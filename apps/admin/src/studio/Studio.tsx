@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import SceneCanvas, { type View } from "./SceneCanvas";
 import {
   catalog,
+  duplicateFloor,
+  projectSlug,
   id,
   newProject,
   snapshot,
@@ -277,7 +279,7 @@ export default function Studio() {
         <a className="studio-brand" href="/3Dprojects">
           R
           <span>
-            REKIXO <small>3D DESIGN STUDIO</small>
+            REKIXO <small>3D DESIGN ADMIN</small>
           </span>
         </a>
         <div className="project-name">
@@ -379,6 +381,36 @@ export default function Studio() {
           >
             + New project
           </button>
+          <button
+            className="wide"
+            disabled={busy || dirty || Boolean(review)}
+            onClick={() =>
+              task(async () => {
+                const copy = await storage.duplicateProject(p);
+                await refresh();
+                open(copy);
+                setMessage(
+                  "Independent project created from this design. Review dimensions and replace the source model as needed.",
+                );
+              })
+            }
+          >
+            Use design for new project
+          </button>
+          <label>
+            Project slug
+            <input
+              aria-label="Project slug"
+              value={projectSlug(p)}
+              disabled={busy || Boolean(review)}
+              onChange={(e) => edit({ ...p, slug: e.target.value })}
+            />
+          </label>
+          <small>
+            Planned customer path: /3Dprojects/{projectSlug(p)}
+            <br />
+            Local draft · not published or globally reserved.
+          </small>
           <div className="section-label">
             BUILDING STRUCTURE{" "}
             <button
@@ -647,6 +679,30 @@ export default function Studio() {
             ) : room ? (
               <>
                 <h2>Room properties</h2>
+                <button
+                  onClick={() => {
+                    try {
+                      const next = duplicateFloor(p, room.floorId);
+                      const copiedRoom = next.scene.rooms.find(
+                        (r) => r.floorId === next.scene.floors.at(-1)!.id,
+                      );
+                      edit(next);
+                      if (copiedRoom) {
+                        setRoomId(copiedRoom.id);
+                        setSelected(copiedRoom.id);
+                      }
+                      setView("rooms");
+                    } catch (e) {
+                      setError(
+                        e instanceof Error
+                          ? e.message
+                          : "Could not copy floor.",
+                      );
+                    }
+                  }}
+                >
+                  Duplicate furnished floor
+                </button>
                 <label>
                   Room name
                   <input

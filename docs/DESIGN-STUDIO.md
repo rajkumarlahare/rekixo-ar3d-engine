@@ -4,6 +4,20 @@ Design Studio is the first working authoring surface in `rekixo-ar3d-engine`.
 Open `/3Dprojects/studio` on the admin app. It works with independent projects;
 Jyoti Paradise is one project, not the data model for the engine.
 
+The workspace is labelled **Rekixo 3D Design Admin**. Project slugs follow the
+existing Engine route shape `/3Dprojects/[slug]`. They are unique within the
+local project library, with conflicts checked in the same transaction as saving.
+This does not reserve a production slug or create a public link. Imported backups
+and reused designs receive fresh slugs. Existing local projects receive stable
+name/ID-based slugs and retain their models, rooms and review history.
+
+Use **Use design for new project** after saving to copy a design and its assets
+into an independent project. Reviews are cleared and dimensions need review for
+the new site. **Duplicate furnished floor** copies the selected room's whole floor,
+including its room layouts and furniture, onto a new elevation. Copied rooms get
+new identities, lose old mesh bindings and are unverified until checked. Copying
+a floor does not generate a new storey inside the imported building model.
+
 ## Start and use
 
 Use Node 22.13 or newer, run `npm install` at the repository root, then

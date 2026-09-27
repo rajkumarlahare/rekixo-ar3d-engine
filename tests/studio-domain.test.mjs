@@ -11,7 +11,15 @@ const code = ts.transpileModule(
     },
   },
 ).outputText;
-const { newProject, validateProject, snapshot, canWalk } = await import(
+const {
+  newProject,
+  validateProject,
+  snapshot,
+  canWalk,
+  duplicateFloor,
+  projectSlug,
+  validStudioSlug,
+} = await import(
   "data:text/javascript;base64," + Buffer.from(code).toString("base64")
 );
 function fixture() {
@@ -101,4 +109,45 @@ test("snapshot and asset limits reject oversized or ambiguous projects", () => {
   const q = fixture();
   q.scene.rooms.push({ ...q.scene.rooms[0] });
   assert.throws(() => validateProject(q));
+});
+test("slugs are stable for legacy projects and reject reserved or unsafe routes", () => {
+  const p = fixture();
+  assert.equal(projectSlug(p), projectSlug(structuredClone(p)));
+  for (const slug of [
+    "studio",
+    "api",
+    "assets",
+    "../other",
+    "A B",
+    "x",
+    "a".repeat(81),
+  ])
+    assert.equal(validStudioSlug(slug), false);
+  p.slug = "garden-residences";
+  p.name = "Renamed display name";
+  assert.equal(projectSlug(p), "garden-residences");
+  validateProject(p);
+});
+test("furnished floor copy remaps rooms and furniture without claiming source verification", () => {
+  const p = fixture();
+  p.scene.rooms[0].mesh = "source-mesh";
+  p.scene.furniture.push({
+    id: "sofa",
+    kind: "sofa",
+    roomId: "living",
+    x: 0,
+    z: 0,
+    rotation: 0,
+    color: "#cccccc",
+  });
+  const copy = duplicateFloor(p, p.scene.floors[0].id);
+  assert.equal(p.scene.rooms.length, 1);
+  assert.equal(copy.scene.rooms.length, 2);
+  const room = copy.scene.rooms[1];
+  assert.notEqual(room.id, "living");
+  assert.equal(room.verified, false);
+  assert.equal(room.mesh, undefined);
+  assert.equal(copy.scene.furniture[1].roomId, room.id);
+  assert.notEqual(copy.scene.furniture[1].id, "sofa");
+  assert.equal(copy.scene.floors[1].elevation, 3);
 });

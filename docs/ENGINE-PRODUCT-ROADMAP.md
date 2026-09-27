@@ -1,7 +1,9 @@
 # AR3D Engine: reusable building and interior platform
 
-Investigation date: 27 September 2026. This is a proposed implementation plan,
-not a claim that the editor or automated modelling workflow already exists.
+Investigation date: 27 September 2026. The baseline audit below describes main
+before the Studio work. The local editor now exists on the implementation branch;
+see DESIGN-STUDIO.md for implemented features. Cloud publishing and automatic
+modelling remain planned work.
 
 ## Recommendation
 

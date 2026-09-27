@@ -119,3 +119,41 @@ test("an asset owned by another project is rejected before saving", async () => 
     false,
   );
 });
+test("slug collisions are rejected atomically even for simultaneous saves", async () => {
+  const a = { ...newProject("A"), slug: "shared-slug" };
+  const b = { ...newProject("B"), slug: "shared-slug" };
+  const results = await Promise.allSettled([storage.save(a), storage.save(b)]);
+  assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+  assert.equal(
+    (await storage.projects()).filter((p) => p.slug === "shared-slug").length,
+    1,
+  );
+});
+test("reusing a design creates independent assets and clears review history", async () => {
+  const p = newProject("Reusable villa");
+  const a = await storage.makeAsset(
+    new File(["villa model"], "villa.glb"),
+    p.id,
+  );
+  p.assets.push(a.id);
+  p.scene.modelId = a.id;
+  await storage.save(p, [a]);
+  const copied = await storage.duplicateProject(p);
+  assert.notEqual(copied.id, p.id);
+  assert.notEqual(copied.scene.modelId, a.id);
+  assert.equal(copied.releases.length, 0);
+  assert.equal(
+    (await storage.asset(copied.scene.modelId)).projectId,
+    copied.id,
+  );
+  assert.equal(
+    await (await storage.asset(copied.scene.modelId)).blob.text(),
+    "villa model",
+  );
+  copied.scene.scale = 2;
+  await storage.save(copied);
+  assert.equal(
+    (await storage.projects()).find((x) => x.id === p.id).scene.scale,
+    1,
+  );
+});

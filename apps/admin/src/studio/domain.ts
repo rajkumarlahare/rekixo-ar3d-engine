@@ -54,6 +54,7 @@ export interface Project {
   schema: 1;
   id: string;
   name: string;
+  slug?: string;
   updated: string;
   scene: Scene;
   assets: string[];
@@ -100,6 +101,66 @@ export const catalog: Record<
   },
 };
 export const id = () => crypto.randomUUID();
+export function slugFromName(name: string) {
+  return (
+    name
+      .normalize("NFKD")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 60)
+      .replace(/-$/g, "") || "project"
+  );
+}
+export function projectSlug(p: Project) {
+  return (
+    p.slug ??
+    `${slugFromName(p.name)}-${p.id
+      .replace(/[^a-z0-9]/gi, "")
+      .slice(0, 8)
+      .toLowerCase()}`
+  );
+}
+export function validStudioSlug(slug: string) {
+  return (
+    slug.length >= 2 &&
+    slug.length <= 80 &&
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) &&
+    !["studio", "api", "assets"].includes(slug)
+  );
+}
+export function duplicateFloor(p: Project, floorId: string): Project {
+  const next = structuredClone(p);
+  const floor = next.scene.floors.find((f) => f.id === floorId);
+  if (!floor) throw Error("Select a floor to copy.");
+  const rooms = next.scene.rooms.filter((r) => r.floorId === floorId);
+  const height = Math.max(3, ...next.scene.rooms.map((r) => r.height));
+  const newFloor = {
+    ...floor,
+    id: id(),
+    name: `${floor.name} copy`,
+    elevation: Math.max(...next.scene.floors.map((f) => f.elevation)) + height,
+  };
+  const remap = new Map(rooms.map((r) => [r.id, id()]));
+  next.scene.floors.push(newFloor);
+  next.scene.rooms.push(
+    ...rooms.map((r) => ({
+      ...r,
+      id: remap.get(r.id)!,
+      floorId: newFloor.id,
+      unit: `${r.unit} copy`,
+      verified: false,
+      mesh: undefined,
+    })),
+  );
+  next.scene.furniture.push(
+    ...p.scene.furniture
+      .filter((f) => remap.has(f.roomId))
+      .map((f) => ({ ...f, id: id(), roomId: remap.get(f.roomId)! })),
+  );
+  validateProject(next);
+  return next;
+}
 export function newProject(name: string): Project {
   return {
     schema: 1,
@@ -206,6 +267,13 @@ export function validateProject(p: Project): void {
     !unique(p.releases)
   )
     throw Error("Invalid project package.");
+  if (
+    p.slug !== undefined &&
+    (typeof p.slug !== "string" || !validStudioSlug(p.slug))
+  )
+    throw Error(
+      "Use a unique slug of 2–80 lowercase letters, numbers and hyphens. studio, api and assets are reserved.",
+    );
   validateScene(p.scene);
   for (const r of p.releases) {
     if (!text(r.name) || !text(r.date)) throw Error("Invalid review version.");

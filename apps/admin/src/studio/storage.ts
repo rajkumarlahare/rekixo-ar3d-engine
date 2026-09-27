@@ -1,4 +1,11 @@
-import { id, validateProject, type Asset, type Project } from "./domain";
+import {
+  id,
+  projectSlug,
+  slugFromName,
+  validateProject,
+  type Asset,
+  type Project,
+} from "./domain";
 let dbPromise: Promise<IDBDatabase> | undefined;
 function db() {
   return (dbPromise ??= new Promise((resolve, reject) => {
@@ -22,7 +29,11 @@ async function read<T>(store: string, key?: string): Promise<T> {
     req.onerror = () => reject(req.error);
   });
 }
-export const projects = () => read<Project[]>("projects");
+export const projects = async () =>
+  (await read<Project[]>("projects")).map((p) => ({
+    ...p,
+    slug: projectSlug(p),
+  }));
 export const asset = (key: string) => read<Asset | undefined>("assets", key);
 export async function save(p: Project, files: Asset[] = []) {
   validateProject(p);
@@ -32,11 +43,29 @@ export async function save(p: Project, files: Asset[] = []) {
   const database = await db();
   return new Promise<void>((resolve, reject) => {
     const tx = database.transaction(["projects", "assets"], "readwrite");
-    tx.objectStore("projects").put(p);
-    for (const f of files) tx.objectStore("assets").put(f);
+    let failure: Error | undefined;
+    const list = tx.objectStore("projects").getAll();
+    list.onsuccess = () => {
+      if (
+        list.result.some(
+          (other: Project) =>
+            other.id !== p.id && projectSlug(other) === projectSlug(p),
+        )
+      ) {
+        failure = Error(
+          "This slug already belongs to another local project. Choose a different slug.",
+        );
+        tx.abort();
+        return;
+      }
+      tx.objectStore("projects").put({ ...p, slug: projectSlug(p) });
+      for (const f of files) tx.objectStore("assets").put(f);
+    };
     tx.oncomplete = () => resolve();
     tx.onabort = () =>
-      reject(tx.error || Error("Saving failed; storage may be full."));
+      reject(
+        failure || tx.error || Error("Saving failed; storage may be full."),
+      );
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -98,6 +127,7 @@ export async function importPackage(file: File): Promise<Project> {
   validateProject(data.project);
   const p = structuredClone(data.project) as Project;
   p.id = id();
+  p.slug = `${slugFromName(data.project.name)}-${p.id.slice(0, 8)}`;
   p.name += " (imported)";
   p.updated = new Date().toISOString();
   const files: Asset[] = [],
@@ -127,6 +157,30 @@ export async function importPackage(file: File): Promise<Project> {
   p.assets = p.assets.map((k) => remap.get(k)!);
   for (const s of [p.scene, ...p.releases.map((r) => r.scene)])
     if (s.modelId) s.modelId = remap.get(s.modelId);
+  await save(p, files);
+  return p;
+}
+export async function duplicateProject(source: Project): Promise<Project> {
+  validateProject(source);
+  const p = structuredClone(source);
+  p.id = id();
+  p.name = `${source.name.slice(0, 190)} copy`;
+  p.slug = `${slugFromName(source.name)}-${p.id.slice(0, 8)}`;
+  p.updated = new Date().toISOString();
+  p.releases = [];
+  p.scene.rooms = p.scene.rooms.map((r) => ({ ...r, verified: false }));
+  const files: Asset[] = [];
+  const remap = new Map<string, string>();
+  for (const key of source.assets) {
+    const f = await asset(key);
+    if (!f || f.projectId !== source.id)
+      throw Error("A source asset is missing; copy stopped.");
+    const key2 = id();
+    remap.set(key, key2);
+    files.push({ ...f, id: key2, projectId: p.id });
+  }
+  p.assets = files.map((f) => f.id);
+  if (p.scene.modelId) p.scene.modelId = remap.get(p.scene.modelId);
   await save(p, files);
   return p;
 }
