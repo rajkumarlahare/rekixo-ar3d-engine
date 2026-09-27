@@ -21,6 +21,13 @@ These are existing configuration values, not newly deployed resources. No DNS,
 domain mapping, Platform code, database or asset bucket was changed by this work.
 The Studio branch must be deployed before its new route exists on the admin domain.
 
+Deployment now defaults to **admin-only**, including pushes to main. It deploys
+only `rekixo-3d-admin` and verifies the Studio route and editor bundle. Public Worker
+deployment, D1 migrations and R2 bucket provisioning run only with an explicit
+manual `engine-all` workflow input. Read-only compatibility checks still verify
+the existing public project and integration API. This prevents an editor release
+from implicitly updating the customer viewer or storage infrastructure.
+
 Platform stores a verified Engine ID/slug link in `project_3d_links`, not the
 models or room scenes. It only exposes a 3D customer link when Engine confirms the
 same published identity. Handoff transfers context, not credentials. Studio's
