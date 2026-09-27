@@ -2,6 +2,19 @@
 
 Rekixo AR3D Engine is the realistic 3D authoring and rendering system in the **Rekixo AR3D** product family.
 
+The engine is reusable infrastructure for multiple products and projects. **Jyoti
+Paradise is the first project being developed on it**, rather than the definition
+of the engine itself. Project-specific elevation finishes must remain isolated
+from shared loading, navigation, floor selection, and project discovery.
+
+The recovered Jyoti reference design and its required model asset are documented
+in [Jyoti reference design](docs/JYOTI-REFERENCE-DESIGN.md).
+
+The new **Design Studio** at `/3Dprojects/studio` provides local project authoring:
+model import, measured room layouts, furniture placement, room walkthroughs and
+versioned review snapshots. See [Design Studio](docs/DESIGN-STUDIO.md) for use,
+backup instructions and the boundary between this prototype and cloud publishing.
+
 It is a sibling of `rekixo-ar3d-platform`, not a separate product family. The repositories intentionally keep separate production databases, R2 assets, Workers and deployment pipelines so heavy 3D workloads cannot destabilize the plot/project platform.
 
 ## Repository identity
@@ -23,7 +36,7 @@ Jyoti Paradise is a normal 3D project/tenant. Stage 4 removed it as an applicati
 
 ## Workspace
 
-- `apps/admin` — dynamic read-only 3D project administration surface
+- `apps/admin` — project administration and local Design Studio
 - `apps/public` — customer-facing 3D experience
 - `packages/contracts` — shared Engine contracts
 - `packages/engine-core` — reusable project slug/path/asset-key rules

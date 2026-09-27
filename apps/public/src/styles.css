@@ -627,13 +627,12 @@ footer { padding-top: 24px; display: flex; justify-content: space-between; gap: 
   z-index: 11;
   top: 108px;
   left: 114px;
-  width: min(390px, calc(100vw - 160px));
-  padding: 18px 20px;
+  width: min(280px, calc(100vw - 160px));
+  padding: 12px 15px;
   border: 1px solid #ffffff14;
   border-radius: 14px;
-  background: linear-gradient(145deg, #102033d6, #1020339e);
-  backdrop-filter: blur(14px);
-  box-shadow: 0 18px 50px #0007;
+  background: #102033d9;
+  box-shadow: 0 4px 14px #0003;
   pointer-events: none;
 }
 .twin-title-card > span {
@@ -645,7 +644,7 @@ footer { padding-top: 24px; display: flex; justify-content: space-between; gap: 
 }
 .twin-title-card h1 {
   margin: 7px 0 6px;
-  font-size: clamp(25px, 3vw, 38px);
+  font-size: clamp(21px, 2vw, 27px);
   line-height: 1;
   letter-spacing: -.04em;
 }

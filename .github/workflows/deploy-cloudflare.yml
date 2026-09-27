@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      deployment_scope:
+        description: Admin-only is the safe default; engine-all also changes the public viewer and Engine infrastructure.
+        type: choice
+        required: true
+        default: admin-only
+        options:
+          - admin-only
+          - engine-all
 
 concurrency:
   group: rekixo-3d-production
@@ -45,6 +54,7 @@ jobs:
           fi
 
       - name: Apply isolated D1 migrations
+        if: github.event_name == 'workflow_dispatch' && inputs.deployment_scope == 'engine-all'
         run: >-
           npx --yes wrangler@4
           d1 migrations apply rekixo-3d-production
@@ -52,6 +62,7 @@ jobs:
           --config wrangler.infra.jsonc
 
       - name: Ensure isolated R2 bucket exists
+        if: github.event_name == 'workflow_dispatch' && inputs.deployment_scope == 'engine-all'
         shell: bash
         run: |
           set -euo pipefail
@@ -69,10 +80,14 @@ jobs:
           --config wrangler.admin.jsonc
 
       - name: Deploy isolated 3D Public Worker
+        if: github.event_name == 'workflow_dispatch' && inputs.deployment_scope == 'engine-all'
         run: >-
           npx --yes wrangler@4
           deploy
           --config wrangler.public.jsonc
+
+      - name: Verify deployed Design Admin entry and editor bundle
+        run: node scripts/verify-design-admin.mjs
 
       - name: Verify generic admin project registry
         shell: bash
