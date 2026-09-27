@@ -8,6 +8,7 @@ import type { CameraPreset3D } from "@rekixo/3d-contracts";
 import { createFloorExploder, enhanceArchitecturalModel } from "./realism";
 import { clampWalkPosition, walkDelta, walkStartPosition, type WalkDirection } from "./walkthrough";
 import { createArchitecturalSiteEnvironment } from "./siteEnvironment";
+import { applyJyotiReferenceExterior } from "./jyotiReferenceExterior";
 import { createProjectExperience, type ExperienceMode, type ExperienceFeature } from "./projectExperience";
 
 type ViewerMode = "booting" | "loading" | "model" | "demo" | "error";
@@ -238,6 +239,7 @@ export function Viewer3D({
     let floorExploder: ReturnType<typeof createFloorExploder> | undefined;
     let siteEnvironment: ReturnType<typeof createArchitecturalSiteEnvironment> | undefined;
     let projectExperience: ReturnType<typeof createProjectExperience> | undefined;
+    let referenceExterior: ReturnType<typeof applyJyotiReferenceExterior>;
     let cameraTween: { start: number; duration: number; fromPosition: THREE.Vector3; toPosition: THREE.Vector3; fromTarget: THREE.Vector3; toTarget: THREE.Vector3; fromFov: number; toFov: number } | undefined;
     let walkActive = false;
     let walkYaw = 0;
@@ -375,8 +377,8 @@ export function Viewer3D({
       const height = Math.max(modelBounds.max.y - modelBounds.min.y, 1);
       const lowerRatio = floor === 0 ? 0 : 0.12 + (floor - 1) * 0.132;
       const upperRatio = floor === 0 ? 0.12 : 0.12 + floor * 0.132;
-      const lower = minY + height * lowerRatio;
-      const upper = minY + height * Math.min(upperRatio, 0.79);
+      const lower = referenceExterior?.floorLevels[floor] ?? minY + height * lowerRatio;
+      const upper = referenceExterior?.floorLevels[floor + 1] ?? minY + height * Math.min(upperRatio, 0.79);
       const sectionPlanes = sectionEnabledRef.current
         ? renderer.clippingPlanes.filter((plane) => Math.abs(plane.normal.x) > 0.5)
         : [];
@@ -415,6 +417,8 @@ export function Viewer3D({
       scene.environmentIntensity = night ? 0.42 : referenceVisual ? 0.34 : 0.65;
       siteEnvironment?.setNight(night);
       projectExperience?.setNight(night);
+      referenceExterior?.setNight(night);
+      if (referenceExterior) scene.background = night ? referenceExterior.eveningSky : referenceExterior.daylightSky;
     };
 
     const enterWalkMode = (enabled: boolean, floor: number | null) => {
@@ -611,6 +615,7 @@ export function Viewer3D({
 
     const mountObject = (object: THREE.Object3D, usePreset: boolean) => {
       if (activeObject) {
+        referenceExterior?.dispose();
         scene.remove(activeObject);
         disposeObject(activeObject);
       }
@@ -618,6 +623,15 @@ export function Viewer3D({
       scene.add(object);
       object.updateMatrixWorld(true);
       modelBounds = new THREE.Box3().setFromObject(object);
+      referenceExterior = referenceVisual ? applyJyotiReferenceExterior(object) : undefined;
+      if (referenceExterior) {
+        scene.background = referenceExterior.daylightSky;
+        sun.position.set(-16, 30, 16);
+        sun.target.position.set(13, 8, -12);
+        scene.add(sun.target);
+        Object.assign(sun.shadow.camera, { left: -25, right: 25, top: 28, bottom: -28 });
+        sun.shadow.camera.updateProjectionMatrix();
+      }
       enhanceArchitecturalModel(object, renderer, referenceVisual);
       floorExploder = createFloorExploder(object, modelBounds);
       explodeRef.current = (enabled) => floorExploder?.setExploded(enabled);
@@ -628,7 +642,11 @@ export function Viewer3D({
           : fitCamera(object, camera, controls);
 
       const bounds = modelBounds;
-      const sphere = bounds.getBoundingSphere(new THREE.Sphere());
+      // Frame the measured building, not the much wider site/paving mesh.
+      const cameraBounds = referenceExterior
+        ? new THREE.Box3(new THREE.Vector3(5.62, 0, -23.82), new THREE.Vector3(22.52, 20.86, -2.73))
+        : bounds;
+      const sphere = cameraBounds.getBoundingSphere(new THREE.Sphere());
       const sizeForView = bounds.getSize(new THREE.Vector3());
       const centerForView = sphere.center.clone();
       const radiusForView = Math.max(sphere.radius, 1);
@@ -644,7 +662,11 @@ export function Viewer3D({
 
       projectExperience?.dispose();
       if (projectExperience) scene.remove(projectExperience.root);
-      projectExperience = createProjectExperience(bounds, mobile, referenceVisual);
+      let preserveSourceSite = false;
+      object.traverse((node) => {
+        if (node.userData.sourceGeometry?.siteGeometry === "included-in-source") preserveSourceSite = true;
+      });
+      projectExperience = createProjectExperience(bounds, mobile, referenceVisual, preserveSourceSite);
       scene.add(projectExperience.root);
       setRooms(projectExperience.rooms.map(({ id, label, category }) => ({ id, label, category })));
 
@@ -652,7 +674,7 @@ export function Viewer3D({
         if (view === "aerial") {
           if (referenceVisual) return {
             position: new THREE.Vector3(
-              centerForView.x + radiusForView * (mobile ? 0.84 : 0.96),
+              centerForView.x - radiusForView * (mobile ? 0.84 : 0.96),
               bounds.min.y + sizeForView.y * (mobile ? 0.20 : 0.23),
               centerForView.z + radiusForView * (mobile ? 0.98 : 1.10),
             ),
@@ -687,7 +709,7 @@ export function Viewer3D({
         if (view === "building") return {
           position: referenceVisual
             ? new THREE.Vector3(
-                centerForView.x + radiusForView * (mobile ? 0.78 : 0.88),
+                centerForView.x - radiusForView * (mobile ? 0.78 : 0.88),
                 bounds.min.y + sizeForView.y * (mobile ? 0.18 : 0.21),
                 centerForView.z + radiusForView * (mobile ? 0.93 : 1.02),
               )
@@ -711,7 +733,24 @@ export function Viewer3D({
           const horizontalHalf = Math.atan(Math.tan(verticalHalf) * camera.aspect);
           const distance = radiusForView / Math.sin(Math.min(verticalHalf, horizontalHalf)) * 1.08;
           const direction = targetView.position.clone().sub(targetView.target).normalize();
-          targetView.position.copy(targetView.target).addScaledVector(direction, distance);
+          if (referenceExterior) direction.set(-0.90, -0.20, 0.44).normalize();
+          let fitDistance = distance;
+          if (referenceExterior) {
+            const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), direction).normalize();
+            const up = new THREE.Vector3().crossVectors(direction, right).normalize();
+            fitDistance = 0;
+            for (const x of [cameraBounds.min.x, cameraBounds.max.x]) {
+              for (const y of [cameraBounds.min.y, cameraBounds.max.y]) {
+                for (const z of [cameraBounds.min.z, cameraBounds.max.z]) {
+                  const offset = new THREE.Vector3(x, y, z).sub(targetView.target);
+                  fitDistance = Math.max(fitDistance, offset.dot(direction) + Math.abs(offset.dot(right)) / Math.tan(horizontalHalf), offset.dot(direction) + Math.abs(offset.dot(up)) / Math.tan(verticalHalf));
+                }
+              }
+            }
+            fitDistance *= 1.13;
+          }
+          targetView.position.copy(targetView.target).addScaledVector(direction, fitDistance);
+          if (referenceExterior) targetView.position.y = Math.max(1.6, targetView.position.y);
           controls.maxDistance = Math.max(controls.maxDistance, distance * 2);
         }
         controls.enabled = true;
@@ -922,6 +961,7 @@ export function Viewer3D({
       renderer.domElement.removeEventListener("pointercancel", handlePointerUp);
       renderer.domElement.removeEventListener("click", handleFeatureClick);
       if (activeObject) disposeObject(activeObject);
+      referenceExterior?.dispose();
       if (siteEnvironment) {
         scene.remove(siteEnvironment.root);
         siteEnvironment.dispose();

@@ -13,6 +13,15 @@ const { createProjectExperience } = await import('data:text/javascript;base64,' 
 const scene = createProjectExperience(new THREE.Box3(new THREE.Vector3(0, 0, -25), new THREE.Vector3(20, 28, 0)), false);
 scene.root.updateMatrixWorld(true);
 
+test('authored sites do not receive an invented second plot, gate or road', () => {
+  const bounds = new THREE.Box3(new THREE.Vector3(0, 0, -25), new THREE.Vector3(20, 28, 0));
+  const authored = createProjectExperience(bounds, false, true, true);
+  assert.ok(!authored.features.some(feature => ['plot', 'parking', 'gate', 'road', 'landscape'].includes(feature.id)));
+  assert.deepEqual(authored.focus('site').box, bounds);
+  assert.ok(authored.rooms.length >= 29);
+  authored.dispose();
+});
+
 test('all reconstructed rooms and balconies have finite eye-height entry points', () => {
   assert.ok(scene.rooms.length >= 29);
   for (const room of scene.rooms) {

@@ -573,7 +573,7 @@ function dispose(root: THREE.Object3D) {
   });
 }
 
-export function createProjectExperience(bounds: THREE.Box3, mobile: boolean, referenceVisual = false) {
+export function createProjectExperience(bounds: THREE.Box3, mobile: boolean, referenceVisual = false, preserveSourceSite = false) {
   const root = new THREE.Group();
   root.name = "source-faithful-project-experience";
 
@@ -589,7 +589,10 @@ export function createProjectExperience(bounds: THREE.Box3, mobile: boolean, ref
   const spanZ = Math.max(size.z, 10);
   const baseY = bounds.min.y - Math.max(size.y * 0.006, 0.04);
 
-  // Source-faithful site: paved plot, road, low compound wall, gate and restrained front landscaping.
+  // Imported site geometry already contains the authored parcel, boundary and
+  // entrance. Never surround it with a second, bounds-scaled compound.
+  if (!preserveSourceSite) {
+  // Presentation context for legacy models without an authored site.
   const plot = box(
     [spanX * (referenceVisual ? 1.28 : 1.68), 0.14, spanZ * (referenceVisual ? 1.16 : 1.48)],
     standard(referenceVisual ? 0x8f8983 : 0xc5bbae, 0.92),
@@ -684,7 +687,10 @@ export function createProjectExperience(bounds: THREE.Box3, mobile: boolean, ref
     );
   }
 
-  addFacadeWarmLights(siteRoot, bounds, mobile);
+  }
+
+  // Authored facade fixtures are attached to actual balcony ceilings.
+  if (!preserveSourceSite) addFacadeWarmLights(siteRoot, bounds, mobile);
 
   const interior = makeBrochureTypicalFloor(features);
   const floorScale = Math.min(
@@ -756,7 +762,7 @@ export function createProjectExperience(bounds: THREE.Box3, mobile: boolean, ref
         const box3 = new THREE.Box3().setFromObject(terraceRoot);
         return { box: box3, target: box3.getCenter(new THREE.Vector3()) };
       }
-      const box3 = new THREE.Box3().setFromObject(siteRoot);
+      const box3 = preserveSourceSite ? bounds.clone() : new THREE.Box3().setFromObject(siteRoot);
       return { box: box3, target: box3.getCenter(new THREE.Vector3()) };
     },
     dispose() {

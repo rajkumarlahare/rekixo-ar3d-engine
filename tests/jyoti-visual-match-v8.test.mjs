@@ -36,5 +36,5 @@ test("reference mode keeps mobile quality without invented facade geometry", () 
   const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
   assert.match(viewer, /antialias: referenceVisual \|\| !mobile/);
   assert.match(viewer, /renderer\.shadowMap\.enabled = referenceVisual \|\| !mobile/);
-  assert.match(viewer, /createProjectExperience\(bounds, mobile, referenceVisual\)/);
+  assert.match(viewer, /createProjectExperience\(bounds, mobile, referenceVisual, preserveSourceSite\)/);
 });

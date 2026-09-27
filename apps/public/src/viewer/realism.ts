@@ -156,6 +156,7 @@ export function enhanceArchitecturalModel(
     for (const material of materialList(object.material)) {
       const name = normalizedMaterialName(material.name);
       if (!(material instanceof THREE.MeshStandardMaterial)) continue;
+      if (material.userData.referenceFinish) continue;
 
       tuneTexture(material.map, anisotropy);
       tuneTexture(material.normalMap, anisotropy);
@@ -222,7 +223,12 @@ export function enhanceArchitecturalModel(
   });
 }
 
-function floorForY(y: number, bounds: THREE.Box3) {
+function floorForY(y: number, bounds: THREE.Box3, levels?: number[]) {
+  if (levels && levels.length === 7) {
+    if (y >= levels[6]) return null;
+    for (let floor = 5; floor >= 0; floor--) if (y >= levels[floor]) return floor;
+    return 0;
+  }
   const total = Math.max(bounds.max.y - bounds.min.y, 0.001);
   const ratio = (y - bounds.min.y) / total;
 
@@ -243,6 +249,7 @@ export function createFloorExploder(root: THREE.Object3D, bounds: THREE.Box3) {
 
   root.traverse((object) => {
     if (!(object instanceof THREE.Mesh) || !object.parent) return;
+    if (object.userData.staticSiteContext) return;
 
     const box = new THREE.Box3().setFromObject(object);
     if (box.isEmpty()) return;
@@ -252,7 +259,7 @@ export function createFloorExploder(root: THREE.Object3D, bounds: THREE.Box3) {
     if (meshHeight > totalHeight * 0.22) return;
 
     const center = box.getCenter(new THREE.Vector3());
-    const floor = floorForY(center.y, bounds);
+    const floor = floorForY(center.y, bounds, root.userData.architecturalFloorLevels);
     if (floor === null) return;
 
     states.push({
