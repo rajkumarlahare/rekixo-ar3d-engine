@@ -1,0 +1,516 @@
+import { useEffect, useRef, useState } from "react";
+import * as T from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
+import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
+import { applyJyotiReferenceExterior } from "../../../public/src/viewer/jyotiReferenceExterior";
+import { asset } from "./storage";
+import { canWalk, catalog, type Scene as SceneData } from "./domain";
+
+export type View = "building" | "rooms" | "walk";
+interface Props {
+  scene: SceneData;
+  roomId: string;
+  view: View;
+  selected: string;
+  onSelect: (id: string) => void;
+  onMesh: (name: string) => void;
+}
+function dispose(root: T.Object3D) {
+  const materials = new Set<T.Material>(),
+    textures = new Set<T.Texture>();
+  root.traverse((n) => {
+    if (n instanceof T.Mesh || n instanceof T.Line) {
+      n.geometry.dispose();
+      for (const m of Array.isArray(n.material) ? n.material : [n.material])
+        materials.add(m);
+    }
+  });
+  for (const m of materials) {
+    for (const v of Object.values(m))
+      if (v instanceof T.Texture) textures.add(v);
+    m.dispose();
+  }
+  for (const t of textures) t.dispose();
+}
+function block(
+  root: T.Object3D,
+  name: string,
+  size: number[],
+  pos: number[],
+  color: string,
+) {
+  const mesh = new T.Mesh(
+    new T.BoxGeometry(...(size as [number, number, number])),
+    new T.MeshStandardMaterial({ color, roughness: 0.75 }),
+  );
+  mesh.name = name;
+  mesh.position.set(...(pos as [number, number, number]));
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  root.add(mesh);
+  return mesh;
+}
+
+export default function SceneCanvas(props: Props) {
+  const host = useRef<HTMLDivElement>(null),
+    latest = useRef(props);
+  latest.current = props;
+  const api = useRef<{
+    scene: T.Scene;
+    camera: T.PerspectiveCamera;
+    controls: OrbitControls;
+    model: T.Group;
+    rooms: T.Group;
+    keys: Set<string>;
+    focus: () => void;
+  } | null>(null);
+  const [status, setStatus] = useState("");
+  useEffect(() => {
+    const el = host.current!;
+    let renderer: T.WebGLRenderer;
+    try {
+      renderer = new T.WebGLRenderer({ antialias: true });
+    } catch {
+      setStatus(
+        "WebGL is unavailable. Try a browser with hardware acceleration.",
+      );
+      return;
+    }
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.7));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = T.PCFShadowMap;
+    renderer.outputColorSpace = T.SRGBColorSpace;
+    renderer.toneMapping = T.ACESFilmicToneMapping;
+    el.appendChild(renderer.domElement);
+    renderer.domElement.setAttribute("aria-label", "Interactive design canvas");
+    renderer.domElement.tabIndex = 0;
+    const scene = new T.Scene();
+    scene.background = new T.Color("#dbe3e7");
+    const camera = new T.PerspectiveCamera(45, 1, 0.05, 2000);
+    camera.position.set(12, 12, 14);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 0, 0);
+    controls.maxPolarAngle = Math.PI * 0.49;
+    scene.add(new T.HemisphereLight(0xffffff, 0x687681, 2.8));
+    const sun = new T.DirectionalLight(0xfff1db, 3.2);
+    sun.position.set(-15, 30, 20);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    Object.assign(sun.shadow.camera, {
+      left: -30,
+      right: 30,
+      top: 30,
+      bottom: -30,
+    });
+    scene.add(sun);
+    const grid = new T.GridHelper(100, 100, 0xa9b4bd, 0xcbd3d9);
+    grid.position.y = -0.05;
+    scene.add(grid);
+    const model = new T.Group(),
+      rooms = new T.Group();
+    scene.add(model, rooms);
+    const keys = new Set<string>();
+    const roomFloor = () => {
+      const { scene: s, roomId } = latest.current;
+      const r = s.rooms.find((r) => r.id === roomId);
+      return {
+        r,
+        y: s.floors.find((f) => f.id === r?.floorId)?.elevation ?? 0,
+      };
+    };
+    let yaw = 0,
+      pitch = 0;
+    const focus = () => {
+      const { r, y } = roomFloor(),
+        { view } = latest.current;
+      keys.clear();
+      if (view === "walk" && r) {
+        let start: [number, number] = [r.x, r.z + r.depth / 2 - 0.4];
+        if (!canWalk(latest.current.scene, r, ...start)) {
+          const candidates: [number, number][] = [];
+          for (let z = -r.depth / 2 + 0.3; z < r.depth / 2 - 0.2; z += 0.3)
+            for (let x = -r.width / 2 + 0.3; x < r.width / 2 - 0.2; x += 0.3)
+              if (canWalk(latest.current.scene, r, r.x + x, r.z + z))
+                candidates.push([r.x + x, r.z + z]);
+          candidates.sort(
+            (a, b) =>
+              Math.hypot(a[0] - start[0], a[1] - start[1]) -
+              Math.hypot(b[0] - start[0], b[1] - start[1]),
+          );
+          if (!candidates.length) {
+            setStatus(
+              "No clear walking space. Move furniture before entering this room.",
+            );
+            return;
+          }
+          start = candidates[0];
+        }
+        camera.position.set(start[0], y + 1.6, start[1]);
+        yaw = Math.atan2(start[0] - r.x, start[1] - r.z);
+        pitch = -0.12;
+        camera.lookAt(r.x, y + 1.3, r.z);
+        return;
+      }
+      const box =
+        view === "building" && model.children.length
+          ? new T.Box3().setFromObject(model)
+          : r
+            ? new T.Box3(
+                new T.Vector3(r.x - r.width / 2, y, r.z - r.depth / 2),
+                new T.Vector3(
+                  r.x + r.width / 2,
+                  y + r.height,
+                  r.z + r.depth / 2,
+                ),
+              )
+            : new T.Box3(new T.Vector3(-5, 0, -5), new T.Vector3(5, 3, 5));
+      const c = box.getCenter(new T.Vector3()),
+        sz = box.getSize(new T.Vector3());
+      const d =
+        (Math.max(sz.y, sz.x / camera.aspect, sz.z / camera.aspect, 4) /
+          Math.tan((camera.fov * Math.PI) / 360)) *
+        0.8;
+      controls.target.copy(c);
+      camera.position
+        .copy(c)
+        .add(new T.Vector3(-1, 0.7, 1).normalize().multiplyScalar(d));
+      controls.update();
+    };
+    api.current = { scene, camera, controls, model, rooms, keys, focus };
+    const resize = new ResizeObserver(() => {
+      camera.aspect =
+        Math.max(el.clientWidth, 1) / Math.max(el.clientHeight, 1);
+      camera.updateProjectionMatrix();
+      renderer.setSize(el.clientWidth, el.clientHeight);
+    });
+    resize.observe(el);
+    const down = (e: KeyboardEvent) => {
+      if (latest.current.view !== "walk") return;
+      if (
+        [
+          "w",
+          "a",
+          "s",
+          "d",
+          "arrowup",
+          "arrowdown",
+          "arrowleft",
+          "arrowright",
+        ].includes(e.key.toLowerCase())
+      ) {
+        e.preventDefault();
+        keys.add(e.key.toLowerCase());
+      }
+    };
+    const up = (e: KeyboardEvent) => keys.delete(e.key.toLowerCase());
+    const blur = () => keys.clear();
+    renderer.domElement.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", blur);
+    renderer.domElement.addEventListener("blur", blur);
+    let point:
+      | { x: number; y: number; ox: number; oy: number; id: number }
+      | undefined;
+    const pointerDown = (e: PointerEvent) => {
+      renderer.domElement.focus();
+      point = {
+        x: e.clientX,
+        y: e.clientY,
+        ox: e.clientX,
+        oy: e.clientY,
+        id: e.pointerId,
+      };
+      if (latest.current.view === "walk")
+        renderer.domElement.setPointerCapture(e.pointerId);
+    };
+    const move = (e: PointerEvent) => {
+      if (!point || latest.current.view !== "walk") return;
+      yaw -= (e.clientX - point.x) * 0.004;
+      pitch = T.MathUtils.clamp(
+        pitch - (e.clientY - point.y) * 0.004,
+        -1.2,
+        1.2,
+      );
+      point.x = e.clientX;
+      point.y = e.clientY;
+    };
+    const click = (e: PointerEvent) => {
+      if (!point) return;
+      const small = Math.hypot(e.clientX - point.ox, e.clientY - point.oy) < 5;
+      point = undefined;
+      if (!small || latest.current.view === "walk") return;
+      const rect = renderer.domElement.getBoundingClientRect(),
+        ray = new T.Raycaster();
+      ray.setFromCamera(
+        new T.Vector2(
+          ((e.clientX - rect.left) / rect.width) * 2 - 1,
+          (-(e.clientY - rect.top) / rect.height) * 2 + 1,
+        ),
+        camera,
+      );
+      const hit = ray.intersectObjects(
+        latest.current.view === "building" ? model.children : rooms.children,
+        true,
+      )[0];
+      if (hit) {
+        if (latest.current.view === "building")
+          latest.current.onMesh(hit.object.name);
+        else {
+          let n: T.Object3D | null = hit.object;
+          while (n && !n.userData.selectId) n = n.parent;
+          if (n) latest.current.onSelect(n.userData.selectId);
+        }
+      }
+    };
+    renderer.domElement.addEventListener("pointerdown", pointerDown);
+    renderer.domElement.addEventListener("pointermove", move);
+    renderer.domElement.addEventListener("pointerup", click);
+    let previous = performance.now(),
+      frame = 0;
+    const draw = (now: number) => {
+      frame = requestAnimationFrame(draw);
+      const dt = Math.min((now - previous) / 1000, 0.05);
+      previous = now;
+      const { r } = roomFloor();
+      if (latest.current.view === "walk" && r) {
+        const forward =
+            Number(keys.has("w") || keys.has("arrowup")) -
+            Number(keys.has("s") || keys.has("arrowdown")),
+          side =
+            Number(keys.has("d") || keys.has("arrowright")) -
+            Number(keys.has("a") || keys.has("arrowleft"));
+        const step = (dt * 1.5) / Math.max(1, Math.hypot(forward, side));
+        const dx = (-Math.sin(yaw) * forward + Math.cos(yaw) * side) * step,
+          dz = (-Math.cos(yaw) * forward - Math.sin(yaw) * side) * step;
+        if (
+          canWalk(
+            latest.current.scene,
+            r,
+            camera.position.x + dx,
+            camera.position.z,
+          )
+        )
+          camera.position.x += dx;
+        if (
+          canWalk(
+            latest.current.scene,
+            r,
+            camera.position.x,
+            camera.position.z + dz,
+          )
+        )
+          camera.position.z += dz;
+        camera.lookAt(
+          camera.position
+            .clone()
+            .add(
+              new T.Vector3(
+                -Math.sin(yaw) * Math.cos(pitch),
+                Math.sin(pitch),
+                -Math.cos(yaw) * Math.cos(pitch),
+              ),
+            ),
+        );
+      } else controls.update();
+      renderer.render(scene, camera);
+    };
+    frame = requestAnimationFrame(draw);
+    focus();
+    return () => {
+      cancelAnimationFrame(frame);
+      resize.disconnect();
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", blur);
+      controls.dispose();
+      dispose(scene);
+      renderer.dispose();
+      el.replaceChildren();
+      api.current = null;
+    };
+  }, []);
+  useEffect(() => {
+    const runtime = api.current;
+    if (!runtime) return;
+    let cancelled = false;
+    let finishCleanup: (() => void) | undefined;
+    for (const n of [...runtime.model.children]) {
+      runtime.model.remove(n);
+      dispose(n);
+    }
+    runtime.scene.background = new T.Color("#dbe3e7");
+    if (!props.scene.modelId) {
+      setStatus("");
+      return;
+    }
+    setStatus("Loading model…");
+    void (async () => {
+      const f = await asset(props.scene.modelId!);
+      if (!f) throw Error("Model missing. Re-import a full project backup.");
+      const data = await f.blob.arrayBuffer();
+      let object: T.Group;
+      const manager = new T.LoadingManager();
+      manager.setURLModifier((url) => {
+        if (url.startsWith("blob:") || url.startsWith("data:")) return url;
+        throw Error(
+          "External model resources are not loaded. Export a self-contained GLB with embedded textures.",
+        );
+      });
+      if (f.name.toLowerCase().endsWith(".fbx"))
+        object = new FBXLoader(manager).parse(data, "");
+      else {
+        const loader = new GLTFLoader(manager);
+        loader.setMeshoptDecoder(MeshoptDecoder);
+        object = (await loader.parseAsync(data, "")).scene;
+      }
+      if (cancelled) {
+        dispose(object);
+        return;
+      }
+      const profile = applyJyotiReferenceExterior(object);
+      if (profile) {
+        runtime.scene.background = profile.daylightSky;
+        finishCleanup = profile.dispose;
+      }
+      object.traverse((n) => {
+        if (n instanceof T.Mesh) {
+          n.castShadow = true;
+          n.receiveShadow = true;
+        }
+      });
+      runtime.model.add(object);
+      runtime.model.scale.setScalar(latest.current.scene.scale);
+      runtime.focus();
+      setStatus(
+        f.name.toLowerCase().endsWith(".fbx")
+          ? "FBX loaded. Check scale and external textures before review."
+          : "",
+      );
+    })().catch((e) => {
+      if (!cancelled)
+        setStatus(e instanceof Error ? e.message : "Model loading failed.");
+    });
+    return () => {
+      cancelled = true;
+      finishCleanup?.();
+    };
+  }, [props.scene.modelId]);
+  useEffect(() => {
+    const r = api.current;
+    if (!r) return;
+    for (const n of [...r.rooms.children]) {
+      r.rooms.remove(n);
+      dispose(n);
+    }
+    r.model.scale.setScalar(props.scene.scale);
+    r.model.visible = props.view === "building";
+    r.rooms.visible = props.view !== "building";
+    r.controls.enabled = props.view !== "walk";
+    for (const room of props.scene.rooms) {
+      if (props.view === "walk" && room.id !== props.roomId) continue;
+      const root = new T.Group();
+      root.userData.selectId = room.id;
+      root.position.set(
+        room.x,
+        props.scene.floors.find((f) => f.id === room.floorId)?.elevation ?? 0,
+        room.z,
+      );
+      r.rooms.add(root);
+      const w = room.width,
+        d = room.depth,
+        h = props.view === "walk" ? room.height : 0.65;
+      block(root, room.name, [w, 0.08, d], [0, -0.04, 0], room.color);
+      for (const z of [-d / 2, d / 2])
+        block(root, "wall", [w, 0.01 + h, 0.12], [0, h / 2, z], "#eee9df");
+      for (const x of [-w / 2, w / 2])
+        block(root, "wall", [0.12, h, d], [x, h / 2, 0], "#e7e0d5");
+      if (room.id === props.selected) {
+        const line = new T.BoxHelper(root, 0x148575);
+        root.updateMatrixWorld(true);
+        line.update();
+        r.rooms.add(line);
+      }
+      for (const f of props.scene.furniture.filter(
+        (f) => f.roomId === room.id,
+      )) {
+        const c = catalog[f.kind],
+          g = new T.Group();
+        g.userData.selectId = f.id;
+        g.position.set(f.x, 0, f.z);
+        g.rotation.y = (f.rotation * Math.PI) / 180;
+        root.add(g);
+        block(
+          g,
+          f.kind,
+          [c.width, c.height, c.depth],
+          [0, c.height / 2, 0],
+          f.color,
+        );
+        if (f.kind === "sofa") {
+          block(g, "backrest", [c.width, 0.5, 0.15], [0, 0.85, -0.35], f.color);
+          for (const x of [-0.94, 0.94])
+            block(g, "armrest", [0.22, 0.3, 0.8], [x, 0.75, 0], f.color);
+        }
+        if (f.kind === "bed") {
+          block(g, "headboard", [1.7, 0.9, 0.1], [0, 0.45, -1], "#816958");
+          for (const x of [-0.4, 0.4])
+            block(g, "pillow", [0.6, 0.12, 0.4], [x, 0.62, -0.65], "#f4f0e6");
+        }
+        if (f.kind === "plant") {
+          const leaves = new T.Mesh(
+            new T.IcosahedronGeometry(0.45, 1),
+            new T.MeshStandardMaterial({ color: 0x50734b }),
+          );
+          leaves.position.y = 1;
+          g.add(leaves);
+        }
+        if (f.id === props.selected) {
+          g.updateWorldMatrix(true, true);
+          r.rooms.add(new T.BoxHelper(g, 0xd67e34));
+        }
+      }
+    }
+  }, [props.scene, props.selected, props.view, props.roomId]);
+  useEffect(() => {
+    api.current?.focus();
+  }, [props.roomId, props.view]);
+  return (
+    <div className="canvas-wrap">
+      <div className="studio-canvas" ref={host} />
+      {status && (
+        <div className="canvas-status" role="status">
+          {status}
+        </div>
+      )}
+      <button className="reset-camera" onClick={() => api.current?.focus()}>
+        Reset view
+      </button>
+      {props.view === "walk" && (
+        <div className="walk-pad">
+          <span>Drag to look · WASD to walk · room-bounded</span>
+          {[
+            ["w", "↑"],
+            ["a", "←"],
+            ["s", "↓"],
+            ["d", "→"],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              aria-label={`Walk ${label}`}
+              onPointerDown={(e) => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                api.current?.keys.add(key);
+              }}
+              onPointerUp={() => api.current?.keys.delete(key)}
+              onPointerCancel={() => api.current?.keys.delete(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

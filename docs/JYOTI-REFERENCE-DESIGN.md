@@ -1,5 +1,11 @@
 # Jyoti Paradise reference design
 
+**Recovery update, 27 September:** The original FBX is available again and its
+hash matches. The GLB was regenerated at 25,582,856 bytes, and the localhost
+preview uses it with the recovered original design code. The missing-asset
+section below records the earlier recovery state, not the current local state.
+See [Engine roadmap](ENGINE-PRODUCT-ROADMAP.md) for the current audit.
+
 ## Engine and first project
 
 Rekixo AR3D Engine provides reusable loading, rendering, navigation, floor controls,

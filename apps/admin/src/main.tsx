@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ADMIN_BASE_PATH,
@@ -9,6 +9,8 @@ import {
 } from "@rekixo/3d-contracts";
 import { publicProjectPath } from "@rekixo/3d-engine-core";
 import "./styles.css";
+
+const Studio = lazy(() => import("./studio/Studio"));
 
 interface ApiStatus extends Admin3DProjectStatus {
   uploadContract?: {
@@ -123,6 +125,7 @@ function App() {
       <header className="topbar">
         <div><p className="eyebrow">REKIXO</p><h1>AR3D Project Engine</h1></div>
         <div className="topbar-actions">
+          <a href="/3Dprojects/studio">Open Design Studio</a>
           <select
             className="project-select"
             aria-label="Select 3D project"
@@ -207,4 +210,4 @@ function App() {
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root mount node");
-createRoot(root).render(<React.StrictMode><App /></React.StrictMode>);
+createRoot(root).render(<React.StrictMode>{window.location.pathname.replace(/\/$/, "") === "/3Dprojects/studio" ? <Suspense fallback={<p>Opening Design Studio…</p>}><Studio /></Suspense> : <App />}</React.StrictMode>);
