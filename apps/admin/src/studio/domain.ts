@@ -40,12 +40,31 @@ export interface Asset {
   hash: string;
   blob: Blob;
 }
+export interface SceneAppearance {
+  exposure: number;
+  sunIntensity: number;
+  hemisphereIntensity: number;
+  background: string;
+  referenceVisual: boolean;
+  nightMode: boolean;
+}
+export interface MaterialOverride {
+  materialName: string;
+  baseColor?: string;
+  roughness?: number;
+  metalness?: number;
+  opacity?: number;
+  emissive?: string;
+  emissiveIntensity?: number;
+}
 export interface Scene {
   floors: Floor[];
   rooms: Room[];
   furniture: Furniture[];
   modelId?: string;
   scale: number;
+  appearance?: SceneAppearance;
+  materialOverrides?: MaterialOverride[];
 }
 export interface Release {
   id: string;
@@ -183,6 +202,15 @@ export function newProject(name: string): Project {
     releases: [],
     scene: {
       scale: 1,
+      appearance: {
+        exposure: 1,
+        sunIntensity: 3.2,
+        hemisphereIntensity: 2.8,
+        background: "#dbe3e7",
+        referenceVisual: true,
+        nightMode: false,
+      },
+      materialOverrides: [],
       floors: [{ id: id(), name: "Ground", elevation: 0 }],
       rooms: [],
       furniture: [],
@@ -215,6 +243,41 @@ export function validateScene(s: Scene): void {
     throw Error("Duplicate or invalid object IDs.");
   if (s.modelId !== undefined && !text(s.modelId, 100))
     throw Error("Invalid model reference.");
+  if (
+    s.appearance !== undefined &&
+    (!s.appearance ||
+      !number(s.appearance.exposure, 0.1, 4) ||
+      !number(s.appearance.sunIntensity, 0, 30) ||
+      !number(s.appearance.hemisphereIntensity, 0, 30) ||
+      !color(s.appearance.background) ||
+      typeof s.appearance.referenceVisual !== "boolean" ||
+      typeof s.appearance.nightMode !== "boolean")
+  )
+    throw Error("Invalid scene appearance settings.");
+  if (s.materialOverrides !== undefined) {
+    if (
+      !Array.isArray(s.materialOverrides) ||
+      s.materialOverrides.length > 250 ||
+      new Set(s.materialOverrides.map((item) => item.materialName)).size !==
+        s.materialOverrides.length
+    )
+      throw Error("Invalid material overrides.");
+    for (const material of s.materialOverrides) {
+      if (
+        !text(material.materialName, 300) ||
+        (material.baseColor !== undefined && !color(material.baseColor)) ||
+        (material.roughness !== undefined &&
+          !number(material.roughness, 0, 1)) ||
+        (material.metalness !== undefined &&
+          !number(material.metalness, 0, 1)) ||
+        (material.opacity !== undefined && !number(material.opacity, 0.02, 1)) ||
+        (material.emissive !== undefined && !color(material.emissive)) ||
+        (material.emissiveIntensity !== undefined &&
+          !number(material.emissiveIntensity, 0, 20))
+      )
+        throw Error("Invalid material override values.");
+    }
+  }
   for (const f of s.floors)
     if (!text(f.name) || !number(f.elevation, -500, 2000))
       throw Error("Invalid floor elevation or name.");
