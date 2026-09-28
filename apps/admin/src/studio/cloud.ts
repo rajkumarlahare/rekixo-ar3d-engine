@@ -26,6 +26,16 @@ export interface CloudProjectSummary {
   assetCount: number;
 }
 
+export interface CloudReleaseSummary {
+  id: string;
+  version: number;
+  manifestSha256: string;
+  sourceDraftRevision?: number;
+  createdBy: string;
+  createdAt: string;
+  active: boolean;
+}
+
 export interface CloudAssetSummary {
   id: string;
   projectId: string;
