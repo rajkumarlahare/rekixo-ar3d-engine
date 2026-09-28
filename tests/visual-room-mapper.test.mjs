@@ -28,7 +28,7 @@ test("room drawing happens on the selected floor and derives geometry from a dra
   assert.match(canvas, /Math\.abs\(end\.x - start\.x\)/);
   assert.match(canvas, /Math\.abs\(end\.z - start\.z\)/);
   assert.match(canvas, /onRoomDraw/);
-  assert.match(canvas, /candidateDistance <= 0\.22/);
+  assert.match(canvas, /edgeDistance <= 0\\.18/);
 });
 
 test("visual room mapping preserves evidence discipline", () => {
