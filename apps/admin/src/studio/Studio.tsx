@@ -373,6 +373,22 @@ export default function Studio() {
     );
   }
 
+  async function activatePublishedRelease(releaseId: string, version: number) {
+    if (!cloudSession?.authenticated)
+      throw Error("Sign in to Engine Admin before changing the active release.");
+    if (dirty)
+      throw Error("Save or discard local draft changes before switching a release.");
+    await cloud.activateRelease(projectSlug(p), releaseId);
+    await Promise.all([
+      refreshCloudReleases(p),
+      refreshCloudProjects(),
+      refreshPublishedCatalog(),
+    ]);
+    setMessage(
+      `Release v${version} is now the active immutable public release.`,
+    );
+  }
+
   function history(back: boolean) {
     if (!project) return;
     const from = back ? undo : redo,
