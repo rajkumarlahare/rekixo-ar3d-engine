@@ -70,6 +70,7 @@ export default function Studio() {
   const [manifestText, setManifestText] = useState("");
   const [cloudSession, setCloudSession] = useState<cloud.CloudSession>();
   const [cloudProjects, setCloudProjects] = useState<cloud.CloudProjectSummary[]>([]);
+  const [projectSearch, setProjectSearch] = useState("");
   const [cloudSearch, setCloudSearch] = useState("");
   const [cloudFilter, setCloudFilter] = useState<"active" | "archived">("active");
   const [cloudReleases, setCloudReleases] = useState<cloud.CloudReleaseSummary[]>([]);
@@ -465,6 +466,15 @@ export default function Studio() {
     publishedCurrent = published.some(
       (entry) => entry.slug === projectSlug(p),
     ),
+    visibleLocalProjects = list.filter((entry) => {
+      const query = projectSearch.trim().toLowerCase();
+      return (
+        entry.id === p.id ||
+        !query ||
+        entry.name.toLowerCase().includes(query) ||
+        projectSlug(entry).includes(query)
+      );
+    }),
     unitCount = new Set(
       p.scene.rooms.map(
         (candidate) =>
