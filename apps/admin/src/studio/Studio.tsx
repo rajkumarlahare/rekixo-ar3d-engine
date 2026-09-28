@@ -17,6 +17,8 @@ import {
   projectSlug,
   id,
   newProject,
+  roomArea,
+  roomGeometryFromPolygon,
   snapshot,
   validateProject,
   type Asset,
@@ -28,6 +30,7 @@ import {
   type Project,
   type ReferenceLayer,
   type Room,
+  type RoomPoint,
   type SceneAppearance,
 } from "./domain";
 import * as storage from "./storage";
@@ -930,18 +933,54 @@ export default function Studio() {
         ...p,
         scene: {
           ...p.scene,
-          rooms: p.scene.rooms.map((candidate) =>
-            candidate.id === change.id
-              ? {
-                  ...candidate,
-                  ...(change.x !== undefined ? { x: change.x } : {}),
-                  ...(change.z !== undefined ? { z: change.z } : {}),
-                  ...(change.width !== undefined ? { width: change.width } : {}),
-                  ...(change.depth !== undefined ? { depth: change.depth } : {}),
-                  ...(change.height !== undefined ? { height: change.height } : {}),
-                }
-              : candidate,
-          ),
+          rooms: p.scene.rooms.map((candidate) => {
+            if (candidate.id !== change.id) return candidate;
+            let polygon = candidate.polygon?.map(
+              (point) => [point[0], point[1]] as RoomPoint,
+            );
+            if (polygon?.length) {
+              if (change.x !== undefined || change.z !== undefined) {
+                const dx = (change.x ?? candidate.x) - candidate.x;
+                const dz = (change.z ?? candidate.z) - candidate.z;
+                polygon = polygon.map(
+                  ([x, z]) => [x + dx, z + dz] as RoomPoint,
+                );
+              }
+              if (change.width !== undefined || change.depth !== undefined) {
+                const scaleX =
+                  change.width !== undefined
+                    ? change.width / candidate.width
+                    : 1;
+                const scaleZ =
+                  change.depth !== undefined
+                    ? change.depth / candidate.depth
+                    : 1;
+                polygon = polygon.map(
+                  ([x, z]) =>
+                    [
+                      candidate.x + (x - candidate.x) * scaleX,
+                      candidate.z + (z - candidate.z) * scaleZ,
+                    ] as RoomPoint,
+                );
+              }
+              const geometry = roomGeometryFromPolygon(polygon);
+              return {
+                ...candidate,
+                ...geometry,
+                ...(change.height !== undefined
+                  ? { height: change.height }
+                  : {}),
+              };
+            }
+            return {
+              ...candidate,
+              ...(change.x !== undefined ? { x: change.x } : {}),
+              ...(change.z !== undefined ? { z: change.z } : {}),
+              ...(change.width !== undefined ? { width: change.width } : {}),
+              ...(change.depth !== undefined ? { depth: change.depth } : {}),
+              ...(change.height !== undefined ? { height: change.height } : {}),
+            };
+          }),
         },
       };
     } else {
@@ -1029,6 +1068,7 @@ export default function Studio() {
                   z: bounds.z,
                   width: bounds.width,
                   depth: bounds.depth,
+                  polygon: undefined,
                 }
               : entry,
           ),
@@ -1079,13 +1119,61 @@ export default function Studio() {
     }
   }
 
+  function commitMappedPolygon(points: RoomPoint[]) {
+    const floorId = roomMapFloorId || p.scene.floors[0]?.id;
+    if (!floorId) {
+      setError("Create or detect a floor before mapping rooms.");
+      return;
+    }
+    try {
+      const geometry = roomGeometryFromPolygon(points);
+      const mapped: Room = {
+        id: id(),
+        name: roomMapName.trim() || `Room ${p.scene.rooms.length + 1}`,
+        unit: roomMapUnit.trim() || "Unit",
+        floorId,
+        ...geometry,
+        height: roomHeightForFloor(floorId),
+        color: "#cdbfa9",
+        source: "Visual Room Mapper polygon draft",
+        verified: false,
+      };
+      const next: Project = {
+        ...p,
+        scene: { ...p.scene, rooms: [...p.scene.rooms, mapped] },
+      };
+      validateProject(next);
+      edit(next);
+      setRoomId(mapped.id);
+      setSelected(mapped.id);
+      setRoomMapAction("polygon");
+      setMessage(
+        `${mapped.name} polygon mapped · ${roomArea(mapped).toFixed(2)} m² · ${mapped.polygon?.length ?? 0} corners.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Polygon room mapping failed.",
+      );
+    }
+  }
+
   function cloneMappedRoom() {
     if (!room || selected !== room.id) return;
+    const shiftX = room.width + 0.2;
+    const cloneGeometry = room.polygon?.length
+      ? roomGeometryFromPolygon(
+          room.polygon.map(
+            ([x, z]) => [x + shiftX, z] as RoomPoint,
+          ),
+        )
+      : { x: room.x + shiftX };
     const clone: Room = {
       ...room,
+      ...cloneGeometry,
       id: id(),
       name: `${room.name} copy`,
-      x: room.x + room.width + 0.2,
       verified: false,
       source: "Visual Room Mapper clone",
       sourceAssetId: undefined,
@@ -1129,12 +1217,25 @@ export default function Studio() {
     const maxZ = Math.max(...unitRooms.map((entry) => entry.z + entry.depth / 2));
     const centreX = (minX + maxX) / 2;
     const centreZ = (minZ + maxZ) / 2;
+    const mirroredGeometry = room.polygon?.length
+      ? roomGeometryFromPolygon(
+          room.polygon.map(
+            ([x, z]) =>
+              [
+                axis === "x" ? 2 * centreX - x : x,
+                axis === "z" ? 2 * centreZ - z : z,
+              ] as RoomPoint,
+          ),
+        )
+      : {
+          x: axis === "x" ? 2 * centreX - room.x : room.x,
+          z: axis === "z" ? 2 * centreZ - room.z : room.z,
+        };
     const mirrored: Room = {
       ...room,
+      ...mirroredGeometry,
       id: id(),
       name: `${room.name} mirror`,
-      x: axis === "x" ? 2 * centreX - room.x : room.x,
-      z: axis === "z" ? 2 * centreZ - room.z : room.z,
       verified: false,
       source: "Visual Room Mapper mirrored copy",
       sourceAssetId: undefined,
@@ -1159,6 +1260,72 @@ export default function Studio() {
       setError(reason instanceof Error ? reason.message : "Room mirror failed.");
     }
   }
+  function repeatMappedUnit(targetFloorId: string, targetUnit: string) {
+    const sourceFloorId = roomMapFloorId;
+    const sourceUnit = roomMapUnit.trim();
+    const nextUnit = targetUnit.trim();
+    if (!sourceFloorId || !sourceUnit || !nextUnit || targetFloorId === sourceFloorId)
+      return;
+    const sourceRooms = p.scene.rooms.filter(
+      (entry) =>
+        entry.floorId === sourceFloorId &&
+        entry.unit.trim() === sourceUnit,
+    );
+    if (!sourceRooms.length) {
+      setError("Map at least one room in this unit before repeating its layout.");
+      return;
+    }
+    if (
+      p.scene.rooms.some(
+        (entry) =>
+          entry.floorId === targetFloorId &&
+          entry.unit.trim() === nextUnit,
+      )
+    ) {
+      setError("That target floor/unit already has mapped rooms.");
+      return;
+    }
+    const copies = sourceRooms.map(
+      (entry): Room => ({
+        ...entry,
+        id: id(),
+        floorId: targetFloorId,
+        unit: nextUnit,
+        verified: false,
+        source: "Visual Room Mapper repeated layout",
+        sourceAssetId: undefined,
+        sourcePackSourceId: undefined,
+        sourceClaimIds: undefined,
+        mesh: undefined,
+        polygon: entry.polygon?.map(
+          ([x, z]) => [x, z] as RoomPoint,
+        ),
+      }),
+    );
+    const next: Project = {
+      ...p,
+      scene: { ...p.scene, rooms: [...p.scene.rooms, ...copies] },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      setRoomMapFloorId(targetFloorId);
+      setRoomMapUnit(nextUnit);
+      setIsolateFloorId(targetFloorId);
+      setRoomId(copies[0].id);
+      setSelected(copies[0].id);
+      setMessage(
+        `${sourceRooms.length} room layout repeated to ${nextUnit}. Source evidence and mesh bindings were intentionally not copied.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Unit layout could not be repeated.",
+      );
+    }
+  }
+
   function select(key: string) {
     setSelected(key);
     const r =
@@ -2269,7 +2436,7 @@ export default function Studio() {
                           {r.verified ? "◉" : "○"} {r.name}
                         </span>
                         <small>
-                          {r.unit} · {(r.width * r.depth).toFixed(1)} m²
+                          {r.unit} · {roomArea(r).toFixed(1)} m²
                         </small>
                       </button>
                       {scene.furniture
@@ -2720,6 +2887,11 @@ export default function Studio() {
               floorId: roomMapFloorId,
               snap: roomMapSnap,
             }}
+            roomPolygonDraw={{
+              enabled: showRoomMapper && roomMapAction === "polygon",
+              floorId: roomMapFloorId,
+              snap: roomMapSnap,
+            }}
             snap={transformSnap}
             focusRequest={focusRequest}
             cameraOrientation={cameraOrientation}
@@ -2743,6 +2915,7 @@ export default function Studio() {
             }}
             onTransformCommit={commitCanvasTransform}
             onRoomDraw={commitMappedRoom}
+            onRoomPolygonDraw={commitMappedPolygon}
             onModelNodes={setModelNodes}
             onModelMaterials={setModelMaterials}
           />
@@ -2770,6 +2943,7 @@ export default function Studio() {
               onSnap={setRoomMapSnap}
               onClone={cloneMappedRoom}
               onMirror={mirrorMappedRoom}
+              onRepeatUnit={repeatMappedUnit}
               onClose={() => {
                 setShowRoomMapper(false);
                 setRoomMapAction("idle");
@@ -3136,8 +3310,10 @@ export default function Studio() {
                   {room.verified
                     ? "Reviewed by author"
                     : "Unverified draft measurements"}{" "}
-                  · {(room.width * room.depth).toFixed(2)} m² clear rectangular
-                  floor area
+                  · {roomArea(room).toFixed(2)} m² mapped floor area
+                  {room.polygon?.length
+                    ? ` · ${room.polygon.length} corners`
+                    : ""}
                 </p>
                 <label>
                   Model mesh binding
