@@ -1390,7 +1390,7 @@ export default function Studio() {
                   );
                   setReview(next.releases.at(-1)!.id);
                   setMessage(
-                    "Immutable local review created. Live cloud publishing is not enabled.",
+                    "Immutable local review created. This review remains a draft until you explicitly publish a cloud release.",
                   );
                 })
               }
