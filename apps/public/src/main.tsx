@@ -581,7 +581,13 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
         {mode === "units" && (
           <aside className="twin-info-panel twin-info-panel--right">
             <span className="twin-kicker">UNIT EXPLORER</span>
-            <h2>{floor === 0 ? "Ground Level" : `Floor ${floor ?? 1}`}</h2>
+            <h2>
+              {floor === 0
+                ? "Ground Level"
+                : floor === null
+                  ? "Select a floor"
+                  : `Floor ${floor}`}
+            </h2>
             <div className="twin-unit-list">
               {visibleUnits.map((item) => (
                 <button
