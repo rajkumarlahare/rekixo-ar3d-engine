@@ -5,7 +5,7 @@ import test from "node:test";
 const read = (file) => fs.readFileSync(file, "utf8");
 
 test("common FBX source materials have explicit original diffuse tints", () => {
-  const realism = read("apps/public/src/viewer/realism.ts");
+  const realism = read("apps/public/src/viewer/referenceSourceV9Materials.ts");
   for (const token of [
     "frontcolor: 0xffffff",
     "color_004: 0x8e8e8e",
@@ -19,7 +19,7 @@ test("common FBX source materials have explicit original diffuse tints", () => {
 });
 
 test("texture attachment preserves source tint instead of forcing white", () => {
-  const realism = read("apps/public/src/viewer/realism.ts");
+  const realism = read("apps/public/src/viewer/referenceSourceV9Materials.ts");
   assert.match(realism, /targetTint/);
   assert.match(realism, /material\.color\.setHex\(tint\)/);
   assert.doesNotMatch(realism, /target\.color\.setHex\(0xffffff\)/);
