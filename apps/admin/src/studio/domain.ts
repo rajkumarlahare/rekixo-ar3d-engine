@@ -4,6 +4,7 @@ export interface Floor {
   name: string;
   elevation: number;
 }
+export type RoomPoint = [number, number];
 export interface Room {
   id: string;
   name: string;
@@ -13,6 +14,7 @@ export interface Room {
   z: number;
   width: number;
   depth: number;
+  polygon?: RoomPoint[];
   height: number;
   color: string;
   source: string;
@@ -158,6 +160,191 @@ export const catalog: Record<
     color: "#587958",
   },
 };
+function polygonSignedArea(points: readonly RoomPoint[]) {
+  let area = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const next = points[(index + 1) % points.length];
+    area += points[index][0] * next[1] - next[0] * points[index][1];
+  }
+  return area / 2;
+}
+
+function pointOnSegment(
+  point: RoomPoint,
+  left: RoomPoint,
+  right: RoomPoint,
+  epsilon = 1e-7,
+) {
+  const cross =
+    (point[0] - left[0]) * (right[1] - left[1]) -
+    (point[1] - left[1]) * (right[0] - left[0]);
+  if (Math.abs(cross) > epsilon) return false;
+  return (
+    point[0] >= Math.min(left[0], right[0]) - epsilon &&
+    point[0] <= Math.max(left[0], right[0]) + epsilon &&
+    point[1] >= Math.min(left[1], right[1]) - epsilon &&
+    point[1] <= Math.max(left[1], right[1]) + epsilon
+  );
+}
+
+function segmentOrientation(a: RoomPoint, b: RoomPoint, c: RoomPoint) {
+  return (b[0] - a[0]) * (c[1] - a[1]) -
+    (b[1] - a[1]) * (c[0] - a[0]);
+}
+
+function segmentsCross(
+  a: RoomPoint,
+  b: RoomPoint,
+  c: RoomPoint,
+  d: RoomPoint,
+) {
+  const epsilon = 1e-8;
+  const abC = segmentOrientation(a, b, c);
+  const abD = segmentOrientation(a, b, d);
+  const cdA = segmentOrientation(c, d, a);
+  const cdB = segmentOrientation(c, d, b);
+  if (
+    ((abC > epsilon && abD < -epsilon) ||
+      (abC < -epsilon && abD > epsilon)) &&
+    ((cdA > epsilon && cdB < -epsilon) ||
+      (cdA < -epsilon && cdB > epsilon))
+  )
+    return true;
+  if (Math.abs(abC) <= epsilon && pointOnSegment(c, a, b)) return true;
+  if (Math.abs(abD) <= epsilon && pointOnSegment(d, a, b)) return true;
+  if (Math.abs(cdA) <= epsilon && pointOnSegment(a, c, d)) return true;
+  if (Math.abs(cdB) <= epsilon && pointOnSegment(b, c, d)) return true;
+  return false;
+}
+
+export function validRoomPolygon(points: readonly RoomPoint[]) {
+  if (points.length < 3 || points.length > 64) return false;
+  if (
+    points.some(
+      (point) =>
+        !Array.isArray(point) ||
+        point.length !== 2 ||
+        !Number.isFinite(point[0]) ||
+        !Number.isFinite(point[1]) ||
+        Math.abs(point[0]) > 10000 ||
+        Math.abs(point[1]) > 10000,
+    )
+  )
+    return false;
+  if (Math.abs(polygonSignedArea(points)) < 0.25) return false;
+  for (let index = 0; index < points.length; index += 1) {
+    const next = (index + 1) % points.length;
+    if (
+      Math.hypot(
+        points[index][0] - points[next][0],
+        points[index][1] - points[next][1],
+      ) < 0.05
+    )
+      return false;
+  }
+  for (let left = 0; left < points.length; left += 1) {
+    const leftNext = (left + 1) % points.length;
+    for (let right = left + 1; right < points.length; right += 1) {
+      const rightNext = (right + 1) % points.length;
+      if (
+        left === right ||
+        leftNext === right ||
+        rightNext === left ||
+        (left === 0 && rightNext === 0)
+      )
+        continue;
+      if (
+        segmentsCross(
+          points[left],
+          points[leftNext],
+          points[right],
+          points[rightNext],
+        )
+      )
+        return false;
+    }
+  }
+  return true;
+}
+
+export function roomBoundaryPoints(room: Room): RoomPoint[] {
+  if (room.polygon?.length)
+    return room.polygon.map((point) => [point[0], point[1]]);
+  return [
+    [room.x - room.width / 2, room.z - room.depth / 2],
+    [room.x + room.width / 2, room.z - room.depth / 2],
+    [room.x + room.width / 2, room.z + room.depth / 2],
+    [room.x - room.width / 2, room.z + room.depth / 2],
+  ];
+}
+
+export function roomGeometryFromPolygon(points: readonly RoomPoint[]) {
+  if (!validRoomPolygon(points)) throw Error("Draw a valid, non-crossing room boundary.");
+  const minX = Math.min(...points.map((point) => point[0]));
+  const maxX = Math.max(...points.map((point) => point[0]));
+  const minZ = Math.min(...points.map((point) => point[1]));
+  const maxZ = Math.max(...points.map((point) => point[1]));
+  return {
+    x: (minX + maxX) / 2,
+    z: (minZ + maxZ) / 2,
+    width: maxX - minX,
+    depth: maxZ - minZ,
+    polygon: points.map((point) => [point[0], point[1]] as RoomPoint),
+  };
+}
+
+export function roomArea(room: Room) {
+  return room.polygon?.length
+    ? Math.abs(polygonSignedArea(room.polygon))
+    : room.width * room.depth;
+}
+
+export function roomContainsPoint(
+  room: Room,
+  x: number,
+  z: number,
+  wallMargin = 0,
+) {
+  const points = roomBoundaryPoints(room);
+  const point: RoomPoint = [x, z];
+  let inside = false;
+  for (let index = 0, previous = points.length - 1; index < points.length; previous = index++) {
+    const left = points[index];
+    const right = points[previous];
+    if (pointOnSegment(point, left, right)) return wallMargin <= 0;
+    const crosses =
+      (left[1] > z) !== (right[1] > z) &&
+      x <
+        ((right[0] - left[0]) * (z - left[1])) /
+          (right[1] - left[1]) +
+          left[0];
+    if (crosses) inside = !inside;
+  }
+  if (!inside) return false;
+  if (wallMargin <= 0) return true;
+  for (let index = 0; index < points.length; index += 1) {
+    const left = points[index];
+    const right = points[(index + 1) % points.length];
+    const dx = right[0] - left[0];
+    const dz = right[1] - left[1];
+    const lengthSquared = dx * dx + dz * dz;
+    const t =
+      lengthSquared > 0
+        ? Math.max(
+            0,
+            Math.min(
+              1,
+              ((x - left[0]) * dx + (z - left[1]) * dz) / lengthSquared,
+            ),
+          )
+        : 0;
+    const px = left[0] + t * dx;
+    const pz = left[1] + t * dz;
+    if (Math.hypot(x - px, z - pz) < wallMargin) return false;
+  }
+  return true;
+}
+
 export const id = () => crypto.randomUUID();
 export function slugFromName(name: string) {
   return (
@@ -395,6 +582,18 @@ export function validateScene(s: Scene): void {
       !number(r.z, -10000, 10000) ||
       !number(r.width, 0.5, 200) ||
       !number(r.depth, 0.5, 200) ||
+      (r.polygon !== undefined &&
+        (!Array.isArray(r.polygon) ||
+          !validRoomPolygon(r.polygon) ||
+          (() => {
+            const bounds = roomGeometryFromPolygon(r.polygon);
+            return (
+              Math.abs(bounds.x - r.x) > 0.002 ||
+              Math.abs(bounds.z - r.z) > 0.002 ||
+              Math.abs(bounds.width - r.width) > 0.002 ||
+              Math.abs(bounds.depth - r.depth) > 0.002
+            );
+          })())) ||
       !number(r.height, 1.8, 20) ||
       !color(r.color) ||
       typeof r.source !== "string" ||
@@ -428,11 +627,39 @@ export function validateScene(s: Scene): void {
     )
       throw Error("Invalid furniture or room reference.");
     const ext = furnitureExtents(f);
-    if (
-      Math.abs(f.x) + ext.x > r.width / 2 + 0.001 ||
-      Math.abs(f.z) + ext.z > r.depth / 2 + 0.001
-    )
-      throw Error(`${catalog[f.kind].name} must fit inside ${r.name}.`);
+    if (!r.polygon?.length) {
+      if (
+        Math.abs(f.x) + ext.x > r.width / 2 + 0.001 ||
+        Math.abs(f.z) + ext.z > r.depth / 2 + 0.001
+      )
+        throw Error(`${catalog[f.kind].name} must fit inside ${r.name}.`);
+    }
+    if (r.polygon?.length) {
+      const a = (f.rotation * Math.PI) / 180;
+      const definition = catalog[f.kind];
+      const corners: RoomPoint[] = [
+        [-definition.width / 2, -definition.depth / 2],
+        [definition.width / 2, -definition.depth / 2],
+        [definition.width / 2, definition.depth / 2],
+        [-definition.width / 2, definition.depth / 2],
+      ].map(([localX, localZ]) => [
+        r.x +
+          f.x +
+          localX * Math.cos(a) -
+          localZ * Math.sin(a),
+        r.z +
+          f.z +
+          localX * Math.sin(a) +
+          localZ * Math.cos(a),
+      ]);
+      if (
+        corners.some(
+          ([cornerX, cornerZ]) =>
+            !roomContainsPoint(r, cornerX, cornerZ, 0.01),
+        )
+      )
+        throw Error(`${catalog[f.kind].name} must fit inside ${r.name}.`);
+    }
   }
 }
 export function furnitureExtents(f: Furniture) {
@@ -520,11 +747,7 @@ export function snapshot(p: Project, name: string): Project {
 // Walking is deliberately room-bounded in this release; no inferred door links.
 export function canWalk(scene: Scene, room: Room, x: number, z: number) {
   const margin = 0.18;
-  if (
-    Math.abs(x - room.x) > room.width / 2 - margin ||
-    Math.abs(z - room.z) > room.depth / 2 - margin
-  )
-    return false;
+  if (!roomContainsPoint(room, x, z, margin)) return false;
   return !scene.furniture
     .filter((f) => f.roomId === room.id)
     .some((f) => {
