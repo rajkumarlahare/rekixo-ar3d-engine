@@ -1166,7 +1166,14 @@ export default function Studio() {
       scene.rooms.find(
         (r) => r.id === scene.furniture.find((f) => f.id === key)?.roomId,
       );
-    if (r) setRoomId(r.id);
+    if (r) {
+      setRoomId(r.id);
+      if (showRoomMapper) {
+        setRoomMapFloorId(r.floorId);
+        setRoomMapUnit(r.unit);
+        setRoomMapName(r.name);
+      }
+    }
   }
   async function upload(file: File, model: boolean) {
     if (model && !/\.(glb|fbx)$/i.test(file.name))
@@ -2249,7 +2256,13 @@ export default function Studio() {
                           setSelected(r.id);
                           setMesh("");
                           setSelectedModelNodeKey("");
-                          if (view === "building") setView("rooms");
+                          if (showRoomMapper) {
+                            setRoomMapFloorId(r.floorId);
+                            setRoomMapUnit(r.unit);
+                            setRoomMapName(r.name);
+                          } else if (view === "building") {
+                            setView("rooms");
+                          }
                         }}
                       >
                         <span>
@@ -2292,10 +2305,34 @@ export default function Studio() {
           <button
             className="wide"
             disabled={busy || Boolean(review)}
-            onClick={addRoom}
+            onClick={() => {
+              const floorId =
+                room?.floorId ??
+                roomMapFloorId ??
+                p.scene.floors[0]?.id ??
+                "";
+              setRoomMapFloorId(floorId);
+              setRoomMapUnit(room?.unit ?? roomMapUnit ?? "Unit 101");
+              setShowRoomMapper(true);
+              setShowReferenceWorkspace(false);
+              setRoomMapAction("create");
+              setView("building");
+              setCameraOrientation("top");
+              setIsolateFloorId(floorId);
+            }}
           >
-            + Add measured room
+            + Map room with mouse
           </button>
+          <details className="editor-advanced-add">
+            <summary>Advanced fallback</summary>
+            <button
+              className="wide"
+              disabled={busy || Boolean(review)}
+              onClick={addRoom}
+            >
+              Add default rectangular room
+            </button>
+          </details>
           <div className="section-label">SOURCE LIBRARY</div>
           <button
             className="wide"
@@ -2403,7 +2440,9 @@ export default function Studio() {
                   Boolean(review) ||
                   busy ||
                   view === "walk" ||
-                  (view === "building" && !showReferenceWorkspace)
+                  (view === "building" &&
+                    !showReferenceWorkspace &&
+                    !(showRoomMapper && Boolean(room) && selected === room?.id))
                 }
                 title="Move selected object (W)"
                 onClick={() => setTransformMode("translate")}
@@ -2432,7 +2471,10 @@ export default function Studio() {
                 disabled={
                   Boolean(review) ||
                   busy ||
-                  view !== "rooms" ||
+                  !(
+                    view === "rooms" ||
+                    (view === "building" && showRoomMapper)
+                  ) ||
                   !room ||
                   Boolean(item)
                 }
@@ -2545,6 +2587,34 @@ export default function Studio() {
               </button>
               <button
                 type="button"
+                className={showRoomMapper ? "active" : ""}
+                disabled={Boolean(review) || busy}
+                title="Map units and rooms visually with the mouse"
+                onClick={() => {
+                  const next = !showRoomMapper;
+                  const floorId =
+                    room?.floorId ??
+                    roomMapFloorId ??
+                    p.scene.floors[0]?.id ??
+                    "";
+                  setShowRoomMapper(next);
+                  if (next) {
+                    setShowReferenceWorkspace(false);
+                    setRoomMapFloorId(floorId);
+                    setRoomMapUnit(room?.unit ?? roomMapUnit ?? "Unit 101");
+                    setRoomMapAction("idle");
+                    setView("building");
+                    setCameraOrientation("top");
+                    setIsolateFloorId(floorId);
+                  } else {
+                    setRoomMapAction("idle");
+                  }
+                }}
+              >
+                Map Rooms
+              </button>
+              <button
+                type="button"
                 className={showLeftPanel ? "active" : ""}
                 title="Toggle Scene Outliner"
                 onClick={() => setShowLeftPanel((value) => !value)}
@@ -2638,6 +2708,14 @@ export default function Studio() {
             transformMode={transformMode}
             transformEnabled={!review && !busy}
             modelTransformEnabled={showReferenceWorkspace}
+            roomMapEnabled={showRoomMapper}
+            roomDraw={{
+              enabled:
+                showRoomMapper &&
+                (roomMapAction === "create" || roomMapAction === "reshape"),
+              floorId: roomMapFloorId,
+              snap: roomMapSnap,
+            }}
             snap={transformSnap}
             focusRequest={focusRequest}
             cameraOrientation={cameraOrientation}
@@ -2660,9 +2738,40 @@ export default function Studio() {
               setSelected("");
             }}
             onTransformCommit={commitCanvasTransform}
+            onRoomDraw={commitMappedRoom}
             onModelNodes={setModelNodes}
             onModelMaterials={setModelMaterials}
           />
+          {showRoomMapper && (
+            <VisualRoomMapper
+              scene={p.scene}
+              floorId={roomMapFloorId || p.scene.floors[0]?.id || ""}
+              unit={roomMapUnit}
+              roomName={roomMapName}
+              action={roomMapAction}
+              snap={roomMapSnap}
+              selectedRoom={room}
+              disabled={Boolean(review) || busy}
+              onFloor={(floorId) => {
+                setRoomMapFloorId(floorId);
+                setIsolateFloorId(floorId);
+                const target = p.scene.floors.find(
+                  (entry) => entry.id === floorId,
+                );
+                if (target) setSectionCutOffset(target.elevation + 1.5);
+              }}
+              onUnit={setRoomMapUnit}
+              onRoomName={setRoomMapName}
+              onAction={setRoomMapAction}
+              onSnap={setRoomMapSnap}
+              onClone={cloneMappedRoom}
+              onMirror={mirrorMappedRoom}
+              onClose={() => {
+                setShowRoomMapper(false);
+                setRoomMapAction("idle");
+              }}
+            />
+          )}
           {showReferenceWorkspace && (
             <ReferenceWorkspace
               files={files}
