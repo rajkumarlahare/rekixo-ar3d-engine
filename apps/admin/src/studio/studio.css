@@ -554,3 +554,21 @@
   color: rgba(226, 233, 249, 0.62);
   line-height: 1.45;
 }
+
+
+.cloud-filter {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.cloud-filter button {
+  min-height: 30px;
+  border-radius: 8px;
+}
+
+.cloud-filter button.active {
+  border-color: rgba(244, 185, 66, 0.55);
+  background: rgba(244, 185, 66, 0.12);
+  color: #ffe6aa;
+}
