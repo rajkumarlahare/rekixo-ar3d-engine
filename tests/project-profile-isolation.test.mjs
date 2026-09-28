@@ -18,7 +18,7 @@ test("project-specific reconstructed interiors are source-profile gated and lazy
   const exteriorRegistry = read("apps/public/src/viewer/modelProfiles.ts");
   const experienceRegistry = read("apps/public/src/viewer/projectProfiles.ts");
 
-  assert.match(exteriorRegistry, /if \(!exterior\) return undefined/);
+  assert.match(exteriorRegistry, /if \(!matched\) return undefined/);
   assert.match(experienceRegistry, /loadProfileExperience/);
   assert.match(experienceRegistry, /profile\?\.id !== "reference-source-v9"/);
   assert.match(experienceRegistry, /await import\("\.\/projectExperience"\)/);

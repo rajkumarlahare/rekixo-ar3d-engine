@@ -45,6 +45,11 @@ type FloorSettings = {
   title?: string;
   mediaKey?: string;
   floors?: number[];
+  floorLevels?: Array<{
+    floor: number;
+    elevationM: number;
+    topElevationM?: number;
+  }>;
   units?: UnitFact[];
   verifiedSpaces?: string[];
   drawingNotes?: string[];
@@ -76,6 +81,20 @@ function sceneOf(experience: Public3DExperience, type: Scene3DType) {
 
 function settingsOf<T>(scene?: Scene3D) {
   return (scene?.settings ?? {}) as T;
+}
+
+function floorIdsOf(settings: FloorSettings) {
+  const explicit = settings.floorLevels?.map((item) => item.floor) ?? [];
+  const values = explicit.length ? explicit : [0, ...(settings.floors ?? [])];
+  return Array.from(
+    new Set(values.filter((item) => Number.isFinite(item))),
+  ).sort((a, b) => a - b);
+}
+
+function floorLabel(floor: number) {
+  if (floor === 0) return "G";
+  if (floor < 0) return `B${Math.abs(floor)}`;
+  return `F${floor}`;
 }
 
 function mediaUrl(experience: Public3DExperience, key?: string) {
@@ -122,9 +141,7 @@ function ProjectNavigation({ experience, walkFloor }: { experience: Public3DExpe
   const { model, camera, project } = experience;
   const settings = settingsOf<ProjectSettings>(sceneOf(experience, "project-navigation"));
   const floorSettings = settingsOf<FloorSettings>(sceneOf(experience, "typical-floor"));
-  const availableFloors = Array.from(new Set([0, ...(floorSettings.floors ?? [])])).sort(
-    (a, b) => a - b,
-  );
+  const availableFloors = floorIdsOf(floorSettings);
   const render = mediaUrl(experience, settings.exteriorRenderKey);
 
   return (
@@ -137,6 +154,7 @@ function ProjectNavigation({ experience, walkFloor }: { experience: Public3DExpe
           initialWalk={walkFloor !== undefined}
           initialWalkFloor={walkFloor ?? null}
           availableFloors={availableFloors}
+          floorGeometry={floorSettings.floorLevels ?? []}
         />
       </section>
 
@@ -305,9 +323,7 @@ function ModelModule({
   const scene = sceneOf(experience, type);
   const settings = settingsOf<PendingSettings>(scene);
   const floorSettings = settingsOf<FloorSettings>(sceneOf(experience, "typical-floor"));
-  const availableFloors = Array.from(new Set([0, ...(floorSettings.floors ?? [])])).sort(
-    (a, b) => a - b,
-  );
+  const availableFloors = floorIdsOf(floorSettings);
   return (
     <section className="viewer-section">
       <div className="module-copy model-module-copy">
@@ -321,6 +337,7 @@ function ModelModule({
         modelLabel={experience.model?.name}
         interactionMode={interactionMode}
         availableFloors={availableFloors}
+        floorGeometry={floorSettings.floorLevels ?? []}
       />
     </section>
   );
@@ -394,11 +411,10 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
   const [unit, setUnit] = useState<string>();
   const [selectedFeature, setSelectedFeature] = useState<{ id: string; label: string; category: string; description: string }>();
   const units = floorSettings.units ?? [];
-  const residentialFloors = floorSettings.floors ?? [];
-  const availableFloors = Array.from(new Set([0, ...residentialFloors])).sort(
-    (a, b) => a - b,
-  );
-  const firstResidentialFloor = residentialFloors[0] ?? null;
+  const availableFloors = floorIdsOf(floorSettings);
+  const residentialFloors =
+    floorSettings.floors?.length ? floorSettings.floors : availableFloors;
+  const firstResidentialFloor = residentialFloors[0] ?? availableFloors[0] ?? null;
   const verifiedSpaces = floorSettings.verifiedSpaces ?? [];
   const visibleUnits = floor === null
     ? []
@@ -443,6 +459,7 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
           visualPreset="reference-render"
           onFeatureSelect={setSelectedFeature}
           availableFloors={availableFloors}
+          floorGeometry={floorSettings.floorLevels ?? []}
           compactUi
         />
 
@@ -524,7 +541,7 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
                   setUnit(undefined);
                 }}
               >
-                {item === 0 ? "G" : `F${item}`}
+                {floorLabel(item)}
               </button>
             ))}
           </div>
