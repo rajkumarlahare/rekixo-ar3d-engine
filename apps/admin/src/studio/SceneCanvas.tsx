@@ -69,6 +69,7 @@ interface Props {
   onTransformCommit?: (change: TransformCommit) => void;
   onModelNodes?: (nodes: ModelNodeSummary[]) => void;
   onModelMaterials?: (materials: ModelMaterialSummary[]) => void;
+  cameraOrientation?: "perspective" | "top";
 }
 function dispose(root: T.Object3D) {
   const materials = new Set<T.Material>(),
@@ -218,6 +219,7 @@ export default function SceneCanvas(props: Props) {
     controls: OrbitControls;
     model: T.Group;
     rooms: T.Group;
+    references: T.Group;
     keys: Set<string>;
     selectables: Map<string, T.Object3D>;
     transform: TransformControls;
@@ -273,8 +275,10 @@ export default function SceneCanvas(props: Props) {
     grid.position.y = -0.05;
     scene.add(grid);
     const model = new T.Group(),
-      rooms = new T.Group();
-    scene.add(model, rooms);
+      rooms = new T.Group(),
+      references = new T.Group();
+    references.name = "Studio reference layers";
+    scene.add(references, model, rooms);
     const keys = new Set<string>();
     const selectables = new Map<string, T.Object3D>();
     const transform = new TransformControls(camera, renderer.domElement);
@@ -320,6 +324,36 @@ export default function SceneCanvas(props: Props) {
         camera.lookAt(r.x, y + 1.3, r.z);
         return;
       }
+      if (latest.current.cameraOrientation === "top") {
+        const topBox =
+          view === "building" && model.children.length
+            ? new T.Box3().setFromObject(model)
+            : r
+              ? new T.Box3(
+                  new T.Vector3(r.x - r.width / 2, y, r.z - r.depth / 2),
+                  new T.Vector3(
+                    r.x + r.width / 2,
+                    y + r.height,
+                    r.z + r.depth / 2,
+                  ),
+                )
+              : new T.Box3(
+                  new T.Vector3(-5, 0, -5),
+                  new T.Vector3(5, 3, 5),
+                );
+        const centre = topBox.getCenter(new T.Vector3());
+        const size = topBox.getSize(new T.Vector3());
+        const span = Math.max(size.x / Math.max(camera.aspect, 0.1), size.z, 5);
+        const distance =
+          (span / Math.tan((camera.fov * Math.PI) / 360)) * 0.7;
+        camera.up.set(0, 0, -1);
+        controls.target.copy(centre);
+        camera.position.set(centre.x, centre.y + distance, centre.z + 0.001);
+        camera.lookAt(centre);
+        controls.update();
+        return;
+      }
+      camera.up.set(0, 1, 0);
       const box =
         view === "building" && model.children.length
           ? new T.Box3().setFromObject(model)
@@ -388,6 +422,7 @@ export default function SceneCanvas(props: Props) {
       controls,
       model,
       rooms,
+      references,
       keys,
       selectables,
       transform,
@@ -690,6 +725,14 @@ export default function SceneCanvas(props: Props) {
       });
       latest.current.onModelNodes?.(modelNodes);
       runtime.model.add(object);
+      const alignment = latest.current.scene.modelTransform ?? {
+        x: 0,
+        y: 0,
+        z: 0,
+        rotationY: 0,
+      };
+      runtime.model.position.set(alignment.x, alignment.y, alignment.z);
+      runtime.model.rotation.y = T.MathUtils.degToRad(alignment.rotationY);
       runtime.model.scale.setScalar(latest.current.scene.scale);
       applyModelMaterialOverrides(runtime.model, latest.current.scene);
       latest.current.onModelMaterials?.(
@@ -714,6 +757,89 @@ export default function SceneCanvas(props: Props) {
     props.scene.appearance?.referenceVisual,
     props.resolveAsset,
   ]);
+  useEffect(() => {
+    const runtime = api.current;
+    if (!runtime) return;
+    let cancelled = false;
+    const urls: string[] = [];
+    for (const child of [...runtime.references.children]) {
+      runtime.references.remove(child);
+      dispose(child);
+    }
+
+    void (async () => {
+      for (const layer of props.scene.referenceLayers ?? []) {
+        if (
+          cancelled ||
+          !layer.visible ||
+          !layer.metresPerPixel ||
+          layer.metresPerPixel <= 0
+        )
+          continue;
+        const source = await (props.resolveAsset ?? asset)(layer.assetId);
+        if (!source || cancelled) continue;
+        const isImage =
+          source.type.startsWith("image/") ||
+          /\.(png|jpe?g|webp|tiff?)$/i.test(source.name);
+        if (!isImage) continue;
+
+        const url = URL.createObjectURL(source.blob);
+        urls.push(url);
+        let texture: T.Texture;
+        try {
+          texture = await new Promise<T.Texture>((resolve, reject) =>
+            new T.TextureLoader().load(url, resolve, undefined, reject),
+          );
+        } catch {
+          continue;
+        }
+        if (cancelled) {
+          texture.dispose();
+          continue;
+        }
+        texture.colorSpace = T.SRGBColorSpace;
+        texture.anisotropy = Math.min(
+          runtime.renderer.capabilities.getMaxAnisotropy(),
+          8,
+        );
+        const image = texture.image as HTMLImageElement;
+        const widthPx = image.naturalWidth || image.width || 1;
+        const heightPx = image.naturalHeight || image.height || 1;
+        const geometry = new T.PlaneGeometry(
+          widthPx * layer.metresPerPixel,
+          heightPx * layer.metresPerPixel,
+        );
+        const material = new T.MeshBasicMaterial({
+          map: texture,
+          transparent: true,
+          opacity: layer.opacity,
+          depthWrite: false,
+          side: T.DoubleSide,
+          toneMapped: false,
+        });
+        const plane = new T.Mesh(geometry, material);
+        plane.name = `Reference · ${source.name}`;
+        plane.rotation.x = -Math.PI / 2;
+        plane.renderOrder = -10;
+        const root = new T.Group();
+        root.name = `Reference layer · ${source.name}`;
+        root.position.set(layer.x, layer.y, layer.z);
+        root.rotation.y = T.MathUtils.degToRad(layer.rotation);
+        root.add(plane);
+        runtime.references.add(root);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      for (const url of urls) URL.revokeObjectURL(url);
+      for (const child of [...runtime.references.children]) {
+        runtime.references.remove(child);
+        dispose(child);
+      }
+    };
+  }, [props.scene.referenceLayers, props.resolveAsset]);
+
   useEffect(() => {
     const runtime = api.current;
     if (!runtime) return;
@@ -756,13 +882,22 @@ export default function SceneCanvas(props: Props) {
   useEffect(() => {
     const r = api.current;
     if (!r) return;
+    const alignment = props.scene.modelTransform ?? {
+      x: 0,
+      y: 0,
+      z: 0,
+      rotationY: 0,
+    };
+    r.model.position.set(alignment.x, alignment.y, alignment.z);
+    r.model.rotation.y = T.MathUtils.degToRad(alignment.rotationY);
+    r.model.scale.setScalar(props.scene.scale);
+    r.references.visible = props.view !== "walk";
     r.transform.detach();
     r.selectables.clear();
     for (const n of [...r.rooms.children]) {
       r.rooms.remove(n);
       dispose(n);
     }
-    r.model.scale.setScalar(props.scene.scale);
     r.model.visible = props.view === "building";
     r.rooms.visible = props.view !== "building";
     r.controls.enabled = props.view !== "walk";
@@ -902,7 +1037,15 @@ export default function SceneCanvas(props: Props) {
 
   useEffect(() => {
     api.current?.focus();
-  }, [props.roomId, props.view]);
+  }, [
+    props.roomId,
+    props.view,
+    props.cameraOrientation,
+    props.scene.modelTransform?.x,
+    props.scene.modelTransform?.y,
+    props.scene.modelTransform?.z,
+    props.scene.modelTransform?.rotationY,
+  ]);
   return (
     <div className="canvas-wrap">
       <div className="studio-canvas" ref={host} />
