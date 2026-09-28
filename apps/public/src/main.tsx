@@ -405,9 +405,10 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
   const [unit, setUnit] = useState<string>();
   const [selectedFeature, setSelectedFeature] = useState<{ id: string; label: string; category: string; description: string }>();
   const units = floorSettings.units ?? [];
-  const residentialFloors = floorSettings.floors ?? [];
   const availableFloors = floorIdsOf(floorSettings);
-  const firstResidentialFloor = residentialFloors[0] ?? null;
+  const residentialFloors =
+    floorSettings.floors?.length ? floorSettings.floors : availableFloors;
+  const firstResidentialFloor = residentialFloors[0] ?? availableFloors[0] ?? null;
   const verifiedSpaces = floorSettings.verifiedSpaces ?? [];
   const visibleUnits = floor === null
     ? []
