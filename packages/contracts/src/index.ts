@@ -1,3 +1,4 @@
+export * from "./runtime-validation";
 export * from "./release-manifest-v1";
 export * from "./scene-source-evidence";
 export * from "./source-pack-v1";
