@@ -1,3 +1,8 @@
+import {
+  activateExistingRelease,
+  buildAndActivateRelease,
+  listProjectReleases,
+} from "./release-publish.mjs";
 const BASE_PATH = "/3Dprojects";
 const CLOUD_PATH = `${BASE_PATH}/api/cloud`;
 const COOKIE = "rekixo_3d_admin";
@@ -420,7 +425,7 @@ function cloudProjectRow(row) {
 
 async function projectBySlug(env, slug) {
   return env.DB.prepare(
-    `SELECT id,slug,name,location,status,updated_at
+    `SELECT id,slug,name,location,status,updated_at,active_release_id
        FROM projects_3d
       WHERE slug=?
       LIMIT 1`,
@@ -1000,6 +1005,107 @@ async function deleteAsset(request, env, actor, project, slug, assetId) {
   return json({ ok: true });
 }
 
+async function projectReleases(request, env, actor, project, parts) {
+  if (parts.length === 2) {
+    if (request.method === "GET") {
+      try {
+        return json({ releases: await listProjectReleases(env, project) });
+      } catch (error) {
+        return json(
+          {
+            error:
+              error instanceof Error
+                ? error.message
+                : "Release history could not be loaded.",
+          },
+          { status: 503 },
+        );
+      }
+    }
+
+    if (request.method !== "POST")
+      return json({ error: "Method not allowed." }, { status: 405 });
+    if (!sameOrigin(request))
+      return json({ error: "Invalid request origin." }, { status: 403 });
+
+    const body = await request.json().catch(() => ({}));
+    if (String(body.action || "publish") !== "publish")
+      return json({ error: "Unsupported release action." }, { status: 400 });
+
+    const expectedDraftRevision =
+      body.expectedDraftRevision === null ||
+      body.expectedDraftRevision === undefined
+        ? undefined
+        : Number(body.expectedDraftRevision);
+    if (
+      expectedDraftRevision !== undefined &&
+      (!Number.isInteger(expectedDraftRevision) ||
+        expectedDraftRevision < 1)
+    )
+      return json({ error: "Invalid expected draft revision." }, { status: 400 });
+
+    try {
+      const release = await buildAndActivateRelease(
+        env,
+        actor,
+        project,
+        expectedDraftRevision,
+      );
+      return json({ release }, { status: 201 });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Release publish failed.";
+      const status = /schema is not installed/i.test(message)
+        ? 503
+        : /changed before publish|already exists|missing|nothing publishable/i.test(
+              message,
+            )
+          ? 409
+          : 400;
+      return json({ error: message }, { status });
+    }
+  }
+
+  if (
+    parts.length === 4 &&
+    parts[2] &&
+    parts[3] === "activate"
+  ) {
+    if (request.method !== "POST")
+      return json({ error: "Method not allowed." }, { status: 405 });
+    if (!sameOrigin(request))
+      return json({ error: "Invalid request origin." }, { status: 403 });
+    const releaseId = String(parts[2] || "").trim();
+    if (!/^release_[A-Za-z0-9-]{20,80}$/.test(releaseId))
+      return json({ error: "Invalid release ID." }, { status: 400 });
+    try {
+      return json({
+        release: await activateExistingRelease(
+          env,
+          actor,
+          project,
+          releaseId,
+        ),
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Release activation failed.";
+      return json(
+        { error: message },
+        {
+          status: /schema is not installed/i.test(message)
+            ? 503
+            : /does not belong/i.test(message)
+              ? 404
+              : 409,
+        },
+      );
+    }
+  }
+
+  return json({ error: "Cloud release route not found." }, { status: 404 });
+}
+
 async function patchProject(request, env, actor, project) {
   if (request.method !== "PATCH")
     return json({ error: "Method not allowed." }, { status: 405 });
@@ -1010,7 +1116,12 @@ async function patchProject(request, env, actor, project) {
   const now = new Date().toISOString();
 
   if (action === "archive" || action === "restore") {
-    const status = action === "archive" ? "archived" : "draft";
+    const status =
+      action === "archive"
+        ? "archived"
+        : project.active_release_id
+          ? "published"
+          : "draft";
     if (
       (action === "archive" && project.status === "archived") ||
       (action === "restore" && project.status !== "archived")
@@ -1087,6 +1198,9 @@ async function routeProjects(request, env, actor, url) {
 
   if (parts[1] === "draft" && parts.length === 2)
     return cloudDraft(request, env, actor, project, slug);
+
+  if (parts[1] === "releases")
+    return projectReleases(request, env, actor, project, parts);
 
   if (parts[1] === "assets") {
     if (parts.length === 2) {

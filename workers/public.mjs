@@ -1,3 +1,9 @@
+import {
+  activeReleaseState,
+  experienceFromActiveReleaseState,
+  handleReleaseReadRequest,
+  serveReleaseAsset,
+} from "./release-runtime.mjs";
 const BASE_PATH = "/3Dprojects";
 const MODEL_ROUTE_PREFIX = `${BASE_PATH}/api/models/`;
 const PROJECT_ROUTE_PREFIX = `${BASE_PATH}/api/projects/`;
@@ -65,6 +71,17 @@ function mapScene(row) {
 }
 
 async function getProjectExperience(env, slug) {
+  const release = await activeReleaseState(env, slug);
+  if (release.state === "ok")
+    return experienceFromActiveReleaseState(release);
+  if (release.state === "corrupt")
+    return {
+      __releaseCorrupt: true,
+      diagnostic: release.reason || "Active immutable release is invalid.",
+    };
+  if (release.state === "unpublished" || release.state === "project-missing")
+    return null;
+
   const project = await env.DB.prepare(
     `SELECT id, slug, name, location, status, cover_asset_key
        FROM projects_3d
@@ -160,7 +177,8 @@ async function serveModel(env, modelId, request) {
   }
 
   const model = await env.DB.prepare(
-    `SELECT m.asset_key, m.mime_type, m.version, m.byte_size
+    `SELECT m.asset_key, m.mime_type, m.version, m.byte_size,
+              p.slug
        FROM models_3d m
        JOIN projects_3d p ON p.id = m.project_id
       WHERE m.id = ?
@@ -175,6 +193,24 @@ async function serveModel(env, modelId, request) {
     return json({ error: "Model not found." }, { status: 404 });
   }
 
+  const release = await activeReleaseState(env, model.slug);
+  if (release.state === "ok") {
+    if (release.manifest.experience.model?.id !== modelId)
+      return json({ error: "Model is not part of the active release." }, { status: 404 });
+    return serveReleaseAsset(
+      env,
+      release.manifest.release.id,
+      "models",
+      modelId,
+      request,
+    );
+  }
+  if (release.state === "corrupt")
+    return json(
+      { error: "The active immutable release is corrupted." },
+      { status: 500 },
+    );
+
   const object =
     request.method === "HEAD"
       ? await env.MODEL_ASSETS.head(model.asset_key)
@@ -187,7 +223,7 @@ async function serveModel(env, modelId, request) {
   const headers = new Headers();
   object.writeHttpMetadata?.(headers);
   headers.set("Content-Type", model.mime_type || "model/gltf-binary");
-  headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  headers.set("Cache-Control", "public, max-age=300, must-revalidate");
   headers.set("ETag", object.httpEtag);
   headers.set("X-Content-Type-Options", "nosniff");
 
@@ -224,6 +260,24 @@ async function serveProjectMedia(env, slug, fileName, request) {
     .first();
   if (!project) return json({ error: "Project not found." }, { status: 404 });
 
+  const release = await activeReleaseState(env, slug);
+  if (release.state === "ok") {
+    if (!release.manifest.experience.mediaFiles.includes(fileName))
+      return json({ error: "Media is not part of the active release." }, { status: 404 });
+    return serveReleaseAsset(
+      env,
+      release.manifest.release.id,
+      "media",
+      fileName,
+      request,
+    );
+  }
+  if (release.state === "corrupt")
+    return json(
+      { error: "The active immutable release is corrupted." },
+      { status: 500 },
+    );
+
   const key = `projects/${slug}/media/${fileName}`;
   const object =
     request.method === "HEAD"
@@ -234,7 +288,7 @@ async function serveProjectMedia(env, slug, fileName, request) {
   const headers = new Headers();
   object.writeHttpMetadata?.(headers);
   if (!headers.has("Content-Type")) headers.set("Content-Type", mediaType(fileName));
-  headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  headers.set("Cache-Control", "public, max-age=300, must-revalidate");
   headers.set("ETag", object.httpEtag);
   headers.set("X-Content-Type-Options", "nosniff");
 
@@ -248,6 +302,9 @@ async function serveProjectMedia(env, slug, fileName, request) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    const releaseResponse = await handleReleaseReadRequest(request, env, url);
+    if (releaseResponse) return releaseResponse;
 
     if (
       url.pathname.startsWith(MODEL_ROUTE_PREFIX) &&
@@ -284,6 +341,15 @@ export default {
         return json(
           { error: "This 3D project is not currently published." },
           { status: 404 },
+        );
+      }
+      if (experience.__releaseCorrupt) {
+        return json(
+          {
+            error: "The active immutable release is corrupted.",
+            diagnostic: experience.diagnostic,
+          },
+          { status: 500 },
         );
       }
       return json(experience);

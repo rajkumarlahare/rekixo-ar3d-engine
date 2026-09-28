@@ -16,7 +16,12 @@ import {
 } from "./domain";
 import * as storage from "./storage";
 import * as cloud from "./cloud";
-import { importPublished, loadPublished } from "./published";
+import {
+  importPublished,
+  loadPublished,
+  loadPublishedCatalog,
+  type PublishedCatalogEntry,
+} from "./published";
 import { buildSceneManifestV2 } from "./manifestV2";
 import "./studio.css";
 
@@ -49,9 +54,8 @@ export default function Studio() {
   const [cloudProjects, setCloudProjects] = useState<cloud.CloudProjectSummary[]>([]);
   const [cloudSearch, setCloudSearch] = useState("");
   const [cloudFilter, setCloudFilter] = useState<"active" | "archived">("active");
-  const [published, setPublished] = useState<{ slug: string; name: string }[]>(
-    [],
-  );
+  const [cloudReleases, setCloudReleases] = useState<cloud.CloudReleaseSummary[]>([]);
+  const [published, setPublished] = useState<PublishedCatalogEntry[]>([]);
   useEffect(() => {
     let active = true;
     void cloud
@@ -103,17 +107,9 @@ export default function Studio() {
 
   useEffect(() => {
     let active = true;
-    fetch("/3Dprojects/published/catalog.json")
-      .then((r) => (r.ok ? r.json() : []))
+    void loadPublishedCatalog()
       .then((rows) => {
-        if (active && Array.isArray(rows))
-          setPublished(
-            rows.filter(
-              (r) =>
-                typeof r.name === "string" &&
-                /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(r.slug),
-            ),
-          );
+        if (active) setPublished(rows);
       })
       .catch(() => {});
     return () => {
@@ -181,6 +177,34 @@ export default function Studio() {
     };
   }, [project?.id, project?.assets]);
   useEffect(() => {
+    if (!cloudSession?.authenticated || !project?.cloud) {
+      setCloudReleases([]);
+      return;
+    }
+    let active = true;
+    void cloud
+      .releases(projectSlug(project))
+      .then((result) => {
+        if (active) setCloudReleases(result.releases);
+      })
+      .catch((reason: unknown) => {
+        if (active)
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Release history could not be loaded.",
+          );
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    cloudSession?.authenticated,
+    project?.id,
+    project?.cloud?.revision,
+  ]);
+
+  useEffect(() => {
     const guard = (e: BeforeUnloadEvent) => {
       if (dirty) {
         e.preventDefault();
@@ -235,6 +259,20 @@ export default function Studio() {
     if (!cloudSession?.authenticated) return;
     const result = await cloud.projects(cloudSearch, cloudFilter, 50, 0);
     setCloudProjects(result.projects);
+  }
+
+  async function refreshCloudReleases(current?: Project) {
+    const target = current ?? project;
+    if (!cloudSession?.authenticated || !target?.cloud) {
+      setCloudReleases([]);
+      return;
+    }
+    const result = await cloud.releases(projectSlug(target));
+    setCloudReleases(result.releases);
+  }
+
+  async function refreshPublishedCatalog() {
+    setPublished(await loadPublishedCatalog());
   }
 
   async function openCloudProject(slug: string) {
@@ -306,11 +344,52 @@ export default function Studio() {
     await storage.save(next);
     setProject(next);
     setDirty(false);
-    await Promise.all([refresh(), refreshCloudProjects()]);
+    await Promise.all([
+      refresh(),
+      refreshCloudProjects(),
+      refreshCloudReleases(next),
+    ]);
     setMessage(
-      `Cloud draft saved · revision ${next.cloud?.revision ?? "—"} · local cache updated.`,
+      `Cloud draft saved · revision ${next.cloud?.revision ?? "—"} · local cache updated. Publishing remains a separate immutable step.`,
     );
   }
+  async function publishCurrentRelease() {
+    if (!cloudSession?.authenticated)
+      throw Error("Sign in to Engine Admin before publishing.");
+    if (!p.cloud)
+      throw Error("Save this project to cloud before publishing.");
+    if (dirty)
+      throw Error("Save the current draft before publishing.");
+    const result = await cloud.publishRelease(
+      projectSlug(p),
+      p.cloud.revision,
+    );
+    await Promise.all([
+      refreshCloudReleases(p),
+      refreshCloudProjects(),
+      refreshPublishedCatalog(),
+    ]);
+    setMessage(
+      `Immutable release v${result.release.version} is active. Draft edits will not change it until another explicit publish.`,
+    );
+  }
+
+  async function activatePublishedRelease(releaseId: string, version: number) {
+    if (!cloudSession?.authenticated)
+      throw Error("Sign in to Engine Admin before changing the active release.");
+    if (dirty)
+      throw Error("Save or discard local draft changes before switching a release.");
+    await cloud.activateRelease(projectSlug(p), releaseId);
+    await Promise.all([
+      refreshCloudReleases(p),
+      refreshCloudProjects(),
+      refreshPublishedCatalog(),
+    ]);
+    setMessage(
+      `Release v${version} is now the active immutable public release.`,
+    );
+  }
+
   function history(back: boolean) {
     if (!project) return;
     const from = back ? undo : redo,
@@ -481,12 +560,22 @@ export default function Studio() {
             Save local
           </button>
           {cloudSession?.authenticated ? (
-            <button
-              disabled={busy || Boolean(review)}
-              onClick={() => task(syncCloudProject)}
-            >
-              Save to cloud
-            </button>
+            <>
+              <button
+                disabled={busy || Boolean(review)}
+                onClick={() => task(syncCloudProject)}
+              >
+                Save to cloud
+              </button>
+              {p.cloud && (
+                <button
+                  disabled={busy || dirty || Boolean(review)}
+                  onClick={() => task(publishCurrentRelease)}
+                >
+                  Publish release
+                </button>
+              )}
+            </>
           ) : (
             <a
               href="/3Dprojects/login?return=/3Dprojects/studio"
@@ -548,7 +637,7 @@ export default function Studio() {
         YOUR DESIGN WORKSPACE{" "}
         <span>
           {cloudSession?.authenticated
-            ? "Local cache + authenticated Engine cloud drafts. Review versions remain drafts until a later publish phase."
+            ? "Local cache + authenticated Engine cloud drafts. Publish creates an immutable release; later draft edits do not change the live release."
             : "Local/offline cache is available. Cloud writes stay locked behind the dedicated Engine Admin session."}
         </span>
         <button disabled={busy} onClick={() => importInput.current?.click()}>
@@ -640,6 +729,72 @@ export default function Studio() {
                     </option>
                   ))}
                 </select>
+                {p.cloud && (
+                  <div className="release-panel">
+                    <div className="release-panel-head">
+                      <small>IMMUTABLE RELEASES</small>
+                      <button
+                        type="button"
+                        disabled={busy || dirty || Boolean(review)}
+                        onClick={() => task(publishCurrentRelease)}
+                      >
+                        Publish current
+                      </button>
+                    </div>
+                    {!cloudReleases.length ? (
+                      <small>
+                        No immutable release yet. Cloud draft edits are not public
+                        until you publish.
+                      </small>
+                    ) : (
+                      cloudReleases.slice(0, 8).map((entry) => (
+                        <div
+                          className={
+                            entry.active
+                              ? "release-row release-row--active"
+                              : "release-row"
+                          }
+                          key={entry.id}
+                        >
+                          <span>
+                            <b>v{entry.version}</b>
+                            <small>
+                              {entry.active
+                                ? "Active public release"
+                                : entry.sourceDraftRevision
+                                  ? `Draft r${entry.sourceDraftRevision}`
+                                  : "Frozen legacy runtime"}
+                            </small>
+                          </span>
+                          {entry.active ? (
+                            <strong>LIVE</strong>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={busy || dirty || Boolean(review)}
+                              onClick={() => {
+                                if (
+                                  !window.confirm(
+                                    `Switch the public project to immutable release v${entry.version}? The current draft will not be changed.`,
+                                  )
+                                )
+                                  return;
+                                void task(() =>
+                                  activatePublishedRelease(
+                                    entry.id,
+                                    entry.version,
+                                  ),
+                                );
+                              }}
+                            >
+                              Switch to v{entry.version}
+                            </button>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
                 <div className="cloud-account-row">
                   <small>
                     Signed in as {cloudSession.user?.email ?? "Engine Admin"}.
@@ -1236,7 +1391,7 @@ export default function Studio() {
                   );
                   setReview(next.releases.at(-1)!.id);
                   setMessage(
-                    "Immutable local review created. Live cloud publishing is not enabled.",
+                    "Immutable local review created. This review remains a draft until you explicitly publish a cloud release.",
                   );
                 })
               }

@@ -1,0 +1,761 @@
+import { releaseSchemaReady } from "./release-runtime.mjs";
+
+const RELEASE_FORMAT = "rekixo-release-manifest";
+const RELEASE_VERSION = 1;
+
+function parseJson(value, fallback) {
+  if (typeof value !== "string") return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function validSha256(value) {
+  return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
+}
+
+function safeSegment(value) {
+  const safe = String(value || "")
+    .trim()
+    .replace(/[^A-Za-z0-9_.-]+/g, "_")
+    .slice(0, 180);
+  if (!safe || safe === "." || safe === "..")
+    throw Error("Invalid release asset segment.");
+  return safe;
+}
+
+function mediaFileName(sourceKey, slug) {
+  const prefix = `projects/${slug}/media/`;
+  if (!String(sourceKey || "").startsWith(prefix))
+    throw Error("Release media is outside the selected project.");
+  const name = String(sourceKey).slice(prefix.length);
+  if (!name || name.includes("/") || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,140}$/.test(name))
+    throw Error("Release media key is not a direct project media file.");
+  return name;
+}
+
+function collectMediaKeys(value, slug, out = new Set()) {
+  if (typeof value === "string") {
+    if (value.startsWith(`projects/${slug}/media/`)) out.add(value);
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectMediaKeys(item, slug, out);
+    return out;
+  }
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) collectMediaKeys(item, slug, out);
+  }
+  return out;
+}
+
+function sourceEvidenceFromDraft(draft) {
+  const sourcePackSourceIds = new Set();
+  const sourceClaimIds = new Set();
+  if (!draft) return { sourcePackSourceIds: [], sourceClaimIds: [] };
+  const scenes = [
+    draft.scene,
+    ...(Array.isArray(draft.releases)
+      ? draft.releases.map((release) => release?.scene)
+      : []),
+  ].filter(Boolean);
+  for (const scene of scenes) {
+    for (const room of Array.isArray(scene.rooms) ? scene.rooms : []) {
+      if (typeof room.sourcePackSourceId === "string" && room.sourcePackSourceId)
+        sourcePackSourceIds.add(room.sourcePackSourceId);
+      for (const claimId of Array.isArray(room.sourceClaimIds)
+        ? room.sourceClaimIds
+        : []) {
+        if (typeof claimId === "string" && claimId) sourceClaimIds.add(claimId);
+      }
+    }
+  }
+  return {
+    sourcePackSourceIds: [...sourcePackSourceIds].sort(),
+    sourceClaimIds: [...sourceClaimIds].sort(),
+  };
+}
+
+async function digestHex(value) {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)),
+  );
+  return Array.from(digest, (item) => item.toString(16).padStart(2, "0")).join("");
+}
+
+async function currentExperience(env, project) {
+  const [sceneResult, camera, model] = await Promise.all([
+    env.DB.prepare(
+      `SELECT id,project_id,name,type,model_id,camera_preset_id,
+              settings_json,sort_order,enabled
+         FROM scenes_3d
+        WHERE project_id=? AND enabled=1
+        ORDER BY sort_order ASC,id ASC`,
+    ).bind(project.id).all(),
+    env.DB.prepare(
+      `SELECT id,project_id,name,position_json,target_json,fov
+         FROM camera_presets_3d
+        WHERE project_id=? AND is_default=1
+        LIMIT 1`,
+    ).bind(project.id).first(),
+    env.DB.prepare(
+      `SELECT id,project_id,name,asset_key,source_filename,mime_type,
+              byte_size,version
+         FROM models_3d
+        WHERE project_id=? AND is_active=1
+        ORDER BY version DESC
+        LIMIT 1`,
+    ).bind(project.id).first(),
+  ]);
+
+  return {
+    scenes: (sceneResult.results || []).map((row) => ({
+      id: row.id,
+      projectId: row.project_id,
+      name: row.name,
+      type: row.type,
+      modelId: row.model_id ?? undefined,
+      cameraPresetId: row.camera_preset_id ?? undefined,
+      sortOrder: Number(row.sort_order || 0),
+      enabled: Boolean(row.enabled),
+      settings: parseJson(row.settings_json, {}),
+    })),
+    camera: camera
+      ? {
+          id: camera.id,
+          projectId: camera.project_id,
+          name: camera.name,
+          position: parseJson(camera.position_json, [6, 4, 8]),
+          target: parseJson(camera.target_json, [0, 0, 0]),
+          fov: Number(camera.fov || 45),
+        }
+      : undefined,
+    model: model
+      ? {
+          id: model.id,
+          projectId: model.project_id,
+          name: model.name,
+          version: Number(model.version || 1),
+          byteSize:
+            model.byte_size === null || model.byte_size === undefined
+              ? undefined
+              : Number(model.byte_size),
+          sourceFilename: model.source_filename ?? undefined,
+          mimeType: model.mime_type || "model/gltf-binary",
+          sourceKey: model.asset_key,
+        }
+      : undefined,
+  };
+}
+
+async function cloudDraftForRelease(env, project) {
+  const row = await env.DB.prepare(
+    `SELECT revision,draft_json,updated_at
+       FROM studio_drafts_3d
+      WHERE project_id=?
+      LIMIT 1`,
+  ).bind(project.id).first();
+  if (!row) return undefined;
+  let draft;
+  try {
+    draft = JSON.parse(row.draft_json);
+  } catch {
+    throw Error("Cloud draft is corrupted; release creation stopped.");
+  }
+  if (
+    !draft ||
+    draft.schema !== 1 ||
+    draft.id !== project.id ||
+    draft.slug !== project.slug ||
+    !Array.isArray(draft.assets)
+  )
+    throw Error("Cloud draft identity is invalid; release creation stopped.");
+  return {
+    revision: Number(row.revision),
+    updatedAt: row.updated_at,
+    draft,
+  };
+}
+
+async function studioAssetRows(env, projectId) {
+  const result = await env.DB.prepare(
+    `SELECT id,project_id,kind,name,mime_type,byte_size,sha256,r2_key
+       FROM studio_assets_3d
+      WHERE project_id=? AND deleted_at IS NULL
+      ORDER BY created_at ASC,id ASC`,
+  ).bind(projectId).all();
+  return result.results || [];
+}
+
+async function copyImmutableObject(
+  env,
+  {
+    sourceKey,
+    targetKey,
+    project,
+    releaseId,
+    releaseVersion,
+    kind,
+    logicalId,
+    name,
+    mimeType,
+    sha256,
+  },
+) {
+  if (await env.MODEL_ASSETS.head(targetKey))
+    throw Error("Immutable release object key already exists.");
+
+  const source = await env.MODEL_ASSETS.get(sourceKey);
+  if (!source)
+    throw Error(`Release source asset is missing: ${name}`);
+
+  const sourceHash =
+    validSha256(sha256)
+      ? String(sha256).toLowerCase()
+      : validSha256(source.customMetadata?.sha256)
+        ? String(source.customMetadata.sha256).toLowerCase()
+        : undefined;
+  const sourceEtag = String(source.httpEtag || source.etag || "").replace(/^"|"$/g, "");
+
+  const result = await env.MODEL_ASSETS.put(targetKey, source.body, {
+    httpMetadata: {
+      ...(source.httpMetadata || {}),
+      contentType:
+        mimeType ||
+        source.httpMetadata?.contentType ||
+        "application/octet-stream",
+    },
+    customMetadata: {
+      projectId: project.id,
+      projectSlug: project.slug,
+      releaseId,
+      releaseVersion: String(releaseVersion),
+      releaseKind: kind,
+      logicalId,
+      ...(sourceHash ? { sha256: sourceHash } : {}),
+      ...(sourceEtag ? { sourceEtag } : {}),
+    },
+  });
+
+  if (!result || Number(result.size) !== Number(source.size)) {
+    await env.MODEL_ASSETS.delete(targetKey).catch(() => {});
+    throw Error(`Immutable release copy failed verification: ${name}`);
+  }
+
+  return {
+    manifest: {
+      id: crypto.randomUUID(),
+      kind,
+      logicalId,
+      name,
+      mimeType:
+        mimeType ||
+        source.httpMetadata?.contentType ||
+        "application/octet-stream",
+      byteSize: Number(source.size),
+      ...(sourceHash ? { sha256: sourceHash } : {}),
+      ...(sourceEtag ? { sourceEtag } : {}),
+    },
+    database: {
+      kind,
+      logicalId,
+      name,
+      mimeType:
+        mimeType ||
+        source.httpMetadata?.contentType ||
+        "application/octet-stream",
+      byteSize: Number(source.size),
+      sha256: sourceHash ?? null,
+      sourceEtag: sourceEtag || null,
+      r2Key: targetKey,
+    },
+  };
+}
+
+export async function listProjectReleases(env, project) {
+  if (!(await releaseSchemaReady(env)))
+    throw Error("Immutable release schema is not installed.");
+  const rows = await env.DB.prepare(
+    `SELECT r.id,r.version,r.manifest_sha256 AS manifestSha256,
+            r.source_draft_revision AS sourceDraftRevision,
+            r.created_by AS createdBy,r.created_at AS createdAt,
+            CASE WHEN p.active_release_id=r.id THEN 1 ELSE 0 END AS active
+       FROM releases_3d r
+       JOIN projects_3d p ON p.id=r.project_id
+      WHERE r.project_id=?
+      ORDER BY r.version DESC`,
+  ).bind(project.id).all();
+  return (rows.results || []).map((row) => ({
+    id: row.id,
+    version: Number(row.version),
+    manifestSha256: row.manifestSha256,
+    sourceDraftRevision:
+      row.sourceDraftRevision === null || row.sourceDraftRevision === undefined
+        ? undefined
+        : Number(row.sourceDraftRevision),
+    createdBy: row.createdBy,
+    createdAt: row.createdAt,
+    active: Boolean(row.active),
+  }));
+}
+
+export async function buildAndActivateRelease(
+  env,
+  actor,
+  project,
+  expectedDraftRevision,
+) {
+  if (!(await releaseSchemaReady(env)))
+    throw Error("Immutable release schema is not installed.");
+  if (project.status === "archived")
+    throw Error("Restore the project before publishing a release.");
+
+  const currentProject = await env.DB.prepare(
+    `SELECT id,slug,name,location,status,cover_asset_key,active_release_id
+       FROM projects_3d
+      WHERE id=?
+      LIMIT 1`,
+  ).bind(project.id).first();
+  if (!currentProject || currentProject.slug !== project.slug)
+    throw Error("Project identity changed before release creation.");
+
+  const [experience, cloudDraft, studioAssets, versionRow] = await Promise.all([
+    currentExperience(env, currentProject),
+    cloudDraftForRelease(env, currentProject),
+    studioAssetRows(env, currentProject.id),
+    env.DB.prepare(
+      "SELECT COALESCE(MAX(version),0)+1 AS version FROM releases_3d WHERE project_id=?",
+    ).bind(currentProject.id).first(),
+  ]);
+
+  if (
+    expectedDraftRevision !== undefined &&
+    expectedDraftRevision !== null &&
+    Number(expectedDraftRevision) !== Number(cloudDraft?.revision)
+  )
+    throw Error("Cloud draft revision changed before publish.");
+
+  if (!experience.scenes.length && !experience.model && !cloudDraft)
+    throw Error("Nothing publishable is available for this project.");
+
+  const version = Number(versionRow?.version || 1);
+  const releaseId = `release_${crypto.randomUUID()}`;
+  const createdAt = new Date().toISOString();
+  const releaseAssets = [];
+  const createdKeys = [];
+
+  try {
+    const mediaKeys = new Set();
+    if (currentProject.cover_asset_key)
+      collectMediaKeys(currentProject.cover_asset_key, currentProject.slug, mediaKeys);
+    for (const scene of experience.scenes)
+      collectMediaKeys(scene.settings, currentProject.slug, mediaKeys);
+
+    let frozenModel;
+    if (experience.model) {
+      const targetKey = `projects/${currentProject.slug}/releases/${releaseId}/models/${safeSegment(
+        experience.model.id,
+      )}`;
+      const copied = await copyImmutableObject(env, {
+        sourceKey: experience.model.sourceKey,
+        targetKey,
+        project: currentProject,
+        releaseId,
+        releaseVersion: version,
+        kind: "model",
+        logicalId: experience.model.id,
+        name: experience.model.name,
+        mimeType: experience.model.mimeType,
+      });
+      createdKeys.push(targetKey);
+      releaseAssets.push(copied);
+      frozenModel = {
+        id: experience.model.id,
+        projectId: currentProject.id,
+        name: experience.model.name,
+        version: experience.model.version,
+        byteSize: copied.manifest.byteSize,
+        sourceFilename: experience.model.sourceFilename,
+        mimeType: copied.manifest.mimeType,
+        releaseAssetId: copied.manifest.id,
+      };
+    }
+
+    const mediaFiles = [];
+    for (const sourceKey of [...mediaKeys].sort()) {
+      const fileName = mediaFileName(sourceKey, currentProject.slug);
+      const targetKey = `projects/${currentProject.slug}/releases/${releaseId}/media/${fileName}`;
+      const copied = await copyImmutableObject(env, {
+        sourceKey,
+        targetKey,
+        project: currentProject,
+        releaseId,
+        releaseVersion: version,
+        kind: "media",
+        logicalId: fileName,
+        name: fileName,
+        mimeType: undefined,
+      });
+      createdKeys.push(targetKey);
+      releaseAssets.push(copied);
+      mediaFiles.push(fileName);
+    }
+
+    const studioById = new Map(studioAssets.map((asset) => [asset.id, asset]));
+    if (cloudDraft) {
+      for (const assetId of cloudDraft.draft.assets) {
+        const asset = studioById.get(assetId);
+        if (!asset)
+          throw Error(`Cloud draft asset metadata is missing: ${assetId}`);
+        const targetKey = `projects/${currentProject.slug}/releases/${releaseId}/studio/${safeSegment(
+          asset.id,
+        )}`;
+        const copied = await copyImmutableObject(env, {
+          sourceKey: asset.r2_key,
+          targetKey,
+          project: currentProject,
+          releaseId,
+          releaseVersion: version,
+          kind: "studio",
+          logicalId: asset.id,
+          name: asset.name,
+          mimeType: asset.mime_type,
+          sha256: asset.sha256,
+        });
+        createdKeys.push(targetKey);
+        releaseAssets.push(copied);
+      }
+    }
+
+    if (!frozenModel && cloudDraft?.draft?.scene?.modelId) {
+      const studioModel = studioById.get(cloudDraft.draft.scene.modelId);
+      if (!studioModel)
+        throw Error("Studio model asset metadata is missing.");
+      const targetKey = `projects/${currentProject.slug}/releases/${releaseId}/models/${safeSegment(
+        studioModel.id,
+      )}`;
+      const copied = await copyImmutableObject(env, {
+        sourceKey: studioModel.r2_key,
+        targetKey,
+        project: currentProject,
+        releaseId,
+        releaseVersion: version,
+        kind: "model",
+        logicalId: studioModel.id,
+        name: studioModel.name,
+        mimeType: studioModel.mime_type,
+        sha256: studioModel.sha256,
+      });
+      createdKeys.push(targetKey);
+      releaseAssets.push(copied);
+      frozenModel = {
+        id: studioModel.id,
+        projectId: currentProject.id,
+        name: studioModel.name,
+        version,
+        byteSize: copied.manifest.byteSize,
+        sourceFilename: studioModel.name,
+        mimeType: copied.manifest.mimeType,
+        releaseAssetId: copied.manifest.id,
+      };
+      if (!experience.scenes.length) {
+        experience.scenes.push({
+          id: `release_scene_${currentProject.id}`,
+          projectId: currentProject.id,
+          name: "Project Navigation",
+          type: "project-navigation",
+          modelId: studioModel.id,
+          sortOrder: 10,
+          enabled: true,
+          settings: {
+            status: "ready",
+            source: "immutable-studio-release",
+          },
+        });
+      }
+    }
+
+    const manifest = {
+      format: RELEASE_FORMAT,
+      version: RELEASE_VERSION,
+      release: {
+        id: releaseId,
+        projectId: currentProject.id,
+        projectSlug: currentProject.slug,
+        version,
+        createdAt,
+        ...(cloudDraft ? { sourceDraftRevision: cloudDraft.revision } : {}),
+      },
+      project: {
+        id: currentProject.id,
+        slug: currentProject.slug,
+        name: currentProject.name,
+        ...(currentProject.location
+          ? { location: currentProject.location }
+          : {}),
+        status: "published",
+      },
+      experience: {
+        scenes: experience.scenes,
+        ...(experience.camera ? { camera: experience.camera } : {}),
+        ...(frozenModel ? { model: frozenModel } : {}),
+        mediaFiles,
+      },
+      ...(cloudDraft
+        ? { studio: { project: cloudDraft.draft } }
+        : {}),
+      sourceEvidence: sourceEvidenceFromDraft(cloudDraft?.draft),
+      assets: releaseAssets.map((asset) => asset.manifest),
+    };
+
+    const manifestJson = JSON.stringify(manifest);
+    const manifestSha256 = await digestHex(manifestJson);
+    const assetStatements = releaseAssets.map((asset) =>
+      env.DB.prepare(
+        `INSERT INTO release_assets_3d
+          (release_id,project_id,kind,logical_id,name,mime_type,byte_size,
+           sha256,source_etag,r2_key,created_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      ).bind(
+        releaseId,
+        currentProject.id,
+        asset.database.kind,
+        asset.database.logicalId,
+        asset.database.name,
+        asset.database.mimeType,
+        asset.database.byteSize,
+        asset.database.sha256,
+        asset.database.sourceEtag,
+        asset.database.r2Key,
+        createdAt,
+      ),
+    );
+
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO releases_3d
+          (id,project_id,version,manifest_json,manifest_sha256,
+           source_draft_revision,created_by,created_at)
+          VALUES (?,?,?,?,?,?,?,?)`,
+      ).bind(
+        releaseId,
+        currentProject.id,
+        version,
+        manifestJson,
+        manifestSha256,
+        cloudDraft?.revision ?? null,
+        actor.email,
+        createdAt,
+      ),
+      ...assetStatements,
+      env.DB.prepare(
+        `UPDATE projects_3d
+            SET active_release_id=?,status='published',updated_at=?
+          WHERE id=?`,
+      ).bind(releaseId, createdAt, currentProject.id),
+      env.DB.prepare(
+        `INSERT INTO release_activations_3d
+          (id,project_id,release_id,previous_release_id,action,actor_email,created_at)
+          VALUES (?,?,?,?,?,?,?)`,
+      ).bind(
+        crypto.randomUUID(),
+        currentProject.id,
+        releaseId,
+        currentProject.active_release_id ?? null,
+        "publish",
+        actor.email,
+        createdAt,
+      ),
+      env.DB.prepare(
+        `INSERT INTO engine_admin_audit
+          (id,actor_email,action,project_id,target_id,details_json,created_at)
+          VALUES (?,?,?,?,?,?,?)`,
+      ).bind(
+        crypto.randomUUID(),
+        actor.email,
+        "release.published",
+        currentProject.id,
+        releaseId,
+        JSON.stringify({
+          version,
+          manifestSha256,
+          sourceDraftRevision: cloudDraft?.revision ?? null,
+          assetCount: releaseAssets.length,
+          previousReleaseId: currentProject.active_release_id ?? null,
+        }),
+        createdAt,
+      ),
+    ]);
+
+    return {
+      id: releaseId,
+      version,
+      manifestSha256,
+      sourceDraftRevision: cloudDraft?.revision,
+      createdAt,
+      active: true,
+      assetCount: releaseAssets.length,
+    };
+  } catch (error) {
+    await Promise.all(
+      createdKeys.map((key) => env.MODEL_ASSETS.delete(key).catch(() => {})),
+    );
+    throw error;
+  }
+}
+
+async function verifyReleaseIntegrity(env, project, releaseId) {
+  const release = await env.DB.prepare(
+    `SELECT id,project_id,version,manifest_json,
+            manifest_sha256 AS manifestSha256
+       FROM releases_3d
+      WHERE id=? AND project_id=?
+      LIMIT 1`,
+  ).bind(releaseId, project.id).first();
+  if (!release) throw Error("Release does not belong to this project.");
+
+  const actualHash = await digestHex(release.manifest_json);
+  if (actualHash !== String(release.manifestSha256 || "").toLowerCase())
+    throw Error("Release manifest checksum mismatch.");
+
+  let manifest;
+  try {
+    manifest = JSON.parse(release.manifest_json);
+  } catch {
+    throw Error("Release manifest JSON is invalid.");
+  }
+  if (
+    manifest?.format !== RELEASE_FORMAT ||
+    manifest?.version !== RELEASE_VERSION ||
+    manifest?.release?.id !== releaseId ||
+    manifest?.release?.projectId !== project.id ||
+    manifest?.release?.projectSlug !== project.slug ||
+    Number(manifest?.release?.version) !== Number(release.version) ||
+    manifest?.project?.id !== project.id ||
+    manifest?.project?.slug !== project.slug
+  )
+    throw Error("Release manifest identity mismatch.");
+
+  const rows = await env.DB.prepare(
+    `SELECT kind,logical_id AS logicalId,byte_size AS byteSize,
+            sha256,r2_key AS r2Key
+       FROM release_assets_3d
+      WHERE release_id=? AND project_id=?
+      ORDER BY kind,logical_id`,
+  ).bind(releaseId, project.id).all();
+  const assets = rows.results || [];
+  if (assets.length !== (manifest.assets?.length || 0))
+    throw Error("Release asset metadata count mismatch.");
+
+  const manifestByKey = new Map(
+    (manifest.assets || []).map((asset) => [
+      `${asset.kind}:${asset.logicalId}`,
+      asset,
+    ]),
+  );
+  for (const row of assets) {
+    const asset = manifestByKey.get(`${row.kind}:${row.logicalId}`);
+    if (
+      !asset ||
+      Number(asset.byteSize) !== Number(row.byteSize) ||
+      (asset.sha256 ?? null) !== (row.sha256 ?? null)
+    )
+      throw Error("Release asset manifest metadata mismatch.");
+  }
+
+  for (let index = 0; index < assets.length; index += 20) {
+    const chunk = assets.slice(index, index + 20);
+    await Promise.all(
+      chunk.map(async (asset) => {
+        const object = await env.MODEL_ASSETS.head(asset.r2Key);
+        if (!object)
+          throw Error(`Release asset is missing from storage: ${asset.logicalId}`);
+        if (Number(object.size) !== Number(asset.byteSize))
+          throw Error(`Release asset size mismatch: ${asset.logicalId}`);
+        const metadataSha = object.customMetadata?.sha256;
+        if (
+          asset.sha256 &&
+          metadataSha &&
+          String(metadataSha).toLowerCase() !== String(asset.sha256).toLowerCase()
+        )
+          throw Error(`Release asset checksum metadata mismatch: ${asset.logicalId}`);
+      }),
+    );
+  }
+
+  return {
+    id: release.id,
+    version: Number(release.version),
+    manifestSha256: actualHash,
+  };
+}
+
+export async function activateExistingRelease(env, actor, project, releaseId) {
+  if (!(await releaseSchemaReady(env)))
+    throw Error("Immutable release schema is not installed.");
+
+  const current = await env.DB.prepare(
+    "SELECT active_release_id,status FROM projects_3d WHERE id=? LIMIT 1",
+  ).bind(project.id).first();
+  const release = await verifyReleaseIntegrity(
+    env,
+    project,
+    releaseId,
+  );
+  if (current?.active_release_id === releaseId)
+    return {
+      id: release.id,
+      version: Number(release.version),
+      manifestSha256: release.manifestSha256,
+      active: true,
+      unchanged: true,
+    };
+
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE projects_3d
+          SET active_release_id=?,status='published',updated_at=?
+        WHERE id=?`,
+    ).bind(releaseId, now, project.id),
+    env.DB.prepare(
+      `INSERT INTO release_activations_3d
+        (id,project_id,release_id,previous_release_id,action,actor_email,created_at)
+        VALUES (?,?,?,?,?,?,?)`,
+    ).bind(
+      crypto.randomUUID(),
+      project.id,
+      releaseId,
+      current?.active_release_id ?? null,
+      "rollback",
+      actor.email,
+      now,
+    ),
+    env.DB.prepare(
+      `INSERT INTO engine_admin_audit
+        (id,actor_email,action,project_id,target_id,details_json,created_at)
+        VALUES (?,?,?,?,?,?,?)`,
+    ).bind(
+      crypto.randomUUID(),
+      actor.email,
+      "release.activated",
+      project.id,
+      releaseId,
+      JSON.stringify({
+        version: Number(release.version),
+        previousReleaseId: current?.active_release_id ?? null,
+      }),
+      now,
+    ),
+  ]);
+
+  return {
+    id: release.id,
+    version: Number(release.version),
+    manifestSha256: release.manifestSha256,
+    active: true,
+    unchanged: false,
+  };
+}

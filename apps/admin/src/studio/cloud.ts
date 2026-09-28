@@ -26,6 +26,16 @@ export interface CloudProjectSummary {
   assetCount: number;
 }
 
+export interface CloudReleaseSummary {
+  id: string;
+  version: number;
+  manifestSha256: string;
+  sourceDraftRevision?: number;
+  createdBy: string;
+  createdAt: string;
+  active: boolean;
+}
+
 export interface CloudAssetSummary {
   id: string;
   projectId: string;
@@ -326,4 +336,44 @@ export async function syncProject(project: Project, files: Asset[]) {
   }
 
   return next;
+}
+
+
+export async function releases(slug: string) {
+  return api<{ releases: CloudReleaseSummary[] }>(
+    `${CLOUD_BASE}/projects/${encodeURIComponent(slug)}/releases`,
+  );
+}
+
+export async function publishRelease(
+  slug: string,
+  expectedDraftRevision?: number,
+) {
+  return api<{ release: CloudReleaseSummary & { assetCount: number } }>(
+    `${CLOUD_BASE}/projects/${encodeURIComponent(slug)}/releases`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "publish",
+        ...(expectedDraftRevision
+          ? { expectedDraftRevision }
+          : {}),
+      }),
+    },
+  );
+}
+
+
+export async function activateRelease(slug: string, releaseId: string) {
+  return api<{ release: CloudReleaseSummary & { unchanged?: boolean } }>(
+    `${CLOUD_BASE}/projects/${encodeURIComponent(
+      slug,
+    )}/releases/${encodeURIComponent(releaseId)}/activate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    },
+  );
 }
