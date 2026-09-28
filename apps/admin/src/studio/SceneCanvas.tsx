@@ -14,7 +14,10 @@ import { asset } from "./storage";
 import {
   canWalk,
   catalog,
+  roomBoundaryPoints,
   type Asset,
+  type Room,
+  type RoomPoint,
   type Scene as SceneData,
 } from "./domain";
 
@@ -95,7 +98,13 @@ interface Props {
     floorId: string;
     snap: boolean;
   };
+  roomPolygonDraw?: {
+    enabled: boolean;
+    floorId: string;
+    snap: boolean;
+  };
   onRoomDraw?: (result: RoomDrawResult) => void;
+  onRoomPolygonDraw?: (points: RoomPoint[]) => void;
   isolateFloorId?: string;
   sectionCut?: {
     enabled: boolean;
@@ -138,6 +147,68 @@ function block(
   mesh.receiveShadow = true;
   root.add(mesh);
   return mesh;
+}
+
+function roomSurface(
+  root: T.Object3D,
+  room: Room,
+  height: number,
+  mapper: boolean,
+  selected: boolean,
+) {
+  const world = roomBoundaryPoints(room);
+  const local = world.map(
+    ([x, z]) => [x - room.x, z - room.z] as RoomPoint,
+  );
+  const shape = new T.Shape();
+  local.forEach(([x, z], index) => {
+    if (!index) shape.moveTo(x, z);
+    if (index) shape.lineTo(x, z);
+  });
+  shape.closePath();
+  const floorMaterial = new T.MeshStandardMaterial({
+    color: room.color,
+    roughness: 0.75,
+    side: T.DoubleSide,
+    transparent: mapper,
+    opacity: mapper ? (selected ? 0.52 : 0.24) : 1,
+    depthWrite: !mapper,
+  });
+  const floor = new T.Mesh(new T.ShapeGeometry(shape), floorMaterial);
+  floor.name = room.name;
+  floor.rotation.x = Math.PI / 2;
+  floor.position.y = mapper ? 0.04 : -0.04;
+  floor.receiveShadow = true;
+  floor.renderOrder = mapper ? 20 : 0;
+  root.add(floor);
+
+  if (mapper) return floor;
+  for (let index = 0; index < local.length; index += 1) {
+    const left = local[index];
+    const right = local[(index + 1) % local.length];
+    const dx = right[0] - left[0];
+    const dz = right[1] - left[1];
+    const length = Math.hypot(dx, dz);
+    if (length < 0.03) continue;
+    const wall = new T.Mesh(
+      new T.BoxGeometry(length, height, 0.12),
+      new T.MeshStandardMaterial({
+        color: index % 2 ? "#e7e0d5" : "#eee9df",
+        roughness: 0.82,
+      }),
+    );
+    wall.name = "wall";
+    wall.position.set(
+      (left[0] + right[0]) / 2,
+      height / 2,
+      (left[1] + right[1]) / 2,
+    );
+    wall.rotation.y = Math.atan2(-dz, dx);
+    wall.castShadow = true;
+    wall.receiveShadow = true;
+    root.add(wall);
+  }
+  return floor;
 }
 
 type MaterialBase = {
@@ -285,6 +356,8 @@ export default function SceneCanvas(props: Props) {
     profileExterior?: ModelProfileRuntime["exterior"];
     modelSelection?: T.BoxHelper;
     roomDraft: T.Mesh;
+    polygonDraft: T.Group;
+    clearPolygonDraft: () => void;
     focus: () => void;
     focusSelected: () => void;
   } | null>(null);
@@ -348,7 +421,10 @@ export default function SceneCanvas(props: Props) {
     );
     roomDraft.visible = false;
     roomDraft.renderOrder = 30;
-    scene.add(references, model, rooms, roomDraft);
+    const polygonDraft = new T.Group();
+    polygonDraft.name = "Room polygon draft";
+    polygonDraft.renderOrder = 31;
+    scene.add(references, model, rooms, roomDraft, polygonDraft);
     const keys = new Set<string>();
     const selectables = new Map<string, T.Object3D>();
     const transform = new TransformControls(camera, renderer.domElement);
@@ -360,6 +436,55 @@ export default function SceneCanvas(props: Props) {
         r,
         y: s.floors.find((f) => f.id === r?.floorId)?.elevation ?? 0,
       };
+    };
+    const polygonDraftPoints: T.Vector3[] = [];
+    const clearPolygonDraft = () => {
+      polygonDraftPoints.length = 0;
+      for (const child of [...polygonDraft.children]) {
+        polygonDraft.remove(child);
+        dispose(child);
+      }
+    };
+    const redrawPolygonDraft = (hover?: T.Vector3) => {
+      for (const child of [...polygonDraft.children]) {
+        polygonDraft.remove(child);
+        dispose(child);
+      }
+      const points = hover
+        ? [...polygonDraftPoints, hover]
+        : [...polygonDraftPoints];
+      if (points.length >= 2) {
+        const geometry = new T.BufferGeometry().setFromPoints(points);
+        const line = new T.Line(
+          geometry,
+          new T.LineBasicMaterial({
+            color: 0x8d84ff,
+            transparent: true,
+            opacity: 0.95,
+          }),
+        );
+        polygonDraft.add(line);
+      }
+      for (const point of polygonDraftPoints) {
+        const marker = new T.Mesh(
+          new T.SphereGeometry(0.09, 12, 8),
+          new T.MeshBasicMaterial({ color: 0xb9b2ff }),
+        );
+        marker.position.copy(point);
+        polygonDraft.add(marker);
+      }
+    };
+    const finishPolygonDraft = () => {
+      if (polygonDraftPoints.length < 3) {
+        setStatus("Add at least 3 corners before finishing the room.");
+        return;
+      }
+      const points = polygonDraftPoints.map(
+        (point) => [Number(point.x.toFixed(3)), Number(point.z.toFixed(3))] as RoomPoint,
+      );
+      latest.current.onRoomPolygonDraw?.(points);
+      clearPolygonDraft();
+      setStatus("");
     };
     let yaw = 0,
       pitch = 0;
@@ -512,6 +637,8 @@ export default function SceneCanvas(props: Props) {
       hemi,
       sun,
       roomDraft,
+      polygonDraft,
+      clearPolygonDraft,
       focus,
       focusSelected,
     };
