@@ -146,10 +146,12 @@ export function resolveFloorGeometry(options: {
         );
       })
     )
-      return floorIds.map((floor) => ({
-        ...byFloor.get(floor)!,
-        source: "profile",
-      }));
+      return floorIds
+        .map((floor) => ({
+          ...byFloor.get(floor)!,
+          source: "profile" as const,
+        }))
+        .sort((left, right) => left.elevationM - right.elevationM);
   }
 
   const ids = floorIds.length ? floorIds : [0];
