@@ -1,5 +1,9 @@
 import * as THREE from "three";
 import { applyJyotiReferenceExterior } from "./jyotiReferenceExterior";
+import {
+  JYOTI_SOURCE_FLOOR_LEVELS_M,
+  JYOTI_SOURCE_MODEL_SHA256,
+} from "./jyotiSourceProfile";
 import { floorGeometryFromBoundaries, type FloorGeometryLevel } from "./floorGeometry";
 
 type ExteriorRuntime = NonNullable<
@@ -23,10 +27,17 @@ export function applyModelProfileExterior(
   object: THREE.Object3D,
   enabled = true,
 ): ModelProfileRuntime | undefined {
-  if (!enabled) return undefined;
+  let matched = false;
+  object.traverse((node) => {
+    if (node.userData.sourceGeometry?.sha256 === JYOTI_SOURCE_MODEL_SHA256)
+      matched = true;
+  });
+  if (!matched) return undefined;
 
-  const exterior = applyJyotiReferenceExterior(object);
-  if (!exterior) return undefined;
+  const exterior = enabled
+    ? applyJyotiReferenceExterior(object)
+    : undefined;
+  const floorLevels = exterior?.floorLevels ?? JYOTI_SOURCE_FLOOR_LEVELS_M;
 
   return {
     id: "reference-source-v9",
@@ -36,8 +47,8 @@ export function applyModelProfileExterior(
       new THREE.Vector3(22.52, 20.86, -2.73),
     ),
     floorGeometry: floorGeometryFromBoundaries(
-      exterior.floorLevels.slice(0, -1).map((_, index) => index),
-      exterior.floorLevels,
+      floorLevels.slice(0, -1).map((_, index) => index),
+      floorLevels,
     ),
     defaultInteriorRoomId: "101-living",
   };
