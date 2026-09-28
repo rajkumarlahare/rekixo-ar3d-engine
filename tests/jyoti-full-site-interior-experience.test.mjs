@@ -49,7 +49,7 @@ test("roof mode does not claim an unsupported recreational roof amenity", () => 
 test("viewer raycasts project features and supports experience modes", () => {
   const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
   const profiles = read("apps/public/src/viewer/projectProfiles.ts");
-  assert.match(viewer, /createProfileExperience/);
+  assert.match(viewer, /loadProfileExperience/);
   assert.match(profiles, /createJyotiProjectExperience/);
   assert.match(viewer, /experienceMode/);
   assert.match(viewer, /Raycaster/);
