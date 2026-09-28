@@ -16,6 +16,7 @@ import {
 } from "./domain";
 import * as storage from "./storage";
 import { importPublished } from "./published";
+import { buildSceneManifestV2 } from "./manifestV2";
 import "./studio.css";
 
 function download(blob: Blob, name: string) {
@@ -357,21 +358,10 @@ export default function Studio() {
             onClick={() =>
               task(async () => {
                 validateProject(p);
-                setManifestText(
-                  JSON.stringify({
-                    format: "rekixo-scene-manifest-1",
-                    project: p,
-                    assets: files.map(({ id, name, type, size, hash }) => ({
-                      id,
-                      name,
-                      type,
-                      size,
-                      hash,
-                    })),
-                  }),
-                );
+                const manifest = buildSceneManifestV2(p, files);
+                setManifestText(JSON.stringify(manifest, null, 2));
                 setMessage(
-                  "Scene manifest ready. Keep the full backup for the model files.",
+                  "Scene Manifest V2 ready. It is a portable scene contract; keep the full backup for model/reference bytes.",
                 );
               })
             }
