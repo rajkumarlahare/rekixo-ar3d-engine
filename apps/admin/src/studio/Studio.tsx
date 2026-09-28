@@ -595,6 +595,57 @@ export default function Studio() {
             · {p.scene.rooms.length} rooms
           </span>
         </div>
+        <div className="studio-project-switcher">
+          <label>
+            <span>PROJECT</span>
+            <select
+              aria-label="Selected local project"
+              value={list.some((entry) => entry.id === p.id) ? p.id : ""}
+              disabled={busy || dirty}
+              onChange={(event) => {
+                const next = list.find(
+                  (entry) => entry.id === event.target.value,
+                );
+                if (next) switchProject(next);
+              }}
+            >
+              <option value="">
+                {list.some((entry) => entry.id === p.id)
+                  ? "Select project"
+                  : "Unsaved project"}
+              </option>
+              {list.map((entry) => (
+                <option value={entry.id} key={entry.id}>
+                  {entry.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {cloudSession?.authenticated && (
+            <label>
+              <span>CLOUD</span>
+              <select
+                aria-label="Selected cloud project"
+                value=""
+                disabled={busy || dirty || !cloudProjects.length}
+                onChange={(event) => {
+                  const slug = event.target.value;
+                  if (!slug) return;
+                  void task(() => openCloudProject(slug));
+                }}
+              >
+                <option value="">
+                  {cloudProjects.length ? "Open cloud project…" : "No cloud projects"}
+                </option>
+                {cloudProjects.map((entry) => (
+                  <option key={entry.id} value={entry.slug}>
+                    {entry.name} · r{entry.draftRevision ?? "—"}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
         <div className="studio-actions">
           <button
             disabled={busy || Boolean(review)}
