@@ -37,7 +37,8 @@ test("reference mode keeps mobile quality without invented facade geometry", () 
   const profiles = read("apps/public/src/viewer/projectProfiles.ts");
   assert.match(viewer, /antialias: referenceVisual \|\| !mobile/);
   assert.match(viewer, /renderer\.shadowMap\.enabled = referenceVisual \|\| !mobile/);
-  assert.match(viewer, /createProfileExperience/);
+  assert.match(viewer, /loadProfileExperience/);
+  assert.match(profiles, /await import\("\.\/projectExperience"\)/);
   assert.match(
     profiles,
     /createJyotiProjectExperience\([\s\S]*bounds,[\s\S]*context\.mobile,[\s\S]*context\.referenceVisual,[\s\S]*context\.preserveSourceSite/,
