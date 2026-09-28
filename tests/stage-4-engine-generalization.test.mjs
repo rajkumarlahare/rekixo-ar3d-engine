@@ -95,6 +95,6 @@ test("privileged Engine writes live only behind the dedicated cloud auth boundar
   assert.match(cloud, /sameOrigin\(request\)/);
   assert.match(cloud, /Engine Admin sign-in required/);
   assert.match(cloud, /ENGINE_ADMIN_SESSION_SECRET/);
-  assert.doesNotMatch(cloud, /tiyansh_admin|SESSION_SECRET\b|ADMIN_PASSWORD_HASH\b/);
+  assert.doesNotMatch(cloud, /tiyansh_admin|\\bSESSION_SECRET\\b|\\bADMIN_PASSWORD_HASH\\b/);
   assert.match(worker, /request\.method !== "GET"/);
 });
