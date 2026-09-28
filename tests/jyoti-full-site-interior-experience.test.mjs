@@ -61,7 +61,7 @@ test("digital twin navigation exposes brochure-backed interior and roof modes", 
   const app = read("apps/public/src/main.tsx");
   assert.match(app, /Typical Floor Interior/);
   assert.match(app, /Roof Inspection/);
-  assert.match(app, /Car Parking, Modular Kitchen, POP in Hall and CCTV Camera/);
+  assert.match(app, /amenitySettings\.amenities/);
   assert.match(app, /experienceMode=\{experienceMode\}/);
   assert.match(app, /twin-feature-card/);
 });
