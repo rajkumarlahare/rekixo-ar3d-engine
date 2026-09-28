@@ -662,18 +662,42 @@ export default function Studio() {
       },
     });
   }
-  function patchRoomForMesh(targetRoomId: string, meshName: string) {
+  function bindSelectedMeshToRoom(targetRoomId: string) {
+    if (!selectedModelNode) return;
+    const target = p.scene.rooms.find(
+      (candidate) => candidate.id === targetRoomId,
+    );
+    if (!target) return;
+    const previous = p.scene.modelNodeTags ?? [];
+    const tag: ModelNodeTag = {
+      nodeName: selectedModelNode.name,
+      occurrence: selectedModelNode.occurrence,
+      floorId: target.floorId,
+      unit: target.unit,
+      roomId: target.id,
+    };
     edit({
       ...p,
       scene: {
         ...p.scene,
         rooms: p.scene.rooms.map((candidate) =>
-          candidate.id === targetRoomId
-            ? { ...candidate, mesh: meshName }
+          candidate.id === target.id
+            ? { ...candidate, mesh: selectedModelNode.name }
             : candidate,
         ),
+        modelNodeTags: [
+          ...previous.filter(
+            (entry) =>
+              !(
+                entry.nodeName === selectedModelNode.name &&
+                entry.occurrence === selectedModelNode.occurrence
+              ),
+          ),
+          tag,
+        ],
       },
     });
+    setRoomId(target.id);
   }
   function patchItem(change: Partial<Furniture>) {
     if (!item) return;
@@ -2399,15 +2423,9 @@ export default function Studio() {
                       <select
                         value={selectedModelNodeTag?.roomId ?? ""}
                         onChange={(event) => {
-                          const roomId = event.target.value;
-                          patchModelNodeTag({ roomId });
-                          const target = p.scene.rooms.find(
-                            (candidate) => candidate.id === roomId,
-                          );
-                          if (target) {
-                            setRoomId(target.id);
-                            patchRoomForMesh(target.id, mesh);
-                          }
+                          const targetRoomId = event.target.value;
+                          if (targetRoomId) bindSelectedMeshToRoom(targetRoomId);
+                          else patchModelNodeTag({ roomId: "" });
                         }}
                       >
                         <option value="">No exact room</option>
@@ -2437,15 +2455,7 @@ export default function Studio() {
                 <button
                   disabled={!room}
                   onClick={() => {
-                    if (room) {
-                      patchRoom({ mesh });
-                      if (selectedModelNode)
-                        patchModelNodeTag({
-                          floorId: room.floorId,
-                          unit: room.unit,
-                          roomId: room.id,
-                        });
-                    }
+                    if (room) bindSelectedMeshToRoom(room.id);
                   }}
                 >
                   Bind mesh to current room
