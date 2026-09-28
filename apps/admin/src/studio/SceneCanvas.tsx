@@ -48,6 +48,8 @@ export interface ModelNodeSummary {
   key: string;
   name: string;
   type: string;
+  occurrence: number;
+  centreY: number;
 }
 export interface ModelMaterialSummary {
   name: string;
@@ -68,7 +70,9 @@ interface Props {
   selected: string;
   onSelect: (id: string) => void;
   onMesh: (name: string) => void;
+  onModelNodeSelect?: (node: ModelNodeSummary) => void;
   selectedMesh?: string;
+  selectedMeshKey?: string;
   transformMode?: TransformMode;
   transformEnabled?: boolean;
   snap?: boolean;
@@ -79,6 +83,13 @@ interface Props {
   cameraOrientation?: "perspective" | "top";
   showReferenceLayers?: boolean;
   modelTransformEnabled?: boolean;
+  isolateFloorId?: string;
+  sectionCut?: {
+    enabled: boolean;
+    axis: "x" | "y" | "z";
+    offset: number;
+    flip: boolean;
+  };
 }
 function dispose(root: T.Object3D) {
   const materials = new Set<T.Material>(),
@@ -185,6 +196,30 @@ function applyModelMaterialOverrides(root: T.Object3D, scene: SceneData) {
   });
 }
 
+function applyModelNodeVisibility(
+  root: T.Object3D,
+  scene: SceneData,
+  isolateFloorId?: string,
+) {
+  const tags = new Map(
+    (scene.modelNodeTags ?? []).map((tag) => [
+      `${tag.nodeName}\u0000${tag.occurrence}`,
+      tag,
+    ]),
+  );
+  root.traverse((node) => {
+    if (!(node instanceof T.Mesh)) return;
+    const name = node.userData.studioNodeName as string | undefined;
+    const occurrence = node.userData.studioNodeOccurrence as number | undefined;
+    if (!name || !occurrence) return;
+    const tag = tags.get(`${name}\u0000${occurrence}`);
+    node.visible =
+      !isolateFloorId ||
+      !tag?.floorId ||
+      tag.floorId === isolateFloorId;
+  });
+}
+
 function summarizeModelMaterials(root: T.Object3D): ModelMaterialSummary[] {
   const rows = new Map<string, ModelMaterialSummary>();
   root.traverse((node) => {
@@ -254,6 +289,7 @@ export default function SceneCanvas(props: Props) {
     renderer.setPixelRatio(Math.min(devicePixelRatio, 1.7));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = T.PCFShadowMap;
+    renderer.localClippingEnabled = true;
     renderer.outputColorSpace = T.SRGBColorSpace;
     renderer.toneMapping = T.ACESFilmicToneMapping;
     el.appendChild(renderer.domElement);
@@ -418,11 +454,16 @@ export default function SceneCanvas(props: Props) {
         frameObject(target);
         return;
       }
+      const meshKey = latest.current.selectedMeshKey;
       const meshName = latest.current.selectedMesh;
-      if (meshName) {
+      if (meshKey || meshName) {
         let modelTarget: T.Object3D | undefined;
         model.traverse((node) => {
-          if (!modelTarget && node instanceof T.Mesh && node.name === meshName)
+          if (modelTarget || !(node instanceof T.Mesh)) return;
+          if (
+            (meshKey && node.userData.studioNodeKey === meshKey) ||
+            (!meshKey && meshName && node.name === meshName)
+          )
             modelTarget = node;
         });
         if (modelTarget) {
@@ -595,9 +636,21 @@ export default function SceneCanvas(props: Props) {
         true,
       )[0];
       if (hit) {
-        if (latest.current.view === "building")
-          latest.current.onMesh(hit.object.name);
-        else {
+        if (latest.current.view === "building") {
+          let n: T.Object3D | null = hit.object;
+          while (n && !n.userData.studioNodeKey && n !== model) n = n.parent;
+          if (n?.userData.studioNodeKey) {
+            const summary: ModelNodeSummary = {
+              key: String(n.userData.studioNodeKey),
+              name: String(n.userData.studioNodeName ?? n.name),
+              type: n.type,
+              occurrence: Number(n.userData.studioNodeOccurrence ?? 1),
+              centreY: Number(n.userData.studioNodeCentreY ?? 0),
+            };
+            latest.current.onMesh(summary.name);
+            latest.current.onModelNodeSelect?.(summary);
+          }
+        } else {
           let n: T.Object3D | null = hit.object;
           while (n && !n.userData.selectId) n = n.parent;
           if (n) latest.current.onSelect(n.userData.selectId);
@@ -721,6 +774,34 @@ export default function SceneCanvas(props: Props) {
         loader.setMeshoptDecoder(MeshoptDecoder);
         object = (await loader.parseAsync(data, "")).scene;
       }
+      const modelNodes: ModelNodeSummary[] = [];
+      const nodeOccurrences = new Map<string, number>();
+      let modelNodeIndex = 0;
+      object.updateWorldMatrix(true, true);
+      object.traverse((node) => {
+        if (!(node instanceof T.Mesh)) return;
+        modelNodeIndex += 1;
+        if (!node.name) node.name = `Mesh ${modelNodeIndex}`;
+        const occurrence = (nodeOccurrences.get(node.name) ?? 0) + 1;
+        nodeOccurrences.set(node.name, occurrence);
+        const key = `mesh:${modelNodeIndex}`;
+        const bounds = new T.Box3().setFromObject(node);
+        const centreY = bounds.isEmpty()
+          ? 0
+          : bounds.getCenter(new T.Vector3()).y;
+        node.userData.studioNodeKey = key;
+        node.userData.studioNodeName = node.name;
+        node.userData.studioNodeOccurrence = occurrence;
+        node.userData.studioNodeCentreY = centreY;
+        modelNodes.push({
+          key,
+          name: node.name,
+          type: node.type,
+          occurrence,
+          centreY,
+        });
+      });
+      latest.current.onModelNodes?.(modelNodes);
       if (cancelled) {
         dispose(object);
         return;
@@ -742,22 +823,12 @@ export default function SceneCanvas(props: Props) {
       const materialEnhancer =
         await loadModelProfileMaterialEnhancer(modelProfile);
       materialEnhancer?.(object, runtime.renderer, referenceVisual);
-      const modelNodes: ModelNodeSummary[] = [];
-      let modelNodeIndex = 0;
       object.traverse((n) => {
         if (n instanceof T.Mesh) {
           n.castShadow = true;
           n.receiveShadow = true;
-          modelNodeIndex += 1;
-          if (!n.name) n.name = `Mesh ${modelNodeIndex}`;
-          modelNodes.push({
-            key: `mesh:${modelNodeIndex}`,
-            name: n.name,
-            type: n.type,
-          });
         }
       });
-      latest.current.onModelNodes?.(modelNodes);
       runtime.model.add(object);
       const alignment = latest.current.scene.modelTransform ?? {
         x: 0,
@@ -769,6 +840,11 @@ export default function SceneCanvas(props: Props) {
       runtime.model.rotation.y = T.MathUtils.degToRad(alignment.rotationY);
       runtime.model.scale.setScalar(latest.current.scene.scale);
       applyModelMaterialOverrides(runtime.model, latest.current.scene);
+      applyModelNodeVisibility(
+        runtime.model,
+        latest.current.scene,
+        latest.current.isolateFloorId,
+      );
       latest.current.onModelMaterials?.(
         summarizeModelMaterials(runtime.model),
       );
@@ -882,6 +958,73 @@ export default function SceneCanvas(props: Props) {
   useEffect(() => {
     const runtime = api.current;
     if (!runtime) return;
+    applyModelNodeVisibility(
+      runtime.model,
+      props.scene,
+      props.isolateFloorId,
+    );
+  }, [
+    props.scene.modelNodeTags,
+    props.isolateFloorId,
+    props.scene.modelId,
+    props.scene.appearance?.referenceVisual,
+  ]);
+
+  useEffect(() => {
+    const runtime = api.current;
+    if (!runtime) return;
+    const planes: T.Plane[] = [];
+    if (props.isolateFloorId) {
+      const floors = [...props.scene.floors].sort(
+        (left, right) => left.elevation - right.elevation,
+      );
+      const index = floors.findIndex(
+        (floor) => floor.id === props.isolateFloorId,
+      );
+      const floor = floors[index];
+      if (floor) {
+        const roomHeight = Math.max(
+          3,
+          ...props.scene.rooms
+            .filter((room) => room.floorId === floor.id)
+            .map((room) => room.height),
+        );
+        const next = floors[index + 1];
+        const lower = floor.elevation - 0.06;
+        const upper = (next?.elevation ?? floor.elevation + roomHeight) - 0.04;
+        planes.push(
+          new T.Plane(new T.Vector3(0, 1, 0), -lower),
+          new T.Plane(new T.Vector3(0, -1, 0), upper),
+        );
+      }
+    }
+    if (props.sectionCut?.enabled) {
+      const normal =
+        props.sectionCut.axis === "x"
+          ? new T.Vector3(1, 0, 0)
+          : props.sectionCut.axis === "y"
+            ? new T.Vector3(0, 1, 0)
+            : new T.Vector3(0, 0, 1);
+      if (props.sectionCut.flip) normal.negate();
+      const sign = props.sectionCut.flip ? -1 : 1;
+      planes.push(
+        new T.Plane(normal, -props.sectionCut.offset * sign),
+      );
+    }
+    runtime.renderer.clippingPlanes = planes;
+  }, [
+    props.isolateFloorId,
+    props.sectionCut?.enabled,
+    props.sectionCut?.axis,
+    props.sectionCut?.offset,
+    props.sectionCut?.flip,
+    props.scene.floors,
+    props.scene.rooms,
+  ]);
+
+  useEffect(() => {
+    const runtime = api.current;
+    if (!runtime) return;
     const appearance = props.scene.appearance;
     runtime.renderer.toneMappingExposure = appearance?.exposure ?? 1;
     runtime.hemi.intensity = appearance?.hemisphereIntensity ?? 2.8;
@@ -949,6 +1092,8 @@ export default function SceneCanvas(props: Props) {
         props.scene.floors.find((f) => f.id === room.floorId)?.elevation ?? 0,
         room.z,
       );
+      root.visible =
+        !props.isolateFloorId || room.floorId === props.isolateFloorId;
       r.rooms.add(root);
       r.selectables.set(room.id, root);
       const w = room.width,
@@ -1006,7 +1151,13 @@ export default function SceneCanvas(props: Props) {
         }
       }
     }
-  }, [props.scene, props.selected, props.view, props.roomId]);
+  }, [
+    props.scene,
+    props.selected,
+    props.view,
+    props.roomId,
+    props.isolateFloorId,
+  ]);
   useEffect(() => {
     const runtime = api.current;
     if (!runtime) return;
@@ -1068,10 +1219,21 @@ export default function SceneCanvas(props: Props) {
     runtime.modelSelection?.removeFromParent();
     if (runtime.modelSelection) dispose(runtime.modelSelection);
     runtime.modelSelection = undefined;
-    if (!props.selectedMesh || props.view !== "building") return;
+    if (
+      (!props.selectedMesh && !props.selectedMeshKey) ||
+      props.view !== "building"
+    )
+      return;
     let selectedObject: T.Object3D | undefined;
     runtime.model.traverse((node) => {
-      if (!selectedObject && node instanceof T.Mesh && node.name === props.selectedMesh)
+      if (selectedObject || !(node instanceof T.Mesh)) return;
+      if (
+        (props.selectedMeshKey &&
+          node.userData.studioNodeKey === props.selectedMeshKey) ||
+        (!props.selectedMeshKey &&
+          props.selectedMesh &&
+          node.name === props.selectedMesh)
+      )
         selectedObject = node;
     });
     if (!selectedObject) return;
@@ -1080,6 +1242,7 @@ export default function SceneCanvas(props: Props) {
     runtime.modelSelection = helper;
   }, [
     props.selectedMesh,
+    props.selectedMeshKey,
     props.view,
     props.scene.modelId,
     props.scene.appearance?.referenceVisual,
