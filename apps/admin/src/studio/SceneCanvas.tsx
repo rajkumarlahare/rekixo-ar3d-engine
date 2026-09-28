@@ -241,8 +241,23 @@ export default function SceneCanvas(props: Props) {
     };
     const focusSelected = () => {
       const target = selectables.get(latest.current.selected);
-      if (target) frameObject(target);
-      else focus();
+      if (target) {
+        frameObject(target);
+        return;
+      }
+      const meshName = latest.current.selectedMesh;
+      if (meshName) {
+        let modelTarget: T.Object3D | undefined;
+        model.traverse((node) => {
+          if (!modelTarget && node instanceof T.Mesh && node.name === meshName)
+            modelTarget = node;
+        });
+        if (modelTarget) {
+          frameObject(modelTarget);
+          return;
+        }
+      }
+      focus();
     };
     api.current = {
       scene,
@@ -524,9 +539,10 @@ export default function SceneCanvas(props: Props) {
           n.castShadow = true;
           n.receiveShadow = true;
           modelNodeIndex += 1;
+          if (!n.name) n.name = `Mesh ${modelNodeIndex}`;
           modelNodes.push({
             key: `mesh:${modelNodeIndex}`,
-            name: n.name || `Mesh ${modelNodeIndex}`,
+            name: n.name,
             type: n.type,
           });
         }
