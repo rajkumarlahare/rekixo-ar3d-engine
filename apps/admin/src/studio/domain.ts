@@ -74,6 +74,13 @@ export interface ReferenceLayer {
   z: number;
   rotation: number;
 }
+export interface ModelNodeTag {
+  nodeName: string;
+  occurrence: number;
+  floorId?: string;
+  unit?: string;
+  roomId?: string;
+}
 export interface Scene {
   floors: Floor[];
   rooms: Room[];
@@ -84,6 +91,7 @@ export interface Scene {
   materialOverrides?: MaterialOverride[];
   modelTransform?: ModelTransform;
   referenceLayers?: ReferenceLayer[];
+  modelNodeTags?: ModelNodeTag[];
 }
 export interface Release {
   id: string;
@@ -232,6 +240,7 @@ export function newProject(name: string): Project {
       materialOverrides: [],
       modelTransform: { x: 0, y: 0, z: 0, rotationY: 0 },
       referenceLayers: [],
+      modelNodeTags: [],
       floors: [{ id: id(), name: "Ground", elevation: 0 }],
       rooms: [],
       furniture: [],
@@ -328,6 +337,40 @@ export function validateScene(s: Scene): void {
         !number(layer.rotation, -3600, 3600)
       )
         throw Error("Invalid reference layer settings.");
+    }
+  }
+  if (s.modelNodeTags !== undefined) {
+    if (
+      !Array.isArray(s.modelNodeTags) ||
+      s.modelNodeTags.length > 5000 ||
+      new Set(
+        s.modelNodeTags.map(
+          (tag) => `${tag.nodeName}\u0000${tag.occurrence}`,
+        ),
+      ).size !== s.modelNodeTags.length
+    )
+      throw Error("Invalid model node tags.");
+    for (const tag of s.modelNodeTags) {
+      const room = tag.roomId
+        ? s.rooms.find((candidate) => candidate.id === tag.roomId)
+        : undefined;
+      if (
+        !text(tag.nodeName, 500) ||
+        !Number.isInteger(tag.occurrence) ||
+        tag.occurrence < 1 ||
+        tag.occurrence > 100000 ||
+        (tag.floorId !== undefined &&
+          !s.floors.some((floor) => floor.id === tag.floorId)) ||
+        (tag.unit !== undefined &&
+          (typeof tag.unit !== "string" || tag.unit.length > 120)) ||
+        (tag.roomId !== undefined && !room) ||
+        (room && tag.floorId !== undefined && room.floorId !== tag.floorId) ||
+        (room &&
+          tag.unit !== undefined &&
+          tag.unit.trim() &&
+          room.unit !== tag.unit.trim())
+      )
+        throw Error("Invalid model node floor/unit tag.");
     }
   }
   for (const f of s.floors)
