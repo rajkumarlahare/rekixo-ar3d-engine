@@ -103,8 +103,16 @@ export function buildSceneManifestV2(
               assetId: project.scene.modelId,
               role: "shell",
               transform: {
-                position: [0, 0, 0],
-                rotation: [0, 0, 0],
+                position: [
+                  project.scene.modelTransform?.x ?? 0,
+                  project.scene.modelTransform?.y ?? 0,
+                  project.scene.modelTransform?.z ?? 0,
+                ],
+                rotation: [
+                  0,
+                  ((project.scene.modelTransform?.rotationY ?? 0) * Math.PI) / 180,
+                  0,
+                ],
                 scale: [1, 1, 1],
               },
             },
