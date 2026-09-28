@@ -728,6 +728,72 @@ export default function Studio() {
                     </option>
                   ))}
                 </select>
+                {p.cloud && (
+                  <div className="release-panel">
+                    <div className="release-panel-head">
+                      <small>IMMUTABLE RELEASES</small>
+                      <button
+                        type="button"
+                        disabled={busy || dirty || Boolean(review)}
+                        onClick={() => task(publishCurrentRelease)}
+                      >
+                        Publish current
+                      </button>
+                    </div>
+                    {!cloudReleases.length ? (
+                      <small>
+                        No immutable release yet. Cloud draft edits are not public
+                        until you publish.
+                      </small>
+                    ) : (
+                      cloudReleases.slice(0, 8).map((entry) => (
+                        <div
+                          className={
+                            entry.active
+                              ? "release-row release-row--active"
+                              : "release-row"
+                          }
+                          key={entry.id}
+                        >
+                          <span>
+                            <b>v{entry.version}</b>
+                            <small>
+                              {entry.active
+                                ? "Active public release"
+                                : entry.sourceDraftRevision
+                                  ? `Draft r${entry.sourceDraftRevision}`
+                                  : "Frozen legacy runtime"}
+                            </small>
+                          </span>
+                          {entry.active ? (
+                            <strong>LIVE</strong>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={busy || dirty || Boolean(review)}
+                              onClick={() => {
+                                if (
+                                  !window.confirm(
+                                    `Switch the public project to immutable release v${entry.version}? The current draft will not be changed.`,
+                                  )
+                                )
+                                  return;
+                                void task(() =>
+                                  activatePublishedRelease(
+                                    entry.id,
+                                    entry.version,
+                                  ),
+                                );
+                              }}
+                            >
+                              Switch to v{entry.version}
+                            </button>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
                 <div className="cloud-account-row">
                   <small>
                     Signed in as {cloudSession.user?.email ?? "Engine Admin"}.
