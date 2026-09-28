@@ -19,6 +19,8 @@ const {
   duplicateFloor,
   projectSlug,
   validStudioSlug,
+  roomArea,
+  roomGeometryFromPolygon,
 } = await import(
   "data:text/javascript;base64," + Buffer.from(code).toString("base64")
 );
@@ -200,4 +202,51 @@ test("source mesh semantic tags stay floor and room consistent", () => {
     occurrence: 1,
   });
   assert.throws(() => validateProject(p), /model node tags/i);
+});
+
+
+test("polygon rooms validate, compute area and constrain walking to the real boundary", () => {
+  const p = fixture();
+  const geometry = roomGeometryFromPolygon([
+    [8, -7],
+    [12, -7],
+    [12, -5],
+    [10, -5],
+    [10, -3],
+    [8, -3],
+  ]);
+  Object.assign(p.scene.rooms[0], geometry);
+  p.scene.rooms[0].verified = false;
+  p.scene.rooms[0].source = "Visual polygon draft";
+
+  assert.equal(roomArea(p.scene.rooms[0]), 12);
+  assert.doesNotThrow(() => validateProject(p));
+  assert.equal(canWalk(p.scene, p.scene.rooms[0], 9, -4), true);
+  assert.equal(canWalk(p.scene, p.scene.rooms[0], 11, -4), false);
+
+  p.scene.rooms[0].polygon = [
+    [8, -7],
+    [12, -3],
+    [8, -3],
+    [12, -7],
+  ];
+  assert.throws(() => validateProject(p), /room dimensions|measurement source/i);
+});
+
+test("polygon room bounding rectangle must stay synchronized with its corners", () => {
+  const p = fixture();
+  Object.assign(
+    p.scene.rooms[0],
+    roomGeometryFromPolygon([
+      [8, -7],
+      [12, -7],
+      [11, -3],
+      [8, -3],
+    ]),
+  );
+  p.scene.rooms[0].verified = false;
+  p.scene.rooms[0].source = "Visual polygon draft";
+  assert.doesNotThrow(() => validateProject(p));
+  p.scene.rooms[0].width += 1;
+  assert.throws(() => validateProject(p));
 });
