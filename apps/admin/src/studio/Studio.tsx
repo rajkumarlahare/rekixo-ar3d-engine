@@ -261,6 +261,19 @@ export default function Studio() {
     setCloudProjects(result.projects);
   }
 
+  async function refreshCloudReleases(current: Project = p) {
+    if (!cloudSession?.authenticated || !current.cloud) {
+      setCloudReleases([]);
+      return;
+    }
+    const result = await cloud.releases(projectSlug(current));
+    setCloudReleases(result.releases);
+  }
+
+  async function refreshPublishedCatalog() {
+    setPublished(await loadPublishedCatalog());
+  }
+
   async function openCloudProject(slug: string) {
     if (dirty)
       throw Error("Save your local changes before opening a cloud project.");
