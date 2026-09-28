@@ -814,11 +814,20 @@ export default function SceneCanvas(props: Props) {
       | { x: number; y: number; ox: number; oy: number; id: number }
       | undefined;
     let roomDrawStart: T.Vector3 | undefined;
+    let vertexDrag:
+      | {
+          roomId: string;
+          index: number;
+          points: RoomPoint[];
+          floorId: string;
+        }
+      | undefined;
 
     const snapRoomPoint = (
       point: T.Vector3,
       floorId: string,
       enabled: boolean,
+      excludeRoomId?: string,
     ) => {
       if (!enabled) return point;
       const grid = new T.Vector3(
@@ -829,7 +838,7 @@ export default function SceneCanvas(props: Props) {
       let best = grid;
       let bestDistance = Math.hypot(grid.x - point.x, grid.z - point.z);
       for (const room of latest.current.scene.rooms) {
-        if (room.floorId !== floorId) continue;
+        if (room.floorId !== floorId || room.id === excludeRoomId) continue;
         const boundary = roomBoundaryPoints(room);
         for (let index = 0; index < boundary.length; index += 1) {
           const [vx, vz] = boundary[index];
@@ -864,11 +873,28 @@ export default function SceneCanvas(props: Props) {
       return best;
     };
 
-    const roomPlanePoint = (event: PointerEvent) => {
+    const roomPlanePoint = (
+      event: PointerEvent,
+      excludeRoomId?: string,
+    ) => {
       const rectangle = latest.current.roomDraw;
       const polygon = latest.current.roomPolygonDraw;
-      const config = rectangle?.enabled ? rectangle : polygon;
-      if (!config?.enabled) return undefined;
+      const edit = latest.current.roomPolygonEdit;
+      const config = rectangle?.enabled
+        ? rectangle
+        : polygon?.enabled
+          ? polygon
+          : edit?.enabled
+            ? {
+                enabled: true,
+                floorId:
+                  latest.current.scene.rooms.find(
+                    (room) => room.id === edit.roomId,
+                  )?.floorId ?? "",
+                snap: edit.snap,
+              }
+            : undefined;
+      if (!config?.enabled || !config.floorId) return undefined;
       const floor = latest.current.scene.floors.find(
         (entry) => entry.id === config.floorId,
       );
@@ -886,7 +912,7 @@ export default function SceneCanvas(props: Props) {
       const plane = new T.Plane(new T.Vector3(0, 1, 0), -floor.elevation);
       if (!raycaster.ray.intersectPlane(plane, target)) return undefined;
       target.y = floor.elevation + 0.04;
-      return snapRoomPoint(target, floor.id, config.snap);
+      return snapRoomPoint(target, floor.id, config.snap, excludeRoomId);
     };
 
     const updateRoomDraft = (start: T.Vector3, end: T.Vector3) => {
@@ -903,6 +929,53 @@ export default function SceneCanvas(props: Props) {
 
     const pointerDown = (e: PointerEvent) => {
       renderer.domElement.focus();
+      if (
+        e.button === 0 &&
+        latest.current.roomPolygonEdit?.enabled &&
+        latest.current.view === "building"
+      ) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        const raycaster = new T.Raycaster();
+        raycaster.setFromCamera(
+          new T.Vector2(
+            ((e.clientX - rect.left) / rect.width) * 2 - 1,
+            (-(e.clientY - rect.top) / rect.height) * 2 + 1,
+          ),
+          camera,
+        );
+        const hit = raycaster.intersectObjects(polygonEdit.children, true)[0];
+        const index = hit?.object.userData.roomVertexIndex;
+        const roomId = hit?.object.userData.roomId;
+        const targetRoom =
+          typeof roomId === "string"
+            ? latest.current.scene.rooms.find((room) => room.id === roomId)
+            : undefined;
+        if (
+          targetRoom?.polygon?.length &&
+          Number.isInteger(index) &&
+          index >= 0 &&
+          index < targetRoom.polygon.length
+        ) {
+          vertexDrag = {
+            roomId: targetRoom.id,
+            index,
+            points: targetRoom.polygon.map(
+              ([x, z]) => [x, z] as RoomPoint,
+            ),
+            floorId: targetRoom.floorId,
+          };
+          controls.enabled = false;
+          renderer.domElement.setPointerCapture(e.pointerId);
+          point = {
+            x: e.clientX,
+            y: e.clientY,
+            ox: e.clientX,
+            oy: e.clientY,
+            id: e.pointerId,
+          };
+          return;
+        }
+      }
       if (
         e.button === 0 &&
         latest.current.roomPolygonDraw?.enabled &&
@@ -951,6 +1024,17 @@ export default function SceneCanvas(props: Props) {
         renderer.domElement.setPointerCapture(e.pointerId);
     };
     const move = (e: PointerEvent) => {
+      if (vertexDrag) {
+        const target = roomPlanePoint(e, vertexDrag.roomId);
+        if (target) {
+          vertexDrag.points[vertexDrag.index] = [target.x, target.z];
+          const room = latest.current.scene.rooms.find(
+            (entry) => entry.id === vertexDrag?.roomId,
+          );
+          api.current?.renderPolygonEdit(room, vertexDrag.points);
+        }
+        return;
+      }
       if (latest.current.roomPolygonDraw?.enabled && point) {
         const hover = roomPlanePoint(e);
         if (hover) redrawPolygonDraft(hover);
@@ -972,6 +1056,23 @@ export default function SceneCanvas(props: Props) {
       point.y = e.clientY;
     };
     const click = (e: PointerEvent) => {
+      if (vertexDrag) {
+        const current = vertexDrag;
+        const target = roomPlanePoint(e, current.roomId);
+        if (target)
+          current.points[current.index] = [target.x, target.z];
+        vertexDrag = undefined;
+        point = undefined;
+        controls.enabled = latest.current.view !== "walk";
+        try {
+          renderer.domElement.releasePointerCapture(e.pointerId);
+        } catch {}
+        latest.current.onRoomPolygonChange?.(
+          current.roomId,
+          current.points.map(([x, z]) => [x, z] as RoomPoint),
+        );
+        return;
+      }
       if (latest.current.roomPolygonDraw?.enabled) {
         if (!point) return;
         const small = Math.hypot(e.clientX - point.ox, e.clientY - point.oy) < 5;
