@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import {
   applyModelProfileExterior,
+  enhanceModelProfileMaterials,
   type ModelProfileRuntime,
 } from "./modelProfiles";
 import {
@@ -9,7 +10,7 @@ import {
   type ExperienceMode,
 } from "./projectExperience";
 
-export { applyModelProfileExterior };
+export { applyModelProfileExterior, enhanceModelProfileMaterials };
 export type { ExperienceFeature, ExperienceMode, ModelProfileRuntime };
 
 type ExperienceRuntime = ReturnType<typeof createJyotiProjectExperience>;
