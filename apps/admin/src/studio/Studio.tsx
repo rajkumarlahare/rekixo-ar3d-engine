@@ -1611,17 +1611,7 @@ export default function Studio() {
             <button
               className="wide primary"
               disabled={busy}
-              onClick={() =>
-                task(async () => {
-                  const next = await persist(
-                    snapshot(p, `Review ${p.releases.length + 1}`),
-                  );
-                  setReview(next.releases.at(-1)!.id);
-                  setMessage(
-                    "Immutable local review created. This review remains a draft until you explicitly publish a cloud release.",
-                  );
-                })
-              }
+              onClick={() => task(createReviewVersion)}
             >
               Create review version
             </button>
