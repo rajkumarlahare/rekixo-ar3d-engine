@@ -721,6 +721,45 @@ export default function Studio() {
           </button>
         </div>
       </header>
+      <nav className="studio-ops-tabs" aria-label="3D project workspace">
+        {(
+          [
+            ["overview", "Overview"],
+            ["editor", "3D Editor"],
+            ["sources", "Sources"],
+            ["evidence", "Evidence"],
+            ["publish", "Preview & Publish"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            className={workspace === key ? "active" : ""}
+            onClick={() => setWorkspace(key)}
+          >
+            <span aria-hidden="true">
+              {key === "overview"
+                ? "⌂"
+                : key === "editor"
+                  ? "◫"
+                  : key === "sources"
+                    ? "⇧"
+                    : key === "evidence"
+                      ? "✓"
+                      : "↗"}
+            </span>
+            {label}
+            {key === "evidence" && p.scene.rooms.length > 0 && (
+              <small>
+                {readiness.reviewedRooms}/{readiness.totalRooms}
+              </small>
+            )}
+            {key === "publish" && readiness.blockers.length > 0 && (
+              <small className="ops-tab-alert">{readiness.blockers.length}</small>
+            )}
+          </button>
+        ))}
+      </nav>
       <div className="storage-banner">
         {manifestText && (
           <label>
