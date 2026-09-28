@@ -10,6 +10,7 @@ import { clampWalkPosition, walkDelta, walkStartPosition, type WalkDirection } f
 import { createArchitecturalSiteEnvironment } from "./siteEnvironment";
 import {
   applyModelProfileExterior,
+  enhanceModelProfileMaterials,
   createProfileExperience,
   type ExperienceMode,
   type ExperienceFeature,
@@ -654,6 +655,7 @@ export function Viewer3D({
         Object.assign(sun.shadow.camera, { left: -25, right: 25, top: 28, bottom: -28 });
         sun.shadow.camera.updateProjectionMatrix();
       }
+      enhanceModelProfileMaterials(object, renderer, referenceVisual);
       enhanceArchitecturalModel(object, renderer, referenceVisual);
       floorExploder = createFloorExploder(object, modelBounds);
       explodeRef.current = (enabled) => floorExploder?.setExploded(enabled);
