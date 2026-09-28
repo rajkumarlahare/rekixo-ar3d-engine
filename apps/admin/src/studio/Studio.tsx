@@ -366,10 +366,19 @@ export default function Studio() {
   async function publishCurrentRelease() {
     if (!cloudSession?.authenticated)
       throw Error("Sign in to Engine Admin before publishing.");
+    const gate = buildStudioReadiness(
+      p,
+      files,
+      dirty,
+      cloudSession,
+      cloudReleases,
+    );
+    if (gate.blockers.length)
+      throw Error(
+        `Publish blocked: ${gate.blockers[0].title}. ${gate.blockers[0].detail}`,
+      );
     if (!p.cloud)
       throw Error("Save this project to cloud before publishing.");
-    if (dirty)
-      throw Error("Save the current draft before publishing.");
     const result = await cloud.publishRelease(
       projectSlug(p),
       p.cloud.revision,
