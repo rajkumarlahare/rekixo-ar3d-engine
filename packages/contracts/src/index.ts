@@ -1,3 +1,4 @@
+export * from "./scene-manifest-v2";
 export const ADMIN_BASE_PATH = "/3Dprojects" as const;
 export const PUBLIC_BASE_PATH = "/3Dprojects" as const;
 export const PLATFORM_ENGINE_CONTRACT_VERSION = 1 as const;
