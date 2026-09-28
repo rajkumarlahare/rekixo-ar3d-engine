@@ -1455,11 +1455,16 @@ export default function SceneCanvas(props: Props) {
     props.scene.modelTransform?.rotationY,
   ]);
   return (
-    <div className="canvas-wrap">
+    <div className={props.roomDraw?.enabled ? "canvas-wrap room-draw-active" : "canvas-wrap"}>
       <div className="studio-canvas" ref={host} />
       {status && (
         <div className="canvas-status" role="status">
           {status}
+        </div>
+      )}
+      {props.roomDraw?.enabled && (
+        <div className="room-draw-hint">
+          Drag from one room corner to the opposite corner · release to map
         </div>
       )}
       <button className="reset-camera" onClick={() => api.current?.focus()}>
