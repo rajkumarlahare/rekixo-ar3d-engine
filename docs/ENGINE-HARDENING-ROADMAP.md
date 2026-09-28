@@ -39,7 +39,7 @@ The current Platform Super Admin demonstrates production patterns that the separ
 ## Delivery phases
 
 ### Phase 1 — Tenant isolation and profile boundary
-Status: IMPLEMENTED — merge validation pending
+Status: COMPLETE — validated on main (GitHub Actions run 36395515444)
 
 Goal: no project-specific material, texture, room, facade, or presentation data may affect an unrelated project.
 
@@ -134,14 +134,14 @@ Status: PENDING
 
 The following findings remain tracked until their owning phase closes:
 
-- customer-specific textures/tints in generic `realism.ts`;
-- project-specific bundles statically shipped to unrelated tenants;
+- [resolved Phase 1] customer-specific textures/tints in generic `realism.ts`;
+- [resolved Phase 1] heavy project-specific texture/interior bundles statically shipped to unrelated tenants;
 - mutable live-table publication instead of immutable release selection;
 - brochure/DWG source conflicts not fully surfaced in customer UI;
 - reconstructed doors/rooms/furniture encoded in project source code;
 - G+5/fixed seven-level assumptions;
 - sparse floor index mapping;
-- direct Studio FBX source-SHA propagation gap;
+- [resolved Phase 1] direct Studio FBX source-SHA propagation gap;
 - profile camera/default-room values still code-driven;
 - Scene Manifest relational and polygon validation gaps;
 - Source Pack ↔ Scene Manifest evidence-link gap;
