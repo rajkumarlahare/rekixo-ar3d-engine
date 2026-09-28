@@ -125,7 +125,7 @@ export default function SmartProjectBuilder({
                 value={project.name}
                 disabled={busy}
                 onChange={(event) => onProjectMeta({ name: event.target.value })}
-                placeholder="e.g. Jyoti Paradise"
+                placeholder="e.g. Riverfront Residency"
               />
             </label>
             <label>
