@@ -36,6 +36,13 @@ export type TransformCommit =
       x?: number;
       z?: number;
       rotation?: number;
+    }
+  | {
+      kind: "model";
+      x?: number;
+      y?: number;
+      z?: number;
+      rotationY?: number;
     };
 export interface ModelNodeSummary {
   key: string;
@@ -71,6 +78,7 @@ interface Props {
   onModelMaterials?: (materials: ModelMaterialSummary[]) => void;
   cameraOrientation?: "perspective" | "top";
   showReferenceLayers?: boolean;
+  modelTransformEnabled?: boolean;
 }
 function dispose(root: T.Object3D) {
   const materials = new Set<T.Material>(),
@@ -478,8 +486,25 @@ export default function SceneCanvas(props: Props) {
       if (!transformStart) return;
       transformStart = false;
       const current = latest.current;
-      const target = selectables.get(current.selected);
+      const target =
+        transform.object ?? selectables.get(current.selected);
       if (!target || !current.onTransformCommit) return;
+      if (target === model && current.modelTransformEnabled) {
+        if (current.transformMode === "translate") {
+          current.onTransformCommit({
+            kind: "model",
+            x: model.position.x,
+            y: model.position.y,
+            z: model.position.z,
+          });
+        } else if (current.transformMode === "rotate") {
+          current.onTransformCommit({
+            kind: "model",
+            rotationY: T.MathUtils.radToDeg(model.rotation.y),
+          });
+        }
+        return;
+      }
       const selectedRoom = current.scene.rooms.find(
         (candidate) => candidate.id === current.selected,
       );
@@ -986,6 +1011,25 @@ export default function SceneCanvas(props: Props) {
     const runtime = api.current;
     if (!runtime) return;
     runtime.transform.detach();
+    const mode = props.transformMode ?? "translate";
+    runtime.transform.setTranslationSnap(props.snap ? 0.1 : null);
+    runtime.transform.setRotationSnap(props.snap ? Math.PI / 12 : null);
+    runtime.transform.setScaleSnap(props.snap ? 0.1 : null);
+
+    if (
+      props.view === "building" &&
+      props.modelTransformEnabled &&
+      props.transformEnabled &&
+      mode !== "scale"
+    ) {
+      runtime.transform.setMode(mode);
+      runtime.transform.showX = mode === "translate";
+      runtime.transform.showY = true;
+      runtime.transform.showZ = mode === "translate";
+      runtime.transform.attach(runtime.model);
+      return;
+    }
+
     const target = runtime.selectables.get(props.selected);
     if (
       !target ||
@@ -999,7 +1043,6 @@ export default function SceneCanvas(props: Props) {
     const isFurniture = props.scene.furniture.some(
       (item) => item.id === props.selected,
     );
-    const mode = props.transformMode ?? "translate";
     if ((isRoom && mode === "rotate") || (isFurniture && mode === "scale"))
       return;
 
@@ -1007,14 +1050,12 @@ export default function SceneCanvas(props: Props) {
     runtime.transform.showX = mode !== "rotate";
     runtime.transform.showY = mode === "scale" || mode === "rotate";
     runtime.transform.showZ = mode !== "rotate";
-    runtime.transform.setTranslationSnap(props.snap ? 0.1 : null);
-    runtime.transform.setRotationSnap(props.snap ? Math.PI / 12 : null);
-    runtime.transform.setScaleSnap(props.snap ? 0.1 : null);
     runtime.transform.attach(target);
   }, [
     props.selected,
     props.transformMode,
     props.transformEnabled,
+    props.modelTransformEnabled,
     props.snap,
     props.view,
     props.scene,
