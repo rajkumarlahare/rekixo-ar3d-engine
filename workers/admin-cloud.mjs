@@ -252,6 +252,30 @@ async function sessionFor(request, env) {
   return session;
 }
 
+export async function engineAdminReadAccess(request, env) {
+  if (!authConfigured(env))
+    return {
+      ok: false,
+      status: 503,
+      error:
+        "Engine Admin authentication is not configured. Provision the dedicated Engine Admin secrets first.",
+    };
+  if (!(await schemaReady(env)))
+    return {
+      ok: false,
+      status: 503,
+      error: "Engine Admin cloud schema is not installed.",
+    };
+  const actor = await sessionFor(request, env);
+  if (!actor)
+    return {
+      ok: false,
+      status: 401,
+      error: "Engine Admin sign-in required.",
+    };
+  return { ok: true, actor };
+}
+
 async function writeAudit(env, actor, action, projectId = null, targetId = null, details = {}) {
   await env.DB.prepare(
     `INSERT INTO engine_admin_audit
