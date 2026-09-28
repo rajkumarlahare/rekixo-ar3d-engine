@@ -4,7 +4,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
-import { applyJyotiReferenceExterior } from "../../../public/src/viewer/jyotiReferenceExterior";
+import { applyModelProfileExterior } from "../../../public/src/viewer/projectProfiles";
 import { asset } from "./storage";
 import {
   canWalk,
@@ -375,10 +375,10 @@ export default function SceneCanvas(props: Props) {
         dispose(object);
         return;
       }
-      const profile = applyJyotiReferenceExterior(object);
-      if (profile) {
-        runtime.scene.background = profile.daylightSky;
-        finishCleanup = profile.dispose;
+      const modelProfile = applyModelProfileExterior(object);
+      if (modelProfile?.exterior) {
+        runtime.scene.background = modelProfile.exterior.daylightSky;
+        finishCleanup = modelProfile.exterior.dispose;
       }
       object.traverse((n) => {
         if (n instanceof T.Mesh) {
