@@ -1159,6 +1159,39 @@ export default function Studio() {
     }
   }
 
+  function commitEditedPolygon(roomId: string, points: RoomPoint[]) {
+    const target = p.scene.rooms.find((entry) => entry.id === roomId);
+    if (!target?.polygon?.length) return;
+    try {
+      const geometry = roomGeometryFromPolygon(points);
+      const next: Project = {
+        ...p,
+        scene: {
+          ...p.scene,
+          rooms: p.scene.rooms.map((entry) =>
+            entry.id === roomId
+              ? { ...entry, ...geometry, verified: false }
+              : entry,
+          ),
+        },
+      };
+      validateProject(next);
+      edit(next);
+      setMessage(
+        `${target.name} corners updated · ${roomArea({
+          ...target,
+          ...geometry,
+        }).toFixed(2)} m².`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "That polygon shape is not valid.",
+      );
+    }
+  }
+
   function cloneMappedRoom() {
     if (!room || selected !== room.id) return;
     const shiftX = room.width + 0.2;
@@ -2892,6 +2925,15 @@ export default function Studio() {
               floorId: roomMapFloorId,
               snap: roomMapSnap,
             }}
+            roomPolygonEdit={{
+              enabled:
+                showRoomMapper &&
+                roomMapAction === "edit-polygon" &&
+                Boolean(room?.polygon?.length) &&
+                selected === room?.id,
+              roomId: room?.id ?? "",
+              snap: roomMapSnap,
+            }}
             snap={transformSnap}
             focusRequest={focusRequest}
             cameraOrientation={cameraOrientation}
@@ -2916,6 +2958,7 @@ export default function Studio() {
             onTransformCommit={commitCanvasTransform}
             onRoomDraw={commitMappedRoom}
             onRoomPolygonDraw={commitMappedPolygon}
+            onRoomPolygonChange={commitEditedPolygon}
             onModelNodes={setModelNodes}
             onModelMaterials={setModelMaterials}
           />
