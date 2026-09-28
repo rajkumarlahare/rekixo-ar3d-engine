@@ -74,7 +74,7 @@ Status: COMPLETE — validated on main (PR #40, GitHub Actions run 36405684130)
 - move hardcoded project interior geometry toward authored manifest data.
 
 ### Phase 4 — 3D Admin project creation and cloud draft storage
-Status: IMPLEMENTED — validation complete; production activation requires dedicated Engine Admin secrets + admin-infra migration
+Status: IMPLEMENTED + VALIDATED ON MAIN — PR #41, GitHub Actions run 36411300349; production cloud activation remains intentionally pending dedicated Engine Admin secrets + admin-infra migration
 
 Use the stable Platform Admin only as a design/operational reference.
 
