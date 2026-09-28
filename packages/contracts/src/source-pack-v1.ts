@@ -232,7 +232,9 @@ export function assertProjectSourcePackV1(
       !validClaimValue(item.value) ||
       !CLAIM_STATUSES.has(item.status as SourceClaimStatusV1) ||
       (item.page !== undefined &&
-        (!Number.isInteger(item.page) || (item.page as number) < 1)) ||
+        (typeof item.page !== "number" ||
+          !Number.isInteger(item.page) ||
+          item.page < 1)) ||
       (item.note !== undefined &&
         (typeof item.note !== "string" || item.note.length > 5000))
     )
