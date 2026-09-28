@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS releases_3d (
   source_draft_revision INTEGER,
   created_by TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (project_id) REFERENCES projects_3d(id) ON DELETE CASCADE,
   UNIQUE (project_id, version),
   UNIQUE (project_id, manifest_sha256)
 );
@@ -26,7 +27,9 @@ CREATE TABLE IF NOT EXISTS release_assets_3d (
   source_etag TEXT,
   r2_key TEXT NOT NULL UNIQUE,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  PRIMARY KEY (release_id, kind, logical_id)
+  PRIMARY KEY (release_id, kind, logical_id),
+  FOREIGN KEY (release_id) REFERENCES releases_3d(id) ON DELETE CASCADE,
+  FOREIGN KEY (project_id) REFERENCES projects_3d(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS release_activations_3d (
@@ -36,7 +39,9 @@ CREATE TABLE IF NOT EXISTS release_activations_3d (
   previous_release_id TEXT,
   action TEXT NOT NULL CHECK (action IN ('publish','rollback')),
   actor_email TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (project_id) REFERENCES projects_3d(id) ON DELETE CASCADE,
+  FOREIGN KEY (release_id) REFERENCES releases_3d(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_releases_3d_project_version
