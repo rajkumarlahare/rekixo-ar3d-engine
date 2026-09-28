@@ -151,3 +151,29 @@ test("furnished floor copy remaps rooms and furniture without claiming source ve
   assert.notEqual(copy.scene.furniture[1].id, "sofa");
   assert.equal(copy.scene.floors[1].elevation, 3);
 });
+
+test("reference layers and model alignment are validated without mutating source assets", () => {
+  const p = fixture();
+  p.assets.push("plan-image");
+  p.scene.modelTransform = { x: 1.5, y: 0.02, z: -2, rotationY: 17 };
+  p.scene.referenceLayers = [
+    {
+      id: "reference-1",
+      assetId: "plan-image",
+      visible: true,
+      opacity: 0.45,
+      metresPerPixel: 0.01,
+      x: 0,
+      y: 0.01,
+      z: 0,
+      rotation: 0,
+    },
+  ];
+  assert.doesNotThrow(() => validateProject(p));
+
+  p.scene.referenceLayers[0].opacity = 2;
+  assert.throws(() => validateProject(p), /reference layer/i);
+  p.scene.referenceLayers[0].opacity = 0.45;
+  p.scene.referenceLayers[0].assetId = "missing-reference";
+  assert.throws(() => validateProject(p), /Reference layer asset is missing/);
+});
