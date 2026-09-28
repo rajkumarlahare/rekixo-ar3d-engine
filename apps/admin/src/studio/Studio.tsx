@@ -29,6 +29,7 @@ import StudioEvidence from "./StudioEvidence";
 import StudioPublish from "./StudioPublish";
 import { buildStudioReadiness } from "./readiness";
 import "./studio.css";
+import "./studio-operations.css";
 
 function formatBytes(value: number) {
   if (!value) return "0 B";
