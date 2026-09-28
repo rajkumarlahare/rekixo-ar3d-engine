@@ -620,8 +620,103 @@ export default function SceneCanvas(props: Props) {
     let point:
       | { x: number; y: number; ox: number; oy: number; id: number }
       | undefined;
+    let roomDrawStart: T.Vector3 | undefined;
+
+    const snapRoomCoordinate = (
+      value: number,
+      axis: "x" | "z",
+      floorId: string,
+      enabled: boolean,
+    ) => {
+      if (!enabled) return value;
+      const targets: number[] = [];
+      for (const room of latest.current.scene.rooms) {
+        if (room.floorId !== floorId) continue;
+        if (axis === "x")
+          targets.push(
+            room.x - room.width / 2,
+            room.x,
+            room.x + room.width / 2,
+          );
+        else
+          targets.push(
+            room.z - room.depth / 2,
+            room.z,
+            room.z + room.depth / 2,
+          );
+      }
+      let snapped = Math.round(value * 10) / 10;
+      let distance = Math.abs(snapped - value);
+      for (const target of targets) {
+        const candidateDistance = Math.abs(target - value);
+        if (candidateDistance <= 0.22 && candidateDistance < distance) {
+          snapped = target;
+          distance = candidateDistance;
+        }
+      }
+      return snapped;
+    };
+
+    const roomPlanePoint = (event: PointerEvent) => {
+      const config = latest.current.roomDraw;
+      if (!config?.enabled) return undefined;
+      const floor = latest.current.scene.floors.find(
+        (entry) => entry.id === config.floorId,
+      );
+      if (!floor) return undefined;
+      const rect = renderer.domElement.getBoundingClientRect();
+      const raycaster = new T.Raycaster();
+      raycaster.setFromCamera(
+        new T.Vector2(
+          ((event.clientX - rect.left) / rect.width) * 2 - 1,
+          (-(event.clientY - rect.top) / rect.height) * 2 + 1,
+        ),
+        camera,
+      );
+      const target = new T.Vector3();
+      const plane = new T.Plane(new T.Vector3(0, 1, 0), -floor.elevation);
+      if (!raycaster.ray.intersectPlane(plane, target)) return undefined;
+      target.x = snapRoomCoordinate(target.x, "x", floor.id, config.snap);
+      target.z = snapRoomCoordinate(target.z, "z", floor.id, config.snap);
+      target.y = floor.elevation + 0.04;
+      return target;
+    };
+
+    const updateRoomDraft = (start: T.Vector3, end: T.Vector3) => {
+      const width = Math.max(0.01, Math.abs(end.x - start.x));
+      const depth = Math.max(0.01, Math.abs(end.z - start.z));
+      roomDraft.position.set(
+        (start.x + end.x) / 2,
+        start.y,
+        (start.z + end.z) / 2,
+      );
+      roomDraft.scale.set(width, 1, depth);
+      roomDraft.visible = true;
+    };
+
     const pointerDown = (e: PointerEvent) => {
       renderer.domElement.focus();
+      if (
+        e.button === 0 &&
+        latest.current.roomDraw?.enabled &&
+        latest.current.view === "building"
+      ) {
+        const start = roomPlanePoint(e);
+        if (start) {
+          roomDrawStart = start;
+          roomDraft.visible = false;
+          controls.enabled = false;
+          renderer.domElement.setPointerCapture(e.pointerId);
+          point = {
+            x: e.clientX,
+            y: e.clientY,
+            ox: e.clientX,
+            oy: e.clientY,
+            id: e.pointerId,
+          };
+          return;
+        }
+      }
       point = {
         x: e.clientX,
         y: e.clientY,
@@ -633,6 +728,11 @@ export default function SceneCanvas(props: Props) {
         renderer.domElement.setPointerCapture(e.pointerId);
     };
     const move = (e: PointerEvent) => {
+      if (roomDrawStart && latest.current.roomDraw?.enabled) {
+        const end = roomPlanePoint(e);
+        if (end) updateRoomDraft(roomDrawStart, end);
+        return;
+      }
       if (!point || latest.current.view !== "walk") return;
       yaw -= (e.clientX - point.x) * 0.004;
       pitch = T.MathUtils.clamp(
@@ -644,6 +744,31 @@ export default function SceneCanvas(props: Props) {
       point.y = e.clientY;
     };
     const click = (e: PointerEvent) => {
+      if (roomDrawStart) {
+        const start = roomDrawStart;
+        const end = roomPlanePoint(e);
+        roomDrawStart = undefined;
+        roomDraft.visible = false;
+        controls.enabled = latest.current.view !== "walk";
+        point = undefined;
+        try {
+          renderer.domElement.releasePointerCapture(e.pointerId);
+        } catch {}
+        if (end) {
+          const width = Math.abs(end.x - start.x);
+          const depth = Math.abs(end.z - start.z);
+          if (width >= 0.5 && depth >= 0.5)
+            latest.current.onRoomDraw?.({
+              x: Number(((start.x + end.x) / 2).toFixed(3)),
+              z: Number(((start.z + end.z) / 2).toFixed(3)),
+              width: Number(width.toFixed(3)),
+              depth: Number(depth.toFixed(3)),
+            });
+          else
+            setStatus("Drag a room at least 0.5 m × 0.5 m.");
+        }
+        return;
+      }
       if (!point) return;
       const small = Math.hypot(e.clientX - point.ox, e.clientY - point.oy) < 5;
       point = undefined;
@@ -657,6 +782,19 @@ export default function SceneCanvas(props: Props) {
         ),
         camera,
       );
+      const roomHit =
+        latest.current.view === "building" && latest.current.roomMapEnabled
+          ? ray.intersectObjects(rooms.children, true)[0]
+          : undefined;
+      if (roomHit) {
+        let selectedRoomNode: T.Object3D | null = roomHit.object;
+        while (selectedRoomNode && !selectedRoomNode.userData.selectId)
+          selectedRoomNode = selectedRoomNode.parent;
+        if (selectedRoomNode?.userData.selectId) {
+          latest.current.onSelect(selectedRoomNode.userData.selectId);
+          return;
+        }
+      }
       const hit = ray.intersectObjects(
         latest.current.view === "building" ? model.children : rooms.children,
         true,
@@ -687,6 +825,7 @@ export default function SceneCanvas(props: Props) {
     renderer.domElement.addEventListener("pointerdown", pointerDown);
     renderer.domElement.addEventListener("pointermove", move);
     renderer.domElement.addEventListener("pointerup", click);
+    renderer.domElement.addEventListener("pointercancel", click);
     let previous = performance.now(),
       frame = 0;
     const draw = (now: number) => {
@@ -741,6 +880,10 @@ export default function SceneCanvas(props: Props) {
     return () => {
       cancelAnimationFrame(frame);
       resize.disconnect();
+      renderer.domElement.removeEventListener("pointerdown", pointerDown);
+      renderer.domElement.removeEventListener("pointermove", move);
+      renderer.domElement.removeEventListener("pointerup", click);
+      renderer.domElement.removeEventListener("pointercancel", click);
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", blur);
       transform.detach();
