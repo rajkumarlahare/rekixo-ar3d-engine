@@ -58,6 +58,11 @@ export interface Project {
   id: string;
   name: string;
   slug?: string;
+  location?: string;
+  cloud?: {
+    revision: number;
+    syncedAt: string;
+  };
   updated: string;
   scene: Scene;
   assets: string[];
@@ -172,6 +177,7 @@ export function newProject(name: string): Project {
     schema: 1,
     id: id(),
     name: name.trim(),
+    location: "",
     updated: new Date().toISOString(),
     assets: [],
     releases: [],
@@ -275,6 +281,13 @@ export function validateProject(p: Project): void {
     p.schema !== 1 ||
     !text(p.id, 100) ||
     !text(p.name) ||
+    (p.location !== undefined &&
+      (typeof p.location !== "string" || p.location.length > 180)) ||
+    (p.cloud !== undefined &&
+      (!p.cloud ||
+        !Number.isInteger(p.cloud.revision) ||
+        p.cloud.revision < 1 ||
+        !text(p.cloud.syncedAt, 100))) ||
     !text(p.updated) ||
     !Array.isArray(p.assets) ||
     p.assets.length > 100 ||
