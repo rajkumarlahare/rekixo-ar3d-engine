@@ -10,10 +10,12 @@ test("visual room mapper is mouse-first and keeps exact numbers as advanced fall
 
   assert.match(mapper, /VISUAL UNIT \/ ROOM MAPPER/);
   assert.match(mapper, /\+ Draw room/);
+  assert.match(mapper, /\+ Draw corners/);
+  assert.match(mapper, /Repeat layout/);
   assert.match(mapper, /Reshape selected/);
   assert.match(mapper, /Clone \+ drag/);
   assert.match(mapper, /Mirror X/);
-  assert.match(mapper, /Snap to grid & room edges/);
+  assert.match(mapper, /Snap to grid, walls & vertices/);
   assert.match(studio, /Advanced numeric geometry/);
   assert.match(studio, /\+ Map room with mouse/);
 });
@@ -38,4 +40,17 @@ test("visual room mapping preserves evidence discipline", () => {
   assert.match(studio, /sourcePackSourceId: undefined/);
   assert.match(studio, /sourceClaimIds: undefined/);
   assert.match(studio, /mesh: undefined/);
+});
+
+
+test("polygon mapper snaps to existing room walls and exports polygon callbacks", () => {
+  const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+  const studio = read("apps/admin/src/studio/Studio.tsx");
+  assert.match(canvas, /roomBoundaryPoints/);
+  assert.match(canvas, /edgeDistance <= 0\.18/);
+  assert.match(canvas, /onRoomPolygonDraw/);
+  assert.match(canvas, /click first corner or press Enter/);
+  assert.match(studio, /commitMappedPolygon/);
+  assert.match(studio, /roomGeometryFromPolygon/);
+  assert.match(studio, /repeatMappedUnit/);
 });
