@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { applyJyotiReferenceExterior } from "./jyotiReferenceExterior";
+import { enhanceReferenceSourceV9Model } from "./referenceSourceV9Materials";
 
 type ExteriorRuntime = NonNullable<
   ReturnType<typeof applyJyotiReferenceExterior>
@@ -35,4 +36,18 @@ export function applyModelProfileExterior(
     ),
     defaultInteriorRoomId: "101-living",
   };
+}
+
+
+/**
+ * Apply source/project-specific material restoration only when its verified
+ * source profile matches. Generic models never inherit Reference Source V9
+ * textures or tints by material-name coincidence.
+ */
+export function enhanceModelProfileMaterials(
+  object: THREE.Object3D,
+  renderer: THREE.WebGLRenderer,
+  referenceVisual = false,
+) {
+  return enhanceReferenceSourceV9Model(object, renderer, referenceVisual);
 }
