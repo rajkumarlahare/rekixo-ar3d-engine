@@ -1,8 +1,10 @@
 import * as THREE from "three";
+import { floorForElevation, type FloorGeometryLevel } from "./floorGeometry";
 
 type MeshFloorState = {
   mesh: THREE.Mesh;
   floor: number;
+  order: number;
   originalWorldOrigin: THREE.Vector3;
 };
 
@@ -87,26 +89,11 @@ export function enhanceArchitecturalModel(
   });
 }
 
-function floorForY(y: number, bounds: THREE.Box3, levels?: number[]) {
-  if (levels && levels.length === 7) {
-    if (y >= levels[6]) return null;
-    for (let floor = 5; floor >= 0; floor--) if (y >= levels[floor]) return floor;
-    return 0;
-  }
-  const total = Math.max(bounds.max.y - bounds.min.y, 0.001);
-  const ratio = (y - bounds.min.y) / total;
-
-  if (ratio < 0.12) return 0;
-  if (ratio >= 0.79) return null;
-
-  return THREE.MathUtils.clamp(
-    Math.floor((ratio - 0.12) / 0.132) + 1,
-    1,
-    5,
-  );
-}
-
-export function createFloorExploder(root: THREE.Object3D, bounds: THREE.Box3) {
+export function createFloorExploder(
+  root: THREE.Object3D,
+  bounds: THREE.Box3,
+  floorGeometry: readonly FloorGeometryLevel[],
+) {
   root.updateMatrixWorld(true);
   const totalHeight = Math.max(bounds.max.y - bounds.min.y, 1);
   const states: MeshFloorState[] = [];
@@ -123,26 +110,36 @@ export function createFloorExploder(root: THREE.Object3D, bounds: THREE.Box3) {
     if (meshHeight > totalHeight * 0.22) return;
 
     const center = box.getCenter(new THREE.Vector3());
-    const floor = floorForY(center.y, bounds, root.userData.architecturalFloorLevels);
-    if (floor === null) return;
+    const level = floorForElevation(floorGeometry, center.y);
+    if (!level) return;
+    const order = floorGeometry.findIndex((item) => item.floor === level.floor);
+    if (order < 0) return;
 
     states.push({
       mesh: object,
-      floor,
+      floor: level.floor,
+      order,
       originalWorldOrigin: object.getWorldPosition(new THREE.Vector3()),
     });
   });
 
   const apply = (enabled: boolean) => {
     root.updateMatrixWorld(true);
-    const gap = totalHeight * 0.035;
+    const averageFloorHeight =
+      floorGeometry.length > 0
+        ? floorGeometry.reduce(
+            (sum, item) => sum + (item.topElevationM - item.elevationM),
+            0,
+          ) / floorGeometry.length
+        : totalHeight;
+    const gap = Math.max(averageFloorHeight * 0.16, totalHeight * 0.006);
 
     for (const state of states) {
       const parent = state.mesh.parent;
       if (!parent) continue;
 
       const targetWorld = state.originalWorldOrigin.clone();
-      if (enabled) targetWorld.y += state.floor * gap;
+      if (enabled) targetWorld.y += state.order * gap;
 
       parent.updateMatrixWorld(true);
       const targetLocal = parent.worldToLocal(targetWorld);
