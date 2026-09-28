@@ -356,3 +356,124 @@
     display: none;
   }
 }
+
+
+/* Source health, material and lighting tools */
+.editor-source-health,
+.editor-materials,
+.editor-lighting {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.source-health-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.source-health-types > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 0 7px;
+  border: 1px solid #28364d;
+  border-radius: 999px;
+  background: #0d1728;
+  color: #8e9db4;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .06em;
+}
+
+.source-health-types > span b {
+  color: #eef2fb;
+}
+
+.source-health-card {
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid #27344a;
+  border-radius: 9px;
+  background: #0b1424;
+}
+
+.source-health-card > b {
+  min-width: 0;
+  overflow: hidden;
+  color: #dfe6f1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.source-health-card > small {
+  color: #8190a7;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.source-health-card > em {
+  padding: 6px 7px;
+  border: 1px solid #675526;
+  border-radius: 7px;
+  background: rgba(181, 139, 31, 0.12);
+  color: #e4c76e;
+  font-size: 9px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.editor-materials,
+.editor-lighting {
+  padding-top: 3px;
+  border-top: 1px solid #202c41;
+}
+
+.editor-materials fieldset,
+.editor-lighting fieldset {
+  display: grid;
+  gap: 7px;
+}
+
+.editor-materials fieldset > small {
+  color: #74849c;
+  line-height: 1.45;
+}
+
+.material-color-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.editor-materials input[type="color"],
+.editor-lighting input[type="color"] {
+  min-height: 38px;
+}
+
+.editor-lighting .check {
+  min-height: 34px;
+  padding: 7px 8px;
+  border: 1px solid #27344a;
+  border-radius: 8px;
+  background: #0b1424;
+  color: #aeb9ca;
+}
+
+.editor-lighting .check input {
+  accent-color: #8d84ff;
+}
+
+.studio--focus-editor .editor-source-health {
+  margin-top: 0;
+}
+
+@media (max-width: 760px) {
+  .material-color-row {
+    grid-template-columns: 1fr;
+  }
+}
