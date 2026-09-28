@@ -645,16 +645,16 @@ export default function SceneCanvas(props: Props) {
             room.z + room.depth / 2,
           );
       }
-      let snapped = Math.round(value * 10) / 10;
-      let distance = Math.abs(snapped - value);
+      let edgeSnap: number | undefined;
+      let edgeDistance = Infinity;
       for (const target of targets) {
         const candidateDistance = Math.abs(target - value);
-        if (candidateDistance <= 0.22 && candidateDistance < distance) {
-          snapped = target;
-          distance = candidateDistance;
+        if (candidateDistance <= 0.22 && candidateDistance < edgeDistance) {
+          edgeSnap = target;
+          edgeDistance = candidateDistance;
         }
       }
-      return snapped;
+      return edgeSnap ?? Math.round(value * 10) / 10;
     };
 
     const roomPlanePoint = (event: PointerEvent) => {
@@ -1286,10 +1286,12 @@ export default function SceneCanvas(props: Props) {
         roomSurface.material.depthWrite = false;
         roomSurface.renderOrder = 20;
       }
-      for (const z of [-d / 2, d / 2])
-        block(root, "wall", [w, 0.01 + h, 0.12], [0, h / 2, z], "#eee9df");
-      for (const x of [-w / 2, w / 2])
-        block(root, "wall", [0.12, h, d], [x, h / 2, 0], "#e7e0d5");
+      if (!(props.roomMapEnabled && props.view === "building")) {
+        for (const z of [-d / 2, d / 2])
+          block(root, "wall", [w, 0.01 + h, 0.12], [0, h / 2, z], "#eee9df");
+        for (const x of [-w / 2, w / 2])
+          block(root, "wall", [0.12, h, d], [x, h / 2, 0], "#e7e0d5");
+      }
       if (room.id === props.selected) {
         const line = new T.BoxHelper(root, 0x148575);
         root.updateMatrixWorld(true);
