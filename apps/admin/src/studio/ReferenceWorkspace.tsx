@@ -216,10 +216,10 @@ export default function ReferenceWorkspace({
               {points.map((point, index) => (
                 <span
                   className="reference-calibration-point"
-                  key={\`\${point.x}:\${point.y}:\${index}\`}
+                  key={`${point.x}:${point.y}:${index}`}
                   style={{
-                    left: \`\${(point.x / Math.max(naturalSize.width, 1)) * 100}%\`,
-                    top: \`\${(point.y / Math.max(naturalSize.height, 1)) * 100}%\`,
+                    left: `${(point.x / Math.max(naturalSize.width, 1)) * 100}%`,
+                    top: `${(point.y / Math.max(naturalSize.height, 1)) * 100}%`,
                   }}
                 >
                   {index === 0 ? "A" : "B"}
@@ -285,7 +285,7 @@ export default function ReferenceWorkspace({
                   <small>
                     {(layer.metresPerPixel * 1000).toFixed(3)} mm / px
                     {widthM && heightM
-                      ? \` · \${widthM.toFixed(2)} × \${heightM.toFixed(2)} m\`
+                      ? ` · ${widthM.toFixed(2)} × ${heightM.toFixed(2)} m`
                       : ""}
                   </small>
                 </div>
