@@ -205,6 +205,7 @@ export function Viewer3D({
   onFeatureSelect,
   availableFloors = [],
 }: Viewer3DProps) {
+  const floorSignature = availableFloors.join(",");
   const hostRef = useRef<HTMLDivElement>(null);
   const resetRef = useRef<(() => void) | null>(null);
   const floorRef = useRef<((floor: number | null) => void) | null>(null);
@@ -1028,7 +1029,7 @@ export function Viewer3D({
     initialWalk,
     initialWalkFloor,
     visualPreset,
-    availableFloors,
+    floorSignature,
   ]);
 
   useEffect(() => {
