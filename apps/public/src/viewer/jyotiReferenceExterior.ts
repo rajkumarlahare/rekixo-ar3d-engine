@@ -1,11 +1,11 @@
 import * as THREE from "three";
 import { addReferencePlanting, createReferenceSky } from "./jyotiReferenceContext";
-import { JYOTI_SOURCE_MODEL_SHA256 } from "./jyotiSourceProfile";
+import { JYOTI_SOURCE_FLOOR_LEVELS_M, JYOTI_SOURCE_MODEL_SHA256 } from "./jyotiSourceProfile";
 
 // Coordinates are taken from the supplied FBX, not from the overall site box.
 // This look-development pass is restricted to that exact source revision.
 const SOURCE = JYOTI_SOURCE_MODEL_SHA256;
-const LEVELS = [3.048, 6.0452, 9.0424, 12.0396, 15.0368, 18.034];
+const LEVELS = JYOTI_SOURCE_FLOOR_LEVELS_M.slice(1);
 
 function finish(name: string, color: number, roughness = 0.75) {
   const m = new THREE.MeshStandardMaterial({ color, roughness, name });
