@@ -173,3 +173,13 @@ test("manifest export refuses incomplete or cross-project asset sets", () => {
     /requires every project asset/,
   );
 });
+
+test("model alignment is exported as an explicit model transform", () => {
+  const { p, files } = fixture();
+  p.scene.modelTransform = { x: 1.25, y: 0.1, z: -3.5, rotationY: 90 };
+  const manifest = buildSceneManifestV2(p, files);
+  assert.deepEqual(manifest.models[0].transform.position, [1.25, 0.1, -3.5]);
+  assert.ok(
+    Math.abs(manifest.models[0].transform.rotation[1] - Math.PI / 2) < 1e-9,
+  );
+});
