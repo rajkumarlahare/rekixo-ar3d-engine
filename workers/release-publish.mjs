@@ -194,6 +194,35 @@ async function studioAssetRows(env, projectId) {
   return result.results || [];
 }
 
+function publicStudioSnapshot(draft) {
+  const project = structuredClone(draft);
+  const activeModelId = project.scene?.modelId;
+  const publicAssetIds = new Set(activeModelId ? [activeModelId] : []);
+  project.assets = (project.assets || []).filter((assetId) =>
+    publicAssetIds.has(assetId),
+  );
+
+  for (const scene of [
+    project.scene,
+    ...(Array.isArray(project.releases)
+      ? project.releases.map((release) => release?.scene)
+      : []),
+  ]) {
+    if (!scene || typeof scene !== "object") continue;
+    scene.referenceLayers = [];
+    if (scene.modelId && !publicAssetIds.has(scene.modelId))
+      delete scene.modelId;
+    if (Array.isArray(scene.rooms))
+      scene.rooms = scene.rooms.map((room) => {
+        if (!room || typeof room !== "object") return room;
+        const safe = { ...room };
+        delete safe.sourceAssetId;
+        return safe;
+      });
+  }
+  return project;
+}
+
 async function copyImmutableObject(
   env,
   {
@@ -429,8 +458,11 @@ export async function buildAndActivateRelease(
     }
 
     const studioById = new Map(studioAssets.map((asset) => [asset.id, asset]));
-    if (cloudDraft) {
-      for (const assetId of cloudDraft.draft.assets) {
+    const publicStudioProject = cloudDraft
+      ? publicStudioSnapshot(cloudDraft.draft)
+      : undefined;
+    if (publicStudioProject) {
+      for (const assetId of publicStudioProject.assets) {
         const asset = studioById.get(assetId);
         if (!asset)
           throw Error(`Cloud draft asset metadata is missing: ${assetId}`);
@@ -548,8 +580,8 @@ export async function buildAndActivateRelease(
         ...(frozenModel ? { model: frozenModel } : {}),
         mediaFiles,
       },
-      ...(cloudDraft
-        ? { studio: { project: cloudDraft.draft } }
+      ...(publicStudioProject
+        ? { studio: { project: publicStudioProject } }
         : {}),
       sourceEvidence: sourceEvidenceFromDraft(cloudDraft?.draft),
       assets: releaseAssets.map((asset) => asset.manifest),
