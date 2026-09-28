@@ -30,6 +30,7 @@ import StudioPublish from "./StudioPublish";
 import { buildStudioReadiness } from "./readiness";
 import "./studio.css";
 import "./studio-operations.css";
+import "./studio-superadmin-theme.css";
 
 function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob),
