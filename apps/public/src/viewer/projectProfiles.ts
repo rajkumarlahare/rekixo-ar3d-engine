@@ -1,19 +1,17 @@
 import * as THREE from "three";
 import {
   applyModelProfileExterior,
-  enhanceModelProfileMaterials,
+  loadModelProfileMaterialEnhancer,
   type ModelProfileRuntime,
 } from "./modelProfiles";
-import {
-  createJyotiProjectExperience,
-  type ExperienceFeature,
-  type ExperienceMode,
-} from "./projectExperience";
+import type { ExperienceFeature, ExperienceMode } from "./experienceTypes";
 
-export { applyModelProfileExterior, enhanceModelProfileMaterials };
+export { applyModelProfileExterior, loadModelProfileMaterialEnhancer };
 export type { ExperienceFeature, ExperienceMode, ModelProfileRuntime };
 
-type ExperienceRuntime = ReturnType<typeof createJyotiProjectExperience>;
+type ExperienceFactory =
+  (typeof import("./projectExperience"))["createJyotiProjectExperience"];
+export type ExperienceRuntime = ReturnType<ExperienceFactory>;
 
 export interface ModelProfileContext {
   mobile: boolean;
@@ -22,16 +20,18 @@ export interface ModelProfileContext {
 }
 
 /**
- * Authored project experiences are resolved behind the model-profile boundary.
- * A generic model cannot receive another project's rooms or furniture because
- * there is no experience factory without a positive source-profile match.
+ * Authored project experiences are lazy-loaded only after a positive model
+ * profile match. Generic projects therefore do not download another tenant's
+ * rooms, furniture or source texture bundle.
  */
-export function createProfileExperience(
+export async function loadProfileExperience(
   profile: ModelProfileRuntime | undefined,
   bounds: THREE.Box3,
   context: ModelProfileContext,
-): ExperienceRuntime | undefined {
+): Promise<ExperienceRuntime | undefined> {
   if (profile?.id !== "reference-source-v9") return undefined;
+
+  const { createJyotiProjectExperience } = await import("./projectExperience");
   return createJyotiProjectExperience(
     bounds,
     context.mobile,
