@@ -640,9 +640,29 @@ export default function Studio() {
                     </option>
                   ))}
                 </select>
-                <small>
-                  Signed in as {cloudSession.user?.email ?? "Engine Admin"}.
-                </small>
+                <div className="cloud-account-row">
+                  <small>
+                    Signed in as {cloudSession.user?.email ?? "Engine Admin"}.
+                  </small>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      task(async () => {
+                        await cloud.logout();
+                        setCloudSession({
+                          configured: true,
+                          databaseReady: true,
+                          authenticated: false,
+                        });
+                        setCloudProjects([]);
+                        setMessage("Engine cloud session signed out. Local drafts remain available.");
+                      })
+                    }
+                  >
+                    Sign out
+                  </button>
+                </div>
               </>
             )}
           </section>
