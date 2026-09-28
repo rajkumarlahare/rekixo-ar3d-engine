@@ -15,18 +15,23 @@ test("project site follows supplied exterior instead of inventing unsupported am
   assert.doesNotMatch(source, /lounger/);
 });
 
-test("brochure-backed typical floor includes the three marketed unit series", () => {
-  const source = read("apps/public/src/viewer/projectExperience.ts");
-  assert.match(source, /101-501/);
-  assert.match(source, /102-502/);
-  assert.match(source, /103-403/);
-  assert.match(source, /Living 4\.954 x 3\.050/);
-  assert.match(source, /Kitchen 3\.279 x 2\.196/);
-  assert.match(source, /Living 4\.828 x 3\.050/);
-  assert.match(source, /Kitchen 3\.416 x 2\.155/);
-  assert.match(source, /Living 5\.366 x 3\.000/);
-  assert.match(source, /Fire Lift 1\.60 x 1\.80/);
-  assert.match(source, /DUCT 1\.80 x 3\.96/);
+test("source-evidenced typical floor includes the three marketed unit series", () => {
+  const scene = JSON.parse(
+    read("project-profiles/jyoti-paradise/interior-scene-v2.json"),
+  );
+  const names = scene.rooms.map((room) => room.name).join("\\n");
+  const units = scene.units.map((unit) => unit.name).join("\\n");
+  assert.match(units, /101–501/);
+  assert.match(units, /102–502/);
+  assert.match(units, /103–403/);
+  assert.match(names, /Living 4\.954 x 3\.050/);
+  assert.match(names, /Kitchen 3\.279 x 2\.196/);
+  assert.match(names, /Living 4\.828 x 3\.050/);
+  assert.match(names, /Kitchen 3\.416 x 2\.155/);
+  assert.match(names, /Living 5\.366 x 3\.000/);
+  assert.match(names, /Fire Lift 1\.60 x 1\.80/);
+  assert.match(names, /DUCT 1\.80 x 3\.96/);
+  assert.ok(scene.rooms.every((room) => room.evidence.status === "unverified"));
 });
 
 test("interior furniture follows brochure room types", () => {
