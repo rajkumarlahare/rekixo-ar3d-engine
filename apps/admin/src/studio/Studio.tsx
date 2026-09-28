@@ -16,7 +16,7 @@ import {
 } from "./domain";
 import * as storage from "./storage";
 import * as cloud from "./cloud";
-import { importPublished } from "./published";
+import { importPublished, loadPublished } from "./published";
 import { buildSceneManifestV2 } from "./manifestV2";
 import "./studio.css";
 
@@ -240,12 +240,62 @@ export default function Studio() {
   async function openCloudProject(slug: string) {
     if (dirty)
       throw Error("Save your local changes before opening a cloud project.");
-    const downloaded = await cloud.downloadProject(slug);
-    await storage.save(downloaded.project, downloaded.files);
+    try {
+      const downloaded = await cloud.downloadProject(slug);
+      await storage.save(downloaded.project, downloaded.files);
+      await refresh();
+      open(downloaded.project);
+      setMessage(
+        "Cloud draft downloaded and cached locally for offline editing.",
+      );
+      return;
+    } catch (reason) {
+      if (
+        !(reason instanceof Error) ||
+        !/Cloud draft not found/i.test(reason.message)
+      )
+        throw reason;
+    }
+
+    const summary = cloudProjects.find((entry) => entry.slug === slug);
+    if (!summary)
+      throw Error("Cloud project metadata is no longer available.");
+
+    const publishedEntry = published.find((entry) => entry.slug === slug);
+    if (publishedEntry) {
+      const seeded = await loadPublished(slug);
+      const projectFromPublished: Project = {
+        ...seeded.project,
+        id: summary.id,
+        slug: summary.slug,
+        name: summary.name,
+        location: summary.location ?? "",
+        updated: new Date().toISOString(),
+      };
+      delete projectFromPublished.cloud;
+      const ownedFiles = seeded.files.map((asset) => ({
+        ...asset,
+        projectId: summary.id,
+      }));
+      await storage.save(projectFromPublished, ownedFiles);
+      await refresh();
+      open(projectFromPublished);
+      setMessage(
+        "This Engine project had no cloud draft. Studio was seeded from its read-only published design; Save to cloud will create revision 1 without changing the live public project.",
+      );
+      return;
+    }
+
+    const blank = newProject(summary.name);
+    blank.id = summary.id;
+    blank.slug = summary.slug;
+    blank.location = summary.location ?? "";
+    blank.updated = new Date().toISOString();
+    await storage.save(blank);
     await refresh();
-    open(downloaded.project);
+    open(blank);
     setMessage(
-      "Cloud draft downloaded and cached locally for offline editing.",
+      "This Engine project had no Studio draft, so an empty local authoring draft was created. Save to cloud will create revision 1; existing live models/scenes remain untouched.",
     );
   }
 
