@@ -355,7 +355,7 @@ export async function buildAndActivateRelease(
 
     let frozenModel;
     if (experience.model) {
-      const targetKey = `projects/${currentProject.slug}/releases/v${version}/models/${safeSegment(
+      const targetKey = `projects/${currentProject.slug}/releases/${releaseId}/models/${safeSegment(
         experience.model.id,
       )}`;
       const copied = await copyImmutableObject(env, {
@@ -386,7 +386,7 @@ export async function buildAndActivateRelease(
     const mediaFiles = [];
     for (const sourceKey of [...mediaKeys].sort()) {
       const fileName = mediaFileName(sourceKey, currentProject.slug);
-      const targetKey = `projects/${currentProject.slug}/releases/v${version}/media/${fileName}`;
+      const targetKey = `projects/${currentProject.slug}/releases/${releaseId}/media/${fileName}`;
       const copied = await copyImmutableObject(env, {
         sourceKey,
         targetKey,
@@ -409,7 +409,7 @@ export async function buildAndActivateRelease(
         const asset = studioById.get(assetId);
         if (!asset)
           throw Error(`Cloud draft asset metadata is missing: ${assetId}`);
-        const targetKey = `projects/${currentProject.slug}/releases/v${version}/studio/${safeSegment(
+        const targetKey = `projects/${currentProject.slug}/releases/${releaseId}/studio/${safeSegment(
           asset.id,
         )}`;
         const copied = await copyImmutableObject(env, {
@@ -433,7 +433,7 @@ export async function buildAndActivateRelease(
       const studioModel = studioById.get(cloudDraft.draft.scene.modelId);
       if (!studioModel)
         throw Error("Studio model asset metadata is missing.");
-      const targetKey = `projects/${currentProject.slug}/releases/v${version}/models/${safeSegment(
+      const targetKey = `projects/${currentProject.slug}/releases/${releaseId}/models/${safeSegment(
         studioModel.id,
       )}`;
       const copied = await copyImmutableObject(env, {
