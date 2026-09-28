@@ -48,6 +48,7 @@ export default function Studio() {
   const [cloudSession, setCloudSession] = useState<cloud.CloudSession>();
   const [cloudProjects, setCloudProjects] = useState<cloud.CloudProjectSummary[]>([]);
   const [cloudSearch, setCloudSearch] = useState("");
+  const [cloudFilter, setCloudFilter] = useState<"active" | "archived">("active");
   const [published, setPublished] = useState<{ slug: string; name: string }[]>(
     [],
   );
@@ -81,7 +82,7 @@ export default function Studio() {
     let active = true;
     const timer = window.setTimeout(() => {
       void cloud
-        .projects(cloudSearch, "active", 50, 0)
+        .projects(cloudSearch, cloudFilter, 50, 0)
         .then((result) => {
           if (active) setCloudProjects(result.projects);
         })
@@ -98,7 +99,7 @@ export default function Studio() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [cloudSearch, cloudSession?.authenticated]);
+  }, [cloudSearch, cloudFilter, cloudSession?.authenticated]);
 
   useEffect(() => {
     let active = true;
@@ -232,7 +233,7 @@ export default function Studio() {
 
   async function refreshCloudProjects() {
     if (!cloudSession?.authenticated) return;
-    const result = await cloud.projects(cloudSearch, "active", 50, 0);
+    const result = await cloud.projects(cloudSearch, cloudFilter, 50, 0);
     setCloudProjects(result.projects);
   }
 
@@ -542,13 +543,39 @@ export default function Studio() {
                   placeholder="Search cloud projects"
                   disabled={busy}
                 />
+                <div className="cloud-filter">
+                  <button
+                    type="button"
+                    className={cloudFilter === "active" ? "active" : ""}
+                    onClick={() => setCloudFilter("active")}
+                    disabled={busy}
+                  >
+                    Active
+                  </button>
+                  <button
+                    type="button"
+                    className={cloudFilter === "archived" ? "active" : ""}
+                    onClick={() => setCloudFilter("archived")}
+                    disabled={busy}
+                  >
+                    Archived
+                  </button>
+                </div>
                 <select
                   aria-label="Cloud project library"
                   value=""
                   disabled={busy || dirty || !cloudProjects.length}
                   onChange={(event) => {
                     const slug = event.target.value;
-                    if (slug) void task(() => openCloudProject(slug));
+                    if (!slug) return;
+                    void task(async () => {
+                      if (cloudFilter === "archived") {
+                        await cloud.patchProject(slug, { action: "restore" });
+                        setCloudFilter("active");
+                      }
+                      await openCloudProject(slug);
+                      await refreshCloudProjects();
+                    });
                   }}
                 >
                   <option value="">
@@ -558,6 +585,7 @@ export default function Studio() {
                   </option>
                   {cloudProjects.map((entry) => (
                     <option key={entry.id} value={entry.slug}>
+                      {cloudFilter === "archived" ? "Restore · " : ""}
                       {entry.name} · r{entry.draftRevision ?? "—"}
                     </option>
                   ))}
@@ -686,17 +714,13 @@ export default function Studio() {
                   await cloud.patchProject(projectSlug(p), {
                     action: "archive",
                   });
-                  const localCopy = {
-                    ...p,
-                    cloud: undefined,
-                    slug: `${projectSlug(p)}-local-${p.id.slice(0, 6)}`,
-                    updated: new Date().toISOString(),
-                  };
-                  await storage.save(localCopy);
+                  const localCopy = await storage.duplicateProject(p);
+                  await refresh();
                   open(localCopy);
+                  setCloudFilter("active");
                   await refreshCloudProjects();
                   setMessage(
-                    "Cloud project archived. This browser keeps an independent local copy.",
+                    "Cloud project archived. An independent local copy is open for further experimentation.",
                   );
                 })
               }
