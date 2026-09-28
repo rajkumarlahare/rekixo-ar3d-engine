@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { sourceTextureData } from "./sourceTextureData";
+import type { ExperienceFeature, ExperienceMode } from "./experienceTypes";
 
 function sourceFinish(key: string, color: number, roughness: number) {
   const material = standard(color, roughness);
@@ -14,15 +15,6 @@ function sourceFinish(key: string, color: number, roughness: number) {
   return material;
 }
 
-export type ExperienceMode = "site" | "interior" | "terrace";
-
-export type ExperienceFeature = {
-  id: string;
-  label: string;
-  category: string;
-  description: string;
-  object: THREE.Object3D;
-};
 
 function standard(color: number, roughness = 0.72, metalness = 0.02) {
   return new THREE.MeshStandardMaterial({ color, roughness, metalness });
