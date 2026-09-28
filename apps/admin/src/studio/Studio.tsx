@@ -343,9 +343,13 @@ export default function Studio() {
     await storage.save(next);
     setProject(next);
     setDirty(false);
-    await Promise.all([refresh(), refreshCloudProjects()]);
+    await Promise.all([
+      refresh(),
+      refreshCloudProjects(),
+      refreshCloudReleases(next),
+    ]);
     setMessage(
-      `Cloud draft saved · revision ${next.cloud?.revision ?? "—"} · local cache updated.`,
+      `Cloud draft saved · revision ${next.cloud?.revision ?? "—"} · local cache updated. Publishing remains a separate immutable step.`,
     );
   }
   function history(back: boolean) {
