@@ -573,7 +573,7 @@ function dispose(root: THREE.Object3D) {
   });
 }
 
-export function createProjectExperience(bounds: THREE.Box3, mobile: boolean, referenceVisual = false, preserveSourceSite = false) {
+export function createJyotiProjectExperience(bounds: THREE.Box3, mobile: boolean, referenceVisual = false, preserveSourceSite = false) {
   const root = new THREE.Group();
   root.name = "source-faithful-project-experience";
 
