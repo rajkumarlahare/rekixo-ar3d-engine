@@ -15,6 +15,7 @@ import {
   type Room,
 } from "./domain";
 import * as storage from "./storage";
+import * as cloud from "./cloud";
 import { importPublished } from "./published";
 import { buildSceneManifestV2 } from "./manifestV2";
 import "./studio.css";
@@ -44,9 +45,61 @@ export default function Studio() {
     [backup, setBackup] = useState<{ url: string; name: string }>(),
     [mesh, setMesh] = useState("");
   const [manifestText, setManifestText] = useState("");
+  const [cloudSession, setCloudSession] = useState<cloud.CloudSession>();
+  const [cloudProjects, setCloudProjects] = useState<cloud.CloudProjectSummary[]>([]);
+  const [cloudSearch, setCloudSearch] = useState("");
   const [published, setPublished] = useState<{ slug: string; name: string }[]>(
     [],
   );
+  useEffect(() => {
+    let active = true;
+    void cloud
+      .session()
+      .then((next) => {
+        if (!active) return;
+        setCloudSession(next);
+        if (next.authenticated)
+          return cloud.projects("", "active", 50, 0).then((result) => {
+            if (active) setCloudProjects(result.projects);
+          });
+      })
+      .catch(() => {
+        if (active)
+          setCloudSession({
+            configured: false,
+            databaseReady: false,
+            authenticated: false,
+          });
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!cloudSession?.authenticated) return;
+    let active = true;
+    const timer = window.setTimeout(() => {
+      void cloud
+        .projects(cloudSearch, "active", 50, 0)
+        .then((result) => {
+          if (active) setCloudProjects(result.projects);
+        })
+        .catch((reason: unknown) => {
+          if (active)
+            setError(
+              reason instanceof Error
+                ? reason.message
+                : "Cloud projects could not be loaded.",
+            );
+        });
+    }, 220);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [cloudSearch, cloudSession?.authenticated]);
+
   useEffect(() => {
     let active = true;
     fetch("/3Dprojects/published/catalog.json")
@@ -165,7 +218,7 @@ export default function Studio() {
     setDirty(false);
     await refresh();
     setMessage(
-      "Saved on this device. Export a backup to keep a separate copy.",
+      "Saved in the local offline cache. Use Save to cloud for the shared Engine draft.",
     );
     return next;
   }
@@ -175,6 +228,37 @@ export default function Studio() {
       return;
     }
     open(p);
+  }
+
+  async function refreshCloudProjects() {
+    if (!cloudSession?.authenticated) return;
+    const result = await cloud.projects(cloudSearch, "active", 50, 0);
+    setCloudProjects(result.projects);
+  }
+
+  async function openCloudProject(slug: string) {
+    if (dirty)
+      throw Error("Save your local changes before opening a cloud project.");
+    const downloaded = await cloud.downloadProject(slug);
+    await storage.save(downloaded.project, downloaded.files);
+    await refresh();
+    open(downloaded.project);
+    setMessage(
+      "Cloud draft downloaded and cached locally for offline editing.",
+    );
+  }
+
+  async function syncCloudProject() {
+    if (!cloudSession?.authenticated)
+      throw Error("Sign in to Engine Admin before saving a cloud draft.");
+    const next = await cloud.syncProject(p, files);
+    await storage.save(next);
+    setProject(next);
+    setDirty(false);
+    await Promise.all([refresh(), refreshCloudProjects()]);
+    setMessage(
+      `Cloud draft saved · revision ${next.cloud?.revision ?? "—"} · local cache updated.`,
+    );
   }
   function history(back: boolean) {
     if (!project) return;
@@ -258,9 +342,17 @@ export default function Studio() {
     if (model && !/\.(glb|fbx)$/i.test(file.name))
       throw Error("Choose a GLB or FBX model.");
     const a = await storage.makeAsset(file, p.id);
+    const previousModelId = model ? p.scene.modelId : undefined;
+    const previousModelNeededByReview = previousModelId
+      ? p.releases.some((release) => release.scene.modelId === previousModelId)
+      : false;
+    const retainedAssets =
+      previousModelId && !previousModelNeededByReview
+        ? p.assets.filter((assetId) => assetId !== previousModelId)
+        : p.assets;
     const next = {
       ...p,
-      assets: [...p.assets, a.id],
+      assets: [...retainedAssets, a.id],
       scene: {
         ...p.scene,
         ...(model
@@ -272,6 +364,8 @@ export default function Studio() {
       },
     };
     await persist(next, [a]);
+    if (previousModelId && !previousModelNeededByReview)
+      await storage.removeAssetIfUnreferenced(previousModelId);
     undo.current = [];
     redo.current = [];
     if (model) {
