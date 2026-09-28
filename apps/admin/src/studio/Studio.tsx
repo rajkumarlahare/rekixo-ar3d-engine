@@ -559,12 +559,22 @@ export default function Studio() {
             Save local
           </button>
           {cloudSession?.authenticated ? (
-            <button
-              disabled={busy || Boolean(review)}
-              onClick={() => task(syncCloudProject)}
-            >
-              Save to cloud
-            </button>
+            <>
+              <button
+                disabled={busy || Boolean(review)}
+                onClick={() => task(syncCloudProject)}
+              >
+                Save to cloud
+              </button>
+              {p.cloud && (
+                <button
+                  disabled={busy || dirty || Boolean(review)}
+                  onClick={() => task(publishCurrentRelease)}
+                >
+                  Publish release
+                </button>
+              )}
+            </>
           ) : (
             <a
               href="/3Dprojects/login?return=/3Dprojects/studio"
@@ -626,7 +636,7 @@ export default function Studio() {
         YOUR DESIGN WORKSPACE{" "}
         <span>
           {cloudSession?.authenticated
-            ? "Local cache + authenticated Engine cloud drafts. Review versions remain drafts until a later publish phase."
+            ? "Local cache + authenticated Engine cloud drafts. Publish creates an immutable release; later draft edits do not change the live release."
             : "Local/offline cache is available. Cloud writes stay locked behind the dedicated Engine Admin session."}
         </span>
         <button disabled={busy} onClick={() => importInput.current?.click()}>
