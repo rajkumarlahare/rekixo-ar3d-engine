@@ -650,6 +650,18 @@ export default function SceneCanvas(props: Props) {
     });
     resize.observe(el);
     const down = (e: KeyboardEvent) => {
+      if (latest.current.roomPolygonDraw?.enabled) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          finishPolygonDraft();
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          clearPolygonDraft();
+          setStatus("");
+        }
+        return;
+      }
       if (latest.current.view !== "walk") return;
       if (
         [
@@ -749,43 +761,59 @@ export default function SceneCanvas(props: Props) {
       | undefined;
     let roomDrawStart: T.Vector3 | undefined;
 
-    const snapRoomCoordinate = (
-      value: number,
-      axis: "x" | "z",
+    const snapRoomPoint = (
+      point: T.Vector3,
       floorId: string,
       enabled: boolean,
     ) => {
-      if (!enabled) return value;
-      const targets: number[] = [];
+      if (!enabled) return point;
+      const grid = new T.Vector3(
+        Math.round(point.x * 10) / 10,
+        point.y,
+        Math.round(point.z * 10) / 10,
+      );
+      let best = grid;
+      let bestDistance = Math.hypot(grid.x - point.x, grid.z - point.z);
       for (const room of latest.current.scene.rooms) {
         if (room.floorId !== floorId) continue;
-        if (axis === "x")
-          targets.push(
-            room.x - room.width / 2,
-            room.x,
-            room.x + room.width / 2,
-          );
-        else
-          targets.push(
-            room.z - room.depth / 2,
-            room.z,
-            room.z + room.depth / 2,
-          );
-      }
-      let edgeSnap: number | undefined;
-      let edgeDistance = Infinity;
-      for (const target of targets) {
-        const candidateDistance = Math.abs(target - value);
-        if (candidateDistance <= 0.22 && candidateDistance < edgeDistance) {
-          edgeSnap = target;
-          edgeDistance = candidateDistance;
+        const boundary = roomBoundaryPoints(room);
+        for (let index = 0; index < boundary.length; index += 1) {
+          const [vx, vz] = boundary[index];
+          const vertexDistance = Math.hypot(vx - point.x, vz - point.z);
+          if (vertexDistance <= 0.24 && vertexDistance < bestDistance) {
+            best = new T.Vector3(vx, point.y, vz);
+            bestDistance = vertexDistance;
+          }
+          const [ax, az] = boundary[index];
+          const [bx, bz] = boundary[(index + 1) % boundary.length];
+          const dx = bx - ax;
+          const dz = bz - az;
+          const lengthSquared = dx * dx + dz * dz;
+          const t =
+            lengthSquared > 0
+              ? T.MathUtils.clamp(
+                  ((point.x - ax) * dx + (point.z - az) * dz) /
+                    lengthSquared,
+                  0,
+                  1,
+                )
+              : 0;
+          const px = ax + t * dx;
+          const pz = az + t * dz;
+          const edgeDistance = Math.hypot(px - point.x, pz - point.z);
+          if (edgeDistance <= 0.18 && edgeDistance < bestDistance) {
+            best = new T.Vector3(px, point.y, pz);
+            bestDistance = edgeDistance;
+          }
         }
       }
-      return edgeSnap ?? Math.round(value * 10) / 10;
+      return best;
     };
 
     const roomPlanePoint = (event: PointerEvent) => {
-      const config = latest.current.roomDraw;
+      const rectangle = latest.current.roomDraw;
+      const polygon = latest.current.roomPolygonDraw;
+      const config = rectangle?.enabled ? rectangle : polygon;
       if (!config?.enabled) return undefined;
       const floor = latest.current.scene.floors.find(
         (entry) => entry.id === config.floorId,
@@ -803,10 +831,8 @@ export default function SceneCanvas(props: Props) {
       const target = new T.Vector3();
       const plane = new T.Plane(new T.Vector3(0, 1, 0), -floor.elevation);
       if (!raycaster.ray.intersectPlane(plane, target)) return undefined;
-      target.x = snapRoomCoordinate(target.x, "x", floor.id, config.snap);
-      target.z = snapRoomCoordinate(target.z, "z", floor.id, config.snap);
       target.y = floor.elevation + 0.04;
-      return target;
+      return snapRoomPoint(target, floor.id, config.snap);
     };
 
     const updateRoomDraft = (start: T.Vector3, end: T.Vector3) => {
@@ -823,6 +849,22 @@ export default function SceneCanvas(props: Props) {
 
     const pointerDown = (e: PointerEvent) => {
       renderer.domElement.focus();
+      if (
+        e.button === 0 &&
+        latest.current.roomPolygonDraw?.enabled &&
+        latest.current.view === "building"
+      ) {
+        controls.enabled = false;
+        renderer.domElement.setPointerCapture(e.pointerId);
+        point = {
+          x: e.clientX,
+          y: e.clientY,
+          ox: e.clientX,
+          oy: e.clientY,
+          id: e.pointerId,
+        };
+        return;
+      }
       if (
         e.button === 0 &&
         latest.current.roomDraw?.enabled &&
@@ -855,6 +897,11 @@ export default function SceneCanvas(props: Props) {
         renderer.domElement.setPointerCapture(e.pointerId);
     };
     const move = (e: PointerEvent) => {
+      if (latest.current.roomPolygonDraw?.enabled && point) {
+        const hover = roomPlanePoint(e);
+        if (hover) redrawPolygonDraft(hover);
+        return;
+      }
       if (roomDrawStart && latest.current.roomDraw?.enabled) {
         const end = roomPlanePoint(e);
         if (end) updateRoomDraft(roomDrawStart, end);
@@ -871,6 +918,35 @@ export default function SceneCanvas(props: Props) {
       point.y = e.clientY;
     };
     const click = (e: PointerEvent) => {
+      if (latest.current.roomPolygonDraw?.enabled) {
+        if (!point) return;
+        const small = Math.hypot(e.clientX - point.ox, e.clientY - point.oy) < 5;
+        point = undefined;
+        controls.enabled = latest.current.view !== "walk";
+        try {
+          renderer.domElement.releasePointerCapture(e.pointerId);
+        } catch {}
+        if (!small) return;
+        const corner = roomPlanePoint(e);
+        if (!corner) return;
+        const first = polygonDraftPoints[0];
+        if (
+          first &&
+          polygonDraftPoints.length >= 3 &&
+          Math.hypot(first.x - corner.x, first.z - corner.z) <= 0.28
+        ) {
+          finishPolygonDraft();
+          return;
+        }
+        polygonDraftPoints.push(corner.clone());
+        redrawPolygonDraft();
+        setStatus(
+          polygonDraftPoints.length < 3
+            ? `${polygonDraftPoints.length} corner${polygonDraftPoints.length === 1 ? "" : "s"} · add at least 3`
+            : `${polygonDraftPoints.length} corners · click first corner or press Enter to finish`,
+        );
+        return;
+      }
       if (roomDrawStart) {
         const start = roomDrawStart;
         const end = roomPlanePoint(e);
