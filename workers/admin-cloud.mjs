@@ -425,7 +425,7 @@ function cloudProjectRow(row) {
 
 async function projectBySlug(env, slug) {
   return env.DB.prepare(
-    `SELECT id,slug,name,location,status,updated_at
+    `SELECT id,slug,name,location,status,updated_at,active_release_id
        FROM projects_3d
       WHERE slug=?
       LIMIT 1`,
@@ -1116,7 +1116,12 @@ async function patchProject(request, env, actor, project) {
   const now = new Date().toISOString();
 
   if (action === "archive" || action === "restore") {
-    const status = action === "archive" ? "archived" : "draft";
+    const status =
+      action === "archive"
+        ? "archived"
+        : project.active_release_id
+          ? "published"
+          : "draft";
     if (
       (action === "archive" && project.status === "archived") ||
       (action === "restore" && project.status !== "archived")
