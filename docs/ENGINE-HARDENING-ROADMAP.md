@@ -63,7 +63,7 @@ Status: COMPLETE — validated on main (PR #39, GitHub Actions run 36399474310)
 - separate render meshes from navigation/collision geometry.
 
 ### Phase 3 — Source evidence and Scene Manifest V2 hardening
-Status: PENDING
+Status: IN PROGRESS
 
 - enforce cross-floor Unit/Room/Opening integrity;
 - validate polygon area, repeated points and self-intersection;
