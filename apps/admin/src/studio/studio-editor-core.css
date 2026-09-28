@@ -780,3 +780,141 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Floor isolation, section cutting and semantic source-node tagging */
+.editor-floor-tools select {
+  min-width: 150px;
+  min-height: 36px;
+  padding: 0 28px 0 9px;
+  border: 1px solid #27344a;
+  border-radius: 8px;
+  background: #0e1728;
+  color: #c5cfde;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.section-cut-bar {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #2a3951;
+  background: #0b1424;
+  color: #aeb9ca;
+  z-index: 10;
+}
+
+.section-cut-bar > b {
+  flex: 0 0 auto;
+  color: #8d84ff;
+  font-size: 9px;
+  letter-spacing: .12em;
+}
+
+.section-cut-bar > input[type="range"] {
+  flex: 1 1 220px;
+  min-width: 100px;
+  accent-color: #8d84ff;
+}
+
+.section-cut-bar > label {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #7f8da4;
+  font-size: 9px;
+}
+
+.section-cut-bar > label input {
+  width: 84px;
+  min-height: 30px;
+  padding: 4px 6px;
+}
+
+.section-axis {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.section-axis button,
+.section-cut-bar > button {
+  min-height: 30px;
+  padding: 4px 8px;
+  border-color: #2b3a51;
+  background: #101b2e;
+  color: #aeb9ca;
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.section-axis button.active,
+.section-cut-bar > button.active {
+  border-color: #6e65ff;
+  background: rgba(105, 95, 255, .18);
+  color: #f0efff;
+}
+
+.semantic-tag-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 7px 0 9px;
+}
+
+.semantic-tag-status > span {
+  min-height: 25px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid #293950;
+  border-radius: 999px;
+  background: #0c1728;
+  color: #8fa0b8;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.model-node small {
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 980px) {
+  .editor-floor-tools select {
+    min-width: 124px;
+  }
+
+  .section-cut-bar {
+    flex-wrap: wrap;
+  }
+
+  .section-cut-bar > input[type="range"] {
+    order: 5;
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  .editor-floor-tools select {
+    min-width: 118px;
+  }
+
+  .section-cut-bar {
+    position: sticky;
+    top: 52px;
+  }
+
+  .section-cut-bar > label {
+    flex: 1 1 120px;
+  }
+
+  .section-cut-bar > label input {
+    width: 100%;
+  }
+}
