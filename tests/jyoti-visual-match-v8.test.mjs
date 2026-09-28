@@ -34,7 +34,12 @@ test("reference site remains compact instead of dominating the building", () => 
 
 test("reference mode keeps mobile quality without invented facade geometry", () => {
   const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
+  const profiles = read("apps/public/src/viewer/projectProfiles.ts");
   assert.match(viewer, /antialias: referenceVisual \|\| !mobile/);
   assert.match(viewer, /renderer\.shadowMap\.enabled = referenceVisual \|\| !mobile/);
-  assert.match(viewer, /createProjectExperience\(bounds, mobile, referenceVisual, preserveSourceSite\)/);
+  assert.match(viewer, /createProfileExperience/);
+  assert.match(
+    profiles,
+    /createJyotiProjectExperience\([\s\S]*bounds,[\s\S]*context\.mobile,[\s\S]*context\.referenceVisual,[\s\S]*context\.preserveSourceSite/,
+  );
 });
