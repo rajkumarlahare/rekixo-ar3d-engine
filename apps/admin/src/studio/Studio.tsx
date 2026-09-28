@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import SceneCanvas, { type View } from "./SceneCanvas";
+import SceneCanvas, {
+  type ModelNodeSummary,
+  type TransformCommit,
+  type TransformMode,
+  type View,
+} from "./SceneCanvas";
 import {
   catalog,
   duplicateFloor,
@@ -56,6 +61,15 @@ export default function Studio() {
     [review, setReview] = useState(""),
     [backup, setBackup] = useState<{ url: string; name: string }>(),
     [mesh, setMesh] = useState("");
+  const [transformMode, setTransformMode] = useState<TransformMode>("translate");
+  const [transformSnap, setTransformSnap] = useState(true);
+  const [focusRequest, setFocusRequest] = useState(0);
+  const [editorFocus, setEditorFocus] = useState(true);
+  const [showLeftPanel, setShowLeftPanel] = useState(true);
+  const [showRightPanel, setShowRightPanel] = useState(true);
+  const [showAssetShelf, setShowAssetShelf] = useState(true);
+  const [modelNodes, setModelNodes] = useState<ModelNodeSummary[]>([]);
+  const [modelNodeFilter, setModelNodeFilter] = useState("");
   const [manifestText, setManifestText] = useState("");
   const [cloudSession, setCloudSession] = useState<cloud.CloudSession>();
   const [cloudProjects, setCloudProjects] = useState<cloud.CloudProjectSummary[]>([]);
@@ -141,6 +155,8 @@ export default function Studio() {
     setBackup(undefined);
     setMessage("");
     setMesh("");
+    setModelNodes([]);
+    setModelNodeFilter("");
     setProject(p);
     setRoomId(p.scene.rooms[0]?.id ?? "");
     setSelected(p.scene.rooms[0]?.id ?? "");
@@ -433,6 +449,40 @@ export default function Studio() {
       setReview("");
     }
   }
+  useEffect(() => {
+    if (workspace !== "editor" || review || busy) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      )
+        return;
+      const key = event.key.toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && key === "z") {
+        event.preventDefault();
+        history(event.shiftKey ? false : true);
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && key === "y") {
+        event.preventDefault();
+        history(false);
+        return;
+      }
+      if (key === "w") setTransformMode("translate");
+      else if (key === "e") setTransformMode("rotate");
+      else if (key === "r") setTransformMode("scale");
+      else if (key === "f") {
+        event.preventDefault();
+        setFocusRequest((value) => value + 1);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [workspace, review, busy, project]);
   if (!project)
     return (
       <main className="studio">
@@ -469,7 +519,12 @@ export default function Studio() {
         (candidate) =>
           `${candidate.floorId}\u0000${candidate.unit.trim()}`,
       ),
-    ).size;
+    ).size,
+    filteredModelNodes = modelNodes
+      .filter((node) =>
+        node.name.toLowerCase().includes(modelNodeFilter.trim().toLowerCase()),
+      )
+      .slice(0, 120);
   function patchRoom(change: Partial<Room>) {
     if (!room) return;
     edit({
@@ -493,6 +548,59 @@ export default function Studio() {
         ),
       },
     });
+  }
+  function commitCanvasTransform(change: TransformCommit) {
+    if (review || busy) return;
+    let next: Project;
+    if (change.kind === "room") {
+      next = {
+        ...p,
+        scene: {
+          ...p.scene,
+          rooms: p.scene.rooms.map((candidate) =>
+            candidate.id === change.id
+              ? {
+                  ...candidate,
+                  ...(change.x !== undefined ? { x: change.x } : {}),
+                  ...(change.z !== undefined ? { z: change.z } : {}),
+                  ...(change.width !== undefined ? { width: change.width } : {}),
+                  ...(change.depth !== undefined ? { depth: change.depth } : {}),
+                  ...(change.height !== undefined ? { height: change.height } : {}),
+                }
+              : candidate,
+          ),
+        },
+      };
+    } else {
+      next = {
+        ...p,
+        scene: {
+          ...p.scene,
+          furniture: p.scene.furniture.map((candidate) =>
+            candidate.id === change.id
+              ? {
+                  ...candidate,
+                  ...(change.x !== undefined ? { x: change.x } : {}),
+                  ...(change.z !== undefined ? { z: change.z } : {}),
+                  ...(change.rotation !== undefined
+                    ? { rotation: change.rotation }
+                    : {}),
+                }
+              : candidate,
+          ),
+        },
+      };
+    }
+    try {
+      validateProject(next);
+      edit(next);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "That transform is outside the valid design bounds.",
+      );
+    }
   }
   function addRoom() {
     const prev = p.scene.rooms.at(-1);
@@ -580,7 +688,13 @@ export default function Studio() {
   );
   const local = ["localhost", "127.0.0.1"].includes(location.hostname);
   return (
-    <main className="studio">
+    <main
+      className={
+        workspace === "editor" && editorFocus
+          ? "studio studio--focus-editor"
+          : "studio"
+      }
+    >
       <header className="studio-head">
         <a className="studio-brand" href="/3Dprojects">
           R
@@ -781,7 +895,10 @@ export default function Studio() {
             key={key}
             type="button"
             className={workspace === key ? "active" : ""}
-            onClick={() => setWorkspace(key)}
+            onClick={() => {
+              setWorkspace(key);
+              if (key === "editor") setEditorFocus(true);
+            }}
           >
             <span aria-hidden="true">
               {key === "overview"
@@ -841,7 +958,11 @@ export default function Studio() {
           dirty={dirty}
           readiness={readiness}
           unitCount={unitCount}
-          onOpenEditor={() => setWorkspace("editor")}
+          onOpenEditor={() => {
+            setWorkspace("editor");
+            setEditorFocus(true);
+            setEditorFocus(true);
+          }}
           onOpenSources={() => setWorkspace("sources")}
           onOpenEvidence={() => setWorkspace("evidence")}
           onOpenPublish={() => setWorkspace("publish")}
@@ -890,8 +1011,19 @@ export default function Studio() {
         />
       )}
       {workspace === "editor" && (
-        <div className="studio-layout">
+        <div
+          className={[
+            "studio-layout",
+            "editor-core",
+            showLeftPanel ? "" : "editor-core--no-left",
+            showRightPanel ? "" : "editor-core--no-right",
+            showAssetShelf ? "" : "editor-core--no-assets",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
         <aside className="studio-sidebar">
+          <div className="editor-project-admin">
           <section className="cloud-workspace" aria-label="Cloud project workspace">
             <div className="section-label">ENGINE CLOUD</div>
             {!cloudSession ? (
@@ -1201,6 +1333,56 @@ export default function Studio() {
               Archive cloud project
             </button>
           )}
+          </div>
+          <section className="editor-outliner" aria-label="Scene outliner">
+            <div className="section-label">SCENE OUTLINER</div>
+            {p.scene.modelId ? (
+              <>
+                <button
+                  type="button"
+                  className={view === "building" ? "tree-room active" : "tree-room"}
+                  onClick={() => {
+                    setView("building");
+                    setSelected("");
+                  }}
+                >
+                  <span>▰ Imported building model</span>
+                  <small>{modelNodes.length} mesh nodes</small>
+                </button>
+                <input
+                  aria-label="Filter imported model nodes"
+                  value={modelNodeFilter}
+                  onChange={(event) => setModelNodeFilter(event.target.value)}
+                  placeholder="Filter model meshes"
+                />
+                <div className="model-node-list">
+                  {filteredModelNodes.map((node) => (
+                    <button
+                      type="button"
+                      key={node.key}
+                      className={mesh === node.name ? "model-node active" : "model-node"}
+                      title={node.name}
+                      onClick={() => {
+                        setView("building");
+                        setMesh(node.name);
+                        setSelected("");
+                      }}
+                    >
+                      <span>◇ {node.name}</span>
+                      <small>{node.type}</small>
+                    </button>
+                  ))}
+                  {modelNodes.length > filteredModelNodes.length && (
+                    <small className="model-node-limit">
+                      Showing first {filteredModelNodes.length} matching mesh nodes.
+                    </small>
+                  )}
+                </div>
+              </>
+            ) : (
+              <small>No imported building model yet.</small>
+            )}
+          </section>
           <div className="section-label">
             BUILDING STRUCTURE{" "}
             <button
@@ -1320,48 +1502,148 @@ export default function Studio() {
           </div>
         </aside>
         <section className="studio-center">
-          <nav className="canvas-toolbar" aria-label="Viewer modes">
-            {(
-              [
-                ["building", "Building"],
-                ["rooms", "Interior"],
-                ["walk", "Walk room"],
-              ] as const
-            ).map(([v, label]) => (
+          <nav className="canvas-toolbar editor-toolbar" aria-label="3D editor tools">
+            <div className="editor-tool-group" aria-label="Viewer modes">
+              {(
+                [
+                  ["building", "Building"],
+                  ["rooms", "Interior"],
+                  ["walk", "Walk"],
+                ] as const
+              ).map(([v, label]) => (
+                <button
+                  key={v}
+                  className={view === v ? "active" : ""}
+                  disabled={v === "walk" && !room}
+                  onClick={() => setView(v)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="editor-tool-group editor-transform-tools" aria-label="Transform tools">
               <button
-                key={v}
-                className={view === v ? "active" : ""}
-                disabled={v === "walk" && !room}
-                onClick={() => setView(v)}
+                type="button"
+                className={transformMode === "translate" ? "active" : ""}
+                disabled={Boolean(review) || busy || view === "building" || view === "walk"}
+                title="Move selected object (W)"
+                onClick={() => setTransformMode("translate")}
               >
-                {label}
+                ↔ Move <kbd>W</kbd>
               </button>
-            ))}
-            <span />
-            {!review && (
-              <>
-                <button
-                  disabled={!undo.current.length || busy}
-                  onClick={() => history(true)}
-                >
-                  Undo
-                </button>
-                <button
-                  disabled={!redo.current.length || busy}
-                  onClick={() => history(false)}
-                >
-                  Redo
-                </button>
-              </>
-            )}
+              <button
+                type="button"
+                className={transformMode === "rotate" ? "active" : ""}
+                disabled={
+                  Boolean(review) ||
+                  busy ||
+                  view !== "rooms" ||
+                  !item
+                }
+                title="Rotate selected furniture (E)"
+                onClick={() => setTransformMode("rotate")}
+              >
+                ↻ Rotate <kbd>E</kbd>
+              </button>
+              <button
+                type="button"
+                className={transformMode === "scale" ? "active" : ""}
+                disabled={
+                  Boolean(review) ||
+                  busy ||
+                  view !== "rooms" ||
+                  !room ||
+                  Boolean(item)
+                }
+                title="Scale selected room (R)"
+                onClick={() => setTransformMode("scale")}
+              >
+                ⤢ Scale <kbd>R</kbd>
+              </button>
+              <button
+                type="button"
+                className={transformSnap ? "active" : ""}
+                disabled={Boolean(review) || busy}
+                title="Toggle transform snapping"
+                onClick={() => setTransformSnap((value) => !value)}
+              >
+                # Snap
+              </button>
+            </div>
+            <div className="editor-toolbar-spacer" />
+            <div className="editor-tool-group">
+              <button
+                type="button"
+                title="Frame selected object (F)"
+                onClick={() => setFocusRequest((value) => value + 1)}
+              >
+                Focus <kbd>F</kbd>
+              </button>
+              {!review && (
+                <>
+                  <button
+                    disabled={!undo.current.length || busy}
+                    title="Undo (Ctrl+Z)"
+                    onClick={() => history(true)}
+                  >
+                    ↶
+                  </button>
+                  <button
+                    disabled={!redo.current.length || busy}
+                    title="Redo (Ctrl+Y)"
+                    onClick={() => history(false)}
+                  >
+                    ↷
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                className={showLeftPanel ? "active" : ""}
+                title="Toggle Scene Outliner"
+                onClick={() => setShowLeftPanel((value) => !value)}
+              >
+                Left
+              </button>
+              <button
+                type="button"
+                className={showAssetShelf ? "active" : ""}
+                title="Toggle Asset Shelf"
+                onClick={() => setShowAssetShelf((value) => !value)}
+              >
+                Assets
+              </button>
+              <button
+                type="button"
+                className={showRightPanel ? "active" : ""}
+                title="Toggle Inspector"
+                onClick={() => setShowRightPanel((value) => !value)}
+              >
+                Right
+              </button>
+              <button
+                type="button"
+                className={editorFocus ? "active" : ""}
+                onClick={() => setEditorFocus((value) => !value)}
+              >
+                {editorFocus ? "Exit full screen" : "Full screen"}
+              </button>
+            </div>
           </nav>
           <SceneCanvas
             scene={scene}
             roomId={roomId}
             selected={selected}
+            selectedMesh={mesh}
             view={view}
+            transformMode={transformMode}
+            transformEnabled={!review && !busy}
+            snap={transformSnap}
+            focusRequest={focusRequest}
             onSelect={select}
             onMesh={setMesh}
+            onTransformCommit={commitCanvasTransform}
+            onModelNodes={setModelNodes}
           />
           {!scene.rooms.length && view !== "building" && (
             <div className="empty-guide">
