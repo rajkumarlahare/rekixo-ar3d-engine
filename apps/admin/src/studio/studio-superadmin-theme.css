@@ -1,0 +1,437 @@
+/* Rekixo AR3D Studio — Super Admin visual parity
+   Visual-only overrides. No editor, storage, publish, cloud, scene or project logic is changed. */
+
+.studio {
+  --rkx-bg: #050914;
+  --rkx-shell: #08101e;
+  --rkx-panel: #0a1221;
+  --rkx-panel-2: #0e1728;
+  --rkx-panel-3: #101d31;
+  --rkx-border: #27344a;
+  --rkx-border-strong: #30415e;
+  --rkx-text: #f7f9ff;
+  --rkx-text-soft: #c8d2e3;
+  --rkx-muted: #8c99b0;
+  --rkx-dim: #64738a;
+  --rkx-violet: #8d84ff;
+  --rkx-violet-strong: #6e65ff;
+  --rkx-violet-wash: rgba(105, 95, 255, 0.18);
+  --rkx-green: #20c983;
+  --rkx-green-strong: #159b66;
+  --rkx-green-wash: rgba(32, 201, 131, 0.12);
+  --rkx-danger: #ff8c9b;
+  --rkx-danger-wash: rgba(184, 73, 91, 0.16);
+  --rkx-warning: #e5c56b;
+  --rkx-warning-wash: rgba(181, 139, 31, 0.15);
+
+  background: var(--rkx-bg);
+  color: var(--rkx-text);
+  color-scheme: dark;
+}
+
+.studio button {
+  border-color: var(--rkx-border);
+  border-radius: 9px;
+  background: var(--rkx-panel-2);
+  color: var(--rkx-text-soft);
+}
+
+.studio button:hover:not(:disabled) {
+  border-color: #465675;
+  background: #132138;
+  color: var(--rkx-text);
+}
+
+.studio button:focus-visible,
+.studio input:focus-visible,
+.studio select:focus-visible,
+.studio textarea:focus-visible {
+  outline-color: var(--rkx-violet);
+}
+
+.studio input,
+.studio select,
+.studio textarea {
+  border-color: var(--rkx-border-strong);
+  border-radius: 8px;
+  background: var(--rkx-panel-2);
+  color: var(--rkx-text);
+}
+
+.studio input::placeholder,
+.studio textarea::placeholder {
+  color: #66758c;
+}
+
+.studio-head {
+  background: var(--rkx-shell);
+  border-bottom-color: #202c41;
+}
+
+.studio-brand {
+  color: var(--rkx-text);
+}
+
+.studio-brand > span {
+  color: #b0aaff;
+}
+
+.studio-brand small,
+.project-name span,
+.asset-list small,
+.catalog small,
+.studio-inspector label,
+.studio-inspector p,
+.review-row small {
+  color: var(--rkx-muted);
+}
+
+.project-name input {
+  background: transparent;
+  color: var(--rkx-text);
+}
+
+.studio-actions button:first-child,
+.studio .primary,
+.studio .ops-primary {
+  border-color: var(--rkx-green-strong);
+  background: var(--rkx-green);
+  color: #04120d;
+  font-weight: 850;
+}
+
+.studio-actions button:first-child:hover:not(:disabled),
+.studio .primary:hover:not(:disabled),
+.studio .ops-primary:hover:not(:disabled) {
+  border-color: #35dda0;
+  background: #2fd596;
+  color: #03110c;
+}
+
+.storage-banner {
+  border-bottom: 1px solid #202c41;
+  background: #0b1424;
+  color: #9aa8bd;
+}
+
+.storage-banner span {
+  color: var(--rkx-muted);
+}
+
+.studio-layout {
+  background: var(--rkx-bg);
+}
+
+.studio-sidebar,
+.studio-inspector {
+  background: var(--rkx-shell);
+}
+
+.studio-sidebar {
+  border-right-color: #202c41;
+}
+
+.studio-inspector {
+  border-left-color: #202c41;
+}
+
+.section-label,
+.floor-name,
+.tree-room small {
+  color: var(--rkx-muted);
+}
+
+.studio .active {
+  border-color: var(--rkx-violet-strong) !important;
+  background: var(--rkx-violet-wash) !important;
+  color: #e9e7ff !important;
+}
+
+.canvas-toolbar {
+  border-bottom-color: #202c41;
+  background: #0b1424;
+}
+
+.canvas-status {
+  border: 1px solid #69531f;
+  background: #2a2311;
+  color: #f0d887;
+}
+
+.catalog {
+  border-top-color: #202c41;
+  background: var(--rkx-shell);
+}
+
+.studio-inspector h2 {
+  color: var(--rkx-text);
+}
+
+.measurement-note,
+.studio .subtle {
+  background: var(--rkx-panel-3);
+  color: var(--rkx-text-soft);
+}
+
+.studio .danger {
+  color: var(--rkx-danger);
+}
+
+.studio-feedback {
+  border-top: 1px solid #23513f;
+  background: #0d2a20;
+  color: #7ce1b5;
+}
+
+.studio-feedback.error {
+  border-top-color: #663844;
+  background: #2a1319;
+  color: #ff9fad;
+}
+
+.empty-guide {
+  border: 1px solid var(--rkx-border);
+  background: rgba(10, 18, 33, 0.94);
+  color: var(--rkx-text-soft);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34);
+}
+
+.empty-guide p {
+  color: var(--rkx-muted);
+}
+
+.walk-pad span {
+  border: 1px solid var(--rkx-border);
+  background: rgba(8, 16, 30, 0.92);
+  color: var(--rkx-text-soft);
+}
+
+/* Cloud / release controls */
+.studio .cloud-signin-link,
+.studio-cloud-login {
+  border-color: rgba(141, 132, 255, 0.42);
+  background: var(--rkx-violet-wash);
+  color: #e3e0ff;
+}
+
+.cloud-workspace {
+  border-color: var(--rkx-border);
+  background: rgba(14, 23, 40, 0.72);
+}
+
+.cloud-workspace small,
+.release-panel-head > small,
+.release-row > span > small {
+  color: var(--rkx-muted);
+}
+
+.cloud-filter button.active {
+  border-color: var(--rkx-violet-strong);
+  background: var(--rkx-violet-wash);
+  color: #e5e2ff;
+}
+
+.release-panel {
+  border-color: var(--rkx-border);
+  background: rgba(8, 16, 30, 0.72);
+}
+
+.release-row {
+  border-color: var(--rkx-border);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.release-row--active {
+  border-color: #336a55;
+  background: var(--rkx-green-wash);
+}
+
+.release-row > strong {
+  color: #80e8ba;
+}
+
+/* Workspace navigation */
+.studio-ops-tabs {
+  border-bottom-color: #202c41;
+  background: #08101e;
+}
+
+.studio-ops-tabs button {
+  color: #8fa0b8;
+}
+
+.studio-ops-tabs button:hover {
+  border-color: #34445f;
+  background: #101d31;
+  color: #e4e9f2;
+}
+
+.studio-ops-tabs button.active {
+  border-color: var(--rkx-violet-strong) !important;
+  background: var(--rkx-violet-wash) !important;
+  color: #f0efff !important;
+}
+
+.studio-ops-tabs button > small {
+  background: #253348;
+  color: #dbe7f5;
+}
+
+.studio-ops-tabs .ops-tab-alert {
+  background: #5a2d34;
+  color: #ffb3bd;
+}
+
+.studio-project-switcher label > span {
+  color: var(--rkx-muted);
+}
+
+/* Overview / Sources / Evidence / Publish */
+.studio-ops-view {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(105, 95, 255, 0.08), transparent 30rem),
+    var(--rkx-bg);
+}
+
+.ops-title-row h2,
+.ops-card-head h3,
+.ops-stat-grid article > strong,
+.ops-workflow button strong,
+.ops-health b,
+.ops-file-detail dd,
+.ops-evidence-row b {
+  color: var(--rkx-text);
+}
+
+.ops-title-row p,
+.ops-stat-grid article > small,
+.ops-workflow button small,
+.ops-health small,
+.ops-file-detail dt,
+.ops-source-list button small,
+.ops-empty p,
+.ops-evidence-head,
+.ops-evidence-row small,
+.ops-preview-links a small,
+.ops-release small {
+  color: var(--rkx-muted);
+}
+
+.ops-eyebrow {
+  color: var(--rkx-violet);
+}
+
+.ops-stat-grid article,
+.ops-card {
+  border-color: var(--rkx-border);
+  background: var(--rkx-panel);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.16);
+}
+
+.ops-stat-grid article > span {
+  color: #7e8ca4;
+}
+
+.ops-workflow button,
+.ops-source-list button,
+.ops-evidence-row {
+  border-color: var(--rkx-border);
+  background: var(--rkx-panel-2);
+}
+
+.ops-workflow button > b {
+  background: var(--rkx-violet-wash);
+  color: #b8b2ff;
+}
+
+.ops-workflow button i,
+.ops-source-list button i,
+.ops-preview-links a i {
+  color: #8b99b0;
+}
+
+.ops-health,
+.ops-file-detail dl > div,
+.ops-preview-links a,
+.ops-release {
+  border-color: var(--rkx-border);
+  background: var(--rkx-panel-2);
+  color: var(--rkx-text-soft);
+}
+
+.ops-health--ready > span {
+  background: var(--rkx-green-wash);
+  color: #67e4ad;
+}
+
+.ops-health--warning > span {
+  background: var(--rkx-warning-wash);
+  color: var(--rkx-warning);
+}
+
+.ops-health--blocker > span {
+  background: var(--rkx-danger-wash);
+  color: var(--rkx-danger);
+}
+
+.ops-pill--ready {
+  border-color: #336a55;
+  background: var(--rkx-green-wash);
+  color: #75e6b3;
+}
+
+.ops-pill--warning {
+  border-color: #6e5c27;
+  background: var(--rkx-warning-wash);
+  color: #efd67f;
+}
+
+.ops-pill--blocker {
+  border-color: #703b47;
+  background: var(--rkx-danger-wash);
+  color: #ff9ead;
+}
+
+.ops-file-type,
+.ops-release-version {
+  background: #17243a;
+  color: #b5c0d2;
+}
+
+.ops-empty {
+  border-color: #35445c;
+  background: #0b1424;
+}
+
+.ops-empty b {
+  color: var(--rkx-text-soft);
+}
+
+.ops-preview-links a:hover {
+  border-color: #485a79;
+  background: #132138;
+  color: var(--rkx-text);
+}
+
+.ops-release--active {
+  border-color: #336a55;
+  background: var(--rkx-green-wash);
+}
+
+.ops-release > strong {
+  color: #72e2ae;
+}
+
+/* Keep native 3D scene presentation untouched while darkening only editor chrome. */
+.studio-canvas,
+.studio-canvas canvas,
+.canvas-wrap {
+  color-scheme: normal;
+}
+
+@media (max-width: 760px) {
+  .studio-head,
+  .studio-ops-tabs {
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  }
+}
