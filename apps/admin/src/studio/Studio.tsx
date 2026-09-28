@@ -798,7 +798,67 @@ export default function Studio() {
           {error || (busy ? "Working…" : message)}
         </div>
       )}
-      <div className="studio-layout">
+      {workspace === "overview" && (
+        <StudioOverview
+          project={p}
+          dirty={dirty}
+          readiness={readiness}
+          unitCount={unitCount}
+          onOpenEditor={() => setWorkspace("editor")}
+          onOpenSources={() => setWorkspace("sources")}
+          onOpenEvidence={() => setWorkspace("evidence")}
+          onOpenPublish={() => setWorkspace("publish")}
+        />
+      )}
+      {workspace === "sources" && (
+        <StudioSources
+          project={p}
+          files={files}
+          readiness={readiness}
+          busy={busy}
+          onImportModel={() => modelInput.current?.click()}
+          onImportReference={() => referenceInput.current?.click()}
+          onDownload={(asset) => download(asset.blob, asset.name)}
+        />
+      )}
+      {workspace === "evidence" && (
+        <StudioEvidence
+          project={p}
+          readiness={readiness}
+          onOpenRoom={(key) => {
+            setRoomId(key);
+            setSelected(key);
+            setReview("");
+            setView("rooms");
+            setWorkspace("editor");
+          }}
+        />
+      )}
+      {workspace === "publish" && (
+        <StudioPublish
+          project={p}
+          readiness={readiness}
+          session={cloudSession}
+          releases={cloudReleases}
+          published={publishedCurrent}
+          busy={busy}
+          dirty={dirty}
+          onSaveLocal={() => void task(async () => { await persist(p); })}
+          onSaveCloud={() => void task(syncCloudProject)}
+          onPublish={() => void task(publishCurrentRelease)}
+          onActivate={(releaseId, version) =>
+            void task(() => activatePublishedRelease(releaseId, version))
+          }
+          onCreateReview={() => void task(createReviewVersion)}
+        />
+      )}
+      <div
+        className={
+          workspace === "editor"
+            ? "studio-layout"
+            : "studio-layout studio-layout--hidden"
+        }
+      >
         <aside className="studio-sidebar">
           <section className="cloud-workspace" aria-label="Cloud project workspace">
             <div className="section-label">ENGINE CLOUD</div>
