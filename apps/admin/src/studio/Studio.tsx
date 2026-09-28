@@ -177,6 +177,34 @@ export default function Studio() {
     };
   }, [project?.id, project?.assets]);
   useEffect(() => {
+    if (!cloudSession?.authenticated || !project?.cloud) {
+      setCloudReleases([]);
+      return;
+    }
+    let active = true;
+    void cloud
+      .releases(projectSlug(project))
+      .then((result) => {
+        if (active) setCloudReleases(result.releases);
+      })
+      .catch((reason: unknown) => {
+        if (active)
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Release history could not be loaded.",
+          );
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    cloudSession?.authenticated,
+    project?.id,
+    project?.cloud?.revision,
+  ]);
+
+  useEffect(() => {
     const guard = (e: BeforeUnloadEvent) => {
       if (dirty) {
         e.preventDefault();
