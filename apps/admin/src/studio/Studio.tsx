@@ -143,6 +143,7 @@ export default function Studio() {
     setRoomId(p.scene.rooms[0]?.id ?? "");
     setSelected(p.scene.rooms[0]?.id ?? "");
     setReview("");
+    setWorkspace("overview");
     setView(p.scene.modelId ? "building" : "rooms");
     setDirty(false);
     undo.current = [];
@@ -422,7 +423,23 @@ export default function Studio() {
     scene = release?.scene ?? p.scene,
     room = scene.rooms.find((r) => r.id === roomId),
     item = scene.furniture.find((f) => f.id === selected),
-    floor = scene.floors.find((f) => f.id === room?.floorId);
+    floor = scene.floors.find((f) => f.id === room?.floorId),
+    readiness = buildStudioReadiness(
+      p,
+      files,
+      dirty,
+      cloudSession,
+      cloudReleases,
+    ),
+    publishedCurrent = published.some(
+      (entry) => entry.slug === projectSlug(p),
+    ),
+    unitCount = new Set(
+      p.scene.rooms.map(
+        (candidate) =>
+          `${candidate.floorId}\u0000${candidate.unit.trim()}`,
+      ),
+    ).size;
   function patchRoom(change: Partial<Room>) {
     if (!room) return;
     edit({
