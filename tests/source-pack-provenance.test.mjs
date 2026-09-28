@@ -190,6 +190,44 @@ test("generic verifier detects missing, resized and checksum-mismatched source f
     const result = await verifySourcePackFiles(manifestPath, directory);
     assert.equal(result.verified.length, 1);
     assert.equal(result.verified[0].sha256, hash);
+
+    const traversal = {
+      ...manifest,
+      sources: [{ ...manifest.sources[0], filename: "../escape.bin" }],
+    };
+    await fsp.writeFile(manifestPath, JSON.stringify(traversal));
+    await assert.rejects(
+      verifySourcePackFiles(manifestPath, directory),
+      /Unsafe source filename/,
+    );
+
+    const nested = path.join(directory, "nested");
+    await fsp.mkdir(nested);
+    const nestedFile = path.join(nested, "source.bin");
+    await fsp.writeFile(nestedFile, sourceBytes);
+    const nestedManifest = {
+      ...manifest,
+      sources: [{ ...manifest.sources[0], filename: "nested/source.bin" }],
+    };
+    await fsp.writeFile(manifestPath, JSON.stringify(nestedManifest));
+    const nestedResult = await verifySourcePackFiles(manifestPath, directory);
+    assert.equal(nestedResult.verified[0].filename, "nested/source.bin");
+
+    const symlinkPath = path.join(directory, "linked.bin");
+    try {
+      await fsp.symlink(nestedFile, symlinkPath);
+      const symlinkManifest = {
+        ...manifest,
+        sources: [{ ...manifest.sources[0], filename: "linked.bin" }],
+      };
+      await fsp.writeFile(manifestPath, JSON.stringify(symlinkManifest));
+      await assert.rejects(
+        verifySourcePackFiles(manifestPath, directory),
+        /symlink is not allowed/,
+      );
+    } catch (error) {
+      if (!["EPERM", "EACCES", "ENOTSUP"].includes(error?.code)) throw error;
+    }
   } finally {
     await fsp.rm(directory, { recursive: true, force: true });
   }
