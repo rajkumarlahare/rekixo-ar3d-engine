@@ -677,7 +677,17 @@ export default function Studio() {
               </button>
               {p.cloud && (
                 <button
-                  disabled={busy || dirty || Boolean(review)}
+                  disabled={
+                    busy ||
+                    dirty ||
+                    Boolean(review) ||
+                    !readiness.publishable
+                  }
+                  title={
+                    readiness.publishable
+                      ? "Publish current immutable release"
+                      : readiness.blockers[0]?.detail
+                  }
                   onClick={() => task(publishCurrentRelease)}
                 >
                   Publish release
@@ -942,7 +952,17 @@ export default function Studio() {
                       <small>IMMUTABLE RELEASES</small>
                       <button
                         type="button"
-                        disabled={busy || dirty || Boolean(review)}
+                        disabled={
+                          busy ||
+                          dirty ||
+                          Boolean(review) ||
+                          !readiness.publishable
+                        }
+                        title={
+                          readiness.publishable
+                            ? "Publish current immutable release"
+                            : readiness.blockers[0]?.detail
+                        }
                         onClick={() => task(publishCurrentRelease)}
                       >
                         Publish current
