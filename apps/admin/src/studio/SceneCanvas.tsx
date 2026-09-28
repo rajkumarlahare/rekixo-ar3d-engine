@@ -535,15 +535,17 @@ export default function SceneCanvas(props: Props) {
           }
           if (hasContent) topBox = contentBox;
         }
-        if (view !== "building" && r)
+        if (view !== "building" && r) {
+          const boundary = roomBoundaryPoints(r);
+          const minX = Math.min(...boundary.map((point) => point[0]));
+          const maxX = Math.max(...boundary.map((point) => point[0]));
+          const minZ = Math.min(...boundary.map((point) => point[1]));
+          const maxZ = Math.max(...boundary.map((point) => point[1]));
           topBox = new T.Box3(
-            new T.Vector3(r.x - r.width / 2, y, r.z - r.depth / 2),
-            new T.Vector3(
-              r.x + r.width / 2,
-              y + r.height,
-              r.z + r.depth / 2,
-            ),
+            new T.Vector3(minX, y, minZ),
+            new T.Vector3(maxX, y + r.height, maxZ),
           );
+        }
         const centre = topBox.getCenter(new T.Vector3());
         const size = topBox.getSize(new T.Vector3());
         const span = Math.max(size.x / Math.max(camera.aspect, 0.1), size.z, 5);
@@ -561,14 +563,17 @@ export default function SceneCanvas(props: Props) {
         view === "building" && model.children.length
           ? new T.Box3().setFromObject(model)
           : r
-            ? new T.Box3(
-                new T.Vector3(r.x - r.width / 2, y, r.z - r.depth / 2),
-                new T.Vector3(
-                  r.x + r.width / 2,
-                  y + r.height,
-                  r.z + r.depth / 2,
-                ),
-              )
+            ? (() => {
+                const boundary = roomBoundaryPoints(r);
+                const minX = Math.min(...boundary.map((point) => point[0]));
+                const maxX = Math.max(...boundary.map((point) => point[0]));
+                const minZ = Math.min(...boundary.map((point) => point[1]));
+                const maxZ = Math.max(...boundary.map((point) => point[1]));
+                return new T.Box3(
+                  new T.Vector3(minX, y, minZ),
+                  new T.Vector3(maxX, y + r.height, maxZ),
+                );
+              })()
             : new T.Box3(new T.Vector3(-5, 0, -5), new T.Vector3(5, 3, 5));
       const c = box.getCenter(new T.Vector3()),
         sz = box.getSize(new T.Vector3());
@@ -1471,32 +1476,14 @@ export default function SceneCanvas(props: Props) {
         !props.isolateFloorId || room.floorId === props.isolateFloorId;
       r.rooms.add(root);
       r.selectables.set(room.id, root);
-      const w = room.width,
-        d = room.depth,
-        h = props.view === "walk" ? room.height : 0.65;
-      const roomSurface = block(
+      const h = props.view === "walk" ? room.height : 0.65;
+      roomSurface(
         root,
-        room.name,
-        [w, 0.08, d],
-        [0, props.roomMapEnabled && props.view === "building" ? 0.02 : -0.04, 0],
-        room.color,
+        room,
+        h,
+        Boolean(props.roomMapEnabled && props.view === "building"),
+        room.id === props.selected,
       );
-      if (
-        props.roomMapEnabled &&
-        props.view === "building" &&
-        roomSurface.material instanceof T.MeshStandardMaterial
-      ) {
-        roomSurface.material.transparent = true;
-        roomSurface.material.opacity = room.id === props.selected ? 0.52 : 0.24;
-        roomSurface.material.depthWrite = false;
-        roomSurface.renderOrder = 20;
-      }
-      if (!(props.roomMapEnabled && props.view === "building")) {
-        for (const z of [-d / 2, d / 2])
-          block(root, "wall", [w, 0.01 + h, 0.12], [0, h / 2, z], "#eee9df");
-        for (const x of [-w / 2, w / 2])
-          block(root, "wall", [0.12, h, d], [x, h / 2, 0], "#e7e0d5");
-      }
       if (room.id === props.selected) {
         const line = new T.BoxHelper(root, 0x148575);
         root.updateMatrixWorld(true);
@@ -1646,6 +1633,11 @@ export default function SceneCanvas(props: Props) {
   ]);
 
   useEffect(() => {
+    if (props.roomPolygonDraw?.enabled) return;
+    api.current?.clearPolygonDraft();
+  }, [props.roomPolygonDraw?.enabled, props.roomPolygonDraw?.floorId]);
+
+  useEffect(() => {
     if (props.focusRequest === undefined) return;
     api.current?.focusSelected();
   }, [props.focusRequest]);
@@ -1662,7 +1654,13 @@ export default function SceneCanvas(props: Props) {
     props.scene.modelTransform?.rotationY,
   ]);
   return (
-    <div className={props.roomDraw?.enabled ? "canvas-wrap room-draw-active" : "canvas-wrap"}>
+    <div
+      className={
+        props.roomDraw?.enabled || props.roomPolygonDraw?.enabled
+          ? "canvas-wrap room-draw-active"
+          : "canvas-wrap"
+      }
+    >
       <div className="studio-canvas" ref={host} />
       {status && (
         <div className="canvas-status" role="status">
@@ -1672,6 +1670,12 @@ export default function SceneCanvas(props: Props) {
       {props.roomDraw?.enabled && (
         <div className="room-draw-hint">
           Drag from one room corner to the opposite corner · release to map
+        </div>
+      )}
+      {props.roomPolygonDraw?.enabled && (
+        <div className="room-draw-hint">
+          Click room corners · wall/vertex snap is active · click first corner
+          or press Enter to finish · Esc cancels
         </div>
       )}
       <button className="reset-camera" onClick={() => api.current?.focus()}>
