@@ -178,6 +178,7 @@ export function assertProjectSourcePackV1(
     throw Error("Invalid source pack rules or claims.");
 
   const sourceIds = new Set<string>();
+  const sourceCapabilities = new Map<string, Set<SourceCapabilityV1>>();
 
   for (const item of value.sources) {
     if (!isObject(item)) throw Error("Invalid source item.");
@@ -203,6 +204,10 @@ export function assertProjectSourcePackV1(
     )
       throw Error("Invalid source item.");
     sourceIds.add(item.id as string);
+    sourceCapabilities.set(
+      item.id as string,
+      new Set(item.capabilities as SourceCapabilityV1[]),
+    );
   }
 
   const precedenceCapabilities = new Set<string>();
@@ -216,6 +221,12 @@ export function assertProjectSourcePackV1(
       new Set(item.orderedSourceIds as unknown[]).size !==
         item.orderedSourceIds.length ||
       item.orderedSourceIds.some((id) => !sourceIds.has(id as string)) ||
+      item.orderedSourceIds.some(
+        (id) =>
+          !sourceCapabilities
+            .get(id as string)
+            ?.has(item.capability as SourceCapabilityV1),
+      ) ||
       (item.note !== undefined &&
         (typeof item.note !== "string" || item.note.length > 5000))
     )
