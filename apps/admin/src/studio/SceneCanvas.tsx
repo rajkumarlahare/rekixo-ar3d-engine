@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as T from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
@@ -14,6 +15,29 @@ import {
 } from "./domain";
 
 export type View = "building" | "rooms" | "walk";
+export type TransformMode = "translate" | "rotate" | "scale";
+export type TransformCommit =
+  | {
+      kind: "room";
+      id: string;
+      x?: number;
+      z?: number;
+      width?: number;
+      depth?: number;
+      height?: number;
+    }
+  | {
+      kind: "furniture";
+      id: string;
+      x?: number;
+      z?: number;
+      rotation?: number;
+    };
+export interface ModelNodeSummary {
+  key: string;
+  name: string;
+  type: string;
+}
 interface Props {
   resolveAsset?: (id: string) => Promise<Asset | undefined>;
   scene: SceneData;
@@ -22,6 +46,13 @@ interface Props {
   selected: string;
   onSelect: (id: string) => void;
   onMesh: (name: string) => void;
+  selectedMesh?: string;
+  transformMode?: TransformMode;
+  transformEnabled?: boolean;
+  snap?: boolean;
+  focusRequest?: number;
+  onTransformCommit?: (change: TransformCommit) => void;
+  onModelNodes?: (nodes: ModelNodeSummary[]) => void;
 }
 function dispose(root: T.Object3D) {
   const materials = new Set<T.Material>(),
@@ -70,7 +101,11 @@ export default function SceneCanvas(props: Props) {
     model: T.Group;
     rooms: T.Group;
     keys: Set<string>;
+    selectables: Map<string, T.Object3D>;
+    transform: TransformControls;
+    modelSelection?: T.BoxHelper;
     focus: () => void;
+    focusSelected: () => void;
   } | null>(null);
   const [status, setStatus] = useState("");
   useEffect(() => {
@@ -119,6 +154,9 @@ export default function SceneCanvas(props: Props) {
       rooms = new T.Group();
     scene.add(model, rooms);
     const keys = new Set<string>();
+    const selectables = new Map<string, T.Object3D>();
+    const transform = new TransformControls(camera, renderer.domElement);
+    scene.add(transform.getHelper());
     const roomFloor = () => {
       const { scene: s, roomId } = latest.current;
       const r = s.rooms.find((r) => r.id === roomId);
@@ -185,7 +223,39 @@ export default function SceneCanvas(props: Props) {
         .add(new T.Vector3(-1, 0.7, 1).normalize().multiplyScalar(d));
       controls.update();
     };
-    api.current = { scene, camera, controls, model, rooms, keys, focus };
+    const frameObject = (target: T.Object3D) => {
+      target.updateWorldMatrix(true, true);
+      const box = new T.Box3().setFromObject(target);
+      if (box.isEmpty()) return;
+      const centre = box.getCenter(new T.Vector3());
+      const size = box.getSize(new T.Vector3());
+      const distance =
+        (Math.max(size.y, size.x / camera.aspect, size.z / camera.aspect, 1.5) /
+          Math.tan((camera.fov * Math.PI) / 360)) *
+        0.9;
+      controls.target.copy(centre);
+      camera.position
+        .copy(centre)
+        .add(new T.Vector3(-1, 0.7, 1).normalize().multiplyScalar(distance));
+      controls.update();
+    };
+    const focusSelected = () => {
+      const target = selectables.get(latest.current.selected);
+      if (target) frameObject(target);
+      else focus();
+    };
+    api.current = {
+      scene,
+      camera,
+      controls,
+      model,
+      rooms,
+      keys,
+      selectables,
+      transform,
+      focus,
+      focusSelected,
+    };
     const resize = new ResizeObserver(() => {
       camera.aspect =
         Math.max(el.clientWidth, 1) / Math.max(el.clientHeight, 1);
@@ -213,6 +283,60 @@ export default function SceneCanvas(props: Props) {
     };
     const up = (e: KeyboardEvent) => keys.delete(e.key.toLowerCase());
     const blur = () => keys.clear();
+    let transformStart = false;
+    transform.addEventListener("dragging-changed", (event) => {
+      const dragging = Boolean(event.value);
+      controls.enabled = !dragging && latest.current.view !== "walk";
+      if (dragging) {
+        transformStart = true;
+        return;
+      }
+      if (!transformStart) return;
+      transformStart = false;
+      const current = latest.current;
+      const target = selectables.get(current.selected);
+      if (!target || !current.onTransformCommit) return;
+      const selectedRoom = current.scene.rooms.find(
+        (candidate) => candidate.id === current.selected,
+      );
+      if (selectedRoom) {
+        if (current.transformMode === "translate") {
+          current.onTransformCommit({
+            kind: "room",
+            id: selectedRoom.id,
+            x: target.position.x,
+            z: target.position.z,
+          });
+        } else if (current.transformMode === "scale") {
+          current.onTransformCommit({
+            kind: "room",
+            id: selectedRoom.id,
+            width: Math.max(0.5, selectedRoom.width * Math.abs(target.scale.x)),
+            height: Math.max(1.8, selectedRoom.height * Math.abs(target.scale.y)),
+            depth: Math.max(0.5, selectedRoom.depth * Math.abs(target.scale.z)),
+          });
+        }
+        return;
+      }
+      const furniture = current.scene.furniture.find(
+        (candidate) => candidate.id === current.selected,
+      );
+      if (!furniture) return;
+      if (current.transformMode === "translate") {
+        current.onTransformCommit({
+          kind: "furniture",
+          id: furniture.id,
+          x: target.position.x,
+          z: target.position.z,
+        });
+      } else if (current.transformMode === "rotate") {
+        current.onTransformCommit({
+          kind: "furniture",
+          id: furniture.id,
+          rotation: T.MathUtils.radToDeg(target.rotation.y),
+        });
+      }
+    });
     renderer.domElement.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     window.addEventListener("blur", blur);
@@ -330,6 +454,8 @@ export default function SceneCanvas(props: Props) {
       resize.disconnect();
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", blur);
+      transform.detach();
+      transform.dispose();
       controls.dispose();
       dispose(scene);
       renderer.dispose();
@@ -342,10 +468,15 @@ export default function SceneCanvas(props: Props) {
     if (!runtime) return;
     let cancelled = false;
     let finishCleanup: (() => void) | undefined;
+    runtime.transform.detach();
+    runtime.modelSelection?.removeFromParent();
+    if (runtime.modelSelection) dispose(runtime.modelSelection);
+    runtime.modelSelection = undefined;
     for (const n of [...runtime.model.children]) {
       runtime.model.remove(n);
       dispose(n);
     }
+    latest.current.onModelNodes?.([]);
     runtime.scene.background = new T.Color("#dbe3e7");
     if (!props.scene.modelId) {
       setStatus("");
@@ -386,12 +517,21 @@ export default function SceneCanvas(props: Props) {
         runtime.scene.background = modelProfile.exterior.daylightSky;
         finishCleanup = modelProfile.exterior.dispose;
       }
+      const modelNodes: ModelNodeSummary[] = [];
+      let modelNodeIndex = 0;
       object.traverse((n) => {
         if (n instanceof T.Mesh) {
           n.castShadow = true;
           n.receiveShadow = true;
+          modelNodeIndex += 1;
+          modelNodes.push({
+            key: `mesh:${modelNodeIndex}`,
+            name: n.name || `Mesh ${modelNodeIndex}`,
+            type: n.type,
+          });
         }
       });
+      latest.current.onModelNodes?.(modelNodes);
       runtime.model.add(object);
       runtime.model.scale.setScalar(latest.current.scene.scale);
       runtime.focus();
@@ -412,6 +552,8 @@ export default function SceneCanvas(props: Props) {
   useEffect(() => {
     const r = api.current;
     if (!r) return;
+    r.transform.detach();
+    r.selectables.clear();
     for (const n of [...r.rooms.children]) {
       r.rooms.remove(n);
       dispose(n);
@@ -430,6 +572,7 @@ export default function SceneCanvas(props: Props) {
         room.z,
       );
       r.rooms.add(root);
+      r.selectables.set(room.id, root);
       const w = room.width,
         d = room.depth,
         h = props.view === "walk" ? room.height : 0.65;
@@ -453,6 +596,7 @@ export default function SceneCanvas(props: Props) {
         g.position.set(f.x, 0, f.z);
         g.rotation.y = (f.rotation * Math.PI) / 180;
         root.add(g);
+        r.selectables.set(f.id, g);
         block(
           g,
           f.kind,
@@ -485,6 +629,68 @@ export default function SceneCanvas(props: Props) {
       }
     }
   }, [props.scene, props.selected, props.view, props.roomId]);
+  useEffect(() => {
+    const runtime = api.current;
+    if (!runtime) return;
+    runtime.transform.detach();
+    const target = runtime.selectables.get(props.selected);
+    if (
+      !target ||
+      !props.transformEnabled ||
+      props.view === "walk" ||
+      props.view === "building"
+    )
+      return;
+
+    const isRoom = props.scene.rooms.some((room) => room.id === props.selected);
+    const isFurniture = props.scene.furniture.some(
+      (item) => item.id === props.selected,
+    );
+    const mode = props.transformMode ?? "translate";
+    if ((isRoom && mode === "rotate") || (isFurniture && mode === "scale"))
+      return;
+
+    runtime.transform.setMode(mode);
+    runtime.transform.showX = mode !== "rotate";
+    runtime.transform.showY = mode === "scale" || mode === "rotate";
+    runtime.transform.showZ = mode !== "rotate";
+    runtime.transform.setTranslationSnap(props.snap ? 0.1 : null);
+    runtime.transform.setRotationSnap(props.snap ? Math.PI / 12 : null);
+    runtime.transform.setScaleSnap(props.snap ? 0.1 : null);
+    runtime.transform.attach(target);
+  }, [
+    props.selected,
+    props.transformMode,
+    props.transformEnabled,
+    props.snap,
+    props.view,
+    props.scene,
+    props.roomId,
+  ]);
+
+  useEffect(() => {
+    const runtime = api.current;
+    if (!runtime) return;
+    runtime.modelSelection?.removeFromParent();
+    if (runtime.modelSelection) dispose(runtime.modelSelection);
+    runtime.modelSelection = undefined;
+    if (!props.selectedMesh || props.view !== "building") return;
+    let selectedObject: T.Object3D | undefined;
+    runtime.model.traverse((node) => {
+      if (!selectedObject && node instanceof T.Mesh && node.name === props.selectedMesh)
+        selectedObject = node;
+    });
+    if (!selectedObject) return;
+    const helper = new T.BoxHelper(selectedObject, 0x8d84ff);
+    runtime.scene.add(helper);
+    runtime.modelSelection = helper;
+  }, [props.selectedMesh, props.view, props.scene.modelId]);
+
+  useEffect(() => {
+    if (props.focusRequest === undefined) return;
+    api.current?.focusSelected();
+  }, [props.focusRequest]);
+
   useEffect(() => {
     api.current?.focus();
   }, [props.roomId, props.view]);
