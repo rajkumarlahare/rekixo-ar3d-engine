@@ -24,7 +24,8 @@ test("exploded floor interaction is geometry-derived and generic", () => {
   const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
   assert.match(helper, /createFloorExploder/);
   assert.match(helper, /floorForElevation/);
-  assert.match(helper, /meshHeight > totalHeight \* 0\.22/);\n  assert.match(viewer, /resolvedFloorGeometry/);
+  assert.match(helper, /meshHeight > totalHeight \* 0\.22/);
+  assert.match(viewer, /resolvedFloorGeometry/);
   assert.match(viewer, /Explode/);
   assert.match(viewer, /explodeRef/);
 });
