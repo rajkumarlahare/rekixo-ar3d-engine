@@ -67,9 +67,45 @@ export async function releaseSchemaReady(env) {
   }
 }
 
+function finiteVector3(value) {
+  return (
+    Array.isArray(value) &&
+    value.length === 3 &&
+    value.every((item) => typeof item === "number" && Number.isFinite(item))
+  );
+}
+
+function validManifestScene(scene, projectId) {
+  return (
+    scene &&
+    typeof scene === "object" &&
+    !Array.isArray(scene) &&
+    validToken(scene.id) &&
+    scene.projectId === projectId &&
+    typeof scene.name === "string" &&
+    scene.name.trim().length > 0 &&
+    [
+      "project-navigation",
+      "section",
+      "wing-distance",
+      "balcony",
+      "typical-floor",
+      "amenity",
+    ].includes(scene.type) &&
+    Number.isInteger(scene.sortOrder) &&
+    typeof scene.enabled === "boolean" &&
+    (scene.settings === undefined ||
+      (scene.settings &&
+        typeof scene.settings === "object" &&
+        !Array.isArray(scene.settings)))
+  );
+}
+
 function validateManifestShape(manifest, row) {
   if (
     !manifest ||
+    typeof manifest !== "object" ||
+    Array.isArray(manifest) ||
     manifest.format !== "rekixo-release-manifest" ||
     manifest.version !== 1 ||
     !manifest.release ||
@@ -83,9 +119,103 @@ function validateManifestShape(manifest, row) {
     manifest.release.projectSlug !== row.slug ||
     Number(manifest.release.version) !== Number(row.release_version) ||
     manifest.project.id !== row.project_id ||
-    manifest.project.slug !== row.slug
+    manifest.project.slug !== row.slug ||
+    manifest.project.status !== "published" ||
+    typeof manifest.project.name !== "string" ||
+    !manifest.project.name.trim()
   )
     throw Error("Active release manifest identity is invalid.");
+
+  if (
+    manifest.experience.scenes.length > 5000 ||
+    manifest.experience.scenes.some(
+      (scene) => !validManifestScene(scene, row.project_id),
+    )
+  )
+    throw Error("Active release scene payload is invalid.");
+
+  const mediaFiles = manifest.experience.mediaFiles;
+  if (
+    mediaFiles.length > 5000 ||
+    new Set(mediaFiles).size !== mediaFiles.length ||
+    mediaFiles.some(
+      (file) =>
+        typeof file !== "string" ||
+        !/^[A-Za-z0-9][A-Za-z0-9._-]{0,140}$/.test(file),
+    )
+  )
+    throw Error("Active release media list is invalid.");
+
+  const assetIds = new Set();
+  const assetKeys = new Set();
+  for (const asset of manifest.assets) {
+    if (
+      !asset ||
+      typeof asset !== "object" ||
+      Array.isArray(asset) ||
+      !validToken(asset.id) ||
+      !["model", "media", "studio"].includes(asset.kind) ||
+      !validToken(asset.logicalId, 500) ||
+      typeof asset.name !== "string" ||
+      !asset.name.trim() ||
+      typeof asset.mimeType !== "string" ||
+      !asset.mimeType.trim() ||
+      !Number.isSafeInteger(asset.byteSize) ||
+      asset.byteSize < 0 ||
+      (asset.sha256 !== undefined &&
+        (typeof asset.sha256 !== "string" ||
+          !/^[a-f0-9]{64}$/.test(asset.sha256)))
+    )
+      throw Error("Active release asset manifest is invalid.");
+    const logicalKey = `${asset.kind}:${asset.logicalId}`;
+    if (assetIds.has(asset.id) || assetKeys.has(logicalKey))
+      throw Error("Active release contains duplicate assets.");
+    assetIds.add(asset.id);
+    assetKeys.add(logicalKey);
+  }
+
+  const model = manifest.experience.model;
+  if (
+    model &&
+    (!validToken(model.id) ||
+      model.projectId !== row.project_id ||
+      typeof model.name !== "string" ||
+      !model.name.trim() ||
+      !Number.isInteger(model.version) ||
+      model.version < 1 ||
+      typeof model.mimeType !== "string" ||
+      !validToken(model.releaseAssetId) ||
+      !assetIds.has(model.releaseAssetId))
+  )
+    throw Error("Active release model payload is invalid.");
+
+  const camera = manifest.experience.camera;
+  if (
+    camera &&
+    (!validToken(camera.id) ||
+      camera.projectId !== row.project_id ||
+      typeof camera.name !== "string" ||
+      !camera.name.trim() ||
+      !finiteVector3(camera.position) ||
+      !finiteVector3(camera.target) ||
+      (camera.fov !== undefined &&
+        (typeof camera.fov !== "number" ||
+          !Number.isFinite(camera.fov) ||
+          camera.fov <= 0 ||
+          camera.fov > 180)))
+  )
+    throw Error("Active release camera payload is invalid.");
+
+  const studioProject = manifest.studio?.project;
+  if (
+    studioProject &&
+    (studioProject.schema !== 1 ||
+      studioProject.id !== row.project_id ||
+      studioProject.slug !== row.slug ||
+      !Array.isArray(studioProject.assets) ||
+      studioProject.assets.some((assetId) => !validToken(assetId)))
+  )
+    throw Error("Active release Studio payload is invalid.");
 }
 
 export async function activeReleaseState(env, slug) {
