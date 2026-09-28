@@ -134,7 +134,7 @@ export function validStudioSlug(slug: string) {
     slug.length >= 2 &&
     slug.length <= 80 &&
     /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) &&
-    !["studio", "api", "assets"].includes(slug)
+    !["studio", "api", "assets", "login", "showcase", "published"].includes(slug)
   );
 }
 export function duplicateFloor(p: Project, floorId: string): Project {
