@@ -6,6 +6,7 @@ import SceneCanvas, {
   type TransformMode,
   type View,
 } from "./SceneCanvas";
+import ReferenceWorkspace from "./ReferenceWorkspace";
 import {
   catalog,
   duplicateFloor,
@@ -18,7 +19,9 @@ import {
   type Furniture,
   type Kind,
   type MaterialOverride,
+  type ModelTransform,
   type Project,
+  type ReferenceLayer,
   type Room,
   type SceneAppearance,
 } from "./domain";
@@ -82,6 +85,10 @@ export default function Studio() {
   const [showLeftPanel, setShowLeftPanel] = useState(true);
   const [showRightPanel, setShowRightPanel] = useState(true);
   const [showAssetShelf, setShowAssetShelf] = useState(true);
+  const [showReferenceWorkspace, setShowReferenceWorkspace] = useState(false);
+  const [cameraOrientation, setCameraOrientation] = useState<
+    "perspective" | "top"
+  >("perspective");
   const [modelNodes, setModelNodes] = useState<ModelNodeSummary[]>([]);
   const [modelNodeFilter, setModelNodeFilter] = useState("");
   const [modelMaterials, setModelMaterials] = useState<ModelMaterialSummary[]>([]);
@@ -178,6 +185,8 @@ export default function Studio() {
     setModelMaterials([]);
     setSelectedMaterial("");
     setSourceAudits([]);
+    setShowReferenceWorkspace(false);
+    setCameraOrientation("perspective");
     setProject(p);
     setRoomId(p.scene.rooms[0]?.id ?? "");
     setSelected(p.scene.rooms[0]?.id ?? "");
@@ -589,7 +598,13 @@ export default function Studio() {
       const extension = file.name.toLowerCase().split(".").pop() || "file";
       counts[extension] = (counts[extension] ?? 0) + 1;
       return counts;
-    }, {});
+    }, {}),
+    modelTransform: ModelTransform = p.scene.modelTransform ?? {
+      x: 0,
+      y: 0,
+      z: 0,
+      rotationY: 0,
+    };
   function patchRoom(change: Partial<Room>) {
     if (!room) return;
     edit({
@@ -656,6 +671,38 @@ export default function Studio() {
         materialOverrides: (p.scene.materialOverrides ?? []).filter(
           (entry) => entry.materialName !== selectedMaterial,
         ),
+      },
+    });
+  }
+  function upsertReferenceLayer(layer: ReferenceLayer) {
+    const current = p.scene.referenceLayers ?? [];
+    edit({
+      ...p,
+      scene: {
+        ...p.scene,
+        referenceLayers: current.some((entry) => entry.id === layer.id)
+          ? current.map((entry) => (entry.id === layer.id ? layer : entry))
+          : [...current, layer],
+      },
+    });
+  }
+  function removeReferenceLayer(layerId: string) {
+    edit({
+      ...p,
+      scene: {
+        ...p.scene,
+        referenceLayers: (p.scene.referenceLayers ?? []).filter(
+          (entry) => entry.id !== layerId,
+        ),
+      },
+    });
+  }
+  function patchModelTransform(change: Partial<ModelTransform>) {
+    edit({
+      ...p,
+      scene: {
+        ...p.scene,
+        modelTransform: { ...modelTransform, ...change },
       },
     });
   }
@@ -1712,11 +1759,35 @@ export default function Studio() {
                   key={v}
                   className={view === v ? "active" : ""}
                   disabled={v === "walk" && !room}
-                  onClick={() => setView(v)}
+                  onClick={() => {
+                    setView(v);
+                    if (v === "walk") setCameraOrientation("perspective");
+                  }}
                 >
                   {label}
                 </button>
               ))}
+            </div>
+            <div className="editor-tool-group" aria-label="Camera orientation">
+              <button
+                type="button"
+                className={cameraOrientation === "perspective" ? "active" : ""}
+                disabled={view === "walk"}
+                onClick={() => setCameraOrientation("perspective")}
+              >
+                Perspective
+              </button>
+              <button
+                type="button"
+                className={cameraOrientation === "top" ? "active" : ""}
+                disabled={view === "walk"}
+                onClick={() => {
+                  setView("building");
+                  setCameraOrientation("top");
+                }}
+              >
+                Top
+              </button>
             </div>
             <div className="editor-tool-group editor-transform-tools" aria-label="Transform tools">
               <button
@@ -1804,6 +1875,18 @@ export default function Studio() {
               </button>
               <button
                 type="button"
+                className={showReferenceWorkspace ? "active" : ""}
+                title="Open calibrated plan/reference workspace"
+                onClick={() => {
+                  setShowReferenceWorkspace((value) => !value);
+                  setView("building");
+                  setCameraOrientation("top");
+                }}
+              >
+                Reference
+              </button>
+              <button
+                type="button"
                 className={showLeftPanel ? "active" : ""}
                 title="Toggle Scene Outliner"
                 onClick={() => setShowLeftPanel((value) => !value)}
@@ -1845,6 +1928,7 @@ export default function Studio() {
             transformEnabled={!review && !busy}
             snap={transformSnap}
             focusRequest={focusRequest}
+            cameraOrientation={cameraOrientation}
             onSelect={select}
             onMesh={(name) => {
               setMesh(name);
@@ -1854,6 +1938,23 @@ export default function Studio() {
             onModelNodes={setModelNodes}
             onModelMaterials={setModelMaterials}
           />
+          {showReferenceWorkspace && (
+            <ReferenceWorkspace
+              files={files}
+              modelId={p.scene.modelId}
+              layers={p.scene.referenceLayers ?? []}
+              modelTransform={modelTransform}
+              disabled={Boolean(review) || busy}
+              onUpsertLayer={upsertReferenceLayer}
+              onRemoveLayer={removeReferenceLayer}
+              onModelTransform={patchModelTransform}
+              onTopView={() => {
+                setView("building");
+                setCameraOrientation("top");
+              }}
+              onClose={() => setShowReferenceWorkspace(false)}
+            />
+          )}
           {!scene.rooms.length && view !== "building" && (
             <div className="empty-guide">
               <b>Start with one room.</b>
