@@ -83,11 +83,19 @@ test("source-backed runtime fingerprint and floor levels come from the canonical
     exterior,
     /1dce4dec093ef5707617c99ccb26ad3a5b6cb6c2d02b5efe4a171c852cc616e0/,
   );
-  assert.match(profile, /source-pack\.json/);
+  assert.match(profile, /reference-source-v9\\/runtime\\.json/);
 
+  const runtime = JSON.parse(
+    fs.readFileSync("project-profiles/reference-source-v9/runtime.json", "utf8"),
+  );
   const floorClaim = pack.claims.find(
     (claim) => claim.key === "audit.architecturalFloorLevelsM",
   );
+  const sourceModel = pack.sources.find(
+    (source) => source.id === "jyoti-source-fbx",
+  );
+  assert.equal(runtime.sourceModelSha256, sourceModel.sha256);
+  assert.deepEqual(runtime.floorLevelsM, floorClaim.value);
   assert.deepEqual(floorClaim.value, [
     0,
     3.048,
