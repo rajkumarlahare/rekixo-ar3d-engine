@@ -54,7 +54,7 @@ Goal: no project-specific material, texture, room, facade, or presentation data 
 Acceptance: a generic model with names such as `Metal_Panel`, `Slate`, or `Color_A06` cannot inherit another customer's source textures/tints merely because names match. Heavy Reference Source V9 texture/interior modules are loaded only after a positive profile match, and direct FBX Studio parsing carries the verified local asset SHA into profile matching.
 
 ### Phase 2 — Generic floors and geometry core
-Status: PENDING
+Status: IN PROGRESS
 
 - replace G+5 percentage heuristics with explicit floor entities/elevations;
 - remove `levels.length === 7` assumptions;
