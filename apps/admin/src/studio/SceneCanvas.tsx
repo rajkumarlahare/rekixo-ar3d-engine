@@ -6,10 +6,16 @@ import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.j
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { applyJyotiReferenceExterior } from "../../../public/src/viewer/jyotiReferenceExterior";
 import { asset } from "./storage";
-import { canWalk, catalog, type Scene as SceneData } from "./domain";
+import {
+  canWalk,
+  catalog,
+  type Asset,
+  type Scene as SceneData,
+} from "./domain";
 
 export type View = "building" | "rooms" | "walk";
 interface Props {
+  resolveAsset?: (id: string) => Promise<Asset | undefined>;
   scene: SceneData;
   roomId: string;
   view: View;
@@ -347,7 +353,7 @@ export default function SceneCanvas(props: Props) {
     }
     setStatus("Loading model…");
     void (async () => {
-      const f = await asset(props.scene.modelId!);
+      const f = await (props.resolveAsset ?? asset)(props.scene.modelId!);
       if (!f) throw Error("Model missing. Re-import a full project backup.");
       const data = await f.blob.arrayBuffer();
       let object: T.Group;
@@ -396,7 +402,7 @@ export default function SceneCanvas(props: Props) {
       cancelled = true;
       finishCleanup?.();
     };
-  }, [props.scene.modelId]);
+  }, [props.scene.modelId, props.resolveAsset]);
   useEffect(() => {
     const r = api.current;
     if (!r) return;

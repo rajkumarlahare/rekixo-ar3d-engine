@@ -73,7 +73,13 @@ jobs:
             npx --yes wrangler@4 r2 bucket create rekixo-3d-assets
           fi
 
+      - name: Prepare published designs and verify model checksums
+        run: node scripts/prepare-published-designs.mjs
+
       - name: Deploy isolated 3D Admin Worker
+        # Static publication assets are isolated from the existing D1/R2 project registry.
+        # Preparation above must succeed before deploying this Worker.
+        id: admin-deploy
         run: >-
           npx --yes wrangler@4
           deploy

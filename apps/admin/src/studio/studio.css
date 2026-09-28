@@ -510,3 +510,9 @@
     width: 190px;
   }
 }
+.published-design { height: 100dvh; display: flex; flex-direction: column; }
+.published-design h1 { margin: 4px 0; font-size: 24px; }
+.published-canvas { flex: 1; min-height: 350px; }
+.published-canvas .canvas-wrap { height: 100%; }
+.published-design .canvas-toolbar { flex-wrap: wrap; }
+.studio-sidebar small { overflow-wrap: anywhere; }

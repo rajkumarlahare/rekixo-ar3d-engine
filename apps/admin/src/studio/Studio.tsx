@@ -15,6 +15,7 @@ import {
   type Room,
 } from "./domain";
 import * as storage from "./storage";
+import { importPublished } from "./published";
 import "./studio.css";
 
 function download(blob: Blob, name: string) {
@@ -41,6 +42,29 @@ export default function Studio() {
     [review, setReview] = useState(""),
     [backup, setBackup] = useState<{ url: string; name: string }>(),
     [mesh, setMesh] = useState("");
+  const [manifestText, setManifestText] = useState("");
+  const [published, setPublished] = useState<{ slug: string; name: string }[]>(
+    [],
+  );
+  useEffect(() => {
+    let active = true;
+    fetch("/3Dprojects/published/catalog.json")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => {
+        if (active && Array.isArray(rows))
+          setPublished(
+            rows.filter(
+              (r) =>
+                typeof r.name === "string" &&
+                /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(r.slug),
+            ),
+          );
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
   const undo = useRef<Project[]>([]),
     redo = useRef<Project[]>([]);
   const modelInput = useRef<HTMLInputElement>(null),
@@ -51,6 +75,7 @@ export default function Studio() {
     setList(entries.sort((a, b) => b.updated.localeCompare(a.updated)));
   }
   function open(p: Project) {
+    setManifestText("");
     setBackup(undefined);
     setMessage("");
     setMesh("");
@@ -327,9 +352,45 @@ export default function Studio() {
               Download backup
             </a>
           )}
+          <button
+            disabled={busy}
+            onClick={() =>
+              task(async () => {
+                validateProject(p);
+                setManifestText(
+                  JSON.stringify({
+                    format: "rekixo-scene-manifest-1",
+                    project: p,
+                    assets: files.map(({ id, name, type, size, hash }) => ({
+                      id,
+                      name,
+                      type,
+                      size,
+                      hash,
+                    })),
+                  }),
+                );
+                setMessage(
+                  "Scene manifest ready. Keep the full backup for the model files.",
+                );
+              })
+            }
+          >
+            Export scene manifest
+          </button>
         </div>
       </header>
       <div className="storage-banner">
+        {manifestText && (
+          <label>
+            Scene manifest
+            <textarea
+              aria-label="Scene manifest"
+              readOnly
+              value={manifestText}
+            />
+          </label>
+        )}
         YOUR DESIGN WORKSPACE{" "}
         <span>
           Saved in this browser • Export backups for another device. Review
@@ -349,6 +410,38 @@ export default function Studio() {
       )}
       <div className="studio-layout">
         <aside className="studio-sidebar">
+          {published.length > 0 && (
+            <section aria-label="Published projects">
+              <div className="section-label">PUBLISHED PROJECTS</div>
+              {published.map((entry) => (
+                <div key={entry.slug}>
+                  <a
+                    href={`/3Dprojects/showcase/${entry.slug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {entry.name} · View live
+                  </a>
+                  <button
+                    className="wide"
+                    disabled={busy || dirty}
+                    onClick={() =>
+                      task(async () => {
+                        const draft = await importPublished(entry.slug);
+                        await refresh();
+                        open(draft);
+                        setMessage(
+                          "Published design opened as an independent editable copy on this browser. The live snapshot is unchanged.",
+                        );
+                      })
+                    }
+                  >
+                    Open {entry.name} in editor
+                  </button>
+                </div>
+              ))}
+            </section>
+          )}
           <div className="section-label">PROJECT LIBRARY</div>
           <select
             aria-label="Project library"
