@@ -363,3 +363,17 @@ export async function publishRelease(
     },
   );
 }
+
+
+export async function activateRelease(slug: string, releaseId: string) {
+  return api<{ release: CloudReleaseSummary & { unchanged?: boolean } }>(
+    `${CLOUD_BASE}/projects/${encodeURIComponent(
+      slug,
+    )}/releases/${encodeURIComponent(releaseId)}/activate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    },
+  );
+}
