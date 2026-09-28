@@ -63,7 +63,7 @@ Status: COMPLETE — validated on main (PR #39, GitHub Actions run 36399474310)
 - separate render meshes from navigation/collision geometry.
 
 ### Phase 3 — Source evidence and Scene Manifest V2 hardening
-Status: IN PROGRESS
+Status: COMPLETE — validated on main (PR #40, GitHub Actions run 36405684130)
 
 - enforce cross-floor Unit/Room/Opening integrity;
 - validate polygon area, repeated points and self-intersection;
@@ -137,14 +137,14 @@ The following findings remain tracked until their owning phase closes:
 - [resolved Phase 1] customer-specific textures/tints in generic `realism.ts`;
 - [resolved Phase 1] heavy project-specific texture/interior bundles statically shipped to unrelated tenants;
 - mutable live-table publication instead of immutable release selection;
-- brochure/DWG source conflicts not fully surfaced in customer UI;
-- reconstructed doors/rooms/furniture encoded in project source code;
+- [resolved Phase 3] brochure/DWG source conflicts can be explicitly surfaced through project source metadata;
+- [partially resolved Phase 3] reconstructed room rectangles moved to Scene V2 data; presentation furniture and non-authoritative door visuals remain runtime decoration;
 - [resolved Phase 2] G+5/fixed seven-level assumptions;
 - [resolved Phase 2] sparse floor index mapping;
 - [resolved Phase 1] direct Studio FBX source-SHA propagation gap;
 - profile camera/default-room values still code-driven;
-- Scene Manifest relational and polygon validation gaps;
-- Source Pack ↔ Scene Manifest evidence-link gap;
+- [resolved Phase 3] Scene Manifest relational and polygon validation gaps;
+- [resolved Phase 3] Source Pack ↔ Scene Manifest evidence-link gap;
 - V1 Studio authoring model still narrower than V2 contract;
 - replaced/orphaned Studio asset lifecycle;
 - possible dangling IndexedDB project asset references;
@@ -174,7 +174,7 @@ The following findings remain tracked until their owning phase closes:
 - deployment cancellation/atomicity risk;
 - project provisioning same-slug metadata conflict handling;
 - historical/current documentation contradictions;
-- Source Pack precedence capability validation;
+- [resolved Phase 3] Source Pack precedence capability validation;
 - duplicated runtime-profile data that should be generated from canonical source evidence.
 
 ## Change-control rule
