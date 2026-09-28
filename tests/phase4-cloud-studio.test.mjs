@@ -97,11 +97,12 @@ test("Studio treats IndexedDB as cache and exposes authenticated cloud sync", ()
   const studio = fs.readFileSync("apps/admin/src/studio/Studio.tsx", "utf8");
   const storage = fs.readFileSync("apps/admin/src/studio/storage.ts", "utf8");
   const client = fs.readFileSync("apps/admin/src/studio/cloud.ts", "utf8");
+  const worker = fs.readFileSync("workers/admin-cloud.mjs", "utf8");
 
   assert.match(studio, /Save to cloud/);
   assert.match(studio, /openCloudProject/);
   assert.match(studio, /Archive cloud project/);
-  assert.match(client, /Cloud draft changed elsewhere/);
+  assert.match(worker, /Cloud draft changed elsewhere/);
   assert.match(client, /downloadProject/);
   assert.match(client, /checksum mismatch/i);
   assert.match(storage, /indexedDB\.open\("rekixo-engine-studio"/);
