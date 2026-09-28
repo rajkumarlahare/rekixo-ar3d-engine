@@ -36,11 +36,16 @@ import {
 } from "./published";
 import { buildSceneManifestV2 } from "./manifestV2";
 import StudioOverview from "./StudioOverview";
+import SmartProjectBuilder from "./SmartProjectBuilder";
 import StudioSources from "./StudioSources";
 import StudioEvidence from "./StudioEvidence";
 import StudioPublish from "./StudioPublish";
 import { buildStudioReadiness } from "./readiness";
 import { auditFbxSources, type FbxSourceAudit } from "./sourceAudit";
+import {
+  analyzeProjectFiles,
+  type SmartProjectAnalysis,
+} from "./projectAnalyzer";
 import "./studio.css";
 import "./studio-operations.css";
 import "./studio-superadmin-theme.css";
@@ -102,6 +107,7 @@ export default function Studio() {
   const [selectedMaterial, setSelectedMaterial] = useState("");
   const [sourceAudits, setSourceAudits] = useState<FbxSourceAudit[]>([]);
   const [sourceAuditBusy, setSourceAuditBusy] = useState(false);
+  const [smartAnalysis, setSmartAnalysis] = useState<SmartProjectAnalysis>();
   const [manifestText, setManifestText] = useState("");
   const [cloudSession, setCloudSession] = useState<cloud.CloudSession>();
   const [cloudProjects, setCloudProjects] = useState<cloud.CloudProjectSummary[]>([]);
@@ -111,8 +117,8 @@ export default function Studio() {
   const [cloudReleases, setCloudReleases] = useState<cloud.CloudReleaseSummary[]>([]);
   const [published, setPublished] = useState<PublishedCatalogEntry[]>([]);
   const [workspace, setWorkspace] = useState<
-    "overview" | "editor" | "sources" | "evidence" | "publish"
-  >("overview");
+    "builder" | "overview" | "editor" | "sources" | "evidence" | "publish"
+  >("builder");
   useEffect(() => {
     let active = true;
     void cloud
@@ -198,13 +204,18 @@ export default function Studio() {
     setModelMaterials([]);
     setSelectedMaterial("");
     setSourceAudits([]);
+    setSmartAnalysis(undefined);
     setShowReferenceWorkspace(false);
     setCameraOrientation("perspective");
     setProject(p);
     setRoomId(p.scene.rooms[0]?.id ?? "");
     setSelected(p.scene.rooms[0]?.id ?? "");
     setReview("");
-    setWorkspace("overview");
+    setWorkspace(
+      p.assets.length || p.scene.rooms.length || p.scene.floors.length > 1
+        ? "overview"
+        : "builder",
+    );
     setView(p.scene.modelId ? "building" : "rooms");
     setDirty(false);
     undo.current = [];
@@ -675,6 +686,8 @@ export default function Studio() {
       floorId: target.floorId,
       unit: target.unit,
       roomId: target.id,
+      assignment: "manual",
+      confidence: 1,
     };
     edit({
       ...p,
@@ -768,7 +781,12 @@ export default function Studio() {
         nodeName: selectedModelNode.name,
         occurrence: selectedModelNode.occurrence,
       };
-    const nextTag: ModelNodeTag = { ...current, ...change };
+    const nextTag: ModelNodeTag = {
+      ...current,
+      ...change,
+      assignment: "manual",
+      confidence: 1,
+    };
     if (change.floorId !== undefined) {
       if (!change.floorId) {
         delete nextTag.floorId;
@@ -1020,6 +1038,173 @@ export default function Studio() {
       `${assets.length} source/reference file${assets.length === 1 ? "" : "s"} attached to the project.`,
     );
   }
+  async function uploadSourcePack(selectedFiles: File[]) {
+    if (!selectedFiles.length) return;
+    const assets = await Promise.all(
+      selectedFiles.map((file) => storage.makeAsset(file, p.id)),
+    );
+    const existing = new Set(p.assets);
+    const nextAssetIds = [
+      ...p.assets,
+      ...assets.map((asset) => asset.id).filter((key) => !existing.has(key)),
+    ];
+    const modelCandidates = assets.filter((asset) => /\.(glb|fbx)$/i.test(asset.name));
+    const glbCandidates = modelCandidates.filter((asset) => /\.glb$/i.test(asset.name));
+    const autoModel =
+      p.scene.modelId ??
+      (glbCandidates.length === 1
+        ? glbCandidates[0].id
+        : modelCandidates.length === 1
+          ? modelCandidates[0].id
+          : undefined);
+    const next: Project = {
+      ...p,
+      assets: nextAssetIds,
+      scene: {
+        ...p.scene,
+        ...(autoModel && autoModel !== p.scene.modelId
+          ? {
+              modelId: autoModel,
+              modelNodeTags: [],
+              rooms: p.scene.rooms.map((entry) => ({
+                ...entry,
+                mesh: undefined,
+              })),
+            }
+          : {}),
+      },
+    };
+    await persist(next, assets);
+    setSmartAnalysis(undefined);
+    undo.current = [];
+    redo.current = [];
+    setMessage(
+      `${assets.length} source file${assets.length === 1 ? "" : "s"} attached${autoModel && autoModel !== p.scene.modelId ? " · 3D model selected automatically" : ""}.`,
+    );
+  }
+
+  function selectBuilderModel(assetId: string) {
+    if (!assetId || assetId === p.scene.modelId) return;
+    const candidate = files.find((file) => file.id === assetId);
+    if (!candidate || !/\.(glb|fbx)$/i.test(candidate.name)) return;
+    setSmartAnalysis(undefined);
+    edit({
+      ...p,
+      scene: {
+        ...p.scene,
+        modelId: assetId,
+        modelNodeTags: [],
+        rooms: p.scene.rooms.map((entry) => ({ ...entry, mesh: undefined })),
+      },
+    });
+    setView("building");
+  }
+
+  async function analyzeSmartProject() {
+    const result = await analyzeProjectFiles(
+      files,
+      p.scene.modelId,
+      sourceAudits,
+    );
+    setSmartAnalysis(result);
+    if (!p.scene.modelId && result.modelAssetId) {
+      const candidate = files.find((file) => file.id === result.modelAssetId);
+      if (candidate && /\.(glb|fbx)$/i.test(candidate.name))
+        edit({
+          ...p,
+          scene: {
+            ...p.scene,
+            modelId: candidate.id,
+            modelNodeTags: [],
+          },
+        });
+    }
+    setMessage(
+      `Smart analysis complete · ${result.meshCount} meshes · ${result.floorCandidates.length} floor level suggestion${result.floorCandidates.length === 1 ? "" : "s"} · ${result.reviewAssignments + result.commonAssignments} review item${result.reviewAssignments + result.commonAssignments === 1 ? "" : "s"}.`,
+    );
+  }
+
+  function buildSmartDraft() {
+    if (!smartAnalysis?.modelAssetId)
+      throw Error("Analyze a selected GLB/FBX model before building the draft.");
+    if (!smartAnalysis.floorCandidates.length)
+      throw Error("No reliable floor structure was detected. Review the model manually.");
+
+    const hasAuthoredRooms = p.scene.rooms.length > 0;
+    const replaceFloorSkeleton =
+      !hasAuthoredRooms &&
+      p.scene.floors.length === 1 &&
+      !(p.scene.modelNodeTags?.length);
+    const modelY = p.scene.modelTransform?.y ?? 0;
+    const scale = p.scene.scale;
+    const suggestedElevations = smartAnalysis.floorCandidates
+      .map((candidate) => candidate.elevation * scale + modelY)
+      .sort((left, right) => left - right);
+    const floors = replaceFloorSkeleton
+      ? suggestedElevations.map((elevation, index) => ({
+          id: id(),
+          name: index === 0 ? "Ground" : `Floor ${index}`,
+          elevation: Number(elevation.toFixed(4)),
+        }))
+      : [...p.scene.floors].sort(
+          (left, right) => left.elevation - right.elevation,
+        );
+
+    if (!floors.length)
+      throw Error("Create or detect at least one floor before auto-tagging meshes.");
+
+    const existingTags = p.scene.modelNodeTags ?? [];
+    const manualKeys = new Set(
+      existingTags
+        .filter((tag) => tag.assignment !== "auto")
+        .map((tag) => `${tag.nodeName}\u0000${tag.occurrence}`),
+    );
+    const autoTags = smartAnalysis.nodeAssignments
+      .filter(
+        (assignment) =>
+          assignment.floorIndex !== undefined &&
+          assignment.confidence >= 0.62,
+      )
+      .map((assignment) => {
+        const sourceFloor = smartAnalysis.floorCandidates[assignment.floorIndex!];
+        const worldElevation = sourceFloor.elevation * scale + modelY;
+        const targetFloor = [...floors].sort(
+          (left, right) =>
+            Math.abs(left.elevation - worldElevation) -
+            Math.abs(right.elevation - worldElevation),
+        )[0];
+        return {
+          nodeName: assignment.nodeName,
+          occurrence: assignment.occurrence,
+          floorId: targetFloor.id,
+          assignment: "auto" as const,
+          confidence: Number(assignment.confidence.toFixed(3)),
+        };
+      })
+      .filter(
+        (tag) => !manualKeys.has(`${tag.nodeName}\u0000${tag.occurrence}`),
+      );
+
+    const autoKeys = new Set(
+      autoTags.map((tag) => `${tag.nodeName}\u0000${tag.occurrence}`),
+    );
+    const preserved = existingTags.filter(
+      (tag) =>
+        tag.assignment !== "auto" ||
+        !autoKeys.has(`${tag.nodeName}\u0000${tag.occurrence}`),
+    );
+    edit({
+      ...p,
+      scene: {
+        ...p.scene,
+        floors,
+        modelNodeTags: [...preserved, ...autoTags],
+      },
+    });
+    setMessage(
+      `Smart draft built · ${floors.length} floors · ${autoTags.length} meshes auto-tagged. Ambiguous/multi-floor meshes remain unassigned for visual review.`,
+    );
+  }
   const field = (
     label: string,
     value: number,
@@ -1145,7 +1330,7 @@ export default function Studio() {
                 return;
               }
               open(newProject("Untitled project"));
-              setWorkspace("overview");
+              setWorkspace("builder");
             }}
           >
             + New project
@@ -1237,6 +1422,7 @@ export default function Studio() {
       <nav className="studio-ops-tabs" aria-label="3D project workspace">
         {(
           [
+            ["builder", "Project Builder"],
             ["overview", "Overview"],
             ["editor", "3D Editor"],
             ["sources", "Sources"],
@@ -1254,15 +1440,17 @@ export default function Studio() {
             }}
           >
             <span aria-hidden="true">
-              {key === "overview"
-                ? "⌂"
-                : key === "editor"
-                  ? "◫"
-                  : key === "sources"
-                    ? "⇧"
-                    : key === "evidence"
-                      ? "✓"
-                      : "↗"}
+              {key === "builder"
+                ? "✦"
+                : key === "overview"
+                  ? "⌂"
+                  : key === "editor"
+                    ? "◫"
+                    : key === "sources"
+                      ? "⇧"
+                      : key === "evidence"
+                        ? "✓"
+                        : "↗"}
             </span>
             {label}
             {key === "evidence" && p.scene.rooms.length > 0 && (
@@ -1304,6 +1492,37 @@ export default function Studio() {
         >
           {error || (busy ? "Working…" : message)}
         </div>
+      )}
+      {workspace === "builder" && (
+        <SmartProjectBuilder
+          project={p}
+          files={files}
+          audits={sourceAudits}
+          analysis={smartAnalysis}
+          busy={busy || sourceAuditBusy}
+          onProjectMeta={(change) => edit({ ...p, ...change })}
+          onImportFiles={(selectedFiles) =>
+            void task(() => uploadSourcePack(selectedFiles))
+          }
+          onAnalyze={() => void task(analyzeSmartProject)}
+          onSelectModel={selectBuilderModel}
+          onBuildDraft={() => {
+            try {
+              buildSmartDraft();
+            } catch (reason) {
+              setError(
+                reason instanceof Error
+                  ? reason.message
+                  : "Smart draft could not be built.",
+              );
+            }
+          }}
+          onOpenEditor={() => {
+            setWorkspace("editor");
+            setEditorFocus(true);
+          }}
+          onOpenSources={() => setWorkspace("sources")}
+        />
       )}
       {workspace === "overview" && (
         <StudioOverview
