@@ -1251,7 +1251,7 @@ export default function SceneCanvas(props: Props) {
       dispose(n);
     }
     r.model.visible = props.view === "building";
-    r.rooms.visible = props.view !== "building";
+    r.rooms.visible = props.view !== "building" || Boolean(props.roomMapEnabled);
     r.controls.enabled = props.view !== "walk";
     for (const room of props.scene.rooms) {
       if (props.view === "walk" && room.id !== props.roomId) continue;
@@ -1269,7 +1269,23 @@ export default function SceneCanvas(props: Props) {
       const w = room.width,
         d = room.depth,
         h = props.view === "walk" ? room.height : 0.65;
-      block(root, room.name, [w, 0.08, d], [0, -0.04, 0], room.color);
+      const roomSurface = block(
+        root,
+        room.name,
+        [w, 0.08, d],
+        [0, props.roomMapEnabled && props.view === "building" ? 0.02 : -0.04, 0],
+        room.color,
+      );
+      if (
+        props.roomMapEnabled &&
+        props.view === "building" &&
+        roomSurface.material instanceof T.MeshStandardMaterial
+      ) {
+        roomSurface.material.transparent = true;
+        roomSurface.material.opacity = room.id === props.selected ? 0.52 : 0.24;
+        roomSurface.material.depthWrite = false;
+        roomSurface.renderOrder = 20;
+      }
       for (const z of [-d / 2, d / 2])
         block(root, "wall", [w, 0.01 + h, 0.12], [0, h / 2, z], "#eee9df");
       for (const x of [-w / 2, w / 2])
@@ -1280,6 +1296,7 @@ export default function SceneCanvas(props: Props) {
         line.update();
         r.rooms.add(line);
       }
+      if (props.roomMapEnabled && props.view === "building") continue;
       for (const f of props.scene.furniture.filter(
         (f) => f.roomId === room.id,
       )) {
@@ -1327,6 +1344,7 @@ export default function SceneCanvas(props: Props) {
     props.view,
     props.roomId,
     props.isolateFloorId,
+    props.roomMapEnabled,
   ]);
   useEffect(() => {
     const runtime = api.current;
@@ -1340,6 +1358,7 @@ export default function SceneCanvas(props: Props) {
     if (
       props.view === "building" &&
       props.modelTransformEnabled &&
+      !props.roomMapEnabled &&
       props.transformEnabled &&
       mode !== "scale"
     ) {
@@ -1356,7 +1375,7 @@ export default function SceneCanvas(props: Props) {
       !target ||
       !props.transformEnabled ||
       props.view === "walk" ||
-      props.view === "building"
+      (props.view === "building" && !props.roomMapEnabled)
     )
       return;
 
@@ -1377,6 +1396,7 @@ export default function SceneCanvas(props: Props) {
     props.transformMode,
     props.transformEnabled,
     props.modelTransformEnabled,
+    props.roomMapEnabled,
     props.snap,
     props.view,
     props.scene,
