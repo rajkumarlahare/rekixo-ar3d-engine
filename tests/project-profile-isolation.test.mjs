@@ -30,3 +30,21 @@ test("premium shell reads floors and units from project scene data", () => {
   assert.match(app, /settings\.floors/);
   assert.match(app, /floorSettings\.units/);
 });
+
+
+test("generic realism cannot inherit Reference Source V9 customer textures or tints", () => {
+  const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
+  const generic = read("apps/public/src/viewer/realism.ts");
+  const profile = read("apps/public/src/viewer/referenceSourceV9Materials.ts");
+  const registry = read("apps/public/src/viewer/modelProfiles.ts");
+
+  assert.match(viewer, /enhanceModelProfileMaterials/);
+  assert.doesNotMatch(generic, /sourceTextureData|sourceMaterialTint|referenceFacadeTint/);
+  assert.doesNotMatch(generic, /color_a06|color_m06|metal_panel:\s*0x|frontcolor:\s*0x/);
+  assert.match(profile, /JYOTI_SOURCE_MODEL_SHA256/);
+  assert.match(profile, /if \(!hasReferenceSource\(root\)\) return false/);
+  assert.match(profile, /sourceTextureData/);
+  assert.match(profile, /sourceMaterialTint/);
+  assert.match(profile, /referenceFacadeTint/);
+  assert.match(registry, /enhanceReferenceSourceV9Model/);
+});
