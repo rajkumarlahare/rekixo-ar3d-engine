@@ -131,7 +131,7 @@ function dbForActiveRelease(row) {
           return this;
         },
         async first() {
-          if (sql.includes("sqlite_master")) return { total: 2 };
+          if (sql.includes("sqlite_master")) return { total: 3 };
           if (sql.includes("pragma_table_info")) return { total: 1 };
           if (sql.includes("FROM projects_3d p")) return row;
           throw new Error("Unexpected first SQL: " + sql);
