@@ -3,7 +3,8 @@
 Status: Phase A implemented on 2026-09-28.
 
 The reusable viewer and Design Studio no longer import the Jyoti exterior or
-reconstructed interior implementation directly. They call a model-profile
+reconstructed interior implementation directly. Studio uses an exterior-only
+model-profile registry; the public viewer adds a separate authored-experience
 registry. A project profile may alter a model only after positively identifying
 the source model; unmatched projects keep generic behavior.
 
@@ -19,8 +20,8 @@ the generic viewer.
 - Floor buttons and unit cards come from project scene data.
 - A project-specific experience is instantiated only after its model profile
   matches.
-- Studio may use the same registry for source-faithful preview, but it must not
-  import a customer decorator directly.
+- Studio uses only the exterior registry for source-faithful preview, so
+  project interior/furniture code is not pulled into the Admin preview bundle.
 - A second project must render without inheriting Jyoti rooms, furniture,
   cameras, or floor assumptions.
 
