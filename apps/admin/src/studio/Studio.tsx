@@ -616,6 +616,20 @@ export default function Studio() {
           </span>
         </div>
         <div className="studio-project-switcher">
+          <label className="studio-project-search">
+            <span>SEARCH</span>
+            <input
+              aria-label="Search 3D projects"
+              value={projectSearch}
+              onChange={(event) => {
+                const value = event.target.value;
+                setProjectSearch(value);
+                setCloudSearch(value);
+              }}
+              placeholder="Name / slug"
+              disabled={busy}
+            />
+          </label>
           <label>
             <span>PROJECT</span>
             <select
@@ -634,7 +648,7 @@ export default function Studio() {
                   ? "Select project"
                   : "Unsaved project"}
               </option>
-              {list.map((entry) => (
+              {visibleLocalProjects.map((entry) => (
                 <option value={entry.id} key={entry.id}>
                   {entry.name}
                 </option>
