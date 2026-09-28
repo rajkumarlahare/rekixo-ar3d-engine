@@ -10,10 +10,11 @@ import { clampWalkPosition, walkDelta, walkStartPosition, type WalkDirection } f
 import { createArchitecturalSiteEnvironment } from "./siteEnvironment";
 import {
   applyModelProfileExterior,
-  enhanceModelProfileMaterials,
-  createProfileExperience,
+  loadModelProfileMaterialEnhancer,
+  loadProfileExperience,
   type ExperienceMode,
   type ExperienceFeature,
+  type ExperienceRuntime,
   type ModelProfileRuntime,
 } from "./projectProfiles";
 
@@ -248,8 +249,10 @@ export function Viewer3D({
     let floorExploder: ReturnType<typeof createFloorExploder> | undefined;
     let siteEnvironment: ReturnType<typeof createArchitecturalSiteEnvironment> | undefined;
     let modelProfile: ModelProfileRuntime | undefined;
-    let projectExperience: ReturnType<typeof createProfileExperience>;
+    let projectExperience: ExperienceRuntime | undefined;
     let referenceExterior: ModelProfileRuntime["exterior"];
+    let profileLoadGeneration = 0;
+    let currentNight = false;
     let cameraTween: { start: number; duration: number; fromPosition: THREE.Vector3; toPosition: THREE.Vector3; fromTarget: THREE.Vector3; toTarget: THREE.Vector3; fromFov: number; toFov: number } | undefined;
     let walkActive = false;
     let walkYaw = 0;
@@ -420,6 +423,7 @@ export function Viewer3D({
     };
 
     const applyLighting = (night: boolean) => {
+      currentNight = night;
       scene.background = new THREE.Color(
         night ? 0x101827 : referenceVisual ? 0x65798f : 0x8faec8,
       );
@@ -655,8 +659,24 @@ export function Viewer3D({
         Object.assign(sun.shadow.camera, { left: -25, right: 25, top: 28, bottom: -28 });
         sun.shadow.camera.updateProjectionMatrix();
       }
-      enhanceModelProfileMaterials(object, renderer, referenceVisual);
+      const profileGeneration = ++profileLoadGeneration;
+      const materialEnhancerPromise =
+        loadModelProfileMaterialEnhancer(modelProfile);
       enhanceArchitecturalModel(object, renderer, referenceVisual);
+      void materialEnhancerPromise
+        .then((enhancer) => {
+          if (
+            !enhancer ||
+            disposed ||
+            profileGeneration !== profileLoadGeneration ||
+            activeObject !== object
+          )
+            return;
+          enhancer(object, renderer, referenceVisual);
+        })
+        .catch((error) => {
+          console.error("Project material profile load failed", error);
+        });
       floorExploder = createFloorExploder(object, modelBounds);
       explodeRef.current = (enabled) => floorExploder?.setExploded(enabled);
 
@@ -684,27 +704,18 @@ export function Viewer3D({
 
       projectExperience?.dispose();
       if (projectExperience) scene.remove(projectExperience.root);
+      projectExperience = undefined;
+      setRooms([]);
       let preserveSourceSite = false;
       object.traverse((node) => {
-        if (node.userData.sourceGeometry?.siteGeometry === "included-in-source") preserveSourceSite = true;
+        if (node.userData.sourceGeometry?.siteGeometry === "included-in-source")
+          preserveSourceSite = true;
       });
-      projectExperience = createProfileExperience(modelProfile, bounds, {
+      const experiencePromise = loadProfileExperience(modelProfile, bounds, {
         mobile,
         referenceVisual,
         preserveSourceSite,
       });
-      if (projectExperience) {
-        scene.add(projectExperience.root);
-        setRooms(
-          projectExperience.rooms.map(({ id, label, category }) => ({
-            id,
-            label,
-            category,
-          })),
-        );
-      } else {
-        setRooms([]);
-      }
 
       const viewTarget = (view: PresentationView) => {
         if (view === "aerial") {
@@ -813,8 +824,8 @@ export function Viewer3D({
       presentationRef.current = setView;
 
       const setExperience = (nextMode: ExperienceMode, instant = false) => {
-        if (!projectExperience || !activeObject || !siteEnvironment) return;
         currentExperienceMode = nextMode;
+        if (!projectExperience || !activeObject || !siteEnvironment) return;
         walkActive = false;
         setWalkMode(false);
         clearInput();
@@ -869,6 +880,38 @@ export function Viewer3D({
       experienceRef.current = setExperience;
       setExperience(experienceMode, true);
       if (experienceMode === "site") setView(presentationView, true);
+
+      void experiencePromise
+        .then((experience) => {
+          if (!experience) return;
+          if (
+            disposed ||
+            profileGeneration !== profileLoadGeneration ||
+            activeObject !== object
+          ) {
+            experience.dispose();
+            return;
+          }
+
+          const resumeInteriorWalk =
+            walkActive && currentExperienceMode === "interior";
+          projectExperience = experience;
+          scene.add(experience.root);
+          experience.setNight(currentNight);
+          setRooms(
+            experience.rooms.map(({ id, label, category }) => ({
+              id,
+              label,
+              category,
+            })),
+          );
+          setExperience(currentExperienceMode, true);
+          if (resumeInteriorWalk)
+            enterWalkMode(true, initialWalkFloor);
+        })
+        .catch((error) => {
+          console.error("Project experience bundle load failed", error);
+        });
 
       if (initialExploded) {
         floorExploder?.setExploded(true);
@@ -983,6 +1026,7 @@ export function Viewer3D({
 
     return () => {
       disposed = true;
+      profileLoadGeneration += 1;
       window.cancelAnimationFrame(animationFrame);
       observer.disconnect();
       controls.dispose();
