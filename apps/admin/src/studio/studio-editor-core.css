@@ -918,3 +918,228 @@
     width: 100%;
   }
 }
+
+
+/* Mouse-first Visual Unit / Room Mapper */
+.room-mapper {
+  flex: 0 0 auto;
+  border-top: 1px solid #2a3951;
+  background: #07101d;
+  box-shadow: 0 -14px 36px rgba(0, 0, 0, .22);
+  z-index: 10;
+}
+
+.room-mapper-head {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px 7px 14px;
+  border-bottom: 1px solid #202c41;
+  background: #0a1424;
+}
+
+.room-mapper-head > div:first-child {
+  display: grid;
+  gap: 1px;
+}
+
+.room-mapper-head small {
+  color: #8d84ff;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .14em;
+}
+
+.room-mapper-head strong {
+  color: #eef2fa;
+  font-size: 12px;
+}
+
+.room-mapper-body {
+  display: grid;
+  grid-template-columns: minmax(380px, 1fr) auto minmax(260px, .7fr);
+  gap: 10px;
+  align-items: end;
+  padding: 10px 12px;
+}
+
+.room-mapper-fields {
+  display: grid;
+  grid-template-columns: 150px minmax(120px, 1fr) minmax(150px, 1.2fr);
+  gap: 8px;
+}
+
+.room-mapper-fields label {
+  display: grid;
+  gap: 4px;
+  color: #8493aa;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.room-mapper-fields input,
+.room-mapper-fields select {
+  min-height: 34px;
+  border: 1px solid #2b3a51;
+  border-radius: 7px;
+  background: #0e1728;
+  color: #eef2fa;
+}
+
+.room-mapper-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.room-mapper-tools button {
+  min-height: 34px;
+  padding: 5px 9px;
+}
+
+.room-mapper-tools button.active {
+  border-color: #756bff;
+  background: rgba(105, 95, 255, .18);
+  color: #f4f2ff;
+}
+
+.room-mapper-snap {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid #29384f;
+  border-radius: 7px;
+  background: #0b1525;
+  color: #91a0b6;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.room-mapper-snap input {
+  width: auto;
+  accent-color: #8d84ff;
+}
+
+.room-mapper-status {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 7px 9px;
+  border: 1px solid #25344b;
+  border-radius: 8px;
+  background: #091321;
+  color: #77879d;
+  font-size: 9px;
+}
+
+.room-mapper-status span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-mapper-status b {
+  color: #dfe7f2;
+}
+
+.room-mapper-help {
+  grid-column: 1 / -1;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  padding: 6px 9px;
+  border: 1px solid #293950;
+  border-radius: 7px;
+  background: #0a1526;
+  color: #8595ab;
+  font-size: 9px;
+}
+
+.room-mapper-help b {
+  color: #c9d3e2;
+}
+
+.room-draw-active .studio-canvas canvas {
+  cursor: crosshair !important;
+}
+
+.room-draw-hint {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  z-index: 8;
+  max-width: calc(100% - 32px);
+  padding: 7px 10px;
+  border: 1px solid rgba(141, 132, 255, .65);
+  border-radius: 999px;
+  background: rgba(8, 14, 28, .9);
+  color: #dcd9ff;
+  box-shadow: 0 8px 24px rgba(0,0,0,.24);
+  font-size: 9px;
+  font-weight: 800;
+  pointer-events: none;
+}
+
+.editor-advanced-add {
+  margin-top: 6px;
+}
+
+.editor-advanced-add summary,
+.advanced-properties summary {
+  cursor: pointer;
+  color: #7f8fa6;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.editor-advanced-add > button {
+  margin-top: 7px;
+}
+
+.advanced-properties {
+  margin: 6px 0 10px;
+  padding: 8px 9px;
+  border: 1px solid #27364c;
+  border-radius: 8px;
+  background: #0a1423;
+}
+
+.advanced-properties > p {
+  margin: 7px 0;
+  color: #728198;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+@media (max-width: 1180px) {
+  .room-mapper-body {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .room-mapper-status {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 820px) {
+  .room-mapper-body,
+  .room-mapper-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .room-mapper-tools {
+    align-items: stretch;
+  }
+
+  .room-mapper-tools button,
+  .room-mapper-snap {
+    flex: 1 1 140px;
+  }
+}
