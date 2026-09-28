@@ -98,7 +98,7 @@ Status: COMPLETE — validated on main (PR #42, GitHub Actions run 36415183914)
 - consolidate the current D1 runtime and repository-static Published Showcase paths.
 
 ### Phase 6 — Worker, DB and security hardening
-Status: IN PROGRESS — implementation complete; validation pending
+Status: COMPLETE — validated on main (PR #43, GitHub Actions run 36417828501)
 
 - authenticate sensitive Engine Admin reads/writes;
 - enforce project R2 prefixes against project slug/ID;
@@ -153,12 +153,12 @@ The following findings remain tracked until their owning phase closes:
 - unit-number parsing assumptions;
 - fixed premium navigation modes;
 - brochure-specific fallback copy in generic components;
-- [implemented Phase 6] Admin read-surface authentication gap closed behind dedicated Engine Admin session;
-- [implemented Phase 6] R2 prefix isolation enforced at worker and DB boundaries;
-- [implemented Phase 6] Admin model availability is paginated with active-first storage checks;
-- [implemented Phase 6] malformed runtime JSON now fails visibly with corruption diagnostics;
-- [implemented Phase 6] MP4 media supports byte Range/206 responses;
-- [implemented Phase 6] Source Pack filenames are contained and symlinks are rejected;
+- [resolved Phase 6] Admin read-surface authentication gap closed behind dedicated Engine Admin session;
+- [resolved Phase 6] R2 prefix isolation enforced at worker and DB boundaries;
+- [resolved Phase 6] Admin model availability is paginated with active-first storage checks;
+- [resolved Phase 6] malformed runtime JSON now fails visibly with corruption diagnostics;
+- [resolved Phase 6] MP4 media supports byte Range/206 responses;
+- [resolved Phase 6] Source Pack filenames are contained and symlinks are rejected;
 - Windows ASCII-FBX CLI entry check;
 - ASCII-FBX transform limitations;
 - Public WebGL construction less defensive than Admin;
