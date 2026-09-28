@@ -13,6 +13,7 @@ test("V9 renders the supplied exterior model without detached facade cages", () 
 });
 
 test("V9 reference palette is warm and material-driven", () => {
+  const profile = read("apps/public/src/viewer/referenceSourceV9Materials.ts");
   const realism = read("apps/public/src/viewer/realism.ts");
   for (const token of [
     "frontcolor: 0xdcd5cc",
@@ -21,9 +22,10 @@ test("V9 reference palette is warm and material-driven", () => {
     "color_a06: 0x8a5742",
     "color_j08: 0xb2beb2",
     "translucent_glass_blue: 0x829ba5",
-  ]) assert.match(realism, new RegExp(token));
-  assert.match(realism, /material\.emissive\.setHex\(0x24150d\)/);
-  assert.match(realism, /material\.opacity = Math\.min\(material\.opacity, referenceVisual \? 0\.42 : 0\.62\)/);
+  ]) assert.match(profile, new RegExp(token));
+  assert.match(profile, /material\.emissive\.setHex\(0x24150d\)/);
+  assert.match(realism, /material\.opacity = Math\.min/);
+  assert.match(realism, /referenceVisual \? 0\.42 : 0\.62/);
 });
 
 test("V9 uses a lower closer reference camera and stronger dusk separation", () => {
