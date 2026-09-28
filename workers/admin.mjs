@@ -1,3 +1,4 @@
+import { handleCloudAdminRequest } from "./admin-cloud.mjs";
 const BASE_PATH = "/3Dprojects";
 const BUCKET_NAME = "rekixo-3d-assets";
 const PLATFORM_ENGINE_CONTRACT_VERSION = 1;
@@ -208,6 +209,9 @@ async function getProjectStatus(env, slug) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    const cloudResponse = await handleCloudAdminRequest(request, env, url);
+    if (cloudResponse) return cloudResponse;
 
     if (url.pathname === `${BASE_PATH}/api/projects`) {
       if (request.method !== "GET") {
