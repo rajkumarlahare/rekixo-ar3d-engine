@@ -765,9 +765,9 @@ export default function SceneCanvas(props: Props) {
               width: Number(width.toFixed(3)),
               depth: Number(depth.toFixed(3)),
             });
-          } else {
-            setStatus("Drag a room at least 0.5 m × 0.5 m.");
+            return;
           }
+          setStatus("Drag a room at least 0.5 m × 0.5 m.");
         }
         return;
       }
