@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import { applyJyotiReferenceExterior } from "./jyotiReferenceExterior";
-import { enhanceReferenceSourceV9Model } from "./referenceSourceV9Materials";
 
 type ExteriorRuntime = NonNullable<
   ReturnType<typeof applyJyotiReferenceExterior>
@@ -40,14 +39,16 @@ export function applyModelProfileExterior(
 
 
 /**
- * Apply source/project-specific material restoration only when its verified
- * source profile matches. Generic models never inherit Reference Source V9
- * textures or tints by material-name coincidence.
+ * Resolve source/project-specific material restoration only after a verified
+ * profile match. The dynamic import keeps source textures out of unrelated
+ * project bundles.
  */
-export function enhanceModelProfileMaterials(
-  object: THREE.Object3D,
-  renderer: THREE.WebGLRenderer,
-  referenceVisual = false,
+export async function loadModelProfileMaterialEnhancer(
+  profile: ModelProfileRuntime | undefined,
 ) {
-  return enhanceReferenceSourceV9Model(object, renderer, referenceVisual);
+  if (profile?.id !== "reference-source-v9") return undefined;
+
+  const { enhanceReferenceSourceV9Model } =
+    await import("./referenceSourceV9Materials");
+  return enhanceReferenceSourceV9Model;
 }
