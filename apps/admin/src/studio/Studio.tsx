@@ -36,6 +36,7 @@ import { buildStudioReadiness } from "./readiness";
 import "./studio.css";
 import "./studio-operations.css";
 import "./studio-superadmin-theme.css";
+import "./studio-editor-core.css";
 
 function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob),
@@ -961,7 +962,6 @@ export default function Studio() {
           onOpenEditor={() => {
             setWorkspace("editor");
             setEditorFocus(true);
-            setEditorFocus(true);
           }}
           onOpenSources={() => setWorkspace("sources")}
           onOpenEvidence={() => setWorkspace("evidence")}
@@ -989,6 +989,7 @@ export default function Studio() {
             setReview("");
             setView("rooms");
             setWorkspace("editor");
+            setEditorFocus(true);
           }}
         />
       )}
@@ -1417,24 +1418,52 @@ export default function Studio() {
                 {scene.rooms
                   .filter((r) => r.floorId === f.id)
                   .map((r) => (
-                    <button
-                      className={
-                        r.id === roomId ? "tree-room active" : "tree-room"
-                      }
-                      key={r.id}
-                      onClick={() => {
-                        setRoomId(r.id);
-                        setSelected(r.id);
-                        if (view === "building") setView("rooms");
-                      }}
-                    >
-                      <span>
-                        {r.verified ? "◉" : "○"} {r.name}
-                      </span>
-                      <small>
-                        {r.unit} · {(r.width * r.depth).toFixed(1)} m²
-                      </small>
-                    </button>
+                    <div className="outliner-room" key={r.id}>
+                      <button
+                        className={
+                          r.id === roomId && selected === r.id
+                            ? "tree-room active"
+                            : "tree-room"
+                        }
+                        onClick={() => {
+                          setRoomId(r.id);
+                          setSelected(r.id);
+                          setMesh("");
+                          if (view === "building") setView("rooms");
+                        }}
+                      >
+                        <span>
+                          {r.verified ? "◉" : "○"} {r.name}
+                        </span>
+                        <small>
+                          {r.unit} · {(r.width * r.depth).toFixed(1)} m²
+                        </small>
+                      </button>
+                      {scene.furniture
+                        .filter((entry) => entry.roomId === r.id)
+                        .map((entry) => (
+                          <button
+                            type="button"
+                            key={entry.id}
+                            className={
+                              selected === entry.id
+                                ? "outliner-object active"
+                                : "outliner-object"
+                            }
+                            onClick={() => {
+                              setRoomId(r.id);
+                              setSelected(entry.id);
+                              setMesh("");
+                              setView("rooms");
+                            }}
+                          >
+                            <span>└ {catalog[entry.kind].name}</span>
+                            <small>
+                              {entry.x.toFixed(1)}, {entry.z.toFixed(1)}
+                            </small>
+                          </button>
+                        ))}
+                    </div>
                   ))}
               </section>
             ))}
@@ -1641,7 +1670,10 @@ export default function Studio() {
             snap={transformSnap}
             focusRequest={focusRequest}
             onSelect={select}
-            onMesh={setMesh}
+            onMesh={(name) => {
+              setMesh(name);
+              setSelected("");
+            }}
             onTransformCommit={commitCanvasTransform}
             onModelNodes={setModelNodes}
           />
@@ -1709,7 +1741,34 @@ export default function Studio() {
             {review ? "REVIEW VERSION" : "DESIGN PROPERTIES"}
           </div>
           <fieldset disabled={Boolean(review) || busy}>
-            {item ? (
+            {view === "building" && mesh ? (
+              <>
+                <h2>{mesh}</h2>
+                <p>
+                  Imported source mesh selected. Core V1 keeps source geometry
+                  read-only while rooms and furniture use persistent transform
+                  gizmos.
+                </p>
+                <label>
+                  Source mesh
+                  <input readOnly value={mesh} />
+                </label>
+                <button
+                  disabled={!room}
+                  onClick={() => {
+                    if (room) patchRoom({ mesh });
+                  }}
+                >
+                  Bind mesh to current room
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFocusRequest((value) => value + 1)}
+                >
+                  Focus selected mesh
+                </button>
+              </>
+            ) : item ? (
               <>
                 <h2>{catalog[item.kind].name}</h2>
                 <p>Position relative to room centre, in metres.</p>
