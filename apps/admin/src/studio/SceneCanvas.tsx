@@ -70,6 +70,7 @@ interface Props {
   onModelNodes?: (nodes: ModelNodeSummary[]) => void;
   onModelMaterials?: (materials: ModelMaterialSummary[]) => void;
   cameraOrientation?: "perspective" | "top";
+  showReferenceLayers?: boolean;
 }
 function dispose(root: T.Object3D) {
   const materials = new Set<T.Material>(),
@@ -774,6 +775,7 @@ export default function SceneCanvas(props: Props) {
       runtime.references.remove(child);
       dispose(child);
     }
+    if (!props.showReferenceLayers) return;
 
     void (async () => {
       for (const layer of props.scene.referenceLayers ?? []) {
@@ -846,7 +848,11 @@ export default function SceneCanvas(props: Props) {
         dispose(child);
       }
     };
-  }, [props.scene.referenceLayers, props.resolveAsset]);
+  }, [
+    props.scene.referenceLayers,
+    props.resolveAsset,
+    props.showReferenceLayers,
+  ]);
 
   useEffect(() => {
     const runtime = api.current;
