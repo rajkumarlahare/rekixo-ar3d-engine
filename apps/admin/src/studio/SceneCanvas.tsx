@@ -650,7 +650,8 @@ export default function SceneCanvas(props: Props) {
             latest.current.onMesh(summary.name);
             latest.current.onModelNodeSelect?.(summary);
           }
-        } else {
+        }
+        if (latest.current.view !== "building") {
           let n: T.Object3D | null = hit.object;
           while (n && !n.userData.selectId) n = n.parent;
           if (n) latest.current.onSelect(n.userData.selectId);
