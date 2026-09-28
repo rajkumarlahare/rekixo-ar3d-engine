@@ -23,12 +23,11 @@ import {
   type PublishedCatalogEntry,
 } from "./published";
 import { buildSceneManifestV2 } from "./manifestV2";
-import {
-  buildStudioReadiness,
-  publicProjectUrl,
-  publishedShowcaseUrl,
-  studioAssetKind,
-} from "./readiness";
+import StudioOverview from "./StudioOverview";
+import StudioSources from "./StudioSources";
+import StudioEvidence from "./StudioEvidence";
+import StudioPublish from "./StudioPublish";
+import { buildStudioReadiness } from "./readiness";
 import "./studio.css";
 
 function formatBytes(value: number) {
