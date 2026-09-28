@@ -1,3 +1,5 @@
+import { assertReleaseAssetKey } from "./storage-boundary.mjs";
+import { serveR2Object } from "./http-range.mjs";
 const BASE_PATH = "/3Dprojects";
 const RELEASE_BASE = `${BASE_PATH}/api/releases`;
 
@@ -298,7 +300,7 @@ export async function serveReleaseAsset(env, releaseId, pathKind, logicalId, req
 
   const row = await env.DB.prepare(
     `SELECT a.r2_key,a.mime_type,a.byte_size,a.name,a.sha256,a.source_etag,
-            p.status
+            p.status,p.slug
        FROM release_assets_3d a
        JOIN releases_3d r ON r.id=a.release_id AND r.project_id=a.project_id
        JOIN projects_3d p ON p.id=r.project_id
@@ -309,34 +311,54 @@ export async function serveReleaseAsset(env, releaseId, pathKind, logicalId, req
   if (!row || row.status !== "published")
     return json({ error: "Release asset not found." }, { status: 404 });
 
-  const object =
-    request.method === "HEAD"
-      ? await env.MODEL_ASSETS.head(row.r2_key)
-      : await env.MODEL_ASSETS.get(row.r2_key);
-  if (!object)
+  try {
+    assertReleaseAssetKey(
+      row.slug,
+      releaseId,
+      kind,
+      logicalId,
+      row.r2_key,
+    );
+  } catch (error) {
+    return json(
+      {
+        error: "Immutable release storage ownership is corrupted.",
+        diagnostic:
+          error instanceof Error
+            ? error.message
+            : "Invalid immutable release storage key.",
+      },
+      { status: 500 },
+    );
+  }
+
+  const mimeType = row.mime_type || "application/octet-stream";
+  const served = await serveR2Object(
+    env.MODEL_ASSETS,
+    row.r2_key,
+    request,
+    {
+      mimeType,
+      cacheControl: "public, max-age=31536000, immutable",
+      expectedSize: Number(row.byte_size),
+      sha256: row.sha256 || undefined,
+      allowRange: kind === "media" && mimeType === "video/mp4",
+    },
+  );
+  if (served.corruption)
+    return json(
+      {
+        error: "Immutable release asset is corrupted.",
+        diagnostic: served.corruption,
+      },
+      { status: 500 },
+    );
+  if (served.missing)
     return json(
       { error: "Immutable release asset is missing from storage." },
       { status: 500 },
     );
-
-  if (Number(row.byte_size) !== Number(object.size))
-    return json(
-      { error: "Immutable release asset size mismatch." },
-      { status: 500 },
-    );
-
-  const headers = new Headers();
-  object.writeHttpMetadata?.(headers);
-  headers.set("Content-Type", row.mime_type || "application/octet-stream");
-  headers.set("Content-Length", String(object.size));
-  headers.set("Cache-Control", "public, max-age=31536000, immutable");
-  headers.set("ETag", object.httpEtag);
-  headers.set("X-Content-Type-Options", "nosniff");
-  if (row.sha256) headers.set("X-Rekixo-SHA256", row.sha256);
-
-  if (request.method === "HEAD")
-    return new Response(null, { status: 200, headers });
-  return new Response(object.body, { status: 200, headers });
+  return served.response;
 }
 
 export async function handleReleaseReadRequest(
