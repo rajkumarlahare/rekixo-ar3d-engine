@@ -4,7 +4,7 @@ import {
   type ModelProfileRuntime,
 } from "./modelProfiles";
 import {
-  createProjectExperience,
+  createJyotiProjectExperience,
   type ExperienceFeature,
   type ExperienceMode,
 } from "./projectExperience";
@@ -12,7 +12,7 @@ import {
 export { applyModelProfileExterior };
 export type { ExperienceFeature, ExperienceMode, ModelProfileRuntime };
 
-type ExperienceRuntime = ReturnType<typeof createProjectExperience>;
+type ExperienceRuntime = ReturnType<typeof createJyotiProjectExperience>;
 
 export interface ModelProfileContext {
   mobile: boolean;
@@ -31,7 +31,7 @@ export function createProfileExperience(
   context: ModelProfileContext,
 ): ExperienceRuntime | undefined {
   if (profile?.id !== "reference-source-v9") return undefined;
-  return createProjectExperience(
+  return createJyotiProjectExperience(
     bounds,
     context.mobile,
     context.referenceVisual,
