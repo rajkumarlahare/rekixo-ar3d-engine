@@ -261,12 +261,13 @@ export default function Studio() {
     setCloudProjects(result.projects);
   }
 
-  async function refreshCloudReleases(current: Project = p) {
-    if (!cloudSession?.authenticated || !current.cloud) {
+  async function refreshCloudReleases(current?: Project) {
+    const target = current ?? project;
+    if (!cloudSession?.authenticated || !target?.cloud) {
       setCloudReleases([]);
       return;
     }
-    const result = await cloud.releases(projectSlug(current));
+    const result = await cloud.releases(projectSlug(target));
     setCloudReleases(result.releases);
   }
 
