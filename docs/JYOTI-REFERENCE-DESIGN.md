@@ -26,27 +26,29 @@ Source floor elevations drive selection and exploded-floor grouping rather than
 dividing the whole site bounding box into equal sections. Source-tagged site
 models suppress the generic generated compound to avoid duplicate boundaries.
 
-## Required asset: not recovered
+## Canonical source pack
 
-The previously converted `local-assets/jyoti-source-preserved.glb` (about 25.6 MB)
-and the original FBX are absent from the current filesystem. The port 5175 preview
-server is also no longer running. The GitHub code alone does **not** replace the
-older published model or reproduce the finished preview with that older asset.
+The supplied source set is now fingerprinted in
+`project-profiles/jyoti-paradise/source-pack.json`. It records the recovered FBX,
+architectural DWG, SketchUp backup, D5 resource manifest, brochure PDF and exterior
+render by byte size and SHA-256, together with source authority and claim
+precedence.
 
-Recover the original FBX with SHA-256
-`1dce4dec093ef5707617c99ccb26ad3a5b6cb6c2d02b5efe4a171c852cc616e0`
-and run:
+The runtime exterior profile no longer owns a duplicated literal source hash or
+floor-level list. Those values are read through `jyotiSourceProfile.ts` from the
+canonical source pack. The FBX remains the exact source revision required for the
+Jyoti look-development profile.
+
+To verify a local source directory before conversion:
 
 ```powershell
-node scripts/asset-pipeline/convert-source-fbx.mjs '<path-to-original.fbx>' local-assets/jyoti-source-preserved.glb --authored-site
+node scripts/verify-source-pack.mjs project-profiles/jyoti-paradise/source-pack.json '<source-directory>'
+node scripts/asset-pipeline/convert-source-fbx.mjs '<source-directory>\\jyoti aprtment model.fbx' local-assets/jyoti-source-preserved.glb --authored-site
 ```
 
-The converter preserves source material groups and writes the provenance metadata
-required by the profile. Do not attach that provenance to the old published GLB:
-its per-face material assignments were lost. After recovering and validating the
-asset, publish it through the existing project asset pipeline and update the
-project model reference. Binary source assets remain outside Git per repository
-policy. No production asset, project record, or deployment is changed by this PR.
+Binary source assets remain outside Git. Verification proves exact file identity;
+it does not convert a brochure/render into certified dimensional evidence and it
+does not resolve conflicts between sources.
 
 ## Validation on 27 September 2026
 

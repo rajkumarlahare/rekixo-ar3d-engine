@@ -1,0 +1,435 @@
+{
+  "format": "rekixo-source-pack",
+  "version": 1,
+  "project": {
+    "id": "project_jyoti_paradise",
+    "slug": "jyoti-paradise",
+    "name": "Jyoti Paradise"
+  },
+  "sources": [
+    {
+      "id": "jyoti-source-fbx",
+      "filename": "jyoti aprtment model.fbx",
+      "mediaType": "application/octet-stream",
+      "byteSize": 45530329,
+      "sha256": "1dce4dec093ef5707617c99ccb26ad3a5b6cb6c2d02b5efe4a171c852cc616e0",
+      "role": "source-geometry-model",
+      "authority": "primary",
+      "capabilities": [
+        "geometry",
+        "materials",
+        "openings",
+        "authoring-history"
+      ],
+      "notes": "Primary recovered exterior/source geometry. Coordinates are preserved by the conversion pipeline; physical unit calibration is not inferred from the FBX alone."
+    },
+    {
+      "id": "jyoti-source-dwg",
+      "filename": "JYOTI APPARTMENT-FIRST FLOOR LEVEL-RC-003.dwg",
+      "mediaType": "image/vnd.dwg",
+      "byteSize": 1242580,
+      "sha256": "e2fbeb3a1feef2e2590133c2de728386cf730dcca73300dde25f2acfd84170fa",
+      "role": "architectural-drawing",
+      "authority": "primary",
+      "capabilities": [
+        "dimensions",
+        "openings",
+        "geometry"
+      ],
+      "notes": "Preferred dimensional/opening evidence when decoded successfully. Decoder output must remain reviewable; unsupported DWG objects or hatch data must not be silently treated as certified geometry."
+    },
+    {
+      "id": "jyoti-source-skb",
+      "filename": "jyoti appartment    1.skb",
+      "mediaType": "application/octet-stream",
+      "byteSize": 2172885,
+      "sha256": "198f31dadb379211a2e70380f10b9c16dafa89e36b0887324041354c11e3083f",
+      "role": "sketchup-backup-model",
+      "authority": "supporting",
+      "capabilities": [
+        "geometry",
+        "materials",
+        "authoring-history"
+      ],
+      "notes": "Supporting SketchUp backup. It is not preferred over the verified FBX for the current exterior runtime."
+    },
+    {
+      "id": "jyoti-source-drs",
+      "filename": "JYOTI APPARTMENT D5.drs",
+      "mediaType": "application/json",
+      "byteSize": 18434,
+      "sha256": "c2c3baae112c8e39477ad2d76a63615726e611c0010cbee6a37122526f761779",
+      "role": "d5-render-manifest",
+      "authority": "metadata-only",
+      "capabilities": [
+        "materials",
+        "visual-style",
+        "render-dependencies",
+        "authoring-history"
+      ],
+      "notes": "D5 project/resource manifest only. Referenced dependent resources are not assumed to be present unless separately supplied and hashed."
+    },
+    {
+      "id": "jyoti-source-brochure",
+      "filename": "Jyoti Paradise.pdf",
+      "mediaType": "application/pdf",
+      "byteSize": 17238393,
+      "sha256": "482a82c8e29137067cc24ed8072997dff23812b88e4a55ab0c7970204a055442",
+      "role": "marketing-brochure",
+      "authority": "reference-only",
+      "capabilities": [
+        "marketing",
+        "dimensions",
+        "location-context",
+        "visual-style"
+      ],
+      "notes": "Conceptual marketing brochure. Source-stated unit series, areas, amenities and nearby distances may be displayed as brochure facts, but the brochure is not a legal or certified as-built drawing."
+    },
+    {
+      "id": "jyoti-source-render",
+      "filename": "Bagde flat scheme.max+1.jpg.jpeg",
+      "mediaType": "image/jpeg",
+      "byteSize": 683475,
+      "sha256": "800fd18ac455ad867ba9f7ecdc5eab82b3320773c47ade76c1ca0692d563eacc",
+      "role": "exterior-visual-reference",
+      "authority": "reference-only",
+      "capabilities": [
+        "visual-style",
+        "materials"
+      ],
+      "notes": "Visual target for facade finish, balcony framing, lighting and landscape intent. Pixel appearance is not dimensional evidence."
+    }
+  ],
+  "precedence": [
+    {
+      "capability": "geometry",
+      "orderedSourceIds": [
+        "jyoti-source-fbx",
+        "jyoti-source-dwg",
+        "jyoti-source-skb"
+      ],
+      "note": "Use FBX for current exterior mesh identity; use decoded drawing geometry to verify plan relationships rather than replacing the exterior by guesswork."
+    },
+    {
+      "capability": "dimensions",
+      "orderedSourceIds": [
+        "jyoti-source-dwg",
+        "jyoti-source-brochure"
+      ],
+      "note": "DWG dimensional evidence outranks brochure graphics. Conflicts remain explicit until reviewed."
+    },
+    {
+      "capability": "openings",
+      "orderedSourceIds": [
+        "jyoti-source-dwg",
+        "jyoti-source-fbx",
+        "jyoti-source-skb"
+      ]
+    },
+    {
+      "capability": "materials",
+      "orderedSourceIds": [
+        "jyoti-source-fbx",
+        "jyoti-source-drs",
+        "jyoti-source-render"
+      ]
+    },
+    {
+      "capability": "visual-style",
+      "orderedSourceIds": [
+        "jyoti-source-render",
+        "jyoti-source-drs",
+        "jyoti-source-brochure"
+      ],
+      "note": "Visual reference controls look-development only; it does not create surveyed dimensions."
+    },
+    {
+      "capability": "marketing",
+      "orderedSourceIds": [
+        "jyoti-source-brochure"
+      ]
+    },
+    {
+      "capability": "location-context",
+      "orderedSourceIds": [
+        "jyoti-source-brochure"
+      ]
+    },
+    {
+      "capability": "render-dependencies",
+      "orderedSourceIds": [
+        "jyoti-source-drs"
+      ]
+    },
+    {
+      "capability": "authoring-history",
+      "orderedSourceIds": [
+        "jyoti-source-skb",
+        "jyoti-source-drs",
+        "jyoti-source-fbx"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "id": "fbx-format",
+      "sourceId": "jyoti-source-fbx",
+      "key": "fbx.version",
+      "value": "7.5.0",
+      "status": "source-stated"
+    },
+    {
+      "id": "fbx-up-axis",
+      "sourceId": "jyoti-source-fbx",
+      "key": "fbx.upAxis",
+      "value": "Y",
+      "status": "derived",
+      "note": "Derived from FBX GlobalSettings UpAxis=1, UpAxisSign=1."
+    },
+    {
+      "id": "fbx-unit-scale",
+      "sourceId": "jyoti-source-fbx",
+      "key": "fbx.unitScaleFactor",
+      "value": 1,
+      "status": "source-stated",
+      "note": "Recorded as source metadata only; this is not treated as an independent metre calibration."
+    },
+    {
+      "id": "fbx-mesh-count",
+      "sourceId": "jyoti-source-fbx",
+      "key": "audit.meshCount",
+      "value": 913,
+      "status": "derived",
+      "note": "Recovered FBX conversion audit."
+    },
+    {
+      "id": "fbx-multi-material-count",
+      "sourceId": "jyoti-source-fbx",
+      "key": "audit.multiMaterialMeshes",
+      "value": 370,
+      "status": "derived",
+      "note": "Recovered FBX conversion audit."
+    },
+    {
+      "id": "fbx-material-count",
+      "sourceId": "jyoti-source-fbx",
+      "key": "audit.materialCount",
+      "value": 38,
+      "status": "derived",
+      "note": "Recovered FBX conversion audit after preserving source material assignments."
+    },
+    {
+      "id": "fbx-triangle-count",
+      "sourceId": "jyoti-source-fbx",
+      "key": "audit.triangleCount",
+      "value": 242241,
+      "status": "derived",
+      "note": "Recovered FBX conversion audit."
+    },
+    {
+      "id": "fbx-bounds-min",
+      "sourceId": "jyoti-source-fbx",
+      "key": "audit.bounds.min",
+      "value": [
+        0,
+        0,
+        -27.55778694
+      ],
+      "status": "derived"
+    },
+    {
+      "id": "fbx-bounds-max",
+      "sourceId": "jyoti-source-fbx",
+      "key": "audit.bounds.max",
+      "value": [
+        26.07216454,
+        20.85339928,
+        0
+      ],
+      "status": "derived"
+    },
+    {
+      "id": "fbx-floor-levels",
+      "sourceId": "jyoti-source-fbx",
+      "key": "audit.architecturalFloorLevelsM",
+      "value": [
+        0,
+        3.048,
+        6.0452,
+        9.0424,
+        12.0396,
+        15.0368,
+        18.034
+      ],
+      "status": "derived",
+      "note": "Source-coordinate floor/roof levels used by the verified exterior profile. They are model-coordinate measurements, not an independent as-built survey."
+    },
+    {
+      "id": "dwg-format",
+      "sourceId": "jyoti-source-dwg",
+      "key": "dwg.format",
+      "value": "AutoCAD 2000",
+      "status": "derived",
+      "note": "File signature/type identification; room/opening extraction remains a separate reviewed step."
+    },
+    {
+      "id": "skb-format",
+      "sourceId": "jyoti-source-skb",
+      "key": "skb.format",
+      "value": "SketchUp Model",
+      "status": "derived"
+    },
+    {
+      "id": "drs-title",
+      "sourceId": "jyoti-source-drs",
+      "key": "d5.title",
+      "value": "JYOTI APPARTMENT D5",
+      "status": "source-stated"
+    },
+    {
+      "id": "drs-source-model",
+      "sourceId": "jyoti-source-drs",
+      "key": "d5.pakUrl",
+      "value": "d/51f48160b7e74ebc9694c7d0db898130/1.skp",
+      "status": "source-stated"
+    },
+    {
+      "id": "drs-dependent-paks",
+      "sourceId": "jyoti-source-drs",
+      "key": "d5.dependentPakCount",
+      "value": 229,
+      "status": "derived"
+    },
+    {
+      "id": "drs-dependent-products",
+      "sourceId": "jyoti-source-drs",
+      "key": "d5.dependentProductCount",
+      "value": 56,
+      "status": "derived"
+    },
+    {
+      "id": "drs-plugin-version",
+      "sourceId": "jyoti-source-drs",
+      "key": "d5.pluginVersion",
+      "value": "SU-1.4.0.0017-usa",
+      "status": "source-stated"
+    },
+    {
+      "id": "drs-client-version",
+      "sourceId": "jyoti-source-drs",
+      "key": "d5.clientVersion",
+      "value": "3.1.0.0746_usa",
+      "status": "source-stated"
+    },
+    {
+      "id": "drs-save-time",
+      "sourceId": "jyoti-source-drs",
+      "key": "d5.saveTimeStamp",
+      "value": "2026-09-01 15:07",
+      "status": "source-stated"
+    },
+    {
+      "id": "brochure-plan-scope",
+      "sourceId": "jyoti-source-brochure",
+      "key": "brochure.floorPlanTitle",
+      "value": "1st to 3rd FLOOR PLAN",
+      "status": "source-stated",
+      "page": 2
+    },
+    {
+      "id": "brochure-unit-series",
+      "sourceId": "jyoti-source-brochure",
+      "key": "brochure.unitSeries",
+      "value": [
+        "101 to 501",
+        "102 to 502",
+        "103 to 403"
+      ],
+      "status": "source-stated",
+      "page": 2
+    },
+    {
+      "id": "brochure-unit-areas",
+      "sourceId": "jyoti-source-brochure",
+      "key": "brochure.unitAreasSqFt",
+      "value": [
+        972,
+        949,
+        940
+      ],
+      "status": "source-stated",
+      "page": 2
+    },
+    {
+      "id": "brochure-amenities",
+      "sourceId": "jyoti-source-brochure",
+      "key": "brochure.amenities",
+      "value": [
+        "Car Parking",
+        "Modular Kitchen",
+        "POP In Hall",
+        "CCTV Camera"
+      ],
+      "status": "source-stated",
+      "page": 2
+    },
+    {
+      "id": "brochure-nearby",
+      "sourceId": "jyoti-source-brochure",
+      "key": "brochure.nearby",
+      "value": [
+        "Hingna D-Mart — 1 KM",
+        "Lata Mangeshkar Hospital — 2 KM",
+        "G.S. Raisoni College — 1 KM",
+        "Priyadarshini Engineering College — 1 KM",
+        "Hingna Road — 1 KM",
+        "Metro Station — 1 KM"
+      ],
+      "status": "source-stated",
+      "page": 2
+    },
+    {
+      "id": "brochure-project-type",
+      "sourceId": "jyoti-source-brochure",
+      "key": "brochure.homeType",
+      "value": "2 BHK FLATS",
+      "status": "source-stated",
+      "page": 1
+    },
+    {
+      "id": "brochure-price",
+      "sourceId": "jyoti-source-brochure",
+      "key": "brochure.offer",
+      "value": "@ 34 Lakh",
+      "status": "source-stated",
+      "page": 1
+    },
+    {
+      "id": "brochure-conceptual-warning",
+      "sourceId": "jyoti-source-brochure",
+      "key": "brochure.legalStatus",
+      "value": "Conceptual brochure; not a legal document and specifications/elevation/floor plan may be altered.",
+      "status": "derived",
+      "page": 1,
+      "note": "Normalized from the brochure disclaimer for machine-readable policy."
+    },
+    {
+      "id": "render-resolution",
+      "sourceId": "jyoti-source-render",
+      "key": "render.pixelSize",
+      "value": [
+        2048,
+        1365
+      ],
+      "status": "derived"
+    },
+    {
+      "id": "floor-count-conflict",
+      "sourceId": "jyoti-source-brochure",
+      "key": "review.floorCount",
+      "value": "Brochure title says 1st to 3rd floor plan while unit series labels extend to 501/502; do not infer a resolved residential floor count from the brochure alone.",
+      "status": "conflicted",
+      "page": 2
+    }
+  ]
+}
