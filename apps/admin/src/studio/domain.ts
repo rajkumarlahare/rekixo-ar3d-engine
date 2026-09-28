@@ -80,6 +80,8 @@ export interface ModelNodeTag {
   floorId?: string;
   unit?: string;
   roomId?: string;
+  assignment?: "auto" | "manual";
+  confidence?: number;
 }
 export interface Scene {
   floors: Floor[];
@@ -105,6 +107,8 @@ export interface Project {
   name: string;
   slug?: string;
   location?: string;
+  referenceUrl?: string;
+  brief?: string;
   cloud?: {
     revision: number;
     syncedAt: string;
@@ -224,6 +228,8 @@ export function newProject(name: string): Project {
     id: id(),
     name: name.trim(),
     location: "",
+    referenceUrl: "",
+    brief: "",
     updated: new Date().toISOString(),
     assets: [],
     releases: [],
@@ -363,6 +369,10 @@ export function validateScene(s: Scene): void {
           !s.floors.some((floor) => floor.id === tag.floorId)) ||
         (tag.unit !== undefined &&
           (typeof tag.unit !== "string" || tag.unit.length > 120)) ||
+        (tag.assignment !== undefined &&
+          !["auto", "manual"].includes(tag.assignment)) ||
+        (tag.confidence !== undefined &&
+          !number(tag.confidence, 0, 1)) ||
         (tag.roomId !== undefined && !room) ||
         (room && tag.floorId !== undefined && room.floorId !== tag.floorId) ||
         (room &&
@@ -441,6 +451,13 @@ export function validateProject(p: Project): void {
     !text(p.name) ||
     (p.location !== undefined &&
       (typeof p.location !== "string" || p.location.length > 180)) ||
+    (p.referenceUrl !== undefined &&
+      (typeof p.referenceUrl !== "string" ||
+        p.referenceUrl.length > 1000 ||
+        (p.referenceUrl.trim() &&
+          !/^https?:\/\//i.test(p.referenceUrl.trim())))) ||
+    (p.brief !== undefined &&
+      (typeof p.brief !== "string" || p.brief.length > 5000)) ||
     (p.cloud !== undefined &&
       (!p.cloud ||
         !Number.isInteger(p.cloud.revision) ||
