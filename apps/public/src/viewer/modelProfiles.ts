@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { applyJyotiReferenceExterior } from "./jyotiReferenceExterior";
+import { floorGeometryFromBoundaries, type FloorGeometryLevel } from "./floorGeometry";
 
 type ExteriorRuntime = NonNullable<
   ReturnType<typeof applyJyotiReferenceExterior>
@@ -9,6 +10,7 @@ export interface ModelProfileRuntime {
   id: string;
   exterior?: ExteriorRuntime;
   cameraBounds?: THREE.Box3;
+  floorGeometry?: FloorGeometryLevel[];
   defaultInteriorRoomId?: string;
 }
 
@@ -32,6 +34,10 @@ export function applyModelProfileExterior(
     cameraBounds: new THREE.Box3(
       new THREE.Vector3(5.62, 0, -23.82),
       new THREE.Vector3(22.52, 20.86, -2.73),
+    ),
+    floorGeometry: floorGeometryFromBoundaries(
+      exterior.floorLevels.slice(0, -1).map((_, index) => index),
+      exterior.floorLevels,
     ),
     defaultInteriorRoomId: "101-living",
   };
