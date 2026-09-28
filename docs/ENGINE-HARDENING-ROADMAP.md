@@ -88,7 +88,7 @@ Use the stable Platform Admin only as a design/operational reference.
 - asset lifecycle/reference counting so replaced assets do not leak forever.
 
 ### Phase 5 — Immutable release/publish/rollback
-Status: IN PROGRESS — implementation complete; PR #42 validation pending
+Status: COMPLETE — validated on main (PR #42, GitHub Actions run 36415183914)
 
 - make a release manifest the public source of truth;
 - freeze exact scene/model/camera/source-pack references per release;
@@ -136,7 +136,7 @@ The following findings remain tracked until their owning phase closes:
 
 - [resolved Phase 1] customer-specific textures/tints in generic `realism.ts`;
 - [resolved Phase 1] heavy project-specific texture/interior bundles statically shipped to unrelated tenants;
-- [implemented Phase 5] mutable live-table publication replaced by active immutable release selection after project cutover;
+- [resolved Phase 5] mutable live-table publication replaced by active immutable release selection after project cutover;
 - [resolved Phase 3] brochure/DWG source conflicts can be explicitly surfaced through project source metadata;
 - [partially resolved Phase 3] reconstructed room rectangles moved to Scene V2 data; presentation furniture and non-authoritative door visuals remain runtime decoration;
 - [resolved Phase 2] G+5/fixed seven-level assumptions;
