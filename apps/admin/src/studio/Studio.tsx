@@ -709,7 +709,23 @@ export default function Studio() {
   function commitCanvasTransform(change: TransformCommit) {
     if (review || busy) return;
     let next: Project;
-    if (change.kind === "room") {
+    if (change.kind === "model") {
+      next = {
+        ...p,
+        scene: {
+          ...p.scene,
+          modelTransform: {
+            ...modelTransform,
+            ...(change.x !== undefined ? { x: change.x } : {}),
+            ...(change.y !== undefined ? { y: change.y } : {}),
+            ...(change.z !== undefined ? { z: change.z } : {}),
+            ...(change.rotationY !== undefined
+              ? { rotationY: change.rotationY }
+              : {}),
+          },
+        },
+      };
+    } else if (change.kind === "room") {
       next = {
         ...p,
         scene: {
@@ -1793,7 +1809,12 @@ export default function Studio() {
               <button
                 type="button"
                 className={transformMode === "translate" ? "active" : ""}
-                disabled={Boolean(review) || busy || view === "building" || view === "walk"}
+                disabled={
+                  Boolean(review) ||
+                  busy ||
+                  view === "walk" ||
+                  (view === "building" && !showReferenceWorkspace)
+                }
                 title="Move selected object (W)"
                 onClick={() => setTransformMode("translate")}
               >
@@ -1805,8 +1826,10 @@ export default function Studio() {
                 disabled={
                   Boolean(review) ||
                   busy ||
-                  view !== "rooms" ||
-                  !item
+                  !(
+                    (view === "rooms" && Boolean(item)) ||
+                    (view === "building" && showReferenceWorkspace)
+                  )
                 }
                 title="Rotate selected furniture (E)"
                 onClick={() => setTransformMode("rotate")}
@@ -1926,6 +1949,7 @@ export default function Studio() {
             view={view}
             transformMode={transformMode}
             transformEnabled={!review && !busy}
+            modelTransformEnabled={showReferenceWorkspace}
             snap={transformSnap}
             focusRequest={focusRequest}
             cameraOrientation={cameraOrientation}
