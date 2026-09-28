@@ -5,7 +5,11 @@ import { TransformControls } from "three/examples/jsm/controls/TransformControls
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
-import { applyModelProfileExterior } from "../../../public/src/viewer/modelProfiles";
+import {
+  applyModelProfileExterior,
+  loadModelProfileMaterialEnhancer,
+  type ModelProfileRuntime,
+} from "../../../public/src/viewer/modelProfiles";
 import { asset } from "./storage";
 import {
   canWalk,
@@ -38,6 +42,17 @@ export interface ModelNodeSummary {
   name: string;
   type: string;
 }
+export interface ModelMaterialSummary {
+  name: string;
+  type: string;
+  meshCount: number;
+  baseColor: string;
+  roughness: number;
+  metalness: number;
+  opacity: number;
+  emissive: string;
+  emissiveIntensity: number;
+}
 interface Props {
   resolveAsset?: (id: string) => Promise<Asset | undefined>;
   scene: SceneData;
@@ -53,6 +68,7 @@ interface Props {
   focusRequest?: number;
   onTransformCommit?: (change: TransformCommit) => void;
   onModelNodes?: (nodes: ModelNodeSummary[]) => void;
+  onModelMaterials?: (materials: ModelMaterialSummary[]) => void;
 }
 function dispose(root: T.Object3D) {
   const materials = new Set<T.Material>(),
@@ -90,6 +106,107 @@ function block(
   return mesh;
 }
 
+type MaterialBase = {
+  color: string;
+  roughness: number;
+  metalness: number;
+  opacity: number;
+  transparent: boolean;
+  depthWrite: boolean;
+  emissive: string;
+  emissiveIntensity: number;
+};
+
+function materialBase(material: T.MeshStandardMaterial): MaterialBase {
+  const stored = material.userData.studioMaterialBase as MaterialBase | undefined;
+  if (stored) return stored;
+  const base: MaterialBase = {
+    color: `#${material.color.getHexString()}`,
+    roughness: material.roughness,
+    metalness: material.metalness,
+    opacity: material.opacity,
+    transparent: material.transparent,
+    depthWrite: material.depthWrite,
+    emissive: `#${material.emissive.getHexString()}`,
+    emissiveIntensity: material.emissiveIntensity,
+  };
+  material.userData.studioMaterialBase = base;
+  return base;
+}
+
+function applyModelMaterialOverrides(root: T.Object3D, scene: SceneData) {
+  const overrides = new Map(
+    (scene.materialOverrides ?? []).map((item) => [item.materialName, item]),
+  );
+  root.traverse((node) => {
+    if (!(node instanceof T.Mesh)) return;
+    for (const material of Array.isArray(node.material)
+      ? node.material
+      : [node.material]) {
+      if (!(material instanceof T.MeshStandardMaterial)) continue;
+      const base = materialBase(material);
+      material.color.set(base.color);
+      material.roughness = base.roughness;
+      material.metalness = base.metalness;
+      material.opacity = base.opacity;
+      material.transparent = base.transparent;
+      material.depthWrite = base.depthWrite;
+      material.emissive.set(base.emissive);
+      material.emissiveIntensity = base.emissiveIntensity;
+
+      const override = overrides.get(material.name);
+      if (override) {
+        if (override.baseColor) material.color.set(override.baseColor);
+        if (override.roughness !== undefined)
+          material.roughness = override.roughness;
+        if (override.metalness !== undefined)
+          material.metalness = override.metalness;
+        if (override.opacity !== undefined) {
+          material.opacity = override.opacity;
+          material.transparent = override.opacity < 0.999;
+          material.depthWrite = override.opacity >= 0.999;
+        }
+        if (override.emissive) material.emissive.set(override.emissive);
+        if (override.emissiveIntensity !== undefined)
+          material.emissiveIntensity = override.emissiveIntensity;
+      }
+      material.needsUpdate = true;
+    }
+  });
+}
+
+function summarizeModelMaterials(root: T.Object3D): ModelMaterialSummary[] {
+  const rows = new Map<string, ModelMaterialSummary>();
+  root.traverse((node) => {
+    if (!(node instanceof T.Mesh)) return;
+    for (const material of Array.isArray(node.material)
+      ? node.material
+      : [node.material]) {
+      if (!(material instanceof T.MeshStandardMaterial)) continue;
+      const name = material.name || "Unnamed material";
+      const current = rows.get(name);
+      if (current) {
+        current.meshCount += 1;
+        continue;
+      }
+      rows.set(name, {
+        name,
+        type: material.type,
+        meshCount: 1,
+        baseColor: `#${material.color.getHexString()}`,
+        roughness: material.roughness,
+        metalness: material.metalness,
+        opacity: material.opacity,
+        emissive: `#${material.emissive.getHexString()}`,
+        emissiveIntensity: material.emissiveIntensity,
+      });
+    }
+  });
+  return [...rows.values()].sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
+}
+
 export default function SceneCanvas(props: Props) {
   const host = useRef<HTMLDivElement>(null),
     latest = useRef(props);
@@ -97,12 +214,16 @@ export default function SceneCanvas(props: Props) {
   const api = useRef<{
     scene: T.Scene;
     camera: T.PerspectiveCamera;
+    renderer: T.WebGLRenderer;
     controls: OrbitControls;
     model: T.Group;
     rooms: T.Group;
     keys: Set<string>;
     selectables: Map<string, T.Object3D>;
     transform: TransformControls;
+    hemi: T.HemisphereLight;
+    sun: T.DirectionalLight;
+    profileExterior?: ModelProfileRuntime["exterior"];
     modelSelection?: T.BoxHelper;
     focus: () => void;
     focusSelected: () => void;
@@ -135,7 +256,8 @@ export default function SceneCanvas(props: Props) {
     controls.enableDamping = true;
     controls.target.set(0, 0, 0);
     controls.maxPolarAngle = Math.PI * 0.49;
-    scene.add(new T.HemisphereLight(0xffffff, 0x687681, 2.8));
+    const hemi = new T.HemisphereLight(0xffffff, 0x687681, 2.8);
+    scene.add(hemi);
     const sun = new T.DirectionalLight(0xfff1db, 3.2);
     sun.position.set(-15, 30, 20);
     sun.castShadow = true;
@@ -262,12 +384,15 @@ export default function SceneCanvas(props: Props) {
     api.current = {
       scene,
       camera,
+      renderer,
       controls,
       model,
       rooms,
       keys,
       selectables,
       transform,
+      hemi,
+      sun,
       focus,
       focusSelected,
     };
@@ -492,7 +617,11 @@ export default function SceneCanvas(props: Props) {
       dispose(n);
     }
     latest.current.onModelNodes?.([]);
-    runtime.scene.background = new T.Color("#dbe3e7");
+    latest.current.onModelMaterials?.([]);
+    runtime.profileExterior = undefined;
+    runtime.scene.background = new T.Color(
+      latest.current.scene.appearance?.background ?? "#dbe3e7",
+    );
     if (!props.scene.modelId) {
       setStatus("");
       return;
@@ -527,11 +656,23 @@ export default function SceneCanvas(props: Props) {
         dispose(object);
         return;
       }
-      const modelProfile = applyModelProfileExterior(object);
+      const referenceVisual =
+        latest.current.scene.appearance?.referenceVisual ?? true;
+      const modelProfile = applyModelProfileExterior(object, referenceVisual);
+      runtime.profileExterior = modelProfile?.exterior;
       if (modelProfile?.exterior) {
-        runtime.scene.background = modelProfile.exterior.daylightSky;
+        runtime.scene.background =
+          latest.current.scene.appearance?.nightMode
+            ? modelProfile.exterior.eveningSky
+            : modelProfile.exterior.daylightSky;
+        modelProfile.exterior.setNight(
+          latest.current.scene.appearance?.nightMode ?? false,
+        );
         finishCleanup = modelProfile.exterior.dispose;
       }
+      const materialEnhancer =
+        await loadModelProfileMaterialEnhancer(modelProfile);
+      materialEnhancer?.(object, renderer, referenceVisual);
       const modelNodes: ModelNodeSummary[] = [];
       let modelNodeIndex = 0;
       object.traverse((n) => {
@@ -550,6 +691,10 @@ export default function SceneCanvas(props: Props) {
       latest.current.onModelNodes?.(modelNodes);
       runtime.model.add(object);
       runtime.model.scale.setScalar(latest.current.scene.scale);
+      applyModelMaterialOverrides(runtime.model, latest.current.scene);
+      latest.current.onModelMaterials?.(
+        summarizeModelMaterials(runtime.model),
+      );
       runtime.focus();
       setStatus(
         f.name.toLowerCase().endsWith(".fbx")
@@ -564,7 +709,50 @@ export default function SceneCanvas(props: Props) {
       cancelled = true;
       finishCleanup?.();
     };
-  }, [props.scene.modelId, props.resolveAsset]);
+  }, [
+    props.scene.modelId,
+    props.scene.appearance?.referenceVisual,
+    props.resolveAsset,
+  ]);
+  useEffect(() => {
+    const runtime = api.current;
+    if (!runtime) return;
+    const appearance = props.scene.appearance;
+    runtime.renderer.toneMappingExposure = appearance?.exposure ?? 1;
+    runtime.hemi.intensity = appearance?.hemisphereIntensity ?? 2.8;
+    runtime.sun.intensity = appearance?.sunIntensity ?? 3.2;
+    if (runtime.profileExterior) {
+      const night = appearance?.nightMode ?? false;
+      runtime.profileExterior.setNight(night);
+      runtime.scene.background = night
+        ? runtime.profileExterior.eveningSky
+        : runtime.profileExterior.daylightSky;
+    } else {
+      runtime.scene.background = new T.Color(
+        appearance?.background ?? "#dbe3e7",
+      );
+    }
+  }, [
+    props.scene.appearance?.exposure,
+    props.scene.appearance?.sunIntensity,
+    props.scene.appearance?.hemisphereIntensity,
+    props.scene.appearance?.background,
+    props.scene.appearance?.nightMode,
+    props.scene.appearance?.referenceVisual,
+    props.scene.modelId,
+  ]);
+
+  useEffect(() => {
+    const runtime = api.current;
+    if (!runtime || !runtime.model.children.length) return;
+    applyModelMaterialOverrides(runtime.model, props.scene);
+    props.onModelMaterials?.(summarizeModelMaterials(runtime.model));
+  }, [
+    props.scene.materialOverrides,
+    props.scene.modelId,
+    props.scene.appearance?.referenceVisual,
+  ]);
+
   useEffect(() => {
     const r = api.current;
     if (!r) return;
@@ -700,7 +888,12 @@ export default function SceneCanvas(props: Props) {
     const helper = new T.BoxHelper(selectedObject, 0x8d84ff);
     runtime.scene.add(helper);
     runtime.modelSelection = helper;
-  }, [props.selectedMesh, props.view, props.scene.modelId]);
+  }, [
+    props.selectedMesh,
+    props.view,
+    props.scene.modelId,
+    props.scene.appearance?.referenceVisual,
+  ]);
 
   useEffect(() => {
     if (props.focusRequest === undefined) return;
