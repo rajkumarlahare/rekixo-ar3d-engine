@@ -23,6 +23,12 @@ import {
   type PublishedCatalogEntry,
 } from "./published";
 import { buildSceneManifestV2 } from "./manifestV2";
+import {
+  buildStudioReadiness,
+  publicProjectUrl,
+  publishedShowcaseUrl,
+  studioAssetKind,
+} from "./readiness";
 import "./studio.css";
 
 function download(blob: Blob, name: string) {
@@ -56,6 +62,9 @@ export default function Studio() {
   const [cloudFilter, setCloudFilter] = useState<"active" | "archived">("active");
   const [cloudReleases, setCloudReleases] = useState<cloud.CloudReleaseSummary[]>([]);
   const [published, setPublished] = useState<PublishedCatalogEntry[]>([]);
+  const [workspace, setWorkspace] = useState<
+    "overview" | "editor" | "sources" | "evidence" | "publish"
+  >("overview");
   useEffect(() => {
     let active = true;
     void cloud
