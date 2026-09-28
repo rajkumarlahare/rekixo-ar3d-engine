@@ -352,6 +352,27 @@ export default function Studio() {
       `Cloud draft saved · revision ${next.cloud?.revision ?? "—"} · local cache updated. Publishing remains a separate immutable step.`,
     );
   }
+  async function publishCurrentRelease() {
+    if (!cloudSession?.authenticated)
+      throw Error("Sign in to Engine Admin before publishing.");
+    if (!p.cloud)
+      throw Error("Save this project to cloud before publishing.");
+    if (dirty)
+      throw Error("Save the current draft before publishing.");
+    const result = await cloud.publishRelease(
+      projectSlug(p),
+      p.cloud.revision,
+    );
+    await Promise.all([
+      refreshCloudReleases(p),
+      refreshCloudProjects(),
+      refreshPublishedCatalog(),
+    ]);
+    setMessage(
+      `Immutable release v${result.release.version} is active. Draft edits will not change it until another explicit publish.`,
+    );
+  }
+
   function history(back: boolean) {
     if (!project) return;
     const from = back ? undo : redo,
