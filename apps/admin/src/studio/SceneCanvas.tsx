@@ -672,7 +672,7 @@ export default function SceneCanvas(props: Props) {
       }
       const materialEnhancer =
         await loadModelProfileMaterialEnhancer(modelProfile);
-      materialEnhancer?.(object, renderer, referenceVisual);
+      materialEnhancer?.(object, runtime.renderer, referenceVisual);
       const modelNodes: ModelNodeSummary[] = [];
       let modelNodeIndex = 0;
       object.traverse((n) => {
