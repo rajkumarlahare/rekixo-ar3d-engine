@@ -281,7 +281,7 @@ function releaseAssetKind(pathKind) {
   return "";
 }
 
-async function serveReleaseAsset(env, releaseId, pathKind, logicalId, request) {
+export async function serveReleaseAsset(env, releaseId, pathKind, logicalId, request) {
   if (request.method !== "GET" && request.method !== "HEAD")
     return json({ error: "Method not allowed." }, { status: 405 });
   if (!validToken(releaseId) || !validToken(logicalId, 500))
