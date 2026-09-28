@@ -51,3 +51,17 @@ The Scene Manifest V2 and Source Pack V1 solve different problems:
 
 A future cloud release should reference both versions so a published scene can
 be traced back to the source revision used to author it.
+
+
+## Interior evidence manifest
+
+`interior-scene-v2.json` is the current machine-readable typical-floor
+reconstruction. It replaces room rectangle literals that were previously
+embedded directly in `projectExperience.ts`.
+
+Every current room/space is deliberately `unverified`: the brochure supplies
+the plan reference, while interactive placement remains reconstructed until
+higher-authority DWG dimensions/openings and semantic model boundaries are
+reviewed. The manifest therefore contains no authoritative openings and no room
+mesh bindings. Presentation furniture remains runtime decoration and is not
+source evidence.

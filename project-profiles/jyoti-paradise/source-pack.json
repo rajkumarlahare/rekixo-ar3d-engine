@@ -48,6 +48,7 @@
       "authority": "supporting",
       "capabilities": [
         "geometry",
+        "openings",
         "materials",
         "authoring-history"
       ],

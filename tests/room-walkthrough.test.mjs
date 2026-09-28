@@ -5,9 +5,16 @@ import ts from 'typescript';
 import * as THREE from 'three';
 
 // Execute the actual geometry builder; omit only browser image decoding.
+const interiorScene = JSON.parse(
+  fs.readFileSync('project-profiles/jyoti-paradise/interior-scene-v2.json', 'utf8'),
+);
 const source = fs.readFileSync('apps/public/src/viewer/projectExperience.ts', 'utf8')
   .replace('import * as THREE from "three";', `import * as THREE from ${JSON.stringify(import.meta.resolve('three'))};`)
-  .replace('import { sourceTextureData } from "./sourceTextureData";', 'const sourceTextureData = {};');
+  .replace('import { sourceTextureData } from "./sourceTextureData";', 'const sourceTextureData = {};')
+  .replace(
+    'import interiorScene from "../../../../project-profiles/jyoti-paradise/interior-scene-v2.json";',
+    `const interiorScene = ${JSON.stringify(interiorScene)};`,
+  );
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
 const { createJyotiProjectExperience } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
 const scene = createJyotiProjectExperience(new THREE.Box3(new THREE.Vector3(0, 0, -25), new THREE.Vector3(20, 28, 0)), false);

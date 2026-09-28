@@ -1011,3 +1011,44 @@ footer { padding-top: 24px; display: flex; justify-content: space-between; gap: 
     width: auto;
   }
 }
+
+
+.twin-source-conflicts {
+  margin-top: 14px;
+  padding: 13px;
+  border: 1px solid rgba(255, 199, 92, 0.28);
+  border-radius: 14px;
+  background: rgba(58, 39, 14, 0.58);
+  backdrop-filter: blur(12px);
+}
+
+.twin-source-conflicts > small {
+  display: block;
+  margin-bottom: 9px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: #ffd58a;
+}
+
+.twin-source-conflicts > div + div {
+  margin-top: 10px;
+}
+
+.twin-source-conflicts strong {
+  display: block;
+  font-size: 12px;
+  color: #fff2d4;
+}
+
+.twin-source-conflicts p {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(255, 242, 218, 0.78);
+}
+
+.twin-source-conflicts .twin-source-policy {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(255, 213, 138, 0.16);
+}

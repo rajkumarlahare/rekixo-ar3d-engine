@@ -53,6 +53,16 @@ type FloorSettings = {
   units?: UnitFact[];
   verifiedSpaces?: string[];
   drawingNotes?: string[];
+  sourceConflicts?: Array<{
+    id: string;
+    title: string;
+    detail: string;
+    status: "unresolved" | "resolved";
+  }>;
+  dimensionPolicy?: {
+    priority?: string[];
+    note?: string;
+  };
 };
 
 type AmenitySettings = {
@@ -636,9 +646,27 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
                   {floorSettings.verifiedSpaces?.map((space) => <span key={space}>{space}</span>)}
                 </div>
                 <p>
-                  These room/common-space labels are present in the supplied architectural drawing.
-                  They are not assigned to a specific flat until the exact geometry boundary is verified.
+                  These room/common-space labels are present in configured architectural evidence.
+                  They are not assigned to a specific unit until the exact geometry boundary is verified.
                 </p>
+              </div>
+            )}
+            {(floorSettings.sourceConflicts?.length ?? 0) > 0 && (
+              <div className="twin-source-conflicts" role="note">
+                <small>SOURCE REVIEW REQUIRED</small>
+                {floorSettings.sourceConflicts
+                  ?.filter((conflict) => conflict.status === "unresolved")
+                  .map((conflict) => (
+                    <div key={conflict.id}>
+                      <strong>{conflict.title}</strong>
+                      <p>{conflict.detail}</p>
+                    </div>
+                  ))}
+                {floorSettings.dimensionPolicy?.note && (
+                  <p className="twin-source-policy">
+                    {floorSettings.dimensionPolicy.note}
+                  </p>
+                )}
               </div>
             )}
           </aside>

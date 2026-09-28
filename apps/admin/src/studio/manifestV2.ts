@@ -133,6 +133,15 @@ export function buildSceneManifestV2(
       evidence: {
         status: room.verified ? "reviewed" : "unverified",
         ...(room.source.trim() ? { sourceNote: room.source.trim() } : {}),
+        ...(room.sourceAssetId
+          ? { sourceAssetId: room.sourceAssetId }
+          : {}),
+        ...(room.sourcePackSourceId
+          ? { sourcePackSourceId: room.sourcePackSourceId }
+          : {}),
+        ...(room.sourceClaimIds?.length
+          ? { sourceClaimIds: [...room.sourceClaimIds] }
+          : {}),
       },
       meshBindings:
         room.mesh && modelId

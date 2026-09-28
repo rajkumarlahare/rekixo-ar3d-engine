@@ -72,6 +72,8 @@ export interface SceneMeasurementEvidenceV2 {
   status: SceneReviewStatusV2;
   sourceNote?: string;
   sourceAssetId?: string;
+  sourcePackSourceId?: string;
+  sourceClaimIds?: string[];
   basis?: string;
 }
 
@@ -223,6 +225,113 @@ function validateTransform(value: unknown) {
     throw Error("Invalid scene transform.");
 }
 
+function samePoint(
+  left: readonly number[],
+  right: readonly number[],
+  epsilon = 1e-9,
+) {
+  return (
+    Math.abs(left[0] - right[0]) <= epsilon &&
+    Math.abs(left[1] - right[1]) <= epsilon
+  );
+}
+
+function polygonArea(points: readonly (readonly number[])[]) {
+  let area = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const next = points[(index + 1) % points.length];
+    area += points[index][0] * next[1] - next[0] * points[index][1];
+  }
+  return Math.abs(area) / 2;
+}
+
+function orientation(
+  a: readonly number[],
+  b: readonly number[],
+  c: readonly number[],
+) {
+  return (b[0] - a[0]) * (c[1] - a[1]) -
+    (b[1] - a[1]) * (c[0] - a[0]);
+}
+
+function onSegment(
+  a: readonly number[],
+  b: readonly number[],
+  point: readonly number[],
+  epsilon = 1e-9,
+) {
+  return (
+    Math.min(a[0], b[0]) - epsilon <= point[0] &&
+    point[0] <= Math.max(a[0], b[0]) + epsilon &&
+    Math.min(a[1], b[1]) - epsilon <= point[1] &&
+    point[1] <= Math.max(a[1], b[1]) + epsilon
+  );
+}
+
+function segmentsIntersect(
+  a: readonly number[],
+  b: readonly number[],
+  c: readonly number[],
+  d: readonly number[],
+) {
+  const epsilon = 1e-9;
+  const abC = orientation(a, b, c);
+  const abD = orientation(a, b, d);
+  const cdA = orientation(c, d, a);
+  const cdB = orientation(c, d, b);
+
+  if (
+    ((abC > epsilon && abD < -epsilon) ||
+      (abC < -epsilon && abD > epsilon)) &&
+    ((cdA > epsilon && cdB < -epsilon) ||
+      (cdA < -epsilon && cdB > epsilon))
+  )
+    return true;
+
+  if (Math.abs(abC) <= epsilon && onSegment(a, b, c)) return true;
+  if (Math.abs(abD) <= epsilon && onSegment(a, b, d)) return true;
+  if (Math.abs(cdA) <= epsilon && onSegment(c, d, a)) return true;
+  if (Math.abs(cdB) <= epsilon && onSegment(c, d, b)) return true;
+  return false;
+}
+
+function validSimplePolygon(points: readonly (readonly number[])[]) {
+  if (points.length < 3 || polygonArea(points) <= 1e-6) return false;
+  for (let index = 0; index < points.length; index += 1) {
+    const next = (index + 1) % points.length;
+    if (samePoint(points[index], points[next])) return false;
+  }
+  if (samePoint(points[0], points[points.length - 1])) return false;
+
+  for (let left = 0; left < points.length; left += 1) {
+    const leftNext = (left + 1) % points.length;
+    for (let right = left + 1; right < points.length; right += 1) {
+      const rightNext = (right + 1) % points.length;
+      if (
+        left === right ||
+        leftNext === right ||
+        rightNext === left
+      )
+        continue;
+      if (
+        left === 0 &&
+        rightNext === 0
+      )
+        continue;
+      if (
+        segmentsIntersect(
+          points[left],
+          points[leftNext],
+          points[right],
+          points[rightNext],
+        )
+      )
+        return false;
+    }
+  }
+  return true;
+}
+
 export function assertSceneManifestV2(
   value: unknown,
 ): asserts value is SceneManifestV2 {
@@ -269,12 +378,30 @@ export function assertSceneManifestV2(
     throw Error("Scene manifest needs a site, building and floor.");
 
   const assetIds = idSet(assets);
+  const assetById = new Map(
+    assets.map((item) => [
+      (item as Record<string, unknown>).id as string,
+      item as Record<string, unknown>,
+    ]),
+  );
   const modelIds = idSet(models);
   const siteIds = idSet(sites);
   const buildingIds = idSet(buildings);
   const floorIds = idSet(floors);
   const unitIds = idSet(units);
+  const unitById = new Map(
+    units.map((item) => [
+      (item as Record<string, unknown>).id as string,
+      item as Record<string, unknown>,
+    ]),
+  );
   const roomIds = idSet(rooms);
+  const roomById = new Map(
+    rooms.map((item) => [
+      (item as Record<string, unknown>).id as string,
+      item as Record<string, unknown>,
+    ]),
+  );
   const materialIds = idSet(materials);
 
   for (const item of assets) {
@@ -295,8 +422,10 @@ export function assertSceneManifestV2(
 
   for (const item of models) {
     const m = item as Record<string, unknown>;
+    const modelAsset = assetById.get(m.assetId as string);
     if (
-      !assetIds.has(m.assetId as string) ||
+      !modelAsset ||
+      modelAsset.role !== "model" ||
       !["shell", "interior", "context", "other"].includes(m.role as string)
     )
       throw Error("Invalid scene model.");
@@ -335,9 +464,15 @@ export function assertSceneManifestV2(
 
   for (const item of rooms) {
     const room = item as Record<string, unknown>;
+    const roomUnit =
+      room.unitId === undefined
+        ? undefined
+        : unitById.get(room.unitId as string);
     if (
       !floorIds.has(room.floorId as string) ||
-      (room.unitId !== undefined && !unitIds.has(room.unitId as string)) ||
+      (room.unitId !== undefined && !roomUnit) ||
+      (roomUnit !== undefined &&
+        roomUnit.floorId !== room.floorId) ||
       !isText(room.name, 300) ||
       !isNumber(room.ceilingHeightM, 1, 100) ||
       !Array.isArray(room.meshBindings) ||
@@ -359,7 +494,8 @@ export function assertSceneManifestV2(
         !Array.isArray(boundary.points) ||
         boundary.points.length < 3 ||
         boundary.points.length > 256 ||
-        !boundary.points.every((point) => isVector(point, 2, -1e6, 1e6))
+        !boundary.points.every((point) => isVector(point, 2, -1e6, 1e6)) ||
+        !validSimplePolygon(boundary.points as number[][])
       )
         throw Error("Invalid polygon room boundary.");
     } else {
@@ -367,6 +503,7 @@ export function assertSceneManifestV2(
     }
 
     const evidence = room.evidence as Record<string, unknown>;
+    const sourceClaimIds = evidence.sourceClaimIds;
     if (
       !["unverified", "reviewed"].includes(evidence.status as string) ||
       (evidence.sourceNote !== undefined &&
@@ -374,6 +511,16 @@ export function assertSceneManifestV2(
           evidence.sourceNote.length > 4000)) ||
       (evidence.sourceAssetId !== undefined &&
         !assetIds.has(evidence.sourceAssetId as string)) ||
+      (evidence.sourcePackSourceId !== undefined &&
+        !isText(evidence.sourcePackSourceId, 200)) ||
+      (sourceClaimIds !== undefined &&
+        (!Array.isArray(sourceClaimIds) ||
+          sourceClaimIds.length > 100 ||
+          new Set(sourceClaimIds as unknown[]).size !== sourceClaimIds.length ||
+          sourceClaimIds.some((id) => !isText(id, 200)))) ||
+      (Array.isArray(sourceClaimIds) &&
+        sourceClaimIds.length > 0 &&
+        evidence.sourcePackSourceId === undefined) ||
       (evidence.basis !== undefined &&
         (typeof evidence.basis !== "string" || evidence.basis.length > 1000))
     )
@@ -383,7 +530,8 @@ export function assertSceneManifestV2(
       !(
         (typeof evidence.sourceNote === "string" &&
           evidence.sourceNote.trim().length) ||
-        evidence.sourceAssetId
+        evidence.sourceAssetId ||
+        evidence.sourcePackSourceId
       )
     )
       throw Error("Reviewed room measurements require evidence.");
@@ -413,13 +561,18 @@ export function assertSceneManifestV2(
 
   for (const item of openings) {
     const opening = item as Record<string, unknown>;
+    const openingRooms = Array.isArray(opening.roomIds)
+      ? opening.roomIds.map((id) => roomById.get(id as string))
+      : [];
     if (
       !floorIds.has(opening.floorId as string) ||
       !["door", "window", "opening"].includes(opening.kind as string) ||
       !Array.isArray(opening.roomIds) ||
       opening.roomIds.length < 1 ||
       opening.roomIds.length > 2 ||
-      opening.roomIds.some((id) => !roomIds.has(id as string)) ||
+      new Set(opening.roomIds as unknown[]).size !== opening.roomIds.length ||
+      openingRooms.some((room) => !room) ||
+      openingRooms.some((room) => room?.floorId !== opening.floorId) ||
       !isVector(opening.position, 3, -1e6, 1e6) ||
       !isNumber(opening.widthM, 0.01, 100) ||
       !isNumber(opening.heightM, 0.01, 100) ||

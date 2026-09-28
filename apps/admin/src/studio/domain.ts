@@ -17,6 +17,9 @@ export interface Room {
   color: string;
   source: string;
   verified: boolean;
+  sourceAssetId?: string;
+  sourcePackSourceId?: string;
+  sourceClaimIds?: string[];
   mesh?: string;
 }
 export interface Furniture {
@@ -150,6 +153,9 @@ export function duplicateFloor(p: Project, floorId: string): Project {
       floorId: newFloor.id,
       unit: `${r.unit} copy`,
       verified: false,
+      sourceAssetId: undefined,
+      sourcePackSourceId: undefined,
+      sourceClaimIds: undefined,
       mesh: undefined,
     })),
   );
@@ -220,7 +226,19 @@ export function validateScene(s: Scene): void {
       typeof r.source !== "string" ||
       r.source.length > 2000 ||
       typeof r.verified !== "boolean" ||
-      (r.verified && !r.source.trim()) ||
+      (r.verified &&
+        !r.source.trim() &&
+        !r.sourceAssetId &&
+        !r.sourcePackSourceId) ||
+      (r.sourceAssetId !== undefined && !text(r.sourceAssetId, 100)) ||
+      (r.sourcePackSourceId !== undefined &&
+        !text(r.sourcePackSourceId, 200)) ||
+      (r.sourceClaimIds !== undefined &&
+        (!Array.isArray(r.sourceClaimIds) ||
+          r.sourceClaimIds.length > 100 ||
+          new Set(r.sourceClaimIds).size !== r.sourceClaimIds.length ||
+          r.sourceClaimIds.some((claim) => !text(claim, 200)))) ||
+      (r.sourceClaimIds?.length && !r.sourcePackSourceId) ||
       (r.mesh !== undefined && !text(r.mesh, 500))
     )
       throw Error("Check room dimensions, floor and measurement source.");
@@ -279,9 +297,13 @@ export function validateProject(p: Project): void {
     if (!text(r.name) || !text(r.date)) throw Error("Invalid review version.");
     validateScene(r.scene);
   }
-  for (const s of [p.scene, ...p.releases.map((r) => r.scene)])
+  for (const s of [p.scene, ...p.releases.map((r) => r.scene)]) {
     if (s.modelId && !p.assets.includes(s.modelId))
       throw Error("Model asset is missing.");
+    for (const room of s.rooms)
+      if (room.sourceAssetId && !p.assets.includes(room.sourceAssetId))
+        throw Error("Room source asset is missing.");
+  }
 }
 export function snapshot(p: Project, name: string): Project {
   validateProject(p);
