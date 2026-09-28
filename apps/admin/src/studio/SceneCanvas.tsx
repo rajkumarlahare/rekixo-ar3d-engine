@@ -325,22 +325,22 @@ export default function SceneCanvas(props: Props) {
         return;
       }
       if (latest.current.cameraOrientation === "top") {
-        let topBox: T.Box3;
+        let topBox = new T.Box3(
+          new T.Vector3(-5, 0, -5),
+          new T.Vector3(5, 3, 5),
+        );
         if (view === "building") {
-          topBox = new T.Box3();
+          const contentBox = new T.Box3();
           let hasContent = false;
           for (const root of [model, references]) {
             if (!root.children.length) continue;
             root.updateWorldMatrix(true, true);
-            topBox.expandByObject(root);
+            contentBox.expandByObject(root);
             hasContent = true;
           }
-          if (!hasContent)
-            topBox.set(
-              new T.Vector3(-5, 0, -5),
-              new T.Vector3(5, 3, 5),
-            );
-        } else if (r) {
+          if (hasContent) topBox = contentBox;
+        }
+        if (view !== "building" && r)
           topBox = new T.Box3(
             new T.Vector3(r.x - r.width / 2, y, r.z - r.depth / 2),
             new T.Vector3(
@@ -349,12 +349,6 @@ export default function SceneCanvas(props: Props) {
               r.z + r.depth / 2,
             ),
           );
-        } else {
-          topBox = new T.Box3(
-            new T.Vector3(-5, 0, -5),
-            new T.Vector3(5, 3, 5),
-          );
-        }
         const centre = topBox.getCenter(new T.Vector3());
         const size = topBox.getSize(new T.Vector3());
         const span = Math.max(size.x / Math.max(camera.aspect, 0.1), size.z, 5);
