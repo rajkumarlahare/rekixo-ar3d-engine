@@ -15,6 +15,7 @@ test("visual room mapper is mouse-first and keeps exact numbers as advanced fall
   assert.match(mapper, /Reshape selected/);
   assert.match(mapper, /Clone \+ drag/);
   assert.match(mapper, /Mirror X/);
+  assert.match(mapper, /Edit corners/);
   assert.match(mapper, /Snap to grid, walls & vertices/);
   assert.match(studio, /Advanced numeric geometry/);
   assert.match(studio, /\+ Map room with mouse/);
@@ -49,6 +50,8 @@ test("polygon mapper snaps to existing room walls and exports polygon callbacks"
   assert.match(canvas, /roomBoundaryPoints/);
   assert.match(canvas, /edgeDistance <= 0\.18/);
   assert.match(canvas, /onRoomPolygonDraw/);
+  assert.match(canvas, /onRoomPolygonChange/);
+  assert.match(canvas, /roomVertexIndex/);
   assert.match(canvas, /click first corner or press Enter/);
   assert.match(studio, /commitMappedPolygon/);
   assert.match(studio, /roomGeometryFromPolygon/);
