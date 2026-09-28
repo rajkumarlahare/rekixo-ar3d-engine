@@ -1,24 +1,18 @@
 import * as THREE from "three";
-import { applyJyotiReferenceExterior } from "./jyotiReferenceExterior";
+import {
+  applyModelProfileExterior,
+  type ModelProfileRuntime,
+} from "./modelProfiles";
 import {
   createProjectExperience,
   type ExperienceFeature,
   type ExperienceMode,
 } from "./projectExperience";
 
-export type { ExperienceFeature, ExperienceMode };
+export { applyModelProfileExterior };
+export type { ExperienceFeature, ExperienceMode, ModelProfileRuntime };
 
-type ExteriorRuntime = NonNullable<
-  ReturnType<typeof applyJyotiReferenceExterior>
->;
 type ExperienceRuntime = ReturnType<typeof createProjectExperience>;
-
-export interface ModelProfileRuntime {
-  id: string;
-  exterior?: ExteriorRuntime;
-  cameraBounds?: THREE.Box3;
-  defaultInteriorRoomId?: string;
-}
 
 export interface ModelProfileContext {
   mobile: boolean;
@@ -27,36 +21,9 @@ export interface ModelProfileContext {
 }
 
 /**
- * The generic viewer calls this registry instead of importing a customer profile
- * directly. A profile must positively identify its source model before mutating
- * materials, cameras, or geometry.
- */
-export function applyModelProfileExterior(
-  object: THREE.Object3D,
-  enabled = true,
-): ModelProfileRuntime | undefined {
-  if (!enabled) return undefined;
-
-  const exterior = applyJyotiReferenceExterior(object);
-  if (!exterior) return undefined;
-
-  return {
-    id: "reference-source-v9",
-    exterior,
-    // Source-measured building envelope. Keeping it inside the profile prevents
-    // unrelated models from inheriting a project-specific hero camera.
-    cameraBounds: new THREE.Box3(
-      new THREE.Vector3(5.62, 0, -23.82),
-      new THREE.Vector3(22.52, 20.86, -2.73),
-    ),
-    defaultInteriorRoomId: "101-living",
-  };
-}
-
-/**
- * Project-specific authored experiences are created only after a model profile
- * has positively matched. Generic projects therefore never receive another
- * project's reconstructed rooms, furniture, or navigation assumptions.
+ * Authored project experiences are resolved behind the model-profile boundary.
+ * A generic model cannot receive another project's rooms or furniture because
+ * there is no experience factory without a positive source-profile match.
  */
 export function createProfileExperience(
   profile: ModelProfileRuntime | undefined,
