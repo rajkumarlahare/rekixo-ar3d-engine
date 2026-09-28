@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import {
   id,
   type Asset,
@@ -118,7 +118,7 @@ export default function ReferenceWorkspace({
     });
   }
 
-  function clickImage(event: React.MouseEvent<HTMLImageElement>) {
+  function clickImage(event: MouseEvent<HTMLImageElement>) {
     if (disabled) return;
     const image = imageRef.current;
     if (!image || !image.naturalWidth || !image.naturalHeight) return;
