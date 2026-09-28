@@ -1,3 +1,8 @@
+import {
+  activeReleaseState,
+  experienceFromActiveReleaseState,
+  handleReleaseReadRequest,
+} from "./release-runtime.mjs";
 const BASE_PATH = "/3Dprojects";
 const MODEL_ROUTE_PREFIX = `${BASE_PATH}/api/models/`;
 const PROJECT_ROUTE_PREFIX = `${BASE_PATH}/api/projects/`;
@@ -65,6 +70,17 @@ function mapScene(row) {
 }
 
 async function getProjectExperience(env, slug) {
+  const release = await activeReleaseState(env, slug);
+  if (release.state === "ok")
+    return experienceFromActiveReleaseState(release);
+  if (release.state === "corrupt")
+    return {
+      __releaseCorrupt: true,
+      diagnostic: release.reason || "Active immutable release is invalid.",
+    };
+  if (release.state === "unpublished" || release.state === "project-missing")
+    return null;
+
   const project = await env.DB.prepare(
     `SELECT id, slug, name, location, status, cover_asset_key
        FROM projects_3d
@@ -249,6 +265,9 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    const releaseResponse = await handleReleaseReadRequest(request, env, url);
+    if (releaseResponse) return releaseResponse;
+
     if (
       url.pathname.startsWith(MODEL_ROUTE_PREFIX) &&
       url.pathname.endsWith("/content")
@@ -284,6 +303,15 @@ export default {
         return json(
           { error: "This 3D project is not currently published." },
           { status: 404 },
+        );
+      }
+      if (experience.__releaseCorrupt) {
+        return json(
+          {
+            error: "The active immutable release is corrupted.",
+            diagnostic: experience.diagnostic,
+          },
+          { status: 500 },
         );
       }
       return json(experience);
