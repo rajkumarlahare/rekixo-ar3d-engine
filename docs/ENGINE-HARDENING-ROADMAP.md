@@ -109,7 +109,7 @@ Status: COMPLETE — validated on main (PR #43, GitHub Actions run 36417828501)
 - harden source-pack path containment and symlink policy.
 
 ### Phase 7 — Production 3D Admin UX
-Status: PENDING
+Status: IN PROGRESS — implementation complete; validation pending
 
 - bring the separate 3D Admin to the same operational quality level as the stable Platform Super Admin;
 - project search/picker, compact responsive layouts, clear health/status cards;
