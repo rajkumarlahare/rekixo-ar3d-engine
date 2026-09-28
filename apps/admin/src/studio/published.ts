@@ -90,6 +90,13 @@ async function loadReleasePublished(slug: string): Promise<PublishedDesign | und
     { cache: "no-store" },
   );
   if (response.status === 404) return undefined;
+  if (
+    response.ok &&
+    !String(response.headers.get("content-type") || "")
+      .toLowerCase()
+      .includes("application/json")
+  )
+    return undefined;
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as {
       error?: string;
