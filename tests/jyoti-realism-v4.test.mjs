@@ -16,7 +16,7 @@ test("daylight stays readable without V4 overexposure", () => {
 });
 
 test("source FBX diffuse colors are preserved when SKB textures are attached", () => {
-  const realism = read("apps/public/src/viewer/realism.ts");
+  const realism = read("apps/public/src/viewer/referenceSourceV9Materials.ts");
   assert.match(realism, /sourceMaterialTint/);
   assert.match(realism, /color_004: 0x8e8e8e/);
   assert.match(realism, /color_a06: 0xc29b7a/);
