@@ -395,6 +395,7 @@ export function assertSceneManifestV2(
       item as Record<string, unknown>,
     ]),
   );
+  const roomIds = idSet(rooms);
   const roomById = new Map(
     rooms.map((item) => [
       (item as Record<string, unknown>).id as string,
