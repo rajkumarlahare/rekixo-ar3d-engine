@@ -150,6 +150,28 @@ test("Scene Manifest V2 supports polygon rooms without weakening reference check
   assert.throws(() => assertSceneManifestV2(manifest), /Invalid scene room/);
 });
 
+test("Studio adapter exports authored polygon rooms without flattening them", () => {
+  const { p, files } = fixture();
+  p.scene.rooms[0].polygon = [
+    [8, -7],
+    [12, -7],
+    [12, -5],
+    [10, -5],
+    [10, -3],
+    [8, -3],
+  ];
+  p.scene.rooms[0].x = 10;
+  p.scene.rooms[0].z = -5;
+  p.scene.rooms[0].width = 4;
+  p.scene.rooms[0].depth = 4;
+  const manifest = buildSceneManifestV2(p, files);
+  assert.deepEqual(manifest.rooms[0].boundary, {
+    kind: "polygon",
+    points: p.scene.rooms[0].polygon,
+  });
+  assertSceneManifestV2(manifest);
+});
+
 test("reviewed dimensions cannot lose their evidence in V2", () => {
   const { p, files } = fixture();
   const manifest = buildSceneManifestV2(p, files);
