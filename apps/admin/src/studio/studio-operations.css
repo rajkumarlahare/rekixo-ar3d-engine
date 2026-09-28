@@ -748,3 +748,21 @@
     min-height: 88px;
   }
 }
+
+
+.studio-project-switcher input {
+  min-height: 34px;
+  max-width: 170px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+
+.studio-project-search {
+  min-width: 130px !important;
+}
+
+@media (max-width: 1180px) {
+  .studio-project-search {
+    display: none !important;
+  }
+}
