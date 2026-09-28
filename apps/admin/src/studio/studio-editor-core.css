@@ -477,3 +477,306 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Calibrated architectural reference workspace */
+.reference-workspace {
+  flex: 0 0 min(42vh, 430px);
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid #2a3951;
+  background: #07101d;
+  box-shadow: 0 -18px 44px rgba(0, 0, 0, 0.24);
+  z-index: 9;
+}
+
+.reference-workspace-head {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px 7px 14px;
+  border-bottom: 1px solid #202c41;
+  background: #0a1424;
+}
+
+.reference-workspace-head > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.reference-workspace-head small {
+  color: #8d84ff;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .16em;
+}
+
+.reference-workspace-head strong {
+  overflow: hidden;
+  color: #e8edf7;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.reference-workspace-head > div:last-child {
+  display: flex;
+  gap: 6px;
+}
+
+.reference-workspace-head button {
+  min-height: 30px;
+  padding: 5px 9px;
+}
+
+.reference-workspace-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 210px minmax(280px, 1fr) 260px;
+}
+
+.reference-source-list,
+.reference-controls {
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+  background: #08101e;
+}
+
+.reference-source-list {
+  border-right: 1px solid #202c41;
+}
+
+.reference-controls {
+  border-left: 1px solid #202c41;
+}
+
+.reference-source-list > p,
+.reference-controls > p,
+.reference-empty p {
+  margin: 5px 0 10px;
+  color: #8493aa;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.reference-source {
+  width: 100%;
+  min-width: 0;
+  display: grid !important;
+  gap: 2px;
+  margin-bottom: 4px;
+  padding: 7px 8px !important;
+  text-align: left;
+}
+
+.reference-source span,
+.reference-source small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reference-source small {
+  color: #718097;
+  font-size: 9px;
+}
+
+.reference-preview {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: 12px;
+  background:
+    linear-gradient(45deg, rgba(255,255,255,.025) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255,255,255,.025) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,.025) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,.025) 75%),
+    #040914;
+  background-size: 24px 24px;
+  background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+}
+
+.reference-image-stage {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  line-height: 0;
+}
+
+.reference-image-stage img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(42vh - 86px);
+  object-fit: contain;
+  cursor: crosshair;
+  user-select: none;
+}
+
+.reference-calibration-point {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #6e65ff;
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(110,101,255,.25);
+  font: 900 9px/1 system-ui, sans-serif;
+  pointer-events: none;
+}
+
+.reference-pdf {
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+  border: 0;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.reference-empty {
+  width: min(460px, 90%);
+  padding: 22px;
+  border: 1px dashed #34455f;
+  border-radius: 12px;
+  background: rgba(9, 18, 33, .82);
+  color: #a9b6c8;
+  text-align: center;
+}
+
+.reference-cad-note b {
+  display: block;
+  margin-bottom: 6px;
+  color: #e0e7f1;
+  overflow-wrap: anywhere;
+}
+
+.reference-point-status {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.reference-point-status span {
+  display: grid;
+  place-items: center;
+  min-height: 28px;
+  border: 1px solid #293850;
+  border-radius: 7px;
+  background: #0d1728;
+  color: #b7c3d4;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.reference-calibrated {
+  display: grid;
+  gap: 2px;
+  margin: 8px 0;
+  padding: 8px 9px;
+  border: 1px solid #2f6953;
+  border-radius: 8px;
+  background: rgba(32, 201, 131, .08);
+}
+
+.reference-calibrated b {
+  color: #68dfa9;
+  font-size: 10px;
+}
+
+.reference-calibrated small {
+  color: #8fb7a5;
+  font-size: 9px;
+}
+
+.reference-number-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.reference-controls label {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 7px;
+  color: #8c9ab0;
+  font-size: 9px;
+}
+
+.reference-controls .check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px;
+  border: 1px solid #27344a;
+  border-radius: 8px;
+  background: #0b1424;
+}
+
+.reference-controls .check input {
+  width: auto;
+  margin: 0;
+  accent-color: #8d84ff;
+}
+
+.reference-controls .section-label {
+  margin-top: 10px;
+  margin-bottom: 7px;
+}
+
+.reference-controls .section-label:first-child {
+  margin-top: 0;
+}
+
+.reference-controls > button {
+  width: 100%;
+  margin-bottom: 7px;
+}
+
+@media (max-width: 1050px) {
+  .reference-workspace-grid {
+    grid-template-columns: 180px minmax(250px, 1fr) 230px;
+  }
+}
+
+@media (max-width: 760px) {
+  .reference-workspace {
+    flex-basis: auto;
+    min-height: 0;
+  }
+
+  .reference-workspace-grid {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .reference-source-list,
+  .reference-controls {
+    max-height: none;
+  }
+
+  .reference-preview {
+    min-height: 320px;
+  }
+
+  .reference-image-stage img {
+    max-height: 300px;
+  }
+
+  .reference-number-grid {
+    grid-template-columns: 1fr;
+  }
+}
