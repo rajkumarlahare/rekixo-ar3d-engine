@@ -420,6 +420,16 @@ export default function Studio() {
     );
   }
 
+  async function createReviewVersion() {
+    const next = await persist(
+      snapshot(p, `Review ${p.releases.length + 1}`),
+    );
+    setReview(next.releases.at(-1)!.id);
+    setMessage(
+      "Immutable local review created. This review remains a draft until you explicitly publish a cloud release.",
+    );
+  }
+
   function history(back: boolean) {
     if (!project) return;
     const from = back ? undo : redo,
