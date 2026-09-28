@@ -1,5 +1,6 @@
 import { handleReleaseReadRequest } from "./release-runtime.mjs";
-import { handleCloudAdminRequest } from "./admin-cloud.mjs";
+import { engineAdminReadAccess, handleCloudAdminRequest } from "./admin-cloud.mjs";
+import { assertProjectAssetKey } from "./storage-boundary.mjs";
 const BASE_PATH = "/3Dprojects";
 const BUCKET_NAME = "rekixo-3d-assets";
 const PLATFORM_ENGINE_CONTRACT_VERSION = 1;
@@ -19,9 +20,26 @@ function json(value, init = {}) {
   return new Response(JSON.stringify(value), { ...init, headers });
 }
 
-function parseJson(value, fallback) {
-  if (typeof value !== "string") return fallback;
-  try { return JSON.parse(value); } catch { return fallback; }
+function parseJsonObject(value, label) {
+  if (typeof value !== "string")
+    throw Error(`${label} is missing.`);
+  let parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw Error(`${label} contains malformed JSON.`);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    throw Error(`${label} must be a JSON object.`);
+  return parsed;
+}
+
+function boundedInteger(value, fallback, min, max) {
+  if (value === null || value === undefined || value === "") return fallback;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < min || number > max)
+    return fallback;
+  return number;
 }
 
 function addSecurityHeaders(response) {
@@ -112,7 +130,7 @@ async function getIntegrationProject(env, slug) {
   };
 }
 
-async function getProjectStatus(env, slug) {
+async function getProjectStatus(env, slug, url) {
   const project = await env.DB.prepare(
     `SELECT id, slug, name, location, status, cover_asset_key
        FROM projects_3d
@@ -122,14 +140,39 @@ async function getProjectStatus(env, slug) {
 
   if (!project) return null;
 
-  const [modelResult, sceneResult] = await Promise.all([
+  const modelLimit = boundedInteger(
+    url.searchParams.get("modelLimit"),
+    50,
+    1,
+    100,
+  );
+  const modelOffset = boundedInteger(
+    url.searchParams.get("modelOffset"),
+    0,
+    0,
+    1000000,
+  );
+
+  const [modelCountRow, modelResult, activeRow, sceneResult] = await Promise.all([
+    env.DB.prepare(
+      "SELECT COUNT(*) AS total FROM models_3d WHERE project_id=?",
+    ).bind(project.id).first(),
     env.DB.prepare(
       `SELECT id, project_id, name, asset_key, source_filename, mime_type,
               byte_size, version, is_active
          FROM models_3d
         WHERE project_id = ?
-        ORDER BY version DESC, created_at DESC`,
-    ).bind(project.id).all(),
+        ORDER BY is_active DESC, version DESC, created_at DESC, id ASC
+        LIMIT ? OFFSET ?`,
+    ).bind(project.id, modelLimit, modelOffset).all(),
+    env.DB.prepare(
+      `SELECT id, project_id, name, asset_key, source_filename, mime_type,
+              byte_size, version, is_active
+         FROM models_3d
+        WHERE project_id = ? AND is_active = 1
+        ORDER BY version DESC, created_at DESC
+        LIMIT 1`,
+    ).bind(project.id).first(),
     env.DB.prepare(
       `SELECT id, project_id, name, type, model_id, camera_preset_id,
               settings_json, sort_order, enabled
@@ -139,26 +182,52 @@ async function getProjectStatus(env, slug) {
     ).bind(project.id).all(),
   ]);
 
-  const rows = modelResult.results ?? [];
-  const activeRow = rows.find((row) => Boolean(row.is_active));
+  const pageRows = modelResult.results ?? [];
+  const rowsToCheck = [];
+  const seen = new Set();
+  if (activeRow) {
+    rowsToCheck.push(activeRow);
+    seen.add(activeRow.id);
+  }
+  for (const row of pageRows) {
+    if (!seen.has(row.id)) {
+      rowsToCheck.push(row);
+      seen.add(row.id);
+    }
+  }
+
   const availability = new Map();
+  for (let index = 0; index < rowsToCheck.length; index += 20) {
+    const chunk = rowsToCheck.slice(index, index + 20);
+    await Promise.all(
+      chunk.map(async (row) => {
+        try {
+          assertProjectAssetKey(project.slug, row.asset_key, "models");
+          const object = await env.MODEL_ASSETS.head(row.asset_key);
+          availability.set(row.id, object?.size ?? null);
+        } catch (error) {
+          availability.set(row.id, {
+            corrupt:
+              error instanceof Error
+                ? error.message
+                : "Invalid project model storage key.",
+          });
+        }
+      }),
+    );
+  }
 
-  await Promise.all(
-    rows.slice(0, 20).map(async (row) => {
-      const object = await env.MODEL_ASSETS.head(row.asset_key);
-      availability.set(row.id, object?.size ?? null);
-    }),
-  );
-
-  const models = rows.map((row) => {
-    const storedSize = availability.get(row.id);
-    const available = typeof storedSize === "number";
+  function mapModel(row) {
+    const stored = availability.get(row.id);
+    const corruption =
+      stored && typeof stored === "object" ? stored.corrupt : undefined;
+    const available = typeof stored === "number";
     return {
       id: row.id,
       projectId: row.project_id,
       name: row.name,
       version: Number(row.version || 1),
-      byteSize: available ? storedSize : row.byte_size ?? undefined,
+      byteSize: available ? stored : row.byte_size ?? undefined,
       sourceFilename: row.source_filename ?? undefined,
       mimeType: row.mime_type || "model/gltf-binary",
       available,
@@ -167,8 +236,15 @@ async function getProjectStatus(env, slug) {
         : undefined,
       active: Boolean(row.is_active),
       assetKey: row.asset_key,
+      ...(corruption ? { corruption } : {}),
     };
-  });
+  }
+
+  const models = pageRows.map(mapModel);
+  const activeModel = activeRow
+    ? models.find((model) => model.id === activeRow.id) ?? mapModel(activeRow)
+    : undefined;
+  const total = Number(modelCountRow?.total || 0);
 
   return {
     project: {
@@ -188,15 +264,22 @@ async function getProjectStatus(env, slug) {
       cameraPresetId: row.camera_preset_id ?? undefined,
       sortOrder: Number(row.sort_order || 0),
       enabled: Boolean(row.enabled),
-      settings: parseJson(row.settings_json, {}),
+      settings: parseJsonObject(
+        row.settings_json,
+        `Scene ${row.id} settings_json`,
+      ),
     })),
     models,
-    activeModel: activeRow ? models.find((model) => model.id === activeRow.id) : undefined,
+    activeModel,
+    modelPage: {
+      limit: modelLimit,
+      offset: modelOffset,
+      total,
+      hasMore: modelOffset + models.length < total,
+    },
     storage: {
       bucket: BUCKET_NAME,
-      activeModelObjectAvailable: activeRow
-        ? typeof availability.get(activeRow.id) === "number"
-        : false,
+      activeModelObjectAvailable: Boolean(activeModel?.available),
     },
     uploadContract: {
       recommendedKey: `projects/${project.slug}/models/exterior-v1.glb`,
@@ -221,7 +304,21 @@ export default {
       if (request.method !== "GET") {
         return json({ error: "Method not allowed." }, { status: 405 });
       }
-      return json({ projects: await listProjects(env) });
+      const access = await engineAdminReadAccess(request, env);
+      if (!access.ok)
+        return json({ error: access.error }, { status: access.status });
+      try {
+        return json({ projects: await listProjects(env) });
+      } catch (error) {
+        return json(
+          {
+            error: "Engine project registry is corrupted.",
+            diagnostic:
+              error instanceof Error ? error.message : "Unknown registry error.",
+          },
+          { status: 500 },
+        );
+      }
     }
 
     if (url.pathname.startsWith(`${BASE_PATH}/api/integration/projects/`)) {
@@ -249,9 +346,24 @@ export default {
       const slug = (url.searchParams.get("slug") || "").trim().toLowerCase();
       if (!slug) return json({ error: "Project slug is required." }, { status: 400 });
 
-      const status = await getProjectStatus(env, slug);
-      if (!status) return json({ error: "3D project not found." }, { status: 404 });
-      return json(status);
+      const access = await engineAdminReadAccess(request, env);
+      if (!access.ok)
+        return json({ error: access.error }, { status: access.status });
+      try {
+        const status = await getProjectStatus(env, slug, url);
+        if (!status)
+          return json({ error: "3D project not found." }, { status: 404 });
+        return json(status);
+      } catch (error) {
+        return json(
+          {
+            error: "3D project status data is corrupted.",
+            diagnostic:
+              error instanceof Error ? error.message : "Unknown status error.",
+          },
+          { status: 500 },
+        );
+      }
     }
 
     return addSecurityHeaders(await env.ASSETS.fetch(toAssetRequest(request)));
