@@ -234,6 +234,21 @@ test("publisher freezes R2 objects under collision-proof release IDs and flips o
   assert.match(publisher, /"rollback"/);
 });
 
+test("public release strips private authoring references from Studio snapshot", () => {
+  const publisher = fs.readFileSync(
+    "workers/release-publish.mjs",
+    "utf8",
+  );
+  assert.match(publisher, /function publicStudioSnapshot\(draft\)/);
+  assert.match(publisher, /scene\.referenceLayers = \[\]/);
+  assert.match(publisher, /delete safe\.sourceAssetId/);
+  assert.match(
+    publisher,
+    /project\.assets = \(project\.assets \|\| \[\]\)\.filter/,
+  );
+  assert.match(publisher, /studio: \{ project: publicStudioProject \}/);
+});
+
 test("public runtime prefers active immutable release and refuses corrupt release fallback", () => {
   const worker = fs.readFileSync("workers/public.mjs", "utf8");
   assert.match(worker, /const release = await activeReleaseState\(env, slug\)/);
