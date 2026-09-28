@@ -19,6 +19,7 @@ import {
   type Furniture,
   type Kind,
   type MaterialOverride,
+  type ModelNodeTag,
   type ModelTransform,
   type Project,
   type ReferenceLayer,
@@ -90,7 +91,13 @@ export default function Studio() {
     "perspective" | "top"
   >("perspective");
   const [modelNodes, setModelNodes] = useState<ModelNodeSummary[]>([]);
+  const [selectedModelNodeKey, setSelectedModelNodeKey] = useState("");
   const [modelNodeFilter, setModelNodeFilter] = useState("");
+  const [isolateFloorId, setIsolateFloorId] = useState("");
+  const [sectionCutEnabled, setSectionCutEnabled] = useState(false);
+  const [sectionCutAxis, setSectionCutAxis] = useState<"x" | "y" | "z">("y");
+  const [sectionCutOffset, setSectionCutOffset] = useState(0);
+  const [sectionCutFlip, setSectionCutFlip] = useState(false);
   const [modelMaterials, setModelMaterials] = useState<ModelMaterialSummary[]>([]);
   const [selectedMaterial, setSelectedMaterial] = useState("");
   const [sourceAudits, setSourceAudits] = useState<FbxSourceAudit[]>([]);
@@ -180,8 +187,14 @@ export default function Studio() {
     setBackup(undefined);
     setMessage("");
     setMesh("");
+    setSelectedModelNodeKey("");
     setModelNodes([]);
     setModelNodeFilter("");
+    setIsolateFloorId("");
+    setSectionCutEnabled(false);
+    setSectionCutAxis("y");
+    setSectionCutOffset(0);
+    setSectionCutFlip(false);
     setModelMaterials([]);
     setSelectedMaterial("");
     setSourceAudits([]);
@@ -583,10 +596,42 @@ export default function Studio() {
       ),
     ).size,
     filteredModelNodes = modelNodes
-      .filter((node) =>
-        node.name.toLowerCase().includes(modelNodeFilter.trim().toLowerCase()),
-      )
+      .filter((node) => {
+        const query = modelNodeFilter.trim().toLowerCase();
+        if (!query) return true;
+        const tag = p.scene.modelNodeTags?.find(
+          (entry) =>
+            entry.nodeName === node.name &&
+            entry.occurrence === node.occurrence,
+        );
+        const floorName = tag?.floorId
+          ? p.scene.floors.find((entry) => entry.id === tag.floorId)?.name ?? ""
+          : "";
+        return (
+          node.name.toLowerCase().includes(query) ||
+          floorName.toLowerCase().includes(query) ||
+          (tag?.unit ?? "").toLowerCase().includes(query)
+        );
+      })
       .slice(0, 120),
+    selectedModelNode = modelNodes.find(
+      (node) => node.key === selectedModelNodeKey,
+    ),
+    selectedModelNodeTag = selectedModelNode
+      ? p.scene.modelNodeTags?.find(
+          (entry) =>
+            entry.nodeName === selectedModelNode.name &&
+            entry.occurrence === selectedModelNode.occurrence,
+        )
+      : undefined,
+    taggedModelNodeCount = modelNodes.filter((node) =>
+      p.scene.modelNodeTags?.some(
+        (entry) =>
+          entry.nodeName === node.name &&
+          entry.occurrence === node.occurrence &&
+          Boolean(entry.floorId),
+      ),
+    ).length,
     appearance = p.scene.appearance ?? DEFAULT_APPEARANCE,
     materialOverride = p.scene.materialOverrides?.find(
       (entry) => entry.materialName === selectedMaterial,
@@ -613,6 +658,19 @@ export default function Studio() {
         ...p.scene,
         rooms: p.scene.rooms.map((r) =>
           r.id === room.id ? { ...r, ...change } : r,
+        ),
+      },
+    });
+  }
+  function patchRoomForMesh(targetRoomId: string, meshName: string) {
+    edit({
+      ...p,
+      scene: {
+        ...p.scene,
+        rooms: p.scene.rooms.map((candidate) =>
+          candidate.id === targetRoomId
+            ? { ...candidate, mesh: meshName }
+            : candidate,
         ),
       },
     });
@@ -670,6 +728,87 @@ export default function Studio() {
         ...p.scene,
         materialOverrides: (p.scene.materialOverrides ?? []).filter(
           (entry) => entry.materialName !== selectedMaterial,
+        ),
+      },
+    });
+  }
+  function patchModelNodeTag(change: Partial<ModelNodeTag>) {
+    if (!selectedModelNode) return;
+    const previous = p.scene.modelNodeTags ?? [];
+    const current =
+      previous.find(
+        (entry) =>
+          entry.nodeName === selectedModelNode.name &&
+          entry.occurrence === selectedModelNode.occurrence,
+      ) ?? {
+        nodeName: selectedModelNode.name,
+        occurrence: selectedModelNode.occurrence,
+      };
+    const nextTag: ModelNodeTag = { ...current, ...change };
+    if (change.floorId !== undefined) {
+      if (!change.floorId) {
+        delete nextTag.floorId;
+        delete nextTag.roomId;
+      } else {
+        const boundRoom = nextTag.roomId
+          ? p.scene.rooms.find((entry) => entry.id === nextTag.roomId)
+          : undefined;
+        if (boundRoom && boundRoom.floorId !== change.floorId)
+          delete nextTag.roomId;
+      }
+    }
+    if (change.unit !== undefined) {
+      const value = change.unit.trim();
+      if (value) nextTag.unit = value;
+      else delete nextTag.unit;
+      const boundRoom = nextTag.roomId
+        ? p.scene.rooms.find((entry) => entry.id === nextTag.roomId)
+        : undefined;
+      if (boundRoom && value && boundRoom.unit !== value)
+        delete nextTag.roomId;
+    }
+    if (change.roomId !== undefined) {
+      if (!change.roomId) {
+        delete nextTag.roomId;
+      } else {
+        const boundRoom = p.scene.rooms.find(
+          (entry) => entry.id === change.roomId,
+        );
+        if (!boundRoom) return;
+        nextTag.roomId = boundRoom.id;
+        nextTag.floorId = boundRoom.floorId;
+        nextTag.unit = boundRoom.unit;
+      }
+    }
+    edit({
+      ...p,
+      scene: {
+        ...p.scene,
+        modelNodeTags: [
+          ...previous.filter(
+            (entry) =>
+              !(
+                entry.nodeName === selectedModelNode.name &&
+                entry.occurrence === selectedModelNode.occurrence
+              ),
+          ),
+          nextTag,
+        ],
+      },
+    });
+  }
+  function clearModelNodeTag() {
+    if (!selectedModelNode) return;
+    edit({
+      ...p,
+      scene: {
+        ...p.scene,
+        modelNodeTags: (p.scene.modelNodeTags ?? []).filter(
+          (entry) =>
+            !(
+              entry.nodeName === selectedModelNode.name &&
+              entry.occurrence === selectedModelNode.occurrence
+            ),
         ),
       },
     });
@@ -1550,16 +1689,40 @@ export default function Studio() {
                     <button
                       type="button"
                       key={node.key}
-                      className={mesh === node.name ? "model-node active" : "model-node"}
+                      className={
+                        selectedModelNodeKey === node.key
+                          ? "model-node active"
+                          : "model-node"
+                      }
                       title={node.name}
                       onClick={() => {
                         setView("building");
                         setMesh(node.name);
+                        setSelectedModelNodeKey(node.key);
                         setSelected("");
                       }}
                     >
-                      <span>◇ {node.name}</span>
-                      <small>{node.type}</small>
+                      <span>
+                        ◇ {node.name}
+                        {node.occurrence > 1 ? ` #${node.occurrence}` : ""}
+                      </span>
+                      <small>
+                        {(() => {
+                          const tag = p.scene.modelNodeTags?.find(
+                            (entry) =>
+                              entry.nodeName === node.name &&
+                              entry.occurrence === node.occurrence,
+                          );
+                          const floorName = tag?.floorId
+                            ? p.scene.floors.find(
+                                (entry) => entry.id === tag.floorId,
+                              )?.name
+                            : undefined;
+                          return floorName
+                            ? `${floorName}${tag?.unit ? ` · ${tag.unit}` : ""}`
+                            : `${node.type} · y ${node.centreY.toFixed(2)}`;
+                        })()}
+                      </small>
                     </button>
                   ))}
                   {modelNodes.length > filteredModelNodes.length && (
@@ -1660,6 +1823,7 @@ export default function Studio() {
                           setRoomId(r.id);
                           setSelected(r.id);
                           setMesh("");
+                          setSelectedModelNodeKey("");
                           if (view === "building") setView("rooms");
                         }}
                       >
@@ -1685,6 +1849,7 @@ export default function Studio() {
                               setRoomId(r.id);
                               setSelected(entry.id);
                               setMesh("");
+                              setSelectedModelNodeKey("");
                               setView("rooms");
                             }}
                           >
@@ -1861,6 +2026,51 @@ export default function Studio() {
                 # Snap
               </button>
             </div>
+            <div className="editor-tool-group editor-floor-tools" aria-label="Floor isolation">
+              <select
+                aria-label="Isolate floor"
+                value={isolateFloorId}
+                disabled={view === "walk"}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setIsolateFloorId(next);
+                  if (next) {
+                    const target = scene.floors.find((floor) => floor.id === next);
+                    if (target) {
+                      setSectionCutOffset(target.elevation + 1.5);
+                      setView("building");
+                    }
+                  }
+                }}
+              >
+                <option value="">All floors</option>
+                {[...scene.floors]
+                  .sort((a, b) => a.elevation - b.elevation)
+                  .map((floor) => (
+                    <option key={floor.id} value={floor.id}>
+                      {floor.name} · {floor.elevation}m
+                    </option>
+                  ))}
+              </select>
+              <button
+                type="button"
+                className={isolateFloorId ? "active" : ""}
+                disabled={!isolateFloorId || view === "walk"}
+                onClick={() => setIsolateFloorId("")}
+                title="Clear floor isolation"
+              >
+                {isolateFloorId ? "Isolated" : "Floor"}
+              </button>
+              <button
+                type="button"
+                className={sectionCutEnabled ? "active" : ""}
+                disabled={view === "walk"}
+                onClick={() => setSectionCutEnabled((value) => !value)}
+                title="Toggle live section clipping"
+              >
+                Section
+              </button>
+            </div>
             <div className="editor-toolbar-spacer" />
             <div className="editor-tool-group">
               <button
@@ -1941,11 +2151,64 @@ export default function Studio() {
               </button>
             </div>
           </nav>
+          {sectionCutEnabled && (
+            <div className="section-cut-bar" role="group" aria-label="Section cut controls">
+              <b>SECTION CUT</b>
+              <div className="section-axis">
+                {(["x", "y", "z"] as const).map((axis) => (
+                  <button
+                    type="button"
+                    key={axis}
+                    className={sectionCutAxis === axis ? "active" : ""}
+                    onClick={() => setSectionCutAxis(axis)}
+                  >
+                    {axis.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+              <input
+                aria-label="Section cut position"
+                type="range"
+                min="-50"
+                max="50"
+                step="0.05"
+                value={sectionCutOffset}
+                onChange={(event) =>
+                  setSectionCutOffset(Number(event.target.value))
+                }
+              />
+              <label>
+                Position
+                <input
+                  type="number"
+                  min="-10000"
+                  max="10000"
+                  step="0.05"
+                  value={sectionCutOffset}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    if (Number.isFinite(next)) setSectionCutOffset(next);
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                className={sectionCutFlip ? "active" : ""}
+                onClick={() => setSectionCutFlip((value) => !value)}
+              >
+                Flip
+              </button>
+              <button type="button" onClick={() => setSectionCutEnabled(false)}>
+                Close
+              </button>
+            </div>
+          )}
           <SceneCanvas
             scene={scene}
             roomId={roomId}
             selected={selected}
             selectedMesh={mesh}
+            selectedMeshKey={selectedModelNodeKey}
             view={view}
             transformMode={transformMode}
             transformEnabled={!review && !busy}
@@ -1954,9 +2217,21 @@ export default function Studio() {
             focusRequest={focusRequest}
             cameraOrientation={cameraOrientation}
             showReferenceLayers
+            isolateFloorId={isolateFloorId || undefined}
+            sectionCut={{
+              enabled: sectionCutEnabled,
+              axis: sectionCutAxis,
+              offset: sectionCutOffset,
+              flip: sectionCutFlip,
+            }}
             onSelect={select}
             onMesh={(name) => {
               setMesh(name);
+              setSelected("");
+            }}
+            onModelNodeSelect={(node) => {
+              setMesh(node.name);
+              setSelectedModelNodeKey(node.key);
               setSelected("");
             }}
             onTransformCommit={commitCanvasTransform}
@@ -2048,18 +2323,129 @@ export default function Studio() {
               <>
                 <h2>{mesh}</h2>
                 <p>
-                  Imported source mesh selected. Core V1 keeps source geometry
-                  read-only while rooms and furniture use persistent transform
-                  gizmos.
+                  Source geometry stays read-only. Tag this exact source mesh to
+                  a floor, unit or room so isolation and future project
+                  navigation use reviewed semantics instead of guesses.
                 </p>
                 <label>
                   Source mesh
-                  <input readOnly value={mesh} />
+                  <input
+                    readOnly
+                    value={
+                      selectedModelNode
+                        ? `${selectedModelNode.name} · occurrence ${selectedModelNode.occurrence}`
+                        : mesh
+                    }
+                  />
                 </label>
+                {selectedModelNode && (
+                  <>
+                    <div className="semantic-tag-status">
+                      <span>
+                        Tagged {taggedModelNodeCount}/{modelNodes.length}
+                      </span>
+                      <span>
+                        Source Y {selectedModelNode.centreY.toFixed(3)}
+                      </span>
+                    </div>
+                    <label>
+                      Floor tag
+                      <select
+                        value={selectedModelNodeTag?.floorId ?? ""}
+                        onChange={(event) =>
+                          patchModelNodeTag({ floorId: event.target.value })
+                        }
+                      >
+                        <option value="">Unassigned</option>
+                        {[...p.scene.floors]
+                          .sort((a, b) => a.elevation - b.elevation)
+                          .map((floor) => (
+                            <option key={floor.id} value={floor.id}>
+                              {floor.name} · {floor.elevation}m
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <label>
+                      Unit / flat tag
+                      <input
+                        value={selectedModelNodeTag?.unit ?? ""}
+                        onChange={(event) =>
+                          patchModelNodeTag({ unit: event.target.value })
+                        }
+                        placeholder="e.g. 101"
+                        list="model-node-units"
+                      />
+                    </label>
+                    <datalist id="model-node-units">
+                      {[
+                        ...new Set(
+                          p.scene.rooms
+                            .filter(
+                              (candidate) =>
+                                !selectedModelNodeTag?.floorId ||
+                                candidate.floorId ===
+                                  selectedModelNodeTag.floorId,
+                            )
+                            .map((candidate) => candidate.unit)
+                            .filter(Boolean),
+                        ),
+                      ].map((unit) => (
+                        <option key={unit} value={unit} />
+                      ))}
+                    </datalist>
+                    <label>
+                      Exact room binding
+                      <select
+                        value={selectedModelNodeTag?.roomId ?? ""}
+                        onChange={(event) => {
+                          const roomId = event.target.value;
+                          patchModelNodeTag({ roomId });
+                          const target = p.scene.rooms.find(
+                            (candidate) => candidate.id === roomId,
+                          );
+                          if (target) {
+                            setRoomId(target.id);
+                            patchRoomForMesh(target.id, mesh);
+                          }
+                        }}
+                      >
+                        <option value="">No exact room</option>
+                        {p.scene.rooms
+                          .filter(
+                            (candidate) =>
+                              !selectedModelNodeTag?.floorId ||
+                              candidate.floorId ===
+                                selectedModelNodeTag.floorId,
+                          )
+                          .map((candidate) => (
+                            <option key={candidate.id} value={candidate.id}>
+                              {candidate.unit} · {candidate.name}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      disabled={!selectedModelNodeTag}
+                      onClick={clearModelNodeTag}
+                    >
+                      Clear semantic tag
+                    </button>
+                  </>
+                )}
                 <button
                   disabled={!room}
                   onClick={() => {
-                    if (room) patchRoom({ mesh });
+                    if (room) {
+                      patchRoom({ mesh });
+                      if (selectedModelNode)
+                        patchModelNodeTag({
+                          floorId: room.floorId,
+                          unit: room.unit,
+                          roomId: room.id,
+                        });
+                    }
                   }}
                 >
                   Bind mesh to current room
