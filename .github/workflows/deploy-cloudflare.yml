@@ -96,15 +96,22 @@ jobs:
       - name: Verify deployed Design Admin entry and editor bundle
         run: node scripts/verify-design-admin.mjs
 
-      - name: Verify generic admin project registry
+      - name: Verify sensitive Admin reads are protected
         shell: bash
         run: |
           set -euo pipefail
-          API_URL="https://admin.rekixo.com/3Dprojects/api/projects"
-          STATUS="$(curl --location --silent --show-error --output /tmp/engine-projects.json --write-out '%{http_code}' "$API_URL" || true)"
-          [ "$STATUS" = "200" ]
-          grep -Fq '"projects":[' /tmp/engine-projects.json
-          echo "Generic 3D project registry verified."
+          for API_URL in             "https://admin.rekixo.com/3Dprojects/api/projects"             "https://admin.rekixo.com/3Dprojects/api/status?slug=jyoti-paradise"; do
+            BODY="$(mktemp)"
+            STATUS="$(curl --location --silent --show-error --output "$BODY" --write-out '%{http_code}' "$API_URL" || true)"
+            if [ "$STATUS" != "401" ] && [ "$STATUS" != "503" ]; then
+              echo "::error::Sensitive Admin read unexpectedly returned HTTP $STATUS: $API_URL"
+              head -c 1000 "$BODY" || true
+              exit 1
+            fi
+            grep -Eq 'Engine Admin (sign-in required|authentication is not configured)|cloud schema is not installed' "$BODY"
+            rm -f "$BODY"
+          done
+          echo "Sensitive Engine Admin read surfaces are fail-closed."
 
       - name: Verify Platform integration contract
         shell: bash
@@ -180,20 +187,23 @@ jobs:
           echo "::error::Public 3D production surface did not verify."
           exit 1
 
-      # Jyoti Paradise remains a live smoke fixture only; admin selection itself is dynamic.
-      - name: Verify legacy Jyoti admin production fixture
+      # Jyoti remains a compatibility fixture; sensitive Admin data is no longer public.
+      - name: Verify Jyoti admin shell and protected status boundary
         shell: bash
         run: |
           set -euo pipefail
           FIXTURE_SLUG="jyoti-paradise"
           PAGE_URL="https://admin.rekixo.com/3Dprojects"
-          API_URL="https://admin.rekixo.com/3Dprojects/api/status?slug=${FIXTURE_SLUG}"
+          STATUS_URL="https://admin.rekixo.com/3Dprojects/api/status?slug=${FIXTURE_SLUG}"
+          INTEGRATION_URL="https://admin.rekixo.com/3Dprojects/api/integration/projects/${FIXTURE_SLUG}"
           ORIGIN="https://admin.rekixo.com"
           for attempt in 1 2 3 4 5; do
             PAGE="$(mktemp)"
-            API="$(mktemp)"
+            STATUS_BODY="$(mktemp)"
+            INTEGRATION="$(mktemp)"
             PAGE_STATUS="$(curl --location --silent --show-error --output "$PAGE" --write-out '%{http_code}' "$PAGE_URL" || true)"
-            API_STATUS="$(curl --location --silent --show-error --output "$API" --write-out '%{http_code}' "$API_URL" || true)"
+            STATUS_CODE="$(curl --location --silent --show-error --output "$STATUS_BODY" --write-out '%{http_code}' "$STATUS_URL" || true)"
+            INTEGRATION_CODE="$(curl --location --silent --show-error --output "$INTEGRATION" --write-out '%{http_code}' "$INTEGRATION_URL" || true)"
             ASSET_PATH="$(grep -oE 'src="/3Dprojects/assets/[^"]+\.js"' "$PAGE" | head -n1 | cut -d'"' -f2 || true)"
             ASSET_STATUS="000"
             ASSET_TYPE=""
@@ -204,22 +214,21 @@ jobs:
             fi
             if [ "$PAGE_STATUS" = "200" ] \
               && grep -Fq '<title>Rekixo 3D Projects</title>' "$PAGE" \
-              && [ "$API_STATUS" = "200" ] \
-              && grep -Fq '"bucket":"rekixo-3d-assets"' "$API" \
-              && grep -Fq '"id":"model_jyoti_exterior_v1"' "$API" \
-              && grep -Fq '"type":"section"' "$API" \
+              && { [ "$STATUS_CODE" = "401" ] || [ "$STATUS_CODE" = "503" ]; } \
+              && [ "$INTEGRATION_CODE" = "200" ] \
+              && grep -Fq '"slug":"jyoti-paradise"' "$INTEGRATION" \
               && [ "$ASSET_STATUS" = "200" ] \
               && [[ "$ASSET_TYPE" == *javascript* ]]; then
-              echo "3D Admin source package, model record and JavaScript verified."
-              rm -f "$PAGE" "$API"
+              echo "3D Admin shell, protected status boundary and public integration contract verified."
+              rm -f "$PAGE" "$STATUS_BODY" "$INTEGRATION"
               exit 0
             fi
-            echo "Attempt $attempt/5: page=$PAGE_STATUS api=$API_STATUS js=$ASSET_STATUS js_type=$ASSET_TYPE path=$ASSET_PATH"
-            echo "API preview:"
-            head -c 1000 "$API" || true
+            echo "Attempt $attempt/5: page=$PAGE_STATUS status=$STATUS_CODE integration=$INTEGRATION_CODE js=$ASSET_STATUS js_type=$ASSET_TYPE"
+            echo "Protected status preview:"
+            head -c 800 "$STATUS_BODY" || true
             echo
-            rm -f "$PAGE" "$API"
+            rm -f "$PAGE" "$STATUS_BODY" "$INTEGRATION"
             sleep 5
           done
-          echo "::error::3D Admin production surface did not verify."
+          echo "::error::3D Admin protected production surface did not verify."
           exit 1
