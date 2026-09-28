@@ -31,18 +31,6 @@ import { buildStudioReadiness } from "./readiness";
 import "./studio.css";
 import "./studio-operations.css";
 
-function formatBytes(value: number) {
-  if (!value) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  let number = value;
-  let index = 0;
-  while (number >= 1024 && index < units.length - 1) {
-    number /= 1024;
-    index += 1;
-  }
-  return `${number.toFixed(index ? 1 : 0)} ${units[index]}`;
-}
-
 function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob),
     link = document.createElement("a");
