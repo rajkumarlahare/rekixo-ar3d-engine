@@ -91,6 +91,12 @@ function floorIdsOf(settings: FloorSettings) {
   ).sort((a, b) => a - b);
 }
 
+function floorLabel(floor: number) {
+  if (floor === 0) return "G";
+  if (floor < 0) return `B${Math.abs(floor)}`;
+  return `F${floor}`;
+}
+
 function mediaUrl(experience: Public3DExperience, key?: string) {
   if (!key || !experience.mediaBaseUrl) return undefined;
   const fileName = key.split("/").pop();
@@ -535,7 +541,7 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
                   setUnit(undefined);
                 }}
               >
-                {item === 0 ? "G" : `F${item}`}
+                {floorLabel(item)}
               </button>
             ))}
           </div>
