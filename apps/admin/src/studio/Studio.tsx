@@ -410,8 +410,12 @@ export default function Studio() {
             onChange={(e) => edit({ ...p, name: e.target.value })}
           />
           <span>
-            {dirty ? "Unsaved changes" : "Local workspace"} ·{" "}
-            {p.scene.rooms.length} rooms
+            {dirty
+              ? "Unsaved changes"
+              : p.cloud
+                ? `Cloud r${p.cloud.revision} · local cache`
+                : "Local workspace"}{" "}
+            · {p.scene.rooms.length} rooms
           </span>
         </div>
         <div className="studio-actions">
@@ -423,8 +427,23 @@ export default function Studio() {
               })
             }
           >
-            Save draft
+            Save local
           </button>
+          {cloudSession?.authenticated ? (
+            <button
+              disabled={busy || Boolean(review)}
+              onClick={() => task(syncCloudProject)}
+            >
+              Save to cloud
+            </button>
+          ) : (
+            <a
+              href="/3Dprojects/login?return=/3Dprojects/studio"
+              className="studio-cloud-login"
+            >
+              Cloud sign in
+            </a>
+          )}
           <button
             disabled={busy}
             onClick={() =>
@@ -477,8 +496,9 @@ export default function Studio() {
         )}
         YOUR DESIGN WORKSPACE{" "}
         <span>
-          Saved in this browser • Export backups for another device. Review
-          versions are local; they are not live publications.
+          {cloudSession?.authenticated
+            ? "Local cache + authenticated Engine cloud drafts. Review versions remain drafts until a later publish phase."
+            : "Local/offline cache is available. Cloud writes stay locked behind the dedicated Engine Admin session."}
         </span>
         <button disabled={busy} onClick={() => importInput.current?.click()}>
           Import backup
@@ -494,6 +514,60 @@ export default function Studio() {
       )}
       <div className="studio-layout">
         <aside className="studio-sidebar">
+          <section className="cloud-workspace" aria-label="Cloud project workspace">
+            <div className="section-label">ENGINE CLOUD</div>
+            {!cloudSession ? (
+              <small>Checking private cloud workspace…</small>
+            ) : !cloudSession.configured ? (
+              <small>
+                Cloud writes are locked until dedicated Engine Admin secrets are configured.
+              </small>
+            ) : !cloudSession.databaseReady ? (
+              <small>
+                Cloud schema is not installed yet. Local Studio remains available.
+              </small>
+            ) : !cloudSession.authenticated ? (
+              <a
+                className="wide cloud-signin-link"
+                href="/3Dprojects/login?return=/3Dprojects/studio"
+              >
+                Sign in to cloud workspace
+              </a>
+            ) : (
+              <>
+                <input
+                  aria-label="Search cloud projects"
+                  value={cloudSearch}
+                  onChange={(event) => setCloudSearch(event.target.value)}
+                  placeholder="Search cloud projects"
+                  disabled={busy}
+                />
+                <select
+                  aria-label="Cloud project library"
+                  value=""
+                  disabled={busy || dirty || !cloudProjects.length}
+                  onChange={(event) => {
+                    const slug = event.target.value;
+                    if (slug) void task(() => openCloudProject(slug));
+                  }}
+                >
+                  <option value="">
+                    {cloudProjects.length
+                      ? "Open cloud project…"
+                      : "No matching cloud projects"}
+                  </option>
+                  {cloudProjects.map((entry) => (
+                    <option key={entry.id} value={entry.slug}>
+                      {entry.name} · r{entry.draftRevision ?? "—"}
+                    </option>
+                  ))}
+                </select>
+                <small>
+                  Signed in as {cloudSession.user?.email ?? "Engine Admin"}.
+                </small>
+              </>
+            )}
+          </section>
           {published.length > 0 && (
             <section aria-label="Published projects">
               <div className="section-label">PUBLISHED PROJECTS</div>
@@ -579,15 +653,57 @@ export default function Studio() {
             <input
               aria-label="Project slug"
               value={projectSlug(p)}
-              disabled={busy || Boolean(review)}
+              disabled={busy || Boolean(review) || Boolean(p.cloud)}
               onChange={(e) => edit({ ...p, slug: e.target.value })}
             />
           </label>
           <small>
             Planned customer path: /3Dprojects/{projectSlug(p)}
             <br />
-            Local draft · not published or globally reserved.
+            {p.cloud
+              ? `Cloud identity locked after first sync · revision ${p.cloud.revision}`
+              : "Local draft · slug is reserved only after the first cloud save."}
           </small>
+          <label>
+            Project location
+            <input
+              aria-label="Project location"
+              value={p.location ?? ""}
+              disabled={busy || Boolean(review)}
+              maxLength={180}
+              onChange={(event) =>
+                edit({ ...p, location: event.target.value })
+              }
+              placeholder="City / locality (optional)"
+            />
+          </label>
+          {p.cloud && cloudSession?.authenticated && (
+            <button
+              className="wide danger"
+              disabled={busy || dirty || Boolean(review)}
+              onClick={() =>
+                task(async () => {
+                  await cloud.patchProject(projectSlug(p), {
+                    action: "archive",
+                  });
+                  const localCopy = {
+                    ...p,
+                    cloud: undefined,
+                    slug: `${projectSlug(p)}-local-${p.id.slice(0, 6)}`,
+                    updated: new Date().toISOString(),
+                  };
+                  await storage.save(localCopy);
+                  open(localCopy);
+                  await refreshCloudProjects();
+                  setMessage(
+                    "Cloud project archived. This browser keeps an independent local copy.",
+                  );
+                })
+              }
+            >
+              Archive cloud project
+            </button>
+          )}
           <div className="section-label">
             BUILDING STRUCTURE{" "}
             <button
