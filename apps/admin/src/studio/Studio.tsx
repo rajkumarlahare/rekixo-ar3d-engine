@@ -2,11 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import SceneCanvas, {
   type ModelMaterialSummary,
   type ModelNodeSummary,
+  type RoomDrawResult,
   type TransformCommit,
   type TransformMode,
   type View,
 } from "./SceneCanvas";
 import ReferenceWorkspace from "./ReferenceWorkspace";
+import VisualRoomMapper, {
+  type RoomMapAction,
+} from "./VisualRoomMapper";
 import {
   catalog,
   duplicateFloor,
@@ -92,6 +96,13 @@ export default function Studio() {
   const [showRightPanel, setShowRightPanel] = useState(true);
   const [showAssetShelf, setShowAssetShelf] = useState(true);
   const [showReferenceWorkspace, setShowReferenceWorkspace] = useState(false);
+  const [showRoomMapper, setShowRoomMapper] = useState(false);
+  const [roomMapFloorId, setRoomMapFloorId] = useState("");
+  const [roomMapUnit, setRoomMapUnit] = useState("Unit 101");
+  const [roomMapName, setRoomMapName] = useState("Room");
+  const [roomMapAction, setRoomMapAction] =
+    useState<RoomMapAction>("idle");
+  const [roomMapSnap, setRoomMapSnap] = useState(true);
   const [cameraOrientation, setCameraOrientation] = useState<
     "perspective" | "top"
   >("perspective");
@@ -206,6 +217,14 @@ export default function Studio() {
     setSourceAudits([]);
     setSmartAnalysis(undefined);
     setShowReferenceWorkspace(false);
+    setShowRoomMapper(false);
+    setRoomMapFloorId(
+      p.scene.rooms[0]?.floorId ?? p.scene.floors[0]?.id ?? "",
+    );
+    setRoomMapUnit(p.scene.rooms[0]?.unit ?? "Unit 101");
+    setRoomMapName("Room");
+    setRoomMapAction("idle");
+    setRoomMapSnap(true);
     setCameraOrientation("perspective");
     setProject(p);
     setRoomId(p.scene.rooms[0]?.id ?? "");
@@ -976,6 +995,169 @@ export default function Studio() {
     setRoomId(r.id);
     setSelected(r.id);
     setView("rooms");
+  }
+  function roomHeightForFloor(floorId: string) {
+    const existing = p.scene.rooms.find((entry) => entry.floorId === floorId);
+    if (existing) return existing.height;
+    const floors = [...p.scene.floors].sort(
+      (left, right) => left.elevation - right.elevation,
+    );
+    const index = floors.findIndex((entry) => entry.id === floorId);
+    const current = floors[index];
+    const next = floors[index + 1];
+    if (current && next)
+      return Math.max(2.4, Math.min(5, next.elevation - current.elevation - 0.18));
+    return 2.8;
+  }
+
+  function commitMappedRoom(bounds: RoomDrawResult) {
+    const floorId = roomMapFloorId || p.scene.floors[0]?.id;
+    if (!floorId) {
+      setError("Create or detect a floor before mapping rooms.");
+      return;
+    }
+    if (roomMapAction === "reshape" && room) {
+      const next: Project = {
+        ...p,
+        scene: {
+          ...p.scene,
+          rooms: p.scene.rooms.map((entry) =>
+            entry.id === room.id
+              ? {
+                  ...entry,
+                  x: bounds.x,
+                  z: bounds.z,
+                  width: bounds.width,
+                  depth: bounds.depth,
+                }
+              : entry,
+          ),
+        },
+      };
+      try {
+        validateProject(next);
+        edit(next);
+        setRoomMapAction("idle");
+        setMessage(
+          `${room.name} reshaped visually · ${bounds.width.toFixed(2)} × ${bounds.depth.toFixed(2)} m.`,
+        );
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Room reshape failed.");
+      }
+      return;
+    }
+
+    const mapped: Room = {
+      id: id(),
+      name: roomMapName.trim() || `Room ${p.scene.rooms.length + 1}`,
+      unit: roomMapUnit.trim() || "Unit",
+      floorId,
+      x: bounds.x,
+      z: bounds.z,
+      width: bounds.width,
+      depth: bounds.depth,
+      height: roomHeightForFloor(floorId),
+      color: "#cdbfa9",
+      source: "Visual Room Mapper draft",
+      verified: false,
+    };
+    const next: Project = {
+      ...p,
+      scene: { ...p.scene, rooms: [...p.scene.rooms, mapped] },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      setRoomId(mapped.id);
+      setSelected(mapped.id);
+      setRoomMapAction("create");
+      setMessage(
+        `${mapped.name} mapped · ${mapped.width.toFixed(2)} × ${mapped.depth.toFixed(2)} m · ${(mapped.width * mapped.depth).toFixed(2)} m².`,
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Room mapping failed.");
+    }
+  }
+
+  function cloneMappedRoom() {
+    if (!room) return;
+    const clone: Room = {
+      ...room,
+      id: id(),
+      name: `${room.name} copy`,
+      x: room.x + room.width + 0.2,
+      verified: false,
+      source: "Visual Room Mapper clone",
+      sourceAssetId: undefined,
+      sourcePackSourceId: undefined,
+      sourceClaimIds: undefined,
+      mesh: undefined,
+    };
+    const next: Project = {
+      ...p,
+      scene: { ...p.scene, rooms: [...p.scene.rooms, clone] },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      setRoomId(clone.id);
+      setSelected(clone.id);
+      setRoomMapFloorId(clone.floorId);
+      setRoomMapUnit(clone.unit);
+      setRoomMapAction("idle");
+      setTransformMode("translate");
+      setMessage("Room cloned. Drag it into place with the Move gizmo.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Room clone failed.");
+    }
+  }
+
+  function mirrorMappedRoom(axis: "x" | "z") {
+    if (!room) return;
+    const unitRooms = p.scene.rooms.filter(
+      (entry) =>
+        entry.floorId === room.floorId &&
+        entry.unit.trim() === room.unit.trim(),
+    );
+    if (unitRooms.length < 2) {
+      setError("Map at least two rooms in this unit before using unit-centre mirror.");
+      return;
+    }
+    const minX = Math.min(...unitRooms.map((entry) => entry.x - entry.width / 2));
+    const maxX = Math.max(...unitRooms.map((entry) => entry.x + entry.width / 2));
+    const minZ = Math.min(...unitRooms.map((entry) => entry.z - entry.depth / 2));
+    const maxZ = Math.max(...unitRooms.map((entry) => entry.z + entry.depth / 2));
+    const centreX = (minX + maxX) / 2;
+    const centreZ = (minZ + maxZ) / 2;
+    const mirrored: Room = {
+      ...room,
+      id: id(),
+      name: `${room.name} mirror`,
+      x: axis === "x" ? 2 * centreX - room.x : room.x,
+      z: axis === "z" ? 2 * centreZ - room.z : room.z,
+      verified: false,
+      source: "Visual Room Mapper mirrored copy",
+      sourceAssetId: undefined,
+      sourcePackSourceId: undefined,
+      sourceClaimIds: undefined,
+      mesh: undefined,
+    };
+    const next: Project = {
+      ...p,
+      scene: { ...p.scene, rooms: [...p.scene.rooms, mirrored] },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      setRoomId(mirrored.id);
+      setSelected(mirrored.id);
+      setTransformMode("translate");
+      setMessage(
+        `Mirrored copy created across the current unit centre. Drag to fine-tune if needed.`,
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Room mirror failed.");
+    }
   }
   function select(key: string) {
     setSelected(key);
