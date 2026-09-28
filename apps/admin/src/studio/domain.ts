@@ -57,6 +57,23 @@ export interface MaterialOverride {
   emissive?: string;
   emissiveIntensity?: number;
 }
+export interface ModelTransform {
+  x: number;
+  y: number;
+  z: number;
+  rotationY: number;
+}
+export interface ReferenceLayer {
+  id: string;
+  assetId: string;
+  visible: boolean;
+  opacity: number;
+  metresPerPixel?: number;
+  x: number;
+  y: number;
+  z: number;
+  rotation: number;
+}
 export interface Scene {
   floors: Floor[];
   rooms: Room[];
@@ -65,6 +82,8 @@ export interface Scene {
   scale: number;
   appearance?: SceneAppearance;
   materialOverrides?: MaterialOverride[];
+  modelTransform?: ModelTransform;
+  referenceLayers?: ReferenceLayer[];
 }
 export interface Release {
   id: string;
@@ -211,6 +230,8 @@ export function newProject(name: string): Project {
         nightMode: false,
       },
       materialOverrides: [],
+      modelTransform: { x: 0, y: 0, z: 0, rotationY: 0 },
+      referenceLayers: [],
       floors: [{ id: id(), name: "Ground", elevation: 0 }],
       rooms: [],
       furniture: [],
@@ -276,6 +297,37 @@ export function validateScene(s: Scene): void {
           !number(material.emissiveIntensity, 0, 20))
       )
         throw Error("Invalid material override values.");
+    }
+  }
+  if (
+    s.modelTransform !== undefined &&
+    (!s.modelTransform ||
+      !number(s.modelTransform.x, -10000, 10000) ||
+      !number(s.modelTransform.y, -10000, 10000) ||
+      !number(s.modelTransform.z, -10000, 10000) ||
+      !number(s.modelTransform.rotationY, -3600, 3600))
+  )
+    throw Error("Invalid model alignment transform.");
+  if (s.referenceLayers !== undefined) {
+    if (
+      !Array.isArray(s.referenceLayers) ||
+      s.referenceLayers.length > 100 ||
+      !unique(s.referenceLayers)
+    )
+      throw Error("Invalid reference layers.");
+    for (const layer of s.referenceLayers) {
+      if (
+        !text(layer.assetId, 100) ||
+        typeof layer.visible !== "boolean" ||
+        !number(layer.opacity, 0.02, 1) ||
+        (layer.metresPerPixel !== undefined &&
+          !number(layer.metresPerPixel, 0.0000001, 1000)) ||
+        !number(layer.x, -1000000, 1000000) ||
+        !number(layer.y, -10000, 100000) ||
+        !number(layer.z, -1000000, 1000000) ||
+        !number(layer.rotation, -3600, 3600)
+      )
+        throw Error("Invalid reference layer settings.");
     }
   }
   for (const f of s.floors)
@@ -376,6 +428,9 @@ export function validateProject(p: Project): void {
   for (const s of [p.scene, ...p.releases.map((r) => r.scene)]) {
     if (s.modelId && !p.assets.includes(s.modelId))
       throw Error("Model asset is missing.");
+    for (const layer of s.referenceLayers ?? [])
+      if (!p.assets.includes(layer.assetId))
+        throw Error("Reference layer asset is missing.");
     for (const room of s.rooms)
       if (room.sourceAssetId && !p.assets.includes(room.sourceAssetId))
         throw Error("Room source asset is missing.");
