@@ -12,7 +12,13 @@ function claimByKey(key: string) {
 
 function numberArrayClaim(key: string) {
   const claim = claimByKey(key);
-  if (!claim || !Array.isArray(claim.value) || !claim.value.every(Number.isFinite))
+  if (
+    !claim ||
+    !Array.isArray(claim.value) ||
+    !claim.value.every(
+      (item) => typeof item === "number" && Number.isFinite(item),
+    )
+  )
     throw Error(`Jyoti source profile is missing numeric claim ${key}.`);
   return [...claim.value] as number[];
 }
