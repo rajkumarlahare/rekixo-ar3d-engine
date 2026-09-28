@@ -23,7 +23,13 @@ import {
   type PublishedCatalogEntry,
 } from "./published";
 import { buildSceneManifestV2 } from "./manifestV2";
+import StudioOverview from "./StudioOverview";
+import StudioSources from "./StudioSources";
+import StudioEvidence from "./StudioEvidence";
+import StudioPublish from "./StudioPublish";
+import { buildStudioReadiness } from "./readiness";
 import "./studio.css";
+import "./studio-operations.css";
 
 function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob),
@@ -52,10 +58,14 @@ export default function Studio() {
   const [manifestText, setManifestText] = useState("");
   const [cloudSession, setCloudSession] = useState<cloud.CloudSession>();
   const [cloudProjects, setCloudProjects] = useState<cloud.CloudProjectSummary[]>([]);
+  const [projectSearch, setProjectSearch] = useState("");
   const [cloudSearch, setCloudSearch] = useState("");
   const [cloudFilter, setCloudFilter] = useState<"active" | "archived">("active");
   const [cloudReleases, setCloudReleases] = useState<cloud.CloudReleaseSummary[]>([]);
   const [published, setPublished] = useState<PublishedCatalogEntry[]>([]);
+  const [workspace, setWorkspace] = useState<
+    "overview" | "editor" | "sources" | "evidence" | "publish"
+  >("overview");
   useEffect(() => {
     let active = true;
     void cloud
@@ -134,6 +144,7 @@ export default function Studio() {
     setRoomId(p.scene.rooms[0]?.id ?? "");
     setSelected(p.scene.rooms[0]?.id ?? "");
     setReview("");
+    setWorkspace("overview");
     setView(p.scene.modelId ? "building" : "rooms");
     setDirty(false);
     undo.current = [];
@@ -356,10 +367,19 @@ export default function Studio() {
   async function publishCurrentRelease() {
     if (!cloudSession?.authenticated)
       throw Error("Sign in to Engine Admin before publishing.");
+    const gate = buildStudioReadiness(
+      p,
+      files,
+      dirty,
+      cloudSession,
+      cloudReleases,
+    );
+    if (gate.blockers.length)
+      throw Error(
+        `Publish blocked: ${gate.blockers[0].title}. ${gate.blockers[0].detail}`,
+      );
     if (!p.cloud)
       throw Error("Save this project to cloud before publishing.");
-    if (dirty)
-      throw Error("Save the current draft before publishing.");
     const result = await cloud.publishRelease(
       projectSlug(p),
       p.cloud.revision,
@@ -390,6 +410,16 @@ export default function Studio() {
     );
   }
 
+  async function createReviewVersion() {
+    const next = await persist(
+      snapshot(p, `Review ${p.releases.length + 1}`),
+    );
+    setReview(next.releases.at(-1)!.id);
+    setMessage(
+      "Immutable local review created. This review remains a draft until you explicitly publish a cloud release.",
+    );
+  }
+
   function history(back: boolean) {
     if (!project) return;
     const from = back ? undo : redo,
@@ -413,7 +443,32 @@ export default function Studio() {
     scene = release?.scene ?? p.scene,
     room = scene.rooms.find((r) => r.id === roomId),
     item = scene.furniture.find((f) => f.id === selected),
-    floor = scene.floors.find((f) => f.id === room?.floorId);
+    floor = scene.floors.find((f) => f.id === room?.floorId),
+    readiness = buildStudioReadiness(
+      p,
+      files,
+      dirty,
+      cloudSession,
+      cloudReleases,
+    ),
+    publishedCurrent = published.some(
+      (entry) => entry.slug === projectSlug(p),
+    ),
+    visibleLocalProjects = list.filter((entry) => {
+      const query = projectSearch.trim().toLowerCase();
+      return (
+        entry.id === p.id ||
+        !query ||
+        entry.name.toLowerCase().includes(query) ||
+        projectSlug(entry).includes(query)
+      );
+    }),
+    unitCount = new Set(
+      p.scene.rooms.map(
+        (candidate) =>
+          `${candidate.floorId}\u0000${candidate.unit.trim()}`,
+      ),
+    ).size;
   function patchRoom(change: Partial<Room>) {
     if (!room) return;
     edit({
@@ -548,7 +603,85 @@ export default function Studio() {
             · {p.scene.rooms.length} rooms
           </span>
         </div>
+        <div className="studio-project-switcher">
+          <label className="studio-project-search">
+            <span>SEARCH</span>
+            <input
+              aria-label="Search 3D projects"
+              value={projectSearch}
+              onChange={(event) => {
+                const value = event.target.value;
+                setProjectSearch(value);
+                setCloudSearch(value);
+              }}
+              placeholder="Name / slug"
+              disabled={busy}
+            />
+          </label>
+          <label>
+            <span>PROJECT</span>
+            <select
+              aria-label="Selected local project"
+              value={list.some((entry) => entry.id === p.id) ? p.id : ""}
+              disabled={busy || dirty}
+              onChange={(event) => {
+                const next = list.find(
+                  (entry) => entry.id === event.target.value,
+                );
+                if (next) switchProject(next);
+              }}
+            >
+              <option value="">
+                {list.some((entry) => entry.id === p.id)
+                  ? "Select project"
+                  : "Unsaved project"}
+              </option>
+              {visibleLocalProjects.map((entry) => (
+                <option value={entry.id} key={entry.id}>
+                  {entry.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {cloudSession?.authenticated && (
+            <label>
+              <span>CLOUD</span>
+              <select
+                aria-label="Selected cloud project"
+                value=""
+                disabled={busy || dirty || !cloudProjects.length}
+                onChange={(event) => {
+                  const slug = event.target.value;
+                  if (!slug) return;
+                  void task(() => openCloudProject(slug));
+                }}
+              >
+                <option value="">
+                  {cloudProjects.length ? "Open cloud project…" : "No cloud projects"}
+                </option>
+                {cloudProjects.map((entry) => (
+                  <option key={entry.id} value={entry.slug}>
+                    {entry.name} · r{entry.draftRevision ?? "—"}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
         <div className="studio-actions">
+          <button
+            disabled={busy || dirty}
+            onClick={() => {
+              if (dirty) {
+                setError("Save your changes before creating a project.");
+                return;
+              }
+              open(newProject("Untitled project"));
+              setWorkspace("overview");
+            }}
+          >
+            + New project
+          </button>
           <button
             disabled={busy || Boolean(review)}
             onClick={() =>
@@ -569,7 +702,17 @@ export default function Studio() {
               </button>
               {p.cloud && (
                 <button
-                  disabled={busy || dirty || Boolean(review)}
+                  disabled={
+                    busy ||
+                    dirty ||
+                    Boolean(review) ||
+                    !readiness.publishable
+                  }
+                  title={
+                    readiness.publishable
+                      ? "Publish current immutable release"
+                      : readiness.blockers[0]?.detail
+                  }
                   onClick={() => task(publishCurrentRelease)}
                 >
                   Publish release
@@ -623,6 +766,45 @@ export default function Studio() {
           </button>
         </div>
       </header>
+      <nav className="studio-ops-tabs" aria-label="3D project workspace">
+        {(
+          [
+            ["overview", "Overview"],
+            ["editor", "3D Editor"],
+            ["sources", "Sources"],
+            ["evidence", "Evidence"],
+            ["publish", "Preview & Publish"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            className={workspace === key ? "active" : ""}
+            onClick={() => setWorkspace(key)}
+          >
+            <span aria-hidden="true">
+              {key === "overview"
+                ? "⌂"
+                : key === "editor"
+                  ? "◫"
+                  : key === "sources"
+                    ? "⇧"
+                    : key === "evidence"
+                      ? "✓"
+                      : "↗"}
+            </span>
+            {label}
+            {key === "evidence" && p.scene.rooms.length > 0 && (
+              <small>
+                {readiness.reviewedRooms}/{readiness.totalRooms}
+              </small>
+            )}
+            {key === "publish" && readiness.blockers.length > 0 && (
+              <small className="ops-tab-alert">{readiness.blockers.length}</small>
+            )}
+          </button>
+        ))}
+      </nav>
       <div className="storage-banner">
         {manifestText && (
           <label>
@@ -652,7 +834,62 @@ export default function Studio() {
           {error || (busy ? "Working…" : message)}
         </div>
       )}
-      <div className="studio-layout">
+      {workspace === "overview" && (
+        <StudioOverview
+          project={p}
+          dirty={dirty}
+          readiness={readiness}
+          unitCount={unitCount}
+          onOpenEditor={() => setWorkspace("editor")}
+          onOpenSources={() => setWorkspace("sources")}
+          onOpenEvidence={() => setWorkspace("evidence")}
+          onOpenPublish={() => setWorkspace("publish")}
+        />
+      )}
+      {workspace === "sources" && (
+        <StudioSources
+          project={p}
+          files={files}
+          readiness={readiness}
+          busy={busy}
+          onImportModel={() => modelInput.current?.click()}
+          onImportReference={() => referenceInput.current?.click()}
+          onDownload={(asset) => download(asset.blob, asset.name)}
+        />
+      )}
+      {workspace === "evidence" && (
+        <StudioEvidence
+          project={p}
+          readiness={readiness}
+          onOpenRoom={(key) => {
+            setRoomId(key);
+            setSelected(key);
+            setReview("");
+            setView("rooms");
+            setWorkspace("editor");
+          }}
+        />
+      )}
+      {workspace === "publish" && (
+        <StudioPublish
+          project={p}
+          readiness={readiness}
+          session={cloudSession}
+          releases={cloudReleases}
+          published={publishedCurrent}
+          busy={busy}
+          dirty={dirty}
+          onSaveLocal={() => void task(async () => { await persist(p); })}
+          onSaveCloud={() => void task(syncCloudProject)}
+          onPublish={() => void task(publishCurrentRelease)}
+          onActivate={(releaseId, version) =>
+            void task(() => activatePublishedRelease(releaseId, version))
+          }
+          onCreateReview={() => void task(createReviewVersion)}
+        />
+      )}
+      {workspace === "editor" && (
+        <div className="studio-layout">
         <aside className="studio-sidebar">
           <section className="cloud-workspace" aria-label="Cloud project workspace">
             <div className="section-label">ENGINE CLOUD</div>
@@ -735,7 +972,17 @@ export default function Studio() {
                       <small>IMMUTABLE RELEASES</small>
                       <button
                         type="button"
-                        disabled={busy || dirty || Boolean(review)}
+                        disabled={
+                          busy ||
+                          dirty ||
+                          Boolean(review) ||
+                          !readiness.publishable
+                        }
+                        title={
+                          readiness.publishable
+                            ? "Publish current immutable release"
+                            : readiness.blockers[0]?.detail
+                        }
                         onClick={() => task(publishCurrentRelease)}
                       >
                         Publish current
@@ -1384,17 +1631,7 @@ export default function Studio() {
             <button
               className="wide primary"
               disabled={busy}
-              onClick={() =>
-                task(async () => {
-                  const next = await persist(
-                    snapshot(p, `Review ${p.releases.length + 1}`),
-                  );
-                  setReview(next.releases.at(-1)!.id);
-                  setMessage(
-                    "Immutable local review created. This review remains a draft until you explicitly publish a cloud release.",
-                  );
-                })
-              }
+              onClick={() => task(createReviewVersion)}
             >
               Create review version
             </button>
@@ -1431,7 +1668,8 @@ export default function Studio() {
             publishing needs authenticated Engine storage.
           </p>
         </aside>
-      </div>
+        </div>
+      )}
       <input
         hidden
         ref={modelInput}
