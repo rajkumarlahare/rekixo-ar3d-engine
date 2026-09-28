@@ -10,15 +10,16 @@ test("generic viewer and Studio depend on the profile registry, not a customer i
 
   assert.match(viewer, /\.\/projectProfiles/);
   assert.doesNotMatch(viewer, /jyotiReferenceExterior|createProjectExperience|101-living/);
-  assert.match(studio, /projectProfiles/);
+  assert.match(studio, /modelProfiles/);
   assert.doesNotMatch(studio, /jyotiReferenceExterior/);
 });
 
 test("project-specific reconstructed interiors are profile-gated", () => {
-  const registry = read("apps/public/src/viewer/projectProfiles.ts");
-  assert.match(registry, /if \(!exterior\) return undefined/);
-  assert.match(registry, /createProfileExperience/);
-  assert.match(registry, /profile\?\.id !== "reference-source-v9"/);
+  const exteriorRegistry = read("apps/public/src/viewer/modelProfiles.ts");
+  const experienceRegistry = read("apps/public/src/viewer/projectProfiles.ts");
+  assert.match(exteriorRegistry, /if \(!exterior\) return undefined/);
+  assert.match(experienceRegistry, /createProfileExperience/);
+  assert.match(experienceRegistry, /profile\?\.id !== "reference-source-v9"/);
 });
 
 test("premium shell reads floors and units from project scene data", () => {
