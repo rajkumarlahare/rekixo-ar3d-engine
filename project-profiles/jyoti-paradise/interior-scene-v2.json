@@ -1,0 +1,1073 @@
+{
+  "format": "rekixo-scene-manifest",
+  "version": 2,
+  "project": {
+    "id": "project_jyoti_paradise",
+    "slug": "jyoti-paradise",
+    "name": "Jyoti Paradise"
+  },
+  "coordinateSystem": {
+    "linearUnit": "metre",
+    "upAxis": "Y",
+    "handedness": "right",
+    "modelScaleToMetres": 1
+  },
+  "assets": [
+    {
+      "id": "source-fbx",
+      "name": "jyoti aprtment model.fbx",
+      "mimeType": "application/octet-stream",
+      "byteSize": 45530329,
+      "sha256": "1dce4dec093ef5707617c99ccb26ad3a5b6cb6c2d02b5efe4a171c852cc616e0",
+      "role": "model"
+    },
+    {
+      "id": "source-brochure",
+      "name": "Jyoti Paradise.pdf",
+      "mimeType": "application/pdf",
+      "byteSize": 17238393,
+      "sha256": "482a82c8e29137067cc24ed8072997dff23812b88e4a55ab0c7970204a055442",
+      "role": "reference"
+    },
+    {
+      "id": "source-dwg",
+      "name": "JYOTI APPARTMENT-FIRST FLOOR LEVEL-RC-003.dwg",
+      "mimeType": "image/vnd.dwg",
+      "byteSize": 1242580,
+      "sha256": "e2fbeb3a1feef2e2590133c2de728386cf730dcca73300dde25f2acfd84170fa",
+      "role": "reference"
+    }
+  ],
+  "models": [
+    {
+      "id": "source-shell",
+      "assetId": "source-fbx",
+      "role": "shell",
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      }
+    }
+  ],
+  "sites": [
+    {
+      "id": "site-jyoti",
+      "name": "Jyoti Paradise"
+    }
+  ],
+  "buildings": [
+    {
+      "id": "building-jyoti",
+      "siteId": "site-jyoti",
+      "name": "Jyoti Paradise"
+    }
+  ],
+  "floors": [
+    {
+      "id": "floor-typical",
+      "buildingId": "building-jyoti",
+      "name": "Typical residential floor",
+      "elevationM": 0
+    }
+  ],
+  "units": [
+    {
+      "id": "unit-101-501",
+      "floorId": "floor-typical",
+      "name": "101–501 series"
+    },
+    {
+      "id": "unit-102-502",
+      "floorId": "floor-typical",
+      "name": "102–502 series"
+    },
+    {
+      "id": "unit-103-403",
+      "floorId": "floor-typical",
+      "name": "103–403 series"
+    },
+    {
+      "id": "unit-common",
+      "floorId": "floor-typical",
+      "name": "Common area"
+    }
+  ],
+  "rooms": [
+    {
+      "id": "101-living",
+      "floorId": "floor-typical",
+      "unitId": "unit-101-501",
+      "name": "Living 4.954 x 3.050",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          -3.48,
+          0
+        ],
+        "size": [
+          4.95,
+          3.05
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "living"
+      }
+    },
+    {
+      "id": "101-kitchen",
+      "floorId": "floor-typical",
+      "unitId": "unit-101-501",
+      "name": "Kitchen 3.279 x 2.196",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          -5.5,
+          2.623
+        ],
+        "size": [
+          3.28,
+          2.2
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "kitchen"
+      }
+    },
+    {
+      "id": "101-dining",
+      "floorId": "floor-typical",
+      "unitId": "unit-101-501",
+      "name": "Dining 1.265 x 1.023",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          -2.67,
+          2.037
+        ],
+        "size": [
+          1.27,
+          1.03
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "living"
+      }
+    },
+    {
+      "id": "101-toilet-a",
+      "floorId": "floor-typical",
+      "unitId": "unit-101-501",
+      "name": "Toilet 1.20 x 2.13",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          -1.5,
+          3.743
+        ],
+        "size": [
+          1.2,
+          2.13
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "bath"
+      }
+    },
+    {
+      "id": "101-bed-a",
+      "floorId": "floor-typical",
+      "unitId": "unit-101-501",
+      "name": "Bed Room 3.679 x 3.153",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          -6.24,
+          5.398
+        ],
+        "size": [
+          3.68,
+          3.15
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "living"
+      }
+    },
+    {
+      "id": "101-bed-b",
+      "floorId": "floor-typical",
+      "unitId": "unit-101-501",
+      "name": "Bed Room 3.500 x 3.701",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          -2.65,
+          6.79
+        ],
+        "size": [
+          3.5,
+          3.7
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "living"
+      }
+    },
+    {
+      "id": "101-toilet-b",
+      "floorId": "floor-typical",
+      "unitId": "unit-101-501",
+      "name": "Toilet 2.542 x 1.565",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          -6.2,
+          7.887
+        ],
+        "size": [
+          2.54,
+          1.57
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "bath"
+      }
+    },
+    {
+      "id": "101-balcony",
+      "floorId": "floor-typical",
+      "unitId": "unit-101-501",
+      "name": "Balcony 1.416",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          -6.668,
+          0
+        ],
+        "size": [
+          1.42,
+          2.72
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "balcony"
+      }
+    },
+    {
+      "id": "101-wbal",
+      "floorId": "floor-typical",
+      "unitId": "unit-101-501",
+      "name": "W. Bal 1.085",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          -7.75,
+          2.623
+        ],
+        "size": [
+          1.09,
+          2.05
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "balcony"
+      }
+    },
+    {
+      "id": "101-balcony-upper",
+      "floorId": "floor-typical",
+      "unitId": "unit-101-501",
+      "name": "Bedroom balcony",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          -8.08,
+          7.887
+        ],
+        "size": [
+          1.1,
+          1.57
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "balcony"
+      }
+    },
+    {
+      "id": "102-living",
+      "floorId": "floor-typical",
+      "unitId": "unit-102-502",
+      "name": "Living 4.828 x 3.050",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          3.48,
+          0
+        ],
+        "size": [
+          4.83,
+          3.05
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "living"
+      }
+    },
+    {
+      "id": "102-kitchen",
+      "floorId": "floor-typical",
+      "unitId": "unit-102-502",
+      "name": "Kitchen 3.416 x 2.155",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          5.5,
+          2.603
+        ],
+        "size": [
+          3.42,
+          2.16
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "kitchen"
+      }
+    },
+    {
+      "id": "102-dining",
+      "floorId": "floor-typical",
+      "unitId": "unit-102-502",
+      "name": "Dining 1.415 x 1.023",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          2.67,
+          2.037
+        ],
+        "size": [
+          1.42,
+          1.03
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "living"
+      }
+    },
+    {
+      "id": "102-toilet",
+      "floorId": "floor-typical",
+      "unitId": "unit-102-502",
+      "name": "Toilet 1.30 x 2.132",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          1.55,
+          3.743
+        ],
+        "size": [
+          1.3,
+          2.13
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "bath"
+      }
+    },
+    {
+      "id": "102-bed-a",
+      "floorId": "floor-typical",
+      "unitId": "unit-102-502",
+      "name": "Bed Room",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          6.225,
+          5.446
+        ],
+        "size": [
+          3.55,
+          3.25
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "living"
+      }
+    },
+    {
+      "id": "102-bed-b",
+      "floorId": "floor-typical",
+      "unitId": "unit-102-502",
+      "name": "Bed Room",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          2.675,
+          6.79
+        ],
+        "size": [
+          3.55,
+          3.4
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "living"
+      }
+    },
+    {
+      "id": "102-toilet-b",
+      "floorId": "floor-typical",
+      "unitId": "unit-102-502",
+      "name": "Attached toilet",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          6.2,
+          7.887
+        ],
+        "size": [
+          2.54,
+          1.57
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "bath"
+      }
+    },
+    {
+      "id": "102-balcony",
+      "floorId": "floor-typical",
+      "unitId": "unit-102-502",
+      "name": "Balcony 1.40",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          6.65,
+          0
+        ],
+        "size": [
+          1.4,
+          2.72
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "balcony"
+      }
+    },
+    {
+      "id": "102-wbal",
+      "floorId": "floor-typical",
+      "unitId": "unit-102-502",
+      "name": "W. Bal 1.140",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          7.838,
+          2.603
+        ],
+        "size": [
+          1.14,
+          2.05
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "balcony"
+      }
+    },
+    {
+      "id": "102-balcony-upper",
+      "floorId": "floor-typical",
+      "unitId": "unit-102-502",
+      "name": "Bedroom balcony",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          8.08,
+          7.887
+        ],
+        "size": [
+          1.1,
+          1.57
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "balcony"
+      }
+    },
+    {
+      "id": "duct",
+      "floorId": "floor-typical",
+      "unitId": "unit-common",
+      "name": "DUCT 1.80 x 3.96",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          0,
+          3.6
+        ],
+        "size": [
+          1.8,
+          3.96
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "duct"
+      }
+    },
+    {
+      "id": "lobby",
+      "floorId": "floor-typical",
+      "unitId": "unit-common",
+      "name": "Lobby",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          0,
+          -2.75
+        ],
+        "size": [
+          4.6,
+          2.45
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "lobby"
+      }
+    },
+    {
+      "id": "fire-lift",
+      "floorId": "floor-typical",
+      "unitId": "unit-common",
+      "name": "Fire Lift 1.60 x 1.80",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          3.2,
+          -2.6
+        ],
+        "size": [
+          1.6,
+          1.8
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "lobby"
+      }
+    },
+    {
+      "id": "common-toilet",
+      "floorId": "floor-typical",
+      "unitId": "unit-common",
+      "name": "Toilet 1.20 x 1.80",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          4.7,
+          -2.6
+        ],
+        "size": [
+          1.2,
+          1.8
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "bath"
+      }
+    },
+    {
+      "id": "103-living",
+      "floorId": "floor-typical",
+      "unitId": "unit-103-403",
+      "name": "Living 5.366 x 3.000",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          -1.15,
+          -5.5
+        ],
+        "size": [
+          5.37,
+          3
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "living"
+      }
+    },
+    {
+      "id": "103-bed-a",
+      "floorId": "floor-typical",
+      "unitId": "unit-103-403",
+      "name": "Bed Room 3.313 x 3.146",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          3.313,
+          -5.573
+        ],
+        "size": [
+          3.31,
+          3.15
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "living"
+      }
+    },
+    {
+      "id": "103-kitchen",
+      "floorId": "floor-typical",
+      "unitId": "unit-103-403",
+      "name": "Kitchen 3.640 x 2.061",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          -2.013,
+          -8.16
+        ],
+        "size": [
+          3.64,
+          2.06
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "kitchen"
+      }
+    },
+    {
+      "id": "103-toilet",
+      "floorId": "floor-typical",
+      "unitId": "unit-103-403",
+      "name": "Toilet 1.900 x 1.313",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          0.88,
+          -7.93
+        ],
+        "size": [
+          1.9,
+          1.31
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "bath"
+      }
+    },
+    {
+      "id": "103-bed-b",
+      "floorId": "floor-typical",
+      "unitId": "unit-103-403",
+      "name": "Bed Room 3.130 x 3.830",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          3.515,
+          -9.16
+        ],
+        "size": [
+          3.13,
+          3.83
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "living"
+      }
+    },
+    {
+      "id": "103-balcony-side",
+      "floorId": "floor-typical",
+      "unitId": "unit-103-403",
+      "name": "Balcony 1.460",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          -4.64,
+          -5.5
+        ],
+        "size": [
+          1.46,
+          3
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "balcony"
+      }
+    },
+    {
+      "id": "103-wbal",
+      "floorId": "floor-typical",
+      "unitId": "unit-103-403",
+      "name": "W. Bal 1.350",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          -2.013,
+          -9.93
+        ],
+        "size": [
+          3,
+          1.35
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "balcony"
+      }
+    },
+    {
+      "id": "103-balcony",
+      "floorId": "floor-typical",
+      "unitId": "unit-103-403",
+      "name": "Balcony 1.350",
+      "boundary": {
+        "kind": "rectangle",
+        "center": [
+          0.88,
+          -9.44
+        ],
+        "size": [
+          1.35,
+          1.35
+        ]
+      },
+      "ceilingHeightM": 2.75,
+      "evidence": {
+        "status": "unverified",
+        "sourceNote": "Brochure page 2 supplies the floor-plan reference; interactive placement remains reconstructed until higher-authority DWG/semantic boundaries are reviewed.",
+        "sourceAssetId": "source-brochure",
+        "sourcePackSourceId": "jyoti-source-brochure",
+        "basis": "Reference-plan dimensions/labels with reconstructed interactive placement; no authoritative door/opening or FBX room binding is claimed."
+      },
+      "meshBindings": [],
+      "finish": {
+        "materialId": "balcony"
+      }
+    }
+  ],
+  "openings": [],
+  "furniture": [],
+  "materials": [
+    {
+      "id": "living",
+      "name": "Living/bed/dining presentation",
+      "baseColor": "#e7dfd3"
+    },
+    {
+      "id": "kitchen",
+      "name": "Kitchen presentation",
+      "baseColor": "#d0c3ae"
+    },
+    {
+      "id": "bath",
+      "name": "Bath/toilet presentation",
+      "baseColor": "#74777a"
+    },
+    {
+      "id": "lobby",
+      "name": "Common/lobby presentation",
+      "baseColor": "#d9d1c4"
+    },
+    {
+      "id": "duct",
+      "name": "Service duct presentation",
+      "baseColor": "#96999b"
+    },
+    {
+      "id": "balcony",
+      "name": "Balcony presentation",
+      "baseColor": "#cfc7bb"
+    }
+  ],
+  "cameras": []
+}
