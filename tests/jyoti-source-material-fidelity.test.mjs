@@ -23,7 +23,7 @@ test("viewer ships textures extracted from the supplied SKB", () => {
 });
 
 test("architectural model reapplies source textures to GLB material names", () => {
-  const realism = read("apps/public/src/viewer/realism.ts");
+  const realism = read("apps/public/src/viewer/referenceSourceV9Materials.ts");
   assert.match(realism, /sourceTextureData/);
   assert.match(realism, /TextureLoader/);
   assert.match(realism, /texture\.flipY = false/);
