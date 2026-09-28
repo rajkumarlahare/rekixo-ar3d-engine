@@ -364,9 +364,15 @@ export default function SceneCanvas(props: Props) {
           "External model resources are not loaded. Export a self-contained GLB with embedded textures.",
         );
       });
-      if (f.name.toLowerCase().endsWith(".fbx"))
+      if (f.name.toLowerCase().endsWith(".fbx")) {
         object = new FBXLoader(manager).parse(data, "");
-      else {
+        if (/^[a-f0-9]{64}$/i.test(f.hash)) {
+          object.userData.sourceGeometry = {
+            ...(object.userData.sourceGeometry ?? {}),
+            sha256: f.hash.toLowerCase(),
+          };
+        }
+      } else {
         const loader = new GLTFLoader(manager);
         loader.setMeshoptDecoder(MeshoptDecoder);
         object = (await loader.parseAsync(data, "")).scene;
