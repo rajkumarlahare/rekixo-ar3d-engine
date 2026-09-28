@@ -12,9 +12,17 @@ export function assertProjectAssetKey(slug, key, area) {
   if (typeof key !== "string" || !key.startsWith(prefix))
     throw Error("Project asset key escapes its project storage prefix.");
   const relative = key.slice(prefix.length);
-  if (!relative || relative.startsWith("/") || relative.includes("../"))
+  const segments = relative.split("/");
+  if (
+    !relative ||
+    relative.startsWith("/") ||
+    relative.includes("\\") ||
+    segments.some(
+      (segment) => !segment || segment === "." || segment === "..",
+    )
+  )
     throw Error("Invalid project asset key.");
-  if (area && !relative.startsWith(`${area}/`))
+  if (area && segments[0] !== area)
     throw Error(`Project asset key is outside the ${area} prefix.`);
   return key;
 }
