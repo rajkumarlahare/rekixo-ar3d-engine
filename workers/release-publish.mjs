@@ -196,6 +196,8 @@ async function studioAssetRows(env, projectId) {
 
 function publicStudioSnapshot(draft) {
   const project = structuredClone(draft);
+  delete project.referenceUrl;
+  delete project.brief;
   const activeModelId = project.scene?.modelId;
   const publicAssetIds = new Set(activeModelId ? [activeModelId] : []);
   project.assets = (project.assets || []).filter((assetId) =>
