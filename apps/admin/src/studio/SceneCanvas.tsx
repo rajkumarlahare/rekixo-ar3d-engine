@@ -757,15 +757,17 @@ export default function SceneCanvas(props: Props) {
         if (end) {
           const width = Math.abs(end.x - start.x);
           const depth = Math.abs(end.z - start.z);
-          if (width >= 0.5 && depth >= 0.5)
+          if (width >= 0.5 && depth >= 0.5) {
+            setStatus("");
             latest.current.onRoomDraw?.({
               x: Number(((start.x + end.x) / 2).toFixed(3)),
               z: Number(((start.z + end.z) / 2).toFixed(3)),
               width: Number(width.toFixed(3)),
               depth: Number(depth.toFixed(3)),
             });
-          else
+          } else {
             setStatus("Drag a room at least 0.5 m × 0.5 m.");
+          }
         }
         return;
       }
