@@ -5,7 +5,7 @@ import test from "node:test";
 const read = (file) => fs.readFileSync(file, "utf8");
 
 test("V7 keeps original FBX audit tints and adds separate reference calibration", () => {
-  const realism = read("apps/public/src/viewer/realism.ts");
+  const realism = read("apps/public/src/viewer/referenceSourceV9Materials.ts");
   for (const token of ["frontcolor: 0xffffff","color_a06: 0xc29b7a","color_m06: 0x565656","color_j08: 0x330066","metal_panel: 0x8f9d9e"]) {
     assert.match(realism, new RegExp(token));
   }
