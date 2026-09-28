@@ -1080,7 +1080,7 @@ export default function Studio() {
   }
 
   function cloneMappedRoom() {
-    if (!room) return;
+    if (!room || selected !== room.id) return;
     const clone: Room = {
       ...room,
       id: id(),
@@ -1113,7 +1113,7 @@ export default function Studio() {
   }
 
   function mirrorMappedRoom(axis: "x" | "z") {
-    if (!room) return;
+    if (!room || selected !== room.id) return;
     const unitRooms = p.scene.rooms.filter(
       (entry) =>
         entry.floorId === room.floorId &&
@@ -2313,6 +2313,7 @@ export default function Studio() {
                 "";
               setRoomMapFloorId(floorId);
               setRoomMapUnit(room?.unit ?? roomMapUnit ?? "Unit 101");
+              if (room) setSelected(room.id);
               setShowRoomMapper(true);
               setShowReferenceWorkspace(false);
               setShowAssetShelf(false);
@@ -2603,6 +2604,7 @@ export default function Studio() {
                     setShowReferenceWorkspace(false);
                     setShowAssetShelf(false);
                     setRoomMapFloorId(floorId);
+                    if (room) setSelected(room.id);
                     setRoomMapUnit(room?.unit ?? roomMapUnit ?? "Unit 101");
                     setRoomMapAction("idle");
                     setView("building");
@@ -2752,7 +2754,7 @@ export default function Studio() {
               roomName={roomMapName}
               action={roomMapAction}
               snap={roomMapSnap}
-              selectedRoom={room}
+              selectedRoom={selected === room?.id ? room : undefined}
               disabled={Boolean(review) || busy}
               onFloor={(floorId) => {
                 setRoomMapFloorId(floorId);
