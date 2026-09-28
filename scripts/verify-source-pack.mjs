@@ -18,7 +18,6 @@ function assertPackShape(pack) {
       typeof source.id !== "string" ||
       ids.has(source.id) ||
       typeof source.filename !== "string" ||
-      !portableSourceFilename(source.filename) ||
       typeof source.byteSize !== "number" ||
       !Number.isSafeInteger(source.byteSize) ||
       source.byteSize < 0 ||
@@ -26,6 +25,8 @@ function assertPackShape(pack) {
       !/^[a-f0-9]{64}$/i.test(source.sha256)
     )
       throw Error("Invalid source pack item.");
+    if (!portableSourceFilename(source.filename))
+      throw Error(`Unsafe source filename: ${source.filename}`);
     ids.add(source.id);
   }
 }
