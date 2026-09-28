@@ -863,13 +863,8 @@ export default function Studio() {
           onCreateReview={() => void task(createReviewVersion)}
         />
       )}
-      <div
-        className={
-          workspace === "editor"
-            ? "studio-layout"
-            : "studio-layout studio-layout--hidden"
-        }
-      >
+      {workspace === "editor" && (
+        <div className="studio-layout">
         <aside className="studio-sidebar">
           <section className="cloud-workspace" aria-label="Cloud project workspace">
             <div className="section-label">ENGINE CLOUD</div>
@@ -1648,7 +1643,8 @@ export default function Studio() {
             publishing needs authenticated Engine storage.
           </p>
         </aside>
-      </div>
+        </div>
+      )}
       <input
         hidden
         ref={modelInput}
