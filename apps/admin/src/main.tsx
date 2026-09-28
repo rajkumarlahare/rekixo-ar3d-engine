@@ -11,6 +11,7 @@ import { publicProjectPath } from "@rekixo/3d-engine-core";
 import "./styles.css";
 
 const Studio = lazy(() => import("./studio/Studio"));
+const PublishedViewer = lazy(() => import("./studio/PublishedViewer"));
 
 interface ApiStatus extends Admin3DProjectStatus {
   uploadContract?: {
@@ -210,4 +211,4 @@ function App() {
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root mount node");
-createRoot(root).render(<React.StrictMode>{window.location.pathname.replace(/\/$/, "") === "/3Dprojects/studio" ? <Suspense fallback={<p>Opening Design Studio…</p>}><Studio /></Suspense> : <App />}</React.StrictMode>);
+createRoot(root).render(<React.StrictMode>{window.location.pathname.startsWith('/3Dprojects/showcase/') ? <Suspense fallback={<p>Loading published design…</p>}><PublishedViewer /></Suspense> : window.location.pathname.replace(/\/$/, "") === "/3Dprojects/studio" ? <Suspense fallback={<p>Opening Design Studio…</p>}><Studio /></Suspense> : <App />}</React.StrictMode>);

@@ -15,3 +15,16 @@ const editor = await get(`/3Dprojects/assets/${studio[1]}`, 'javascript');
 for (const feature of ['3D DESIGN ADMIN', 'Use design for new project', 'Project slug', 'Duplicate furnished floor'])
   if (!editor.includes(feature)) throw Error(`Deployed editor is missing ${feature}.`);
 console.log(`Design Admin route, JavaScript and reuse controls verified: ${studio[1]}`);
+const catalog = JSON.parse(await get('/3Dprojects/published/catalog.json', 'json'));
+for (const entry of catalog) {
+  const manifest = JSON.parse(await get(`/3Dprojects/published/${entry.slug}/manifest.json`, 'json'));
+  if (manifest.project.slug !== entry.slug) throw Error('Published slug mismatch');
+  for (const a of manifest.assets) {
+    const response = await fetch(`${origin}/3Dprojects/published/${entry.slug}/${a.path}`);
+    if (!response.ok) throw Error('Published model unavailable');
+    const bytes = await response.arrayBuffer();
+    const { createHash } = await import('node:crypto');
+    if (bytes.byteLength !== a.size || createHash('sha256').update(Buffer.from(bytes)).digest('hex') !== a.hash) throw Error('Live published model checksum mismatch');
+  }
+  console.log(`Published design and model verified: ${entry.slug}`);
+}
