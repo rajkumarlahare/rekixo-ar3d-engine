@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import SceneCanvas, {
+  type ModelMaterialSummary,
   type ModelNodeSummary,
   type TransformCommit,
   type TransformMode,
@@ -16,8 +17,10 @@ import {
   type Asset,
   type Furniture,
   type Kind,
+  type MaterialOverride,
   type Project,
   type Room,
+  type SceneAppearance,
 } from "./domain";
 import * as storage from "./storage";
 import * as cloud from "./cloud";
@@ -33,6 +36,7 @@ import StudioSources from "./StudioSources";
 import StudioEvidence from "./StudioEvidence";
 import StudioPublish from "./StudioPublish";
 import { buildStudioReadiness } from "./readiness";
+import { auditFbxSources, type FbxSourceAudit } from "./sourceAudit";
 import "./studio.css";
 import "./studio-operations.css";
 import "./studio-superadmin-theme.css";
@@ -48,6 +52,15 @@ function download(blob: Blob, name: string) {
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
+const DEFAULT_APPEARANCE: SceneAppearance = {
+  exposure: 1,
+  sunIntensity: 3.2,
+  hemisphereIntensity: 2.8,
+  background: "#dbe3e7",
+  referenceVisual: true,
+  nightMode: false,
+};
+
 export default function Studio() {
   const [project, setProject] = useState<Project>(),
     [list, setList] = useState<Project[]>([]),
@@ -71,6 +84,10 @@ export default function Studio() {
   const [showAssetShelf, setShowAssetShelf] = useState(true);
   const [modelNodes, setModelNodes] = useState<ModelNodeSummary[]>([]);
   const [modelNodeFilter, setModelNodeFilter] = useState("");
+  const [modelMaterials, setModelMaterials] = useState<ModelMaterialSummary[]>([]);
+  const [selectedMaterial, setSelectedMaterial] = useState("");
+  const [sourceAudits, setSourceAudits] = useState<FbxSourceAudit[]>([]);
+  const [sourceAuditBusy, setSourceAuditBusy] = useState(false);
   const [manifestText, setManifestText] = useState("");
   const [cloudSession, setCloudSession] = useState<cloud.CloudSession>();
   const [cloudProjects, setCloudProjects] = useState<cloud.CloudProjectSummary[]>([]);
@@ -158,6 +175,9 @@ export default function Studio() {
     setMesh("");
     setModelNodes([]);
     setModelNodeFilter("");
+    setModelMaterials([]);
+    setSelectedMaterial("");
+    setSourceAudits([]);
     setProject(p);
     setRoomId(p.scene.rooms[0]?.id ?? "");
     setSelected(p.scene.rooms[0]?.id ?? "");
@@ -205,6 +225,38 @@ export default function Studio() {
       active = false;
     };
   }, [project?.id, project?.assets]);
+  useEffect(() => {
+    let active = true;
+    const fbxFiles = files.filter((file) => /\.fbx$/i.test(file.name));
+    if (!fbxFiles.length) {
+      setSourceAudits([]);
+      setSourceAuditBusy(false);
+      return;
+    }
+    setSourceAuditBusy(true);
+    void auditFbxSources(files)
+      .then((audits) => {
+        if (active) setSourceAudits(audits);
+      })
+      .catch(() => {
+        if (active) setSourceAudits([]);
+      })
+      .finally(() => {
+        if (active) setSourceAuditBusy(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [files]);
+
+  useEffect(() => {
+    if (!modelMaterials.length) {
+      setSelectedMaterial("");
+      return;
+    }
+    if (!modelMaterials.some((material) => material.name === selectedMaterial))
+      setSelectedMaterial(modelMaterials[0].name);
+  }, [modelMaterials, selectedMaterial]);
   useEffect(() => {
     if (!cloudSession?.authenticated || !project?.cloud) {
       setCloudReleases([]);
@@ -525,7 +577,19 @@ export default function Studio() {
       .filter((node) =>
         node.name.toLowerCase().includes(modelNodeFilter.trim().toLowerCase()),
       )
-      .slice(0, 120);
+      .slice(0, 120),
+    appearance = p.scene.appearance ?? DEFAULT_APPEARANCE,
+    materialOverride = p.scene.materialOverrides?.find(
+      (entry) => entry.materialName === selectedMaterial,
+    ),
+    materialSummary = modelMaterials.find(
+      (entry) => entry.name === selectedMaterial,
+    ),
+    sourceTypeCounts = files.reduce<Record<string, number>>((counts, file) => {
+      const extension = file.name.toLowerCase().split(".").pop() || "file";
+      counts[extension] = (counts[extension] ?? 0) + 1;
+      return counts;
+    }, {});
   function patchRoom(change: Partial<Room>) {
     if (!room) return;
     edit({
@@ -546,6 +610,51 @@ export default function Studio() {
         ...p.scene,
         furniture: p.scene.furniture.map((f) =>
           f.id === item.id ? { ...f, ...change } : f,
+        ),
+      },
+    });
+  }
+  function patchAppearance(change: Partial<SceneAppearance>) {
+    edit({
+      ...p,
+      scene: {
+        ...p.scene,
+        appearance: { ...appearance, ...change },
+      },
+    });
+  }
+  function patchMaterial(change: Partial<MaterialOverride>) {
+    if (!selectedMaterial) return;
+    const previous = p.scene.materialOverrides ?? [];
+    const existing = previous.find(
+      (entry) => entry.materialName === selectedMaterial,
+    );
+    const nextOverride: MaterialOverride = {
+      materialName: selectedMaterial,
+      ...(existing ?? {}),
+      ...change,
+    };
+    edit({
+      ...p,
+      scene: {
+        ...p.scene,
+        materialOverrides: [
+          ...previous.filter(
+            (entry) => entry.materialName !== selectedMaterial,
+          ),
+          nextOverride,
+        ],
+      },
+    });
+  }
+  function resetMaterial() {
+    if (!selectedMaterial) return;
+    edit({
+      ...p,
+      scene: {
+        ...p.scene,
+        materialOverrides: (p.scene.materialOverrides ?? []).filter(
+          (entry) => entry.materialName !== selectedMaterial,
         ),
       },
     });
@@ -667,6 +776,23 @@ export default function Studio() {
       setMesh("");
       setView("building");
     }
+  }
+  async function uploadReferences(selectedFiles: File[]) {
+    if (!selectedFiles.length) return;
+    const assets = await Promise.all(
+      selectedFiles.map((file) => storage.makeAsset(file, p.id)),
+    );
+    const existing = new Set(p.assets);
+    const nextAssetIds = [
+      ...p.assets,
+      ...assets.map((asset) => asset.id).filter((key) => !existing.has(key)),
+    ];
+    await persist({ ...p, assets: nextAssetIds }, assets);
+    undo.current = [];
+    redo.current = [];
+    setMessage(
+      `${assets.length} source/reference file${assets.length === 1 ? "" : "s"} attached to the project.`,
+    );
   }
   const field = (
     label: string,
@@ -1384,6 +1510,48 @@ export default function Studio() {
               <small>No imported building model yet.</small>
             )}
           </section>
+          <section className="editor-source-health" aria-label="Source health">
+            <div className="section-label">SOURCE HEALTH</div>
+            <div className="source-health-types">
+              {Object.entries(sourceTypeCounts).length ? (
+                Object.entries(sourceTypeCounts)
+                  .sort(([left], [right]) => left.localeCompare(right))
+                  .map(([extension, count]) => (
+                    <span key={extension}>
+                      {extension.toUpperCase()} <b>{count}</b>
+                    </span>
+                  ))
+              ) : (
+                <small>No source files attached.</small>
+              )}
+            </div>
+            {sourceAuditBusy && <small>Auditing ASCII FBX source…</small>}
+            {sourceAudits.map((audit) => (
+              <article className="source-health-card" key={audit.assetId}>
+                <b>{audit.filename}</b>
+                {audit.ascii ? (
+                  <>
+                    <small>
+                      {audit.meshCount ?? "—"} meshes · {audit.materialNames.length} materials
+                    </small>
+                    <small>
+                      {audit.externalTextureFiles.length} external texture refs ·{" "}
+                      {audit.matchedTextureFiles.length} matching files attached
+                    </small>
+                    {audit.externalTextureFiles.length >
+                      audit.matchedTextureFiles.length && (
+                      <em>
+                        Texture package incomplete — keep source geometry safe;
+                        use verified runtime restoration or attach the bitmap files.
+                      </em>
+                    )}
+                  </>
+                ) : (
+                  <small>Binary FBX detected · detailed browser audit unavailable.</small>
+                )}
+              </article>
+            ))}
+          </section>
           <div className="section-label">
             BUILDING STRUCTURE{" "}
             <button
@@ -1628,6 +1796,14 @@ export default function Studio() {
               )}
               <button
                 type="button"
+                disabled={busy || Boolean(review)}
+                title="Attach FBX/DWG/PDF/images/textures"
+                onClick={() => referenceInput.current?.click()}
+              >
+                + Source
+              </button>
+              <button
+                type="button"
                 className={showLeftPanel ? "active" : ""}
                 title="Toggle Scene Outliner"
                 onClick={() => setShowLeftPanel((value) => !value)}
@@ -1676,6 +1852,7 @@ export default function Studio() {
             }}
             onTransformCommit={commitCanvasTransform}
             onModelNodes={setModelNodes}
+            onModelMaterials={setModelMaterials}
           />
           {!scene.rooms.length && view !== "building" && (
             <div className="empty-guide">
@@ -1964,6 +2141,175 @@ export default function Studio() {
               automatically certified.
             </p>
           </fieldset>
+          {view === "building" && (
+            <section className="editor-materials" aria-label="Material editor">
+              <div className="section-label">MATERIALS</div>
+              {modelMaterials.length ? (
+                <>
+                  <label>
+                    Model material
+                    <select
+                      value={selectedMaterial}
+                      onChange={(event) => setSelectedMaterial(event.target.value)}
+                      disabled={Boolean(review) || busy}
+                    >
+                      {modelMaterials.map((material) => (
+                        <option key={material.name} value={material.name}>
+                          {material.name} · {material.meshCount} mesh
+                          {material.meshCount === 1 ? "" : "es"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {materialSummary && (
+                    <fieldset disabled={Boolean(review) || busy}>
+                      <div className="material-color-row">
+                        <label>
+                          Base color
+                          <input
+                            type="color"
+                            value={
+                              materialOverride?.baseColor ??
+                              materialSummary.baseColor
+                            }
+                            onChange={(event) =>
+                              patchMaterial({ baseColor: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Emissive
+                          <input
+                            type="color"
+                            value={
+                              materialOverride?.emissive ??
+                              materialSummary.emissive
+                            }
+                            onChange={(event) =>
+                              patchMaterial({ emissive: event.target.value })
+                            }
+                          />
+                        </label>
+                      </div>
+                      {field(
+                        "Roughness",
+                        materialOverride?.roughness ??
+                          materialSummary.roughness,
+                        (roughness) => patchMaterial({ roughness }),
+                        0.05,
+                      )}
+                      {field(
+                        "Metalness",
+                        materialOverride?.metalness ??
+                          materialSummary.metalness,
+                        (metalness) => patchMaterial({ metalness }),
+                        0.05,
+                      )}
+                      {field(
+                        "Opacity",
+                        materialOverride?.opacity ?? materialSummary.opacity,
+                        (opacity) => patchMaterial({ opacity }),
+                        0.05,
+                      )}
+                      {field(
+                        "Emissive intensity",
+                        materialOverride?.emissiveIntensity ??
+                          materialSummary.emissiveIntensity,
+                        (emissiveIntensity) =>
+                          patchMaterial({ emissiveIntensity }),
+                        0.1,
+                      )}
+                      <button
+                        type="button"
+                        disabled={!materialOverride}
+                        onClick={resetMaterial}
+                      >
+                        Reset material override
+                      </button>
+                      <small>
+                        Runtime material override only; imported source bytes stay
+                        unchanged.
+                      </small>
+                    </fieldset>
+                  )}
+                </>
+              ) : (
+                <small>Load the building model to inspect editable runtime materials.</small>
+              )}
+            </section>
+          )}
+          {view === "building" && (
+            <section className="editor-lighting" aria-label="Lighting editor">
+              <div className="section-label">LIGHTING & LOOK</div>
+              <fieldset disabled={Boolean(review) || busy}>
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={appearance.referenceVisual}
+                    onChange={(event) =>
+                      patchAppearance({ referenceVisual: event.target.checked })
+                    }
+                  />
+                  Jyoti verified reference look
+                </label>
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={appearance.nightMode}
+                    onChange={(event) =>
+                      patchAppearance({ nightMode: event.target.checked })
+                    }
+                  />
+                  Evening / architectural lights
+                </label>
+                {field(
+                  "Exposure",
+                  appearance.exposure,
+                  (exposure) => patchAppearance({ exposure }),
+                  0.05,
+                )}
+                {field(
+                  "Sun intensity",
+                  appearance.sunIntensity,
+                  (sunIntensity) => patchAppearance({ sunIntensity }),
+                  0.1,
+                )}
+                {field(
+                  "Sky / hemisphere",
+                  appearance.hemisphereIntensity,
+                  (hemisphereIntensity) =>
+                    patchAppearance({ hemisphereIntensity }),
+                  0.1,
+                )}
+                <label>
+                  Studio background
+                  <input
+                    type="color"
+                    value={appearance.background}
+                    disabled={appearance.referenceVisual}
+                    onChange={(event) =>
+                      patchAppearance({ background: event.target.value })
+                    }
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    edit({
+                      ...p,
+                      scene: {
+                        ...p.scene,
+                        appearance: { ...DEFAULT_APPEARANCE },
+                        materialOverrides: [],
+                      },
+                    })
+                  }
+                >
+                  Reset look development
+                </button>
+              </fieldset>
+            </section>
+          )}
           <div className="section-label">REVIEW & VERSIONS</div>
           {review ? (
             <button className="wide primary" onClick={() => setReview("")}>
@@ -2025,13 +2371,15 @@ export default function Studio() {
       />
       <input
         hidden
+        multiple
         ref={referenceInput}
         type="file"
-        accept=".pdf,.png,.jpg,.jpeg,.webp,.dwg,.dxf,.skb,.skp,.drs,.csv"
+        accept=".fbx,.pdf,.png,.jpg,.jpeg,.webp,.dwg,.dxf,.skb,.skp,.drs,.csv,.json,.tif,.tiff"
         onChange={(e) => {
-          const file = e.target.files?.[0];
+          const selectedFiles = Array.from(e.target.files ?? []);
           e.target.value = "";
-          if (file) void task(() => upload(file, false));
+          if (selectedFiles.length)
+            void task(() => uploadReferences(selectedFiles));
         }}
       />
       <input
