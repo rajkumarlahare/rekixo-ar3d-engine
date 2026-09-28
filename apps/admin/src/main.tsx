@@ -2,6 +2,8 @@ import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ADMIN_BASE_PATH,
+  assertAdminProjectsPayload,
+  assertAdminStatusPayload,
   type Admin3DProjectStatus,
   type AdminProjectsResponse,
   type EngineProjectSummary,
@@ -65,7 +67,16 @@ function App() {
     })
       .then(async (response) => {
         const body = (await response.json()) as AdminProjectsResponse & { error?: string };
-        if (!response.ok) throw new Error(body.error ?? `Projects API failed (${response.status}).`);
+        if (!response.ok) {
+          if (response.status === 401)
+            window.location.replace(
+              `/3Dprojects/login?return=${encodeURIComponent(
+                window.location.pathname + window.location.search,
+              )}`,
+            );
+          throw new Error(body.error ?? `Projects API failed (${response.status}).`);
+        }
+        assertAdminProjectsPayload(body);
         const items = body.projects ?? [];
         setProjects(items);
         const requested = requestedProjectSlug();
@@ -93,7 +104,16 @@ function App() {
     })
       .then(async (response) => {
         const body = (await response.json()) as ApiStatus & { error?: string };
-        if (!response.ok) throw new Error(body.error ?? `Status API failed (${response.status}).`);
+        if (!response.ok) {
+          if (response.status === 401)
+            window.location.replace(
+              `/3Dprojects/login?return=${encodeURIComponent(
+                window.location.pathname + window.location.search,
+              )}`,
+            );
+          throw new Error(body.error ?? `Status API failed (${response.status}).`);
+        }
+        assertAdminStatusPayload(body);
         setStatus(body);
       })
       .catch((reason: unknown) => {
