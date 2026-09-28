@@ -54,7 +54,7 @@ Goal: no project-specific material, texture, room, facade, or presentation data 
 Acceptance: a generic model with names such as `Metal_Panel`, `Slate`, or `Color_A06` cannot inherit another customer's source textures/tints merely because names match. Heavy Reference Source V9 texture/interior modules are loaded only after a positive profile match, and direct FBX Studio parsing carries the verified local asset SHA into profile matching.
 
 ### Phase 2 — Generic floors and geometry core
-Status: IN PROGRESS
+Status: COMPLETE — validated on main (PR #39, GitHub Actions run 36399474310)
 
 - replace G+5 percentage heuristics with explicit floor entities/elevations;
 - remove `levels.length === 7` assumptions;
@@ -139,8 +139,8 @@ The following findings remain tracked until their owning phase closes:
 - mutable live-table publication instead of immutable release selection;
 - brochure/DWG source conflicts not fully surfaced in customer UI;
 - reconstructed doors/rooms/furniture encoded in project source code;
-- G+5/fixed seven-level assumptions;
-- sparse floor index mapping;
+- [resolved Phase 2] G+5/fixed seven-level assumptions;
+- [resolved Phase 2] sparse floor index mapping;
 - [resolved Phase 1] direct Studio FBX source-SHA propagation gap;
 - profile camera/default-room values still code-driven;
 - Scene Manifest relational and polygon validation gaps;
