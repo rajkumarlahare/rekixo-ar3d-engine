@@ -249,6 +249,22 @@
       "status": "derived"
     },
     {
+      "id": "fbx-floor-levels",
+      "sourceId": "jyoti-source-fbx",
+      "key": "audit.architecturalFloorLevelsM",
+      "value": [
+        0,
+        3.048,
+        6.0452,
+        9.0424,
+        12.0396,
+        15.0368,
+        18.034
+      ],
+      "status": "derived",
+      "note": "Source-coordinate floor/roof levels used by the verified exterior profile. They are model-coordinate measurements, not an independent as-built survey."
+    },
+    {
       "id": "dwg-format",
       "sourceId": "jyoti-source-dwg",
       "key": "dwg.format",
