@@ -6,7 +6,20 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import type { CameraPreset3D } from "@rekixo/3d-contracts";
 import { createFloorExploder, enhanceArchitecturalModel } from "./realism";
-import { clampWalkPosition, walkDelta, walkStartPosition, type WalkDirection } from "./walkthrough";
+import {
+  floorFocusElevation,
+  floorGeometryFor,
+  resolveFloorGeometry,
+  type FloorGeometryInput,
+  type FloorGeometryLevel,
+} from "./floorGeometry";
+import {
+  clampWalkPosition,
+  collectWalkColliders,
+  walkDelta,
+  walkStartPosition,
+  type WalkDirection,
+} from "./walkthrough";
 import { createArchitecturalSiteEnvironment } from "./siteEnvironment";
 import {
   applyModelProfileExterior,
@@ -36,6 +49,7 @@ interface Viewer3DProps {
   visualPreset?: "default" | "reference-render";
   onFeatureSelect?: (feature: Omit<ExperienceFeature, "object">) => void;
   availableFloors?: number[];
+  floorGeometry?: FloorGeometryInput[];
 }
 
 interface HomeView {
@@ -206,8 +220,17 @@ export function Viewer3D({
   visualPreset = "default",
   onFeatureSelect,
   availableFloors = [],
+  floorGeometry = [],
 }: Viewer3DProps) {
-  const floorSignature = availableFloors.join(",");
+  const floorSignature = [
+    availableFloors.join(","),
+    floorGeometry
+      .map(
+        (item) =>
+          `${item.floor}:${item.elevationM}:${item.topElevationM ?? ""}`,
+      )
+      .join("|"),
+  ].join("::");
   const hostRef = useRef<HTMLDivElement>(null);
   const resetRef = useRef<(() => void) | null>(null);
   const floorRef = useRef<((floor: number | null) => void) | null>(null);
@@ -285,6 +308,8 @@ export function Viewer3D({
       scene.fog = new THREE.FogExp2(0x71859a, 0.00082);
     }
     let modelBounds: THREE.Box3 | undefined;
+    let resolvedFloorGeometry: FloorGeometryLevel[] = [];
+    let walkColliders: THREE.Object3D[] = [];
 
     const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 2000);
     camera.position.set(8, 6, 9);
@@ -383,31 +408,37 @@ export function Viewer3D({
     const applyFloor = (floor: number | null) => {
       if (!modelBounds) return;
       if (floor === null) {
-        renderer.clippingPlanes = sectionEnabledRef.current ? renderer.clippingPlanes.filter((plane) => Math.abs(plane.normal.x) > 0.5) : [];
+        renderer.clippingPlanes = sectionEnabledRef.current
+          ? renderer.clippingPlanes.filter(
+              (plane) => Math.abs(plane.normal.x) > 0.5,
+            )
+          : [];
         return;
       }
-      const minY = modelBounds.min.y;
-      const height = Math.max(modelBounds.max.y - modelBounds.min.y, 1);
-      const floors = Array.from(new Set(availableFloors))
-        .filter((item) => Number.isFinite(item))
-        .sort((a, b) => a - b);
-      const floorIndex = floors.indexOf(floor);
-      if (floorIndex < 0) return;
-      const slices = Math.max(floors.length, 1);
-      const lower =
-        referenceExterior?.floorLevels[floorIndex] ??
-        minY + height * (floorIndex / slices);
-      const upper =
-        referenceExterior?.floorLevels[floorIndex + 1] ??
-        minY + height * ((floorIndex + 1) / slices);
+
+      const level = floorGeometryFor(resolvedFloorGeometry, floor);
+      if (!level) return;
       const sectionPlanes = sectionEnabledRef.current
-        ? renderer.clippingPlanes.filter((plane) => Math.abs(plane.normal.x) > 0.5)
+        ? renderer.clippingPlanes.filter(
+            (plane) => Math.abs(plane.normal.x) > 0.5,
+          )
         : [];
       renderer.clippingPlanes = [
         ...sectionPlanes,
-        new THREE.Plane(new THREE.Vector3(0, 1, 0), -lower),
-        new THREE.Plane(new THREE.Vector3(0, -1, 0), upper),
+        new THREE.Plane(
+          new THREE.Vector3(0, 1, 0),
+          -level.elevationM,
+        ),
+        new THREE.Plane(
+          new THREE.Vector3(0, -1, 0),
+          level.topElevationM,
+        ),
       ];
+
+      if (!walkActive && currentExperienceMode === "site") {
+        controls.target.y = floorFocusElevation(level);
+        controls.update();
+      }
     };
 
     const sectionEnabledRef = { current: interactionMode === "section" };
@@ -460,9 +491,16 @@ export function Viewer3D({
       if (!modelBounds) return;
       floorExploder?.reset();
       renderer.clippingPlanes = [];
-      camera.position.copy(walkStartPosition(modelBounds, floor));
+      camera.position.copy(
+        walkStartPosition(modelBounds, floor, resolvedFloorGeometry),
+      );
       walkBounds = modelBounds;
       walkScale = 1;
+      walkColliders = collectWalkColliders(
+        currentExperienceMode === "interior"
+          ? projectExperience?.root
+          : activeObject,
+      );
 
       if (currentExperienceMode === "interior" && projectExperience) {
         const defaultRoomId =
@@ -492,6 +530,7 @@ export function Viewer3D({
       walkActive = true;
       walkScale = entry.scale;
       walkBounds = projectExperience.focus("interior").box;
+      walkColliders = collectWalkColliders(projectExperience.root);
       camera.position.copy(entry.point);
       camera.near = Math.max(0.015 * walkScale, 0.005);
       camera.fov = 68;
@@ -509,11 +548,7 @@ export function Viewer3D({
     const moveWalk = (direction: WalkDirection, distance: number) => {
       if (!walkActive || !walkBounds) return;
       const delta = walkDelta(walkYaw, direction, distance);
-      const obstacles: THREE.Object3D[] = [];
-      const targetRoot = currentExperienceMode === "interior" ? projectExperience?.root : activeObject;
-      targetRoot?.traverseVisible((object) => {
-        if (object instanceof THREE.Mesh) obstacles.push(object);
-      });
+      const obstacles = walkColliders;
       const radius = 0.18 * walkScale;
       for (const axis of ["x", "z"] as const) {
         const amount = delta[axis];
@@ -651,6 +686,13 @@ export function Viewer3D({
       modelBounds = new THREE.Box3().setFromObject(object);
       modelProfile = applyModelProfileExterior(object, referenceVisual);
       referenceExterior = modelProfile?.exterior;
+      resolvedFloorGeometry = resolveFloorGeometry({
+        floorIds: availableFloors,
+        minY: modelBounds.min.y,
+        maxY: modelBounds.max.y,
+        scene: floorGeometry,
+        profile: modelProfile?.floorGeometry,
+      });
       if (referenceExterior) {
         scene.background = referenceExterior.daylightSky;
         sun.position.set(-16, 30, 16);
@@ -677,7 +719,11 @@ export function Viewer3D({
         .catch((error) => {
           console.error("Project material profile load failed", error);
         });
-      floorExploder = createFloorExploder(object, modelBounds);
+      floorExploder = createFloorExploder(
+        object,
+        modelBounds,
+        resolvedFloorGeometry,
+      );
       explodeRef.current = (enabled) => floorExploder?.setExploded(enabled);
 
       homeView =
@@ -699,8 +745,13 @@ export function Viewer3D({
 
       siteEnvironment?.dispose();
       if (siteEnvironment) scene.remove(siteEnvironment.root);
-      siteEnvironment = createArchitecturalSiteEnvironment(bounds, renderer, mobile);
+      siteEnvironment = createArchitecturalSiteEnvironment(
+        bounds,
+        renderer,
+        mobile,
+      );
       scene.add(siteEnvironment.root);
+      walkColliders = collectWalkColliders(object);
 
       projectExperience?.dispose();
       if (projectExperience) scene.remove(projectExperience.root);
