@@ -1929,6 +1929,7 @@ export default function Studio() {
             snap={transformSnap}
             focusRequest={focusRequest}
             cameraOrientation={cameraOrientation}
+            showReferenceLayers
             onSelect={select}
             onMesh={(name) => {
               setMesh(name);
