@@ -682,6 +682,19 @@ export default function Studio() {
         </div>
         <div className="studio-actions">
           <button
+            disabled={busy || dirty}
+            onClick={() => {
+              if (dirty) {
+                setError("Save your changes before creating a project.");
+                return;
+              }
+              open(newProject("Untitled project"));
+              setWorkspace("overview");
+            }}
+          >
+            + New project
+          </button>
+          <button
             disabled={busy || Boolean(review)}
             onClick={() =>
               task(async () => {
