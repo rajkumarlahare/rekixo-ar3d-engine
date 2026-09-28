@@ -39,7 +39,7 @@ The current Platform Super Admin demonstrates production patterns that the separ
 ## Delivery phases
 
 ### Phase 1 — Tenant isolation and profile boundary
-Status: IN PROGRESS
+Status: IMPLEMENTED — merge validation pending
 
 Goal: no project-specific material, texture, room, facade, or presentation data may affect an unrelated project.
 
@@ -48,10 +48,10 @@ Goal: no project-specific material, texture, room, facade, or presentation data 
 3. Keep generic PBR enhancement project-neutral.
 4. Preserve the existing Jyoti/reference visual output.
 5. Add regression tests preventing customer-specific material names/textures from returning to generic runtime code.
-6. Next sub-step: lazy-load project-specific experience/texture bundles so unrelated tenants do not download them.
-7. Next sub-step: propagate verified source SHA when the exact source FBX is opened directly in Studio.
+6. Lazy-load project-specific experience/texture bundles so unrelated tenants do not download them.
+7. Propagate the verified local asset SHA when the exact source FBX is opened directly in Studio.
 
-Acceptance: a generic model with names such as `Metal_Panel`, `Slate`, or `Color_A06` cannot inherit another customer's source textures/tints merely because names match.
+Acceptance: a generic model with names such as `Metal_Panel`, `Slate`, or `Color_A06` cannot inherit another customer's source textures/tints merely because names match. Heavy Reference Source V9 texture/interior modules are loaded only after a positive profile match, and direct FBX Studio parsing carries the verified local asset SHA into profile matching.
 
 ### Phase 2 — Generic floors and geometry core
 Status: PENDING
