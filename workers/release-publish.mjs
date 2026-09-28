@@ -606,6 +606,92 @@ export async function buildAndActivateRelease(
   }
 }
 
+async function verifyReleaseIntegrity(env, project, releaseId) {
+  const release = await env.DB.prepare(
+    `SELECT id,project_id,version,manifest_json,
+            manifest_sha256 AS manifestSha256
+       FROM releases_3d
+      WHERE id=? AND project_id=?
+      LIMIT 1`,
+  ).bind(releaseId, project.id).first();
+  if (!release) throw Error("Release does not belong to this project.");
+
+  const actualHash = await digestHex(release.manifest_json);
+  if (actualHash !== String(release.manifestSha256 || "").toLowerCase())
+    throw Error("Release manifest checksum mismatch.");
+
+  let manifest;
+  try {
+    manifest = JSON.parse(release.manifest_json);
+  } catch {
+    throw Error("Release manifest JSON is invalid.");
+  }
+  if (
+    manifest?.format !== RELEASE_FORMAT ||
+    manifest?.version !== RELEASE_VERSION ||
+    manifest?.release?.id !== releaseId ||
+    manifest?.release?.projectId !== project.id ||
+    manifest?.release?.projectSlug !== project.slug ||
+    Number(manifest?.release?.version) !== Number(release.version) ||
+    manifest?.project?.id !== project.id ||
+    manifest?.project?.slug !== project.slug
+  )
+    throw Error("Release manifest identity mismatch.");
+
+  const rows = await env.DB.prepare(
+    `SELECT kind,logical_id AS logicalId,byte_size AS byteSize,
+            sha256,r2_key AS r2Key
+       FROM release_assets_3d
+      WHERE release_id=? AND project_id=?
+      ORDER BY kind,logical_id`,
+  ).bind(releaseId, project.id).all();
+  const assets = rows.results || [];
+  if (assets.length !== (manifest.assets?.length || 0))
+    throw Error("Release asset metadata count mismatch.");
+
+  const manifestByKey = new Map(
+    (manifest.assets || []).map((asset) => [
+      `${asset.kind}:${asset.logicalId}`,
+      asset,
+    ]),
+  );
+  for (const row of assets) {
+    const asset = manifestByKey.get(`${row.kind}:${row.logicalId}`);
+    if (
+      !asset ||
+      Number(asset.byteSize) !== Number(row.byteSize) ||
+      (asset.sha256 ?? null) !== (row.sha256 ?? null)
+    )
+      throw Error("Release asset manifest metadata mismatch.");
+  }
+
+  for (let index = 0; index < assets.length; index += 20) {
+    const chunk = assets.slice(index, index + 20);
+    await Promise.all(
+      chunk.map(async (asset) => {
+        const object = await env.MODEL_ASSETS.head(asset.r2Key);
+        if (!object)
+          throw Error(`Release asset is missing from storage: ${asset.logicalId}`);
+        if (Number(object.size) !== Number(asset.byteSize))
+          throw Error(`Release asset size mismatch: ${asset.logicalId}`);
+        const metadataSha = object.customMetadata?.sha256;
+        if (
+          asset.sha256 &&
+          metadataSha &&
+          String(metadataSha).toLowerCase() !== String(asset.sha256).toLowerCase()
+        )
+          throw Error(`Release asset checksum metadata mismatch: ${asset.logicalId}`);
+      }),
+    );
+  }
+
+  return {
+    id: release.id,
+    version: Number(release.version),
+    manifestSha256: actualHash,
+  };
+}
+
 export async function activateExistingRelease(env, actor, project, releaseId) {
   if (!(await releaseSchemaReady(env)))
     throw Error("Immutable release schema is not installed.");
@@ -613,13 +699,11 @@ export async function activateExistingRelease(env, actor, project, releaseId) {
   const current = await env.DB.prepare(
     "SELECT active_release_id,status FROM projects_3d WHERE id=? LIMIT 1",
   ).bind(project.id).first();
-  const release = await env.DB.prepare(
-    `SELECT id,version,manifest_sha256 AS manifestSha256
-       FROM releases_3d
-      WHERE id=? AND project_id=?
-      LIMIT 1`,
-  ).bind(releaseId, project.id).first();
-  if (!release) throw Error("Release does not belong to this project.");
+  const release = await verifyReleaseIntegrity(
+    env,
+    project,
+    releaseId,
+  );
   if (current?.active_release_id === releaseId)
     return {
       id: release.id,
