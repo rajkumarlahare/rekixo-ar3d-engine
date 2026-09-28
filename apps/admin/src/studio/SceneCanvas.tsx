@@ -4,7 +4,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
-import { applyModelProfileExterior } from "../../../public/src/viewer/projectProfiles";
+import { applyModelProfileExterior } from "../../../public/src/viewer/modelProfiles";
 import { asset } from "./storage";
 import {
   canWalk,
