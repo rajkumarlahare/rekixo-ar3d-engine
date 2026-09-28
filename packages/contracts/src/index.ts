@@ -84,6 +84,12 @@ export interface Admin3DProjectStatus {
   scenes: Scene3D[];
   models: Model3D[];
   activeModel?: Model3D;
+  modelPage?: {
+    limit: number;
+    offset: number;
+    total: number;
+    hasMore: boolean;
+  };
   storage: {
     bucket: string;
     activeModelObjectAvailable: boolean;
