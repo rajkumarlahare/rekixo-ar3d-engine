@@ -193,7 +193,7 @@ function TypicalFloor({ experience, onEnterFloor }: { experience: Public3DExperi
       <div className="module-copy">
         <p className="eyebrow">FLOOR EXPLORER</p>
         <h2>{settings.title ?? "Typical Floor"}</h2>
-        <p>Select a floor to view the unit numbers supported by the supplied brochure data.</p>
+        <p>Select a floor to view unit numbers supported by this project's configured source data.</p>
       </div>
       <div className="floor-selector" aria-label="Select floor">
         {floors.map((item) => (
@@ -229,8 +229,8 @@ function TypicalFloor({ experience, onEnterFloor }: { experience: Public3DExperi
           ))}
           {!visibleUnits.length && (
             <div className="media-placeholder">
-              <strong>No brochure-listed unit for this floor</strong>
-              <span>The viewer does not invent unit numbers that are absent from the supplied project source.</span>
+              <strong>No configured unit for this floor</strong>
+              <span>The viewer does not invent unit numbers that are absent from the project's source data.</span>
             </div>
           )}
         </div>
@@ -240,7 +240,7 @@ function TypicalFloor({ experience, onEnterFloor }: { experience: Public3DExperi
           <span>SELECTED UNIT</span>
           <strong>Flat {selectedUnit} · Floor {floor}</strong>
           <p>
-            This unit identity and area come from the supplied brochure series. Exact 3D room/mesh
+            This unit identity and area come from configured project data. Exact 3D room/mesh
             highlighting is intentionally not guessed until a semantic unit boundary is verified
             from the architectural source model.
           </p>
@@ -439,7 +439,7 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
           initialExploded={exploded}
           experienceMode={experienceMode}
           initialWalk={mode === "walk"}
-          initialWalkFloor={floor ?? 1}
+          initialWalkFloor={floor ?? firstResidentialFloor}
           visualPreset="reference-render"
           onFeatureSelect={setSelectedFeature}
           availableFloors={availableFloors}
@@ -490,13 +490,13 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
             {mode === "project" && "Explore the complete project from an aerial interactive view."}
             {mode === "building" && "Inspect the building facade from a premium architectural camera."}
             {mode === "floors" && "Separate the building stack or focus a single verified floor."}
-            {mode === "units" && "Select brochure-backed units on a floor without inventing geometry."}
-            {mode === "interior" && "Tap a room to enter. Drag to look; hold the arrows or use WASD to move. Reconstructed from the supplied typical-floor brochure; door positions and finishes are approximate."}
-            {mode === "walk" && "Enter the brochure-backed typical floor at eye level. Drag or touch to look around, then move through the living rooms, bedrooms, kitchens, toilets, balconies and common areas using keyboard or on-screen controls."}
-            {mode === "terrace" && "Inspect the actual roof massing and edge lighting. No recreational roof amenity is claimed because it is not present in the supplied brochure."}
-            {mode === "amenities" && "Review only the brochure-listed amenities: Car Parking, Modular Kitchen, POP in Hall and CCTV Camera."}
+            {mode === "units" && "Select configured units on a floor without inventing geometry."}
+            {mode === "interior" && "Inspect the configured interior scene. Tap a room to enter; reconstructed or unverified details remain explicitly non-authoritative."}
+            {mode === "walk" && "Enter the configured interior at eye level. Drag or touch to look around and use keyboard or on-screen controls to move."}
+            {mode === "terrace" && "Inspect the configured roof or terrace presentation without inferring unverified amenities."}
+            {mode === "amenities" && "Review only the amenities configured for this project."}
             {mode === "balcony" && "Inspect the facade and balcony side from a dedicated viewing angle."}
-            {mode === "context" && "Review brochure-listed connectivity and nearby destinations around the project."}
+            {mode === "context" && "Review configured connectivity and nearby destinations around the project."}
           </p>
         </div>
 
@@ -532,7 +532,7 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
 
         {mode === "interior" && (
           <aside className="twin-info-panel twin-info-panel--right">
-            <span className="twin-kicker">BROCHURE-BACKED FLOOR</span>
+            <span className="twin-kicker">PROJECT INTERIOR</span>
             <h2>{floorSettings.title ?? "Residential units"}</h2>
             <p>
               This interior presentation uses the room and unit evidence configured for this
@@ -602,7 +602,7 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
                 </button>
               ))}
               {!visibleUnits.length && (
-                <p>No brochure-listed residential unit is mapped to this level.</p>
+                <p>No configured residential unit is mapped to this level.</p>
               )}
             </div>
             {unit && (
@@ -649,7 +649,10 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
                 </div>
               ))}
             </div>
-            <p className="twin-source-note">Distances are brochure-supplied context, not surveyed GIS measurements.</p>
+            <p className="twin-source-note">
+              {locationSettings.note ??
+                "Distances and context are shown from configured project data; they are not inferred by the viewer."}
+            </p>
           </aside>
         )}
 
