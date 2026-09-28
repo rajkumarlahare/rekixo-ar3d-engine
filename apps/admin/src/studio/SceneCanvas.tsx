@@ -103,8 +103,14 @@ interface Props {
     floorId: string;
     snap: boolean;
   };
+  roomPolygonEdit?: {
+    enabled: boolean;
+    roomId: string;
+    snap: boolean;
+  };
   onRoomDraw?: (result: RoomDrawResult) => void;
   onRoomPolygonDraw?: (points: RoomPoint[]) => void;
+  onRoomPolygonChange?: (roomId: string, points: RoomPoint[]) => void;
   isolateFloorId?: string;
   sectionCut?: {
     enabled: boolean;
@@ -357,7 +363,9 @@ export default function SceneCanvas(props: Props) {
     modelSelection?: T.BoxHelper;
     roomDraft: T.Mesh;
     polygonDraft: T.Group;
+    polygonEdit: T.Group;
     clearPolygonDraft: () => void;
+    renderPolygonEdit: (room?: Room, points?: RoomPoint[]) => void;
     focus: () => void;
     focusSelected: () => void;
   } | null>(null);
@@ -424,7 +432,10 @@ export default function SceneCanvas(props: Props) {
     const polygonDraft = new T.Group();
     polygonDraft.name = "Room polygon draft";
     polygonDraft.renderOrder = 31;
-    scene.add(references, model, rooms, roomDraft, polygonDraft);
+    const polygonEdit = new T.Group();
+    polygonEdit.name = "Room polygon edit handles";
+    polygonEdit.renderOrder = 32;
+    scene.add(references, model, rooms, roomDraft, polygonDraft, polygonEdit);
     const keys = new Set<string>();
     const selectables = new Map<string, T.Object3D>();
     const transform = new TransformControls(camera, renderer.domElement);
@@ -444,6 +455,42 @@ export default function SceneCanvas(props: Props) {
         polygonDraft.remove(child);
         dispose(child);
       }
+    };
+    const renderPolygonEdit = (room?: Room, points?: RoomPoint[]) => {
+      for (const child of [...polygonEdit.children]) {
+        polygonEdit.remove(child);
+        dispose(child);
+      }
+      if (!room?.polygon?.length) return;
+      const floorY =
+        latest.current.scene.floors.find(
+          (floor) => floor.id === room.floorId,
+        )?.elevation ?? 0;
+      const source = points ?? room.polygon;
+      const vectors = source.map(
+        ([x, z]) => new T.Vector3(x, floorY + 0.11, z),
+      );
+      if (vectors.length >= 3) {
+        const loop = new T.LineLoop(
+          new T.BufferGeometry().setFromPoints(vectors),
+          new T.LineBasicMaterial({
+            color: 0xb9b2ff,
+            transparent: true,
+            opacity: 0.98,
+          }),
+        );
+        polygonEdit.add(loop);
+      }
+      vectors.forEach((point, index) => {
+        const marker = new T.Mesh(
+          new T.SphereGeometry(0.12, 14, 10),
+          new T.MeshBasicMaterial({ color: 0x8d84ff }),
+        );
+        marker.position.copy(point);
+        marker.userData.roomVertexIndex = index;
+        marker.userData.roomId = room.id;
+        polygonEdit.add(marker);
+      });
     };
     const redrawPolygonDraft = (hover?: T.Vector3) => {
       for (const child of [...polygonDraft.children]) {
@@ -643,7 +690,9 @@ export default function SceneCanvas(props: Props) {
       sun,
       roomDraft,
       polygonDraft,
+      polygonEdit,
       clearPolygonDraft,
+      renderPolygonEdit,
       focus,
       focusSelected,
     };
