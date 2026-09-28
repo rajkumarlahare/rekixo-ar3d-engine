@@ -132,11 +132,18 @@ export function buildSceneManifestV2(
       floorId: room.floorId,
       unitId: unitIdByKey.get(unitKey(room)),
       name: room.name,
-      boundary: {
-        kind: "rectangle",
-        center: [room.x, room.z],
-        size: [room.width, room.depth],
-      },
+      boundary: room.polygon?.length
+        ? {
+            kind: "polygon" as const,
+            points: room.polygon.map(
+              (point) => [point[0], point[1]] as [number, number],
+            ),
+          }
+        : {
+            kind: "rectangle" as const,
+            center: [room.x, room.z] as [number, number],
+            size: [room.width, room.depth] as [number, number],
+          },
       ceilingHeightM: room.height,
       evidence: {
         status: room.verified ? "reviewed" : "unverified",
