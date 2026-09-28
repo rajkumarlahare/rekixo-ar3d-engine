@@ -7,7 +7,7 @@ const read = (file) => fs.readFileSync(file, "utf8");
 test("premium presentation profile receives the dedicated full-screen digital twin shell", () => {
   const app = read("apps/public/src/main.tsx");
   assert.match(app, /presentation\?\.style === "premium-real-estate-digital-twin"/);
-  assert.match(app, /JyotiDigitalTwin/);
+  assert.match(app, /PremiumDigitalTwin/);
   assert.match(app, /Project Navigation/);
   assert.match(app, /Building Explorer/);
   assert.match(app, /Floor Explorer/);
