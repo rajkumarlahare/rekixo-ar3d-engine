@@ -62,6 +62,12 @@ export interface ModelMaterialSummary {
   emissive: string;
   emissiveIntensity: number;
 }
+export interface RoomDrawResult {
+  x: number;
+  z: number;
+  width: number;
+  depth: number;
+}
 interface Props {
   resolveAsset?: (id: string) => Promise<Asset | undefined>;
   scene: SceneData;
@@ -83,6 +89,13 @@ interface Props {
   cameraOrientation?: "perspective" | "top";
   showReferenceLayers?: boolean;
   modelTransformEnabled?: boolean;
+  roomMapEnabled?: boolean;
+  roomDraw?: {
+    enabled: boolean;
+    floorId: string;
+    snap: boolean;
+  };
+  onRoomDraw?: (result: RoomDrawResult) => void;
   isolateFloorId?: string;
   sectionCut?: {
     enabled: boolean;
@@ -271,6 +284,7 @@ export default function SceneCanvas(props: Props) {
     sun: T.DirectionalLight;
     profileExterior?: ModelProfileRuntime["exterior"];
     modelSelection?: T.BoxHelper;
+    roomDraft: T.Mesh;
     focus: () => void;
     focusSelected: () => void;
   } | null>(null);
@@ -323,7 +337,18 @@ export default function SceneCanvas(props: Props) {
       rooms = new T.Group(),
       references = new T.Group();
     references.name = "Studio reference layers";
-    scene.add(references, model, rooms);
+    const roomDraft = new T.Mesh(
+      new T.BoxGeometry(1, 0.06, 1),
+      new T.MeshBasicMaterial({
+        color: 0x8d84ff,
+        transparent: true,
+        opacity: 0.38,
+        depthWrite: false,
+      }),
+    );
+    roomDraft.visible = false;
+    roomDraft.renderOrder = 30;
+    scene.add(references, model, rooms, roomDraft);
     const keys = new Set<string>();
     const selectables = new Map<string, T.Object3D>();
     const transform = new TransformControls(camera, renderer.domElement);
@@ -486,6 +511,7 @@ export default function SceneCanvas(props: Props) {
       transform,
       hemi,
       sun,
+      roomDraft,
       focus,
       focusSelected,
     };
