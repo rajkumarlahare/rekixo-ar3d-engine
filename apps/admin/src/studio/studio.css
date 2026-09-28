@@ -572,3 +572,22 @@
   background: rgba(244, 185, 66, 0.12);
   color: #ffe6aa;
 }
+
+
+.cloud-account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cloud-account-row small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cloud-account-row button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 9px;
+}
