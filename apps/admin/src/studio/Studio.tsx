@@ -16,7 +16,12 @@ import {
 } from "./domain";
 import * as storage from "./storage";
 import * as cloud from "./cloud";
-import { importPublished, loadPublished } from "./published";
+import {
+  importPublished,
+  loadPublished,
+  loadPublishedCatalog,
+  type PublishedCatalogEntry,
+} from "./published";
 import { buildSceneManifestV2 } from "./manifestV2";
 import "./studio.css";
 
@@ -49,9 +54,8 @@ export default function Studio() {
   const [cloudProjects, setCloudProjects] = useState<cloud.CloudProjectSummary[]>([]);
   const [cloudSearch, setCloudSearch] = useState("");
   const [cloudFilter, setCloudFilter] = useState<"active" | "archived">("active");
-  const [published, setPublished] = useState<{ slug: string; name: string }[]>(
-    [],
-  );
+  const [cloudReleases, setCloudReleases] = useState<cloud.CloudReleaseSummary[]>([]);
+  const [published, setPublished] = useState<PublishedCatalogEntry[]>([]);
   useEffect(() => {
     let active = true;
     void cloud
@@ -103,17 +107,9 @@ export default function Studio() {
 
   useEffect(() => {
     let active = true;
-    fetch("/3Dprojects/published/catalog.json")
-      .then((r) => (r.ok ? r.json() : []))
+    void loadPublishedCatalog()
       .then((rows) => {
-        if (active && Array.isArray(rows))
-          setPublished(
-            rows.filter(
-              (r) =>
-                typeof r.name === "string" &&
-                /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(r.slug),
-            ),
-          );
+        if (active) setPublished(rows);
       })
       .catch(() => {});
     return () => {
