@@ -1,3 +1,4 @@
+import { handleReleaseReadRequest } from "./release-runtime.mjs";
 import { handleCloudAdminRequest } from "./admin-cloud.mjs";
 const BASE_PATH = "/3Dprojects";
 const BUCKET_NAME = "rekixo-3d-assets";
@@ -212,6 +213,9 @@ export default {
 
     const cloudResponse = await handleCloudAdminRequest(request, env, url);
     if (cloudResponse) return cloudResponse;
+
+    const releaseResponse = await handleReleaseReadRequest(request, env, url);
+    if (releaseResponse) return releaseResponse;
 
     if (url.pathname === `${BASE_PATH}/api/projects`) {
       if (request.method !== "GET") {
