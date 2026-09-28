@@ -48,14 +48,18 @@ export async function releaseSchemaReady(env) {
       `SELECT COUNT(*) AS total
          FROM sqlite_master
         WHERE type='table'
-          AND name IN ('releases_3d','release_assets_3d')`,
+          AND name IN (
+            'releases_3d',
+            'release_assets_3d',
+            'release_activations_3d'
+          )`,
     ).first();
     const column = await env.DB.prepare(
       `SELECT COUNT(*) AS total
          FROM pragma_table_info('projects_3d')
         WHERE name='active_release_id'`,
     ).first();
-    return Number(tables?.total || 0) === 2 && Number(column?.total || 0) === 1;
+    return Number(tables?.total || 0) === 3 && Number(column?.total || 0) === 1;
   } catch {
     return false;
   }
