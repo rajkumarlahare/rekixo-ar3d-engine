@@ -3070,31 +3070,39 @@ export default function Studio() {
                     ))}
                   </select>
                 </label>
-                {floor &&
-                  field("Floor elevation (m)", floor.elevation, (elevation) =>
-                    edit({
-                      ...p,
-                      scene: {
-                        ...p.scene,
-                        floors: p.scene.floors.map((f) =>
-                          f.id === floor.id ? { ...f, elevation } : f,
-                        ),
-                      },
-                    }),
-                  )}
-                <div className="property-grid">
-                  {field("Width (m)", room.width, (width) =>
-                    patchRoom({ width }),
-                  )}
-                  {field("Depth (m)", room.depth, (depth) =>
-                    patchRoom({ depth }),
-                  )}
-                  {field("Height (m)", room.height, (height) =>
-                    patchRoom({ height }),
-                  )}
-                  {field("Centre X (m)", room.x, (x) => patchRoom({ x }))}
-                  {field("Centre Z (m)", room.z, (z) => patchRoom({ z }))}
-                </div>
+                <details className="advanced-properties">
+                  <summary>Advanced numeric geometry</summary>
+                  <p>
+                    Normally use Map Rooms, Move and Scale with the mouse. Exact
+                    values stay available here when engineering-level correction
+                    is required.
+                  </p>
+                  {floor &&
+                    field("Floor elevation (m)", floor.elevation, (elevation) =>
+                      edit({
+                        ...p,
+                        scene: {
+                          ...p.scene,
+                          floors: p.scene.floors.map((f) =>
+                            f.id === floor.id ? { ...f, elevation } : f,
+                          ),
+                        },
+                      }),
+                    )}
+                  <div className="property-grid">
+                    {field("Width (m)", room.width, (width) =>
+                      patchRoom({ width }),
+                    )}
+                    {field("Depth (m)", room.depth, (depth) =>
+                      patchRoom({ depth }),
+                    )}
+                    {field("Height (m)", room.height, (height) =>
+                      patchRoom({ height }),
+                    )}
+                    {field("Centre X (m)", room.x, (x) => patchRoom({ x }))}
+                    {field("Centre Z (m)", room.z, (z) => patchRoom({ z }))}
+                  </div>
+                </details>
                 <label>
                   Floor finish
                   <input
