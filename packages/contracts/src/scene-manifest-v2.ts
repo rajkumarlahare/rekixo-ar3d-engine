@@ -395,7 +395,6 @@ export function assertSceneManifestV2(
       item as Record<string, unknown>,
     ]),
   );
-  const roomIds = idSet(rooms);
   const roomById = new Map(
     rooms.map((item) => [
       (item as Record<string, unknown>).id as string,
@@ -503,6 +502,7 @@ export function assertSceneManifestV2(
     }
 
     const evidence = room.evidence as Record<string, unknown>;
+    const sourceClaimIds = evidence.sourceClaimIds;
     if (
       !["unverified", "reviewed"].includes(evidence.status as string) ||
       (evidence.sourceNote !== undefined &&
@@ -512,14 +512,13 @@ export function assertSceneManifestV2(
         !assetIds.has(evidence.sourceAssetId as string)) ||
       (evidence.sourcePackSourceId !== undefined &&
         !isText(evidence.sourcePackSourceId, 200)) ||
-      (evidence.sourceClaimIds !== undefined &&
-        (!Array.isArray(evidence.sourceClaimIds) ||
-          evidence.sourceClaimIds.length > 100 ||
-          new Set(evidence.sourceClaimIds as unknown[]).size !==
-            evidence.sourceClaimIds.length ||
-          evidence.sourceClaimIds.some((id) => !isText(id, 200)))) ||
-      (evidence.sourceClaimIds !== undefined &&
-        evidence.sourceClaimIds.length > 0 &&
+      (sourceClaimIds !== undefined &&
+        (!Array.isArray(sourceClaimIds) ||
+          sourceClaimIds.length > 100 ||
+          new Set(sourceClaimIds as unknown[]).size !== sourceClaimIds.length ||
+          sourceClaimIds.some((id) => !isText(id, 200)))) ||
+      (Array.isArray(sourceClaimIds) &&
+        sourceClaimIds.length > 0 &&
         evidence.sourcePackSourceId === undefined) ||
       (evidence.basis !== undefined &&
         (typeof evidence.basis !== "string" || evidence.basis.length > 1000))
