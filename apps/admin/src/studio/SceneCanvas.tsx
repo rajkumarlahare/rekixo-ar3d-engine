@@ -1788,6 +1788,23 @@ export default function SceneCanvas(props: Props) {
   }, [props.roomPolygonDraw?.enabled, props.roomPolygonDraw?.floorId]);
 
   useEffect(() => {
+    const runtime = api.current;
+    if (!runtime) return;
+    if (!props.roomPolygonEdit?.enabled) {
+      runtime.renderPolygonEdit(undefined);
+      return;
+    }
+    const room = props.scene.rooms.find(
+      (entry) => entry.id === props.roomPolygonEdit?.roomId,
+    );
+    runtime.renderPolygonEdit(room);
+  }, [
+    props.roomPolygonEdit?.enabled,
+    props.roomPolygonEdit?.roomId,
+    props.scene.rooms,
+  ]);
+
+  useEffect(() => {
     if (props.focusRequest === undefined) return;
     api.current?.focusSelected();
   }, [props.focusRequest]);
