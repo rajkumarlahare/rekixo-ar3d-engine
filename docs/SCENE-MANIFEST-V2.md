@@ -76,3 +76,27 @@ semantic model IDs, multi-building authoring, doors/windows, polygons, materials
 and cameras without changing the manifest version for already-supported fields.
 Breaking semantic changes require a future contract version rather than silent
 reinterpretation.
+
+
+## Source evidence linkage
+
+Scene Manifest V2 can now attach structured provenance to room measurement
+evidence with `sourcePackSourceId` and optional `sourceClaimIds`. These fields
+do not make a reconstructed room authoritative by themselves. The room's
+`status` still controls whether the authored measurement is reviewed.
+
+Use `assertSceneSourceEvidenceV2(scene, sourcePack)` when a Scene Manifest is
+published together with a Source Pack. The cross-validator requires matching
+project identity, verifies referenced source/claim IDs, compares source asset
+fingerprints when both are present, and rejects a reviewed room that relies on
+a conflicted claim.
+
+The base Scene V2 validator also enforces:
+
+- model instances reference assets whose role is `model`;
+- a room's unit belongs to the same floor as the room;
+- an opening references one or two distinct rooms on the opening's own floor;
+- polygon rooms have non-zero area, no repeated closing/consecutive points and
+  no self-intersection.
+
+These checks are additive within V2 and do not reinterpret older valid fields.
