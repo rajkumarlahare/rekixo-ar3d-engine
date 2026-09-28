@@ -44,6 +44,7 @@ type FloorSettings = {
   status?: string;
   title?: string;
   mediaKey?: string;
+  floors?: number[];
   units?: UnitFact[];
   verifiedSpaces?: string[];
   drawingNotes?: string[];
@@ -120,6 +121,10 @@ function NotFound({ message }: { message?: string }) {
 function ProjectNavigation({ experience, walkFloor }: { experience: Public3DExperience; walkFloor?: number }) {
   const { model, camera, project } = experience;
   const settings = settingsOf<ProjectSettings>(sceneOf(experience, "project-navigation"));
+  const floorSettings = settingsOf<FloorSettings>(sceneOf(experience, "typical-floor"));
+  const availableFloors = Array.from(new Set([0, ...(floorSettings.floors ?? [])])).sort(
+    (a, b) => a - b,
+  );
   const render = mediaUrl(experience, settings.exteriorRenderKey);
 
   return (
@@ -131,6 +136,7 @@ function ProjectNavigation({ experience, walkFloor }: { experience: Public3DExpe
           modelLabel={model?.name}
           initialWalk={walkFloor !== undefined}
           initialWalkFloor={walkFloor ?? null}
+          availableFloors={availableFloors}
         />
       </section>
 
@@ -175,7 +181,8 @@ function TypicalFloor({ experience, onEnterFloor }: { experience: Public3DExperi
   const settings = settingsOf<FloorSettings>(scene);
   const floorPlan = mediaUrl(experience, settings.mediaKey);
   const units = settings.units ?? [];
-  const [floor, setFloor] = useState(1);
+  const floors = settings.floors ?? [];
+  const [floor, setFloor] = useState(floors[0] ?? 1);
   const [selectedUnit, setSelectedUnit] = useState<string>();
   const visibleUnits = units
     .map((unit) => ({ ...unit, number: unitNumberForFloor(unit.series, floor) }))
@@ -186,10 +193,10 @@ function TypicalFloor({ experience, onEnterFloor }: { experience: Public3DExperi
       <div className="module-copy">
         <p className="eyebrow">FLOOR EXPLORER</p>
         <h2>{settings.title ?? "Typical Floor"}</h2>
-        <p>Select a floor to view the unit numbers supported by the supplied brochure data.</p>
+        <p>Select a floor to view unit numbers supported by this project's configured source data.</p>
       </div>
       <div className="floor-selector" aria-label="Select floor">
-        {[1,2,3,4,5].map((item) => (
+        {floors.map((item) => (
           <button
             type="button"
             key={item}
@@ -222,8 +229,8 @@ function TypicalFloor({ experience, onEnterFloor }: { experience: Public3DExperi
           ))}
           {!visibleUnits.length && (
             <div className="media-placeholder">
-              <strong>No brochure-listed unit for this floor</strong>
-              <span>The viewer does not invent unit numbers that are absent from the supplied project source.</span>
+              <strong>No configured unit for this floor</strong>
+              <span>The viewer does not invent unit numbers that are absent from the project's source data.</span>
             </div>
           )}
         </div>
@@ -233,7 +240,7 @@ function TypicalFloor({ experience, onEnterFloor }: { experience: Public3DExperi
           <span>SELECTED UNIT</span>
           <strong>Flat {selectedUnit} · Floor {floor}</strong>
           <p>
-            This unit identity and area come from the supplied brochure series. Exact 3D room/mesh
+            This unit identity and area come from configured project data. Exact 3D room/mesh
             highlighting is intentionally not guessed until a semantic unit boundary is verified
             from the architectural source model.
           </p>
@@ -297,6 +304,10 @@ function ModelModule({
 }) {
   const scene = sceneOf(experience, type);
   const settings = settingsOf<PendingSettings>(scene);
+  const floorSettings = settingsOf<FloorSettings>(sceneOf(experience, "typical-floor"));
+  const availableFloors = Array.from(new Set([0, ...(floorSettings.floors ?? [])])).sort(
+    (a, b) => a - b,
+  );
   return (
     <section className="viewer-section">
       <div className="module-copy model-module-copy">
@@ -309,6 +320,7 @@ function ModelModule({
         cameraPreset={experience.camera}
         modelLabel={experience.model?.name}
         interactionMode={interactionMode}
+        availableFloors={availableFloors}
       />
     </section>
   );
@@ -372,7 +384,7 @@ const twinModes: Array<{ id: TwinMode; label: string; short: string }> = [
   { id: "context", label: "Distance & Context", short: "Context" },
 ];
 
-function JyotiDigitalTwin({ experience }: { experience: Public3DExperience }) {
+function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) {
   const projectSettings = settingsOf<ProjectSettings>(sceneOf(experience, "project-navigation"));
   const floorSettings = settingsOf<FloorSettings>(sceneOf(experience, "typical-floor"));
   const amenitySettings = settingsOf<AmenitySettings>(sceneOf(experience, "amenity"));
@@ -382,6 +394,12 @@ function JyotiDigitalTwin({ experience }: { experience: Public3DExperience }) {
   const [unit, setUnit] = useState<string>();
   const [selectedFeature, setSelectedFeature] = useState<{ id: string; label: string; category: string; description: string }>();
   const units = floorSettings.units ?? [];
+  const residentialFloors = floorSettings.floors ?? [];
+  const availableFloors = Array.from(new Set([0, ...residentialFloors])).sort(
+    (a, b) => a - b,
+  );
+  const firstResidentialFloor = residentialFloors[0] ?? null;
+  const verifiedSpaces = floorSettings.verifiedSpaces ?? [];
   const visibleUnits = floor === null
     ? []
     : units
@@ -404,7 +422,8 @@ function JyotiDigitalTwin({ experience }: { experience: Public3DExperience }) {
         ? "terrace"
         : "site";
 
-  const viewerFloor = mode === "units" ? floor ?? 1 : mode === "floors" ? floor : null;
+  const viewerFloor =
+    mode === "units" ? floor ?? firstResidentialFloor : mode === "floors" ? floor : null;
   const exploded = mode === "floors" && floor === null;
   const nearby = locationSettings.nearby ?? amenitySettings.nearby ?? [];
 
@@ -420,9 +439,10 @@ function JyotiDigitalTwin({ experience }: { experience: Public3DExperience }) {
           initialExploded={exploded}
           experienceMode={experienceMode}
           initialWalk={mode === "walk"}
-          initialWalkFloor={floor ?? 1}
+          initialWalkFloor={floor ?? firstResidentialFloor}
           visualPreset="reference-render"
           onFeatureSelect={setSelectedFeature}
+          availableFloors={availableFloors}
           compactUi
         />
 
@@ -453,7 +473,8 @@ function JyotiDigitalTwin({ experience }: { experience: Public3DExperience }) {
                   setFloor(null);
                   setUnit(undefined);
                 }
-                if (item.id === "units" && floor === null) setFloor(1);
+                if (item.id === "units" && floor === null)
+                  setFloor(firstResidentialFloor);
               }}
             >
               <span>{String(index + 1).padStart(2, "0")}</span>
@@ -469,13 +490,13 @@ function JyotiDigitalTwin({ experience }: { experience: Public3DExperience }) {
             {mode === "project" && "Explore the complete project from an aerial interactive view."}
             {mode === "building" && "Inspect the building facade from a premium architectural camera."}
             {mode === "floors" && "Separate the building stack or focus a single verified floor."}
-            {mode === "units" && "Select brochure-backed units on a floor without inventing geometry."}
-            {mode === "interior" && "Tap a room to enter. Drag to look; hold the arrows or use WASD to move. Reconstructed from the supplied typical-floor brochure; door positions and finishes are approximate."}
-            {mode === "walk" && "Enter the brochure-backed typical floor at eye level. Drag or touch to look around, then move through the living rooms, bedrooms, kitchens, toilets, balconies and common areas using keyboard or on-screen controls."}
-            {mode === "terrace" && "Inspect the actual roof massing and edge lighting. No recreational roof amenity is claimed because it is not present in the supplied brochure."}
-            {mode === "amenities" && "Review only the brochure-listed amenities: Car Parking, Modular Kitchen, POP in Hall and CCTV Camera."}
+            {mode === "units" && "Select configured units on a floor without inventing geometry."}
+            {mode === "interior" && "Inspect the configured interior scene. Tap a room to enter; reconstructed or unverified details remain explicitly non-authoritative."}
+            {mode === "walk" && "Enter the configured interior at eye level. Drag or touch to look around and use keyboard or on-screen controls to move."}
+            {mode === "terrace" && "Inspect the configured roof or terrace presentation without inferring unverified amenities."}
+            {mode === "amenities" && "Review only the amenities configured for this project."}
             {mode === "balcony" && "Inspect the facade and balcony side from a dedicated viewing angle."}
-            {mode === "context" && "Review brochure-listed connectivity and nearby destinations around the project."}
+            {mode === "context" && "Review configured connectivity and nearby destinations around the project."}
           </p>
         </div>
 
@@ -493,7 +514,7 @@ function JyotiDigitalTwin({ experience }: { experience: Public3DExperience }) {
                 ALL
               </button>
             )}
-            {[0,1,2,3,4,5].map((item) => (
+            {availableFloors.map((item) => (
               <button
                 type="button"
                 key={item}
@@ -511,22 +532,31 @@ function JyotiDigitalTwin({ experience }: { experience: Public3DExperience }) {
 
         {mode === "interior" && (
           <aside className="twin-info-panel twin-info-panel--right">
-            <span className="twin-kicker">BROCHURE-BACKED FLOOR</span>
-            <h2>Flats 101 / 102 / 103</h2>
+            <span className="twin-kicker">PROJECT INTERIOR</span>
+            <h2>{floorSettings.title ?? "Residential units"}</h2>
             <p>
-              This 3D dollhouse follows the supplied 1st-to-3rd floor brochure layout. Click a room,
-              balcony, lobby, stair or fire lift to see its source-backed identity and dimensions.
+              This interior presentation uses the room and unit evidence configured for this
+              project. Select a unit series to inspect its source-backed identity and area.
             </p>
             <div className="twin-unit-list">
-              <button type="button" onClick={() => setSelectedFeature({ id: "101", label: "Flat 101 to 501", category: "2BHK", description: "972 sq.ft. brochure-backed unit series." })}>
-                <span>Flat 101 to 501</span><strong>2BHK</strong><b>972 sq.ft.</b>
-              </button>
-              <button type="button" onClick={() => setSelectedFeature({ id: "102", label: "Flat 102 to 502", category: "2BHK", description: "949 sq.ft. brochure-backed unit series." })}>
-                <span>Flat 102 to 502</span><strong>2BHK</strong><b>949 sq.ft.</b>
-              </button>
-              <button type="button" onClick={() => setSelectedFeature({ id: "103", label: "Flat 103 to 403", category: "2BHK", description: "940 sq.ft. brochure-backed unit series." })}>
-                <span>Flat 103 to 403</span><strong>2BHK</strong><b>940 sq.ft.</b>
-              </button>
+              {units.map((item) => (
+                <button
+                  type="button"
+                  key={item.series}
+                  onClick={() =>
+                    setSelectedFeature({
+                      id: item.series,
+                      label: `Flat ${item.series}`,
+                      category: item.type,
+                      description: `${item.areaSqFt.toLocaleString("en-IN")} sq.ft. configured unit series.`,
+                    })
+                  }
+                >
+                  <span>Flat {item.series}</span>
+                  <strong>{item.type}</strong>
+                  <b>{item.areaSqFt.toLocaleString("en-IN")} sq.ft.</b>
+                </button>
+              ))}
             </div>
           </aside>
         )}
@@ -541,8 +571,9 @@ function JyotiDigitalTwin({ experience }: { experience: Public3DExperience }) {
               envelope so unverified door/collision boundaries are not invented.
             </p>
             <div className="twin-chip-list">
-              <span>Living</span><span>Bedrooms</span><span>Kitchen</span><span>Toilets</span>
-              <span>Balconies</span><span>Lobby</span><span>Stair</span><span>Fire Lift</span>
+              {verifiedSpaces.map((space) => (
+                <span key={space}>{space}</span>
+              ))}
             </div>
           </aside>
         )}
@@ -550,7 +581,13 @@ function JyotiDigitalTwin({ experience }: { experience: Public3DExperience }) {
         {mode === "units" && (
           <aside className="twin-info-panel twin-info-panel--right">
             <span className="twin-kicker">UNIT EXPLORER</span>
-            <h2>{floor === 0 ? "Ground Level" : `Floor ${floor ?? 1}`}</h2>
+            <h2>
+              {floor === 0
+                ? "Ground Level"
+                : floor === null
+                  ? "Select a floor"
+                  : `Floor ${floor}`}
+            </h2>
             <div className="twin-unit-list">
               {visibleUnits.map((item) => (
                 <button
@@ -565,7 +602,7 @@ function JyotiDigitalTwin({ experience }: { experience: Public3DExperience }) {
                 </button>
               ))}
               {!visibleUnits.length && (
-                <p>No brochure-listed residential unit is mapped to this level.</p>
+                <p>No configured residential unit is mapped to this level.</p>
               )}
             </div>
             {unit && (
@@ -612,7 +649,10 @@ function JyotiDigitalTwin({ experience }: { experience: Public3DExperience }) {
                 </div>
               ))}
             </div>
-            <p className="twin-source-note">Distances are brochure-supplied context, not surveyed GIS measurements.</p>
+            <p className="twin-source-note">
+              {locationSettings.note ??
+                "Distances and context are shown from configured project data; they are not inferred by the viewer."}
+            </p>
           </aside>
         )}
 
@@ -690,7 +730,7 @@ function App() {
   if (!experience) return <LoadingPage />;
   const presentation = settingsOf<ProjectSettings>(sceneOf(experience, "project-navigation")).presentation;
   if (presentation?.style === "premium-real-estate-digital-twin") {
-    return <JyotiDigitalTwin experience={experience} />;
+    return <PremiumDigitalTwin experience={experience} />;
   }
 
   const sceneMap = new Map((experience.scenes ?? []).map((scene) => [scene.type, scene]));

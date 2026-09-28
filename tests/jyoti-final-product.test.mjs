@@ -17,7 +17,7 @@ test("public UI contains location map and floor explorer without inventing unit 
   const app = read("apps/public/src/main.tsx");
   assert.match(app, /LocationMap/);
   assert.match(app, /unitNumberForFloor/);
-  assert.match(app, /No brochure-listed unit for this floor/);
+  assert.match(app, /No configured unit for this floor/);
   assert.match(app, /wing-distance/);
 });
 

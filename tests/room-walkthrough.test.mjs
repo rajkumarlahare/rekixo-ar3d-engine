@@ -9,13 +9,13 @@ const source = fs.readFileSync('apps/public/src/viewer/projectExperience.ts', 'u
   .replace('import * as THREE from "three";', `import * as THREE from ${JSON.stringify(import.meta.resolve('three'))};`)
   .replace('import { sourceTextureData } from "./sourceTextureData";', 'const sourceTextureData = {};');
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-const { createProjectExperience } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
-const scene = createProjectExperience(new THREE.Box3(new THREE.Vector3(0, 0, -25), new THREE.Vector3(20, 28, 0)), false);
+const { createJyotiProjectExperience } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
+const scene = createJyotiProjectExperience(new THREE.Box3(new THREE.Vector3(0, 0, -25), new THREE.Vector3(20, 28, 0)), false);
 scene.root.updateMatrixWorld(true);
 
 test('authored sites do not receive an invented second plot, gate or road', () => {
   const bounds = new THREE.Box3(new THREE.Vector3(0, 0, -25), new THREE.Vector3(20, 28, 0));
-  const authored = createProjectExperience(bounds, false, true, true);
+  const authored = createJyotiProjectExperience(bounds, false, true, true);
   assert.ok(!authored.features.some(feature => ['plot', 'parking', 'gate', 'road', 'landscape'].includes(feature.id)));
   assert.deepEqual(authored.focus('site').box, bounds);
   assert.ok(authored.rooms.length >= 29);

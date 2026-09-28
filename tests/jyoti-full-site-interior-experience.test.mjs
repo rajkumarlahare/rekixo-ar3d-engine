@@ -48,7 +48,9 @@ test("roof mode does not claim an unsupported recreational roof amenity", () => 
 
 test("viewer raycasts project features and supports experience modes", () => {
   const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
-  assert.match(viewer, /createProjectExperience/);
+  const profiles = read("apps/public/src/viewer/projectProfiles.ts");
+  assert.match(viewer, /createProfileExperience/);
+  assert.match(profiles, /createJyotiProjectExperience/);
   assert.match(viewer, /experienceMode/);
   assert.match(viewer, /Raycaster/);
   assert.match(viewer, /intersectObject\(projectExperience\.root, true\)/);
@@ -59,7 +61,7 @@ test("digital twin navigation exposes brochure-backed interior and roof modes", 
   const app = read("apps/public/src/main.tsx");
   assert.match(app, /Typical Floor Interior/);
   assert.match(app, /Roof Inspection/);
-  assert.match(app, /Car Parking, Modular Kitchen, POP in Hall and CCTV Camera/);
+  assert.match(app, /amenitySettings\.amenities/);
   assert.match(app, /experienceMode=\{experienceMode\}/);
   assert.match(app, /twin-feature-card/);
 });

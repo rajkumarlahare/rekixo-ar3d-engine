@@ -8,8 +8,13 @@ import type { CameraPreset3D } from "@rekixo/3d-contracts";
 import { createFloorExploder, enhanceArchitecturalModel } from "./realism";
 import { clampWalkPosition, walkDelta, walkStartPosition, type WalkDirection } from "./walkthrough";
 import { createArchitecturalSiteEnvironment } from "./siteEnvironment";
-import { applyJyotiReferenceExterior } from "./jyotiReferenceExterior";
-import { createProjectExperience, type ExperienceMode, type ExperienceFeature } from "./projectExperience";
+import {
+  applyModelProfileExterior,
+  createProfileExperience,
+  type ExperienceMode,
+  type ExperienceFeature,
+  type ModelProfileRuntime,
+} from "./projectProfiles";
 
 type ViewerMode = "booting" | "loading" | "model" | "demo" | "error";
 type PresentationView = "default" | "aerial" | "building" | "top" | "balcony" | "context";
@@ -28,6 +33,7 @@ interface Viewer3DProps {
   experienceMode?: ExperienceMode;
   visualPreset?: "default" | "reference-render";
   onFeatureSelect?: (feature: Omit<ExperienceFeature, "object">) => void;
+  availableFloors?: number[];
 }
 
 interface HomeView {
@@ -197,7 +203,9 @@ export function Viewer3D({
   experienceMode = "site",
   visualPreset = "default",
   onFeatureSelect,
+  availableFloors = [],
 }: Viewer3DProps) {
+  const floorSignature = availableFloors.join(",");
   const hostRef = useRef<HTMLDivElement>(null);
   const resetRef = useRef<(() => void) | null>(null);
   const floorRef = useRef<((floor: number | null) => void) | null>(null);
@@ -238,8 +246,9 @@ export function Viewer3D({
     let homeView: HomeView | undefined;
     let floorExploder: ReturnType<typeof createFloorExploder> | undefined;
     let siteEnvironment: ReturnType<typeof createArchitecturalSiteEnvironment> | undefined;
-    let projectExperience: ReturnType<typeof createProjectExperience> | undefined;
-    let referenceExterior: ReturnType<typeof applyJyotiReferenceExterior>;
+    let modelProfile: ModelProfileRuntime | undefined;
+    let projectExperience: ReturnType<typeof createProfileExperience>;
+    let referenceExterior: ModelProfileRuntime["exterior"];
     let cameraTween: { start: number; duration: number; fromPosition: THREE.Vector3; toPosition: THREE.Vector3; fromTarget: THREE.Vector3; toTarget: THREE.Vector3; fromFov: number; toFov: number } | undefined;
     let walkActive = false;
     let walkYaw = 0;
@@ -375,10 +384,18 @@ export function Viewer3D({
       }
       const minY = modelBounds.min.y;
       const height = Math.max(modelBounds.max.y - modelBounds.min.y, 1);
-      const lowerRatio = floor === 0 ? 0 : 0.12 + (floor - 1) * 0.132;
-      const upperRatio = floor === 0 ? 0.12 : 0.12 + floor * 0.132;
-      const lower = referenceExterior?.floorLevels[floor] ?? minY + height * lowerRatio;
-      const upper = referenceExterior?.floorLevels[floor + 1] ?? minY + height * Math.min(upperRatio, 0.79);
+      const floors = Array.from(new Set(availableFloors))
+        .filter((item) => Number.isFinite(item))
+        .sort((a, b) => a - b);
+      const floorIndex = floors.indexOf(floor);
+      if (floorIndex < 0) return;
+      const slices = Math.max(floors.length, 1);
+      const lower =
+        referenceExterior?.floorLevels[floorIndex] ??
+        minY + height * (floorIndex / slices);
+      const upper =
+        referenceExterior?.floorLevels[floorIndex + 1] ??
+        minY + height * ((floorIndex + 1) / slices);
       const sectionPlanes = sectionEnabledRef.current
         ? renderer.clippingPlanes.filter((plane) => Math.abs(plane.normal.x) > 0.5)
         : [];
@@ -443,8 +460,12 @@ export function Viewer3D({
       walkScale = 1;
 
       if (currentExperienceMode === "interior" && projectExperience) {
-        enterRoom("101-living");
-        return;
+        const defaultRoomId =
+          modelProfile?.defaultInteriorRoomId ?? projectExperience.rooms[0]?.id;
+        if (defaultRoomId) {
+          enterRoom(defaultRoomId);
+          return;
+        }
       }
       const center = modelBounds.getCenter(new THREE.Vector3());
       const direction = center.sub(camera.position).normalize();
@@ -623,7 +644,8 @@ export function Viewer3D({
       scene.add(object);
       object.updateMatrixWorld(true);
       modelBounds = new THREE.Box3().setFromObject(object);
-      referenceExterior = referenceVisual ? applyJyotiReferenceExterior(object) : undefined;
+      modelProfile = applyModelProfileExterior(object, referenceVisual);
+      referenceExterior = modelProfile?.exterior;
       if (referenceExterior) {
         scene.background = referenceExterior.daylightSky;
         sun.position.set(-16, 30, 16);
@@ -643,9 +665,7 @@ export function Viewer3D({
 
       const bounds = modelBounds;
       // Frame the measured building, not the much wider site/paving mesh.
-      const cameraBounds = referenceExterior
-        ? new THREE.Box3(new THREE.Vector3(5.62, 0, -23.82), new THREE.Vector3(22.52, 20.86, -2.73))
-        : bounds;
+      const cameraBounds = modelProfile?.cameraBounds ?? bounds;
       const sphere = cameraBounds.getBoundingSphere(new THREE.Sphere());
       const sizeForView = bounds.getSize(new THREE.Vector3());
       const centerForView = sphere.center.clone();
@@ -666,9 +686,23 @@ export function Viewer3D({
       object.traverse((node) => {
         if (node.userData.sourceGeometry?.siteGeometry === "included-in-source") preserveSourceSite = true;
       });
-      projectExperience = createProjectExperience(bounds, mobile, referenceVisual, preserveSourceSite);
-      scene.add(projectExperience.root);
-      setRooms(projectExperience.rooms.map(({ id, label, category }) => ({ id, label, category })));
+      projectExperience = createProfileExperience(modelProfile, bounds, {
+        mobile,
+        referenceVisual,
+        preserveSourceSite,
+      });
+      if (projectExperience) {
+        scene.add(projectExperience.root);
+        setRooms(
+          projectExperience.rooms.map(({ id, label, category }) => ({
+            id,
+            label,
+            category,
+          })),
+        );
+      } else {
+        setRooms([]);
+      }
 
       const viewTarget = (view: PresentationView) => {
         if (view === "aerial") {
@@ -970,6 +1004,7 @@ export function Viewer3D({
         scene.remove(projectExperience.root);
         projectExperience.dispose();
       }
+      modelProfile = undefined;
       environmentTexture.dispose();
       pmrem.dispose();
       renderer.dispose();
@@ -987,7 +1022,15 @@ export function Viewer3D({
       enterRoomRef.current = null;
       holdWalkRef.current = null;
     };
-  }, [modelUrl, cameraPreset, interactionMode, initialWalk, initialWalkFloor, visualPreset]);
+  }, [
+    modelUrl,
+    cameraPreset,
+    interactionMode,
+    initialWalk,
+    initialWalkFloor,
+    visualPreset,
+    floorSignature,
+  ]);
 
   useEffect(() => {
     presentationRef.current?.(presentationView);
@@ -1142,7 +1185,7 @@ export function Viewer3D({
         >
           All
         </button>
-        {[0,1,2,3,4,5].map((floor) => (
+        {availableFloors.map((floor) => (
           <button
             type="button"
             key={floor}
