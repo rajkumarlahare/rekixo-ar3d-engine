@@ -31,7 +31,7 @@ test("digital twin viewer supports reference-style presentation cameras", () => 
 test("floor and unit navigation stays source-backed", () => {
   const app = read("apps/public/src/main.tsx");
   assert.match(app, /unitNumberForFloor/);
-  assert.match(app, /brochure-backed units/i);
+  assert.match(app, /configured units/i);
   assert.match(app, /source boundary is verified/i);
 });
 
