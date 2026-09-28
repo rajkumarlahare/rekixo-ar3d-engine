@@ -157,3 +157,43 @@ test("reusing a design creates independent assets and clears review history", as
     1,
   );
 });
+
+
+test("cloud-linked design copies become independent and remap evidence assets", async () => {
+  const p = newProject("Cloud source");
+  p.slug = "cloud-source";
+  p.cloud = { revision: 4, syncedAt: new Date().toISOString() };
+  const model = await storage.makeAsset(
+    new File(["model"], "building.glb", { type: "model/gltf-binary" }),
+    p.id,
+  );
+  const drawing = await storage.makeAsset(
+    new File(["drawing"], "plan.pdf", { type: "application/pdf" }),
+    p.id,
+  );
+  p.assets = [model.id, drawing.id];
+  p.scene.modelId = model.id;
+  p.scene.rooms.push({
+    id: "evidence-room",
+    name: "Living",
+    unit: "A1",
+    floorId: p.scene.floors[0].id,
+    x: 0,
+    z: 0,
+    width: 4,
+    depth: 3,
+    height: 2.8,
+    color: "#dddddd",
+    source: "Plan",
+    verified: true,
+    sourceAssetId: drawing.id,
+  });
+  await storage.save(p, [model, drawing]);
+
+  const copied = await storage.duplicateProject(p);
+  assert.equal(copied.cloud, undefined);
+  assert.notEqual(copied.id, p.id);
+  assert.notEqual(copied.scene.modelId, model.id);
+  assert.notEqual(copied.scene.rooms[0].sourceAssetId, drawing.id);
+  assert.ok(copied.assets.includes(copied.scene.rooms[0].sourceAssetId));
+});

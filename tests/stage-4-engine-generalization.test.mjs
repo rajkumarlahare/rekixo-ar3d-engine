@@ -87,8 +87,14 @@ test("historical Jyoti migrations remain immutable compatibility history", () =>
   assert.match(read("database/migrations/0001_core.sql"), /jyoti-paradise/);
 });
 
-test("Stage 4 does not expose privileged admin writes before auth integration", () => {
+test("privileged Engine writes live only behind the dedicated cloud auth boundary", () => {
   const worker = read("workers/admin.mjs");
-  assert.doesNotMatch(worker, /request\.method === "(?:POST|PUT|PATCH|DELETE)"/);
+  const cloud = read("workers/admin-cloud.mjs");
+  assert.match(worker, /handleCloudAdminRequest/);
+  assert.match(cloud, /sessionFor\(request, env\)/);
+  assert.match(cloud, /sameOrigin\(request\)/);
+  assert.match(cloud, /Engine Admin sign-in required/);
+  assert.match(cloud, /ENGINE_ADMIN_SESSION_SECRET/);
+  assert.doesNotMatch(cloud, /tiyansh_admin|\\bSESSION_SECRET\\b|\\bADMIN_PASSWORD_HASH\\b/);
   assert.match(worker, /request\.method !== "GET"/);
 });

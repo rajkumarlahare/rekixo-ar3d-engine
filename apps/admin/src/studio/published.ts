@@ -53,10 +53,18 @@ export async function importPublished(slug: string) {
   copy.id = id();
   copy.slug = `${slug.slice(0, 60)}-${copy.id.slice(0, 8)}`;
   copy.updated = new Date().toISOString();
+  delete copy.cloud;
   const remap = new Map(files.map((f) => [f.id, id()]));
   copy.assets = copy.assets.map((key) => remap.get(key)!);
-  for (const scene of [copy.scene, ...copy.releases.map((r) => r.scene)])
+  for (const scene of [copy.scene, ...copy.releases.map((r) => r.scene)]) {
     if (scene.modelId) scene.modelId = remap.get(scene.modelId);
+    scene.rooms = scene.rooms.map((room) => ({
+      ...room,
+      ...(room.sourceAssetId
+        ? { sourceAssetId: remap.get(room.sourceAssetId) }
+        : {}),
+    }));
+  }
   await save(
     copy,
     files.map((f) => ({ ...f, id: remap.get(f.id)!, projectId: copy.id })),

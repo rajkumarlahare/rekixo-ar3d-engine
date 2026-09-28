@@ -129,6 +129,7 @@ export async function importPackage(file: File): Promise<Project> {
   p.id = id();
   p.slug = `${slugFromName(data.project.name)}-${p.id.slice(0, 8)}`;
   p.name += " (imported)";
+  delete p.cloud;
   p.updated = new Date().toISOString();
   const files: Asset[] = [],
     remap = new Map<string, string>();
@@ -155,8 +156,15 @@ export async function importPackage(file: File): Promise<Project> {
   if (files.length !== p.assets.length)
     throw Error("Package is missing assets.");
   p.assets = p.assets.map((k) => remap.get(k)!);
-  for (const s of [p.scene, ...p.releases.map((r) => r.scene)])
+  for (const s of [p.scene, ...p.releases.map((r) => r.scene)]) {
     if (s.modelId) s.modelId = remap.get(s.modelId);
+    s.rooms = s.rooms.map((room) => ({
+      ...room,
+      ...(room.sourceAssetId
+        ? { sourceAssetId: remap.get(room.sourceAssetId) }
+        : {}),
+    }));
+  }
   await save(p, files);
   return p;
 }
@@ -167,6 +175,7 @@ export async function duplicateProject(source: Project): Promise<Project> {
   p.name = `${source.name.slice(0, 190)} copy`;
   p.slug = `${slugFromName(source.name)}-${p.id.slice(0, 8)}`;
   p.updated = new Date().toISOString();
+  delete p.cloud;
   p.releases = [];
   p.scene.rooms = p.scene.rooms.map((r) => ({ ...r, verified: false }));
   const files: Asset[] = [];
@@ -181,6 +190,25 @@ export async function duplicateProject(source: Project): Promise<Project> {
   }
   p.assets = files.map((f) => f.id);
   if (p.scene.modelId) p.scene.modelId = remap.get(p.scene.modelId);
+  p.scene.rooms = p.scene.rooms.map((room) => ({
+    ...room,
+    ...(room.sourceAssetId
+      ? { sourceAssetId: remap.get(room.sourceAssetId) }
+      : {}),
+  }));
   await save(p, files);
   return p;
+}
+
+export async function removeAssetIfUnreferenced(assetId: string) {
+  const database = await db();
+  const entries = await read<Project[]>("projects");
+  if (entries.some((project) => project.assets.includes(assetId))) return false;
+  return new Promise<boolean>((resolve, reject) => {
+    const tx = database.transaction("assets", "readwrite");
+    tx.objectStore("assets").delete(assetId);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || Error("Asset cache cleanup failed."));
+  });
 }

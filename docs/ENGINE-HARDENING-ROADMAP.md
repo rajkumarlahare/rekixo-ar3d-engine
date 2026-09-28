@@ -74,7 +74,7 @@ Status: COMPLETE — validated on main (PR #40, GitHub Actions run 36405684130)
 - move hardcoded project interior geometry toward authored manifest data.
 
 ### Phase 4 — 3D Admin project creation and cloud draft storage
-Status: PENDING
+Status: IMPLEMENTED — validation complete; production activation requires dedicated Engine Admin secrets + admin-infra migration
 
 Use the stable Platform Admin only as a design/operational reference.
 
@@ -146,8 +146,8 @@ The following findings remain tracked until their owning phase closes:
 - [resolved Phase 3] Scene Manifest relational and polygon validation gaps;
 - [resolved Phase 3] Source Pack ↔ Scene Manifest evidence-link gap;
 - V1 Studio authoring model still narrower than V2 contract;
-- replaced/orphaned Studio asset lifecycle;
-- possible dangling IndexedDB project asset references;
+- [resolved Phase 4 for cloud/local draft assets] replaced/orphaned Studio asset lifecycle;
+- [partially resolved Phase 4] IndexedDB is now a cache for cloud projects and unreferenced replacement assets are cleaned; legacy cache recovery remains tracked;
 - base64 JSON backup memory scaling;
 - duplicate D1/static published project identities;
 - unit-number parsing assumptions;

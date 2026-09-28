@@ -15,7 +15,8 @@ import {
   type Room,
 } from "./domain";
 import * as storage from "./storage";
-import { importPublished } from "./published";
+import * as cloud from "./cloud";
+import { importPublished, loadPublished } from "./published";
 import { buildSceneManifestV2 } from "./manifestV2";
 import "./studio.css";
 
@@ -44,9 +45,62 @@ export default function Studio() {
     [backup, setBackup] = useState<{ url: string; name: string }>(),
     [mesh, setMesh] = useState("");
   const [manifestText, setManifestText] = useState("");
+  const [cloudSession, setCloudSession] = useState<cloud.CloudSession>();
+  const [cloudProjects, setCloudProjects] = useState<cloud.CloudProjectSummary[]>([]);
+  const [cloudSearch, setCloudSearch] = useState("");
+  const [cloudFilter, setCloudFilter] = useState<"active" | "archived">("active");
   const [published, setPublished] = useState<{ slug: string; name: string }[]>(
     [],
   );
+  useEffect(() => {
+    let active = true;
+    void cloud
+      .session()
+      .then((next) => {
+        if (!active) return;
+        setCloudSession(next);
+        if (next.authenticated)
+          return cloud.projects("", "active", 50, 0).then((result) => {
+            if (active) setCloudProjects(result.projects);
+          });
+      })
+      .catch(() => {
+        if (active)
+          setCloudSession({
+            configured: false,
+            databaseReady: false,
+            authenticated: false,
+          });
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!cloudSession?.authenticated) return;
+    let active = true;
+    const timer = window.setTimeout(() => {
+      void cloud
+        .projects(cloudSearch, cloudFilter, 50, 0)
+        .then((result) => {
+          if (active) setCloudProjects(result.projects);
+        })
+        .catch((reason: unknown) => {
+          if (active)
+            setError(
+              reason instanceof Error
+                ? reason.message
+                : "Cloud projects could not be loaded.",
+            );
+        });
+    }, 220);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [cloudSearch, cloudFilter, cloudSession?.authenticated]);
+
   useEffect(() => {
     let active = true;
     fetch("/3Dprojects/published/catalog.json")
@@ -165,7 +219,7 @@ export default function Studio() {
     setDirty(false);
     await refresh();
     setMessage(
-      "Saved on this device. Export a backup to keep a separate copy.",
+      "Saved in the local offline cache. Use Save to cloud for the shared Engine draft.",
     );
     return next;
   }
@@ -175,6 +229,87 @@ export default function Studio() {
       return;
     }
     open(p);
+  }
+
+  async function refreshCloudProjects() {
+    if (!cloudSession?.authenticated) return;
+    const result = await cloud.projects(cloudSearch, cloudFilter, 50, 0);
+    setCloudProjects(result.projects);
+  }
+
+  async function openCloudProject(slug: string) {
+    if (dirty)
+      throw Error("Save your local changes before opening a cloud project.");
+    try {
+      const downloaded = await cloud.downloadProject(slug);
+      await storage.save(downloaded.project, downloaded.files);
+      await refresh();
+      open(downloaded.project);
+      setMessage(
+        "Cloud draft downloaded and cached locally for offline editing.",
+      );
+      return;
+    } catch (reason) {
+      if (
+        !(reason instanceof Error) ||
+        !/Cloud draft not found/i.test(reason.message)
+      )
+        throw reason;
+    }
+
+    const summary = cloudProjects.find((entry) => entry.slug === slug);
+    if (!summary)
+      throw Error("Cloud project metadata is no longer available.");
+
+    const publishedEntry = published.find((entry) => entry.slug === slug);
+    if (publishedEntry) {
+      const seeded = await loadPublished(slug);
+      const projectFromPublished: Project = {
+        ...seeded.project,
+        id: summary.id,
+        slug: summary.slug,
+        name: summary.name,
+        location: summary.location ?? "",
+        updated: new Date().toISOString(),
+      };
+      delete projectFromPublished.cloud;
+      const ownedFiles = seeded.files.map((asset) => ({
+        ...asset,
+        projectId: summary.id,
+      }));
+      await storage.save(projectFromPublished, ownedFiles);
+      await refresh();
+      open(projectFromPublished);
+      setMessage(
+        "This Engine project had no cloud draft. Studio was seeded from its read-only published design; Save to cloud will create revision 1 without changing the live public project.",
+      );
+      return;
+    }
+
+    const blank = newProject(summary.name);
+    blank.id = summary.id;
+    blank.slug = summary.slug;
+    blank.location = summary.location ?? "";
+    blank.updated = new Date().toISOString();
+    await storage.save(blank);
+    await refresh();
+    open(blank);
+    setMessage(
+      "This Engine project had no Studio draft, so an empty local authoring draft was created. Save to cloud will create revision 1; existing live models/scenes remain untouched.",
+    );
+  }
+
+  async function syncCloudProject() {
+    if (!cloudSession?.authenticated)
+      throw Error("Sign in to Engine Admin before saving a cloud draft.");
+    const next = await cloud.syncProject(p, files);
+    await storage.save(next);
+    setProject(next);
+    setDirty(false);
+    await Promise.all([refresh(), refreshCloudProjects()]);
+    setMessage(
+      `Cloud draft saved · revision ${next.cloud?.revision ?? "—"} · local cache updated.`,
+    );
   }
   function history(back: boolean) {
     if (!project) return;
@@ -258,9 +393,17 @@ export default function Studio() {
     if (model && !/\.(glb|fbx)$/i.test(file.name))
       throw Error("Choose a GLB or FBX model.");
     const a = await storage.makeAsset(file, p.id);
+    const previousModelId = model ? p.scene.modelId : undefined;
+    const previousModelNeededByReview = previousModelId
+      ? p.releases.some((release) => release.scene.modelId === previousModelId)
+      : false;
+    const retainedAssets =
+      previousModelId && !previousModelNeededByReview
+        ? p.assets.filter((assetId) => assetId !== previousModelId)
+        : p.assets;
     const next = {
       ...p,
-      assets: [...p.assets, a.id],
+      assets: [...retainedAssets, a.id],
       scene: {
         ...p.scene,
         ...(model
@@ -272,6 +415,8 @@ export default function Studio() {
       },
     };
     await persist(next, [a]);
+    if (previousModelId && !previousModelNeededByReview)
+      await storage.removeAssetIfUnreferenced(previousModelId);
     undo.current = [];
     redo.current = [];
     if (model) {
@@ -316,8 +461,12 @@ export default function Studio() {
             onChange={(e) => edit({ ...p, name: e.target.value })}
           />
           <span>
-            {dirty ? "Unsaved changes" : "Local workspace"} ·{" "}
-            {p.scene.rooms.length} rooms
+            {dirty
+              ? "Unsaved changes"
+              : p.cloud
+                ? `Cloud r${p.cloud.revision} · local cache`
+                : "Local workspace"}{" "}
+            · {p.scene.rooms.length} rooms
           </span>
         </div>
         <div className="studio-actions">
@@ -329,8 +478,23 @@ export default function Studio() {
               })
             }
           >
-            Save draft
+            Save local
           </button>
+          {cloudSession?.authenticated ? (
+            <button
+              disabled={busy || Boolean(review)}
+              onClick={() => task(syncCloudProject)}
+            >
+              Save to cloud
+            </button>
+          ) : (
+            <a
+              href="/3Dprojects/login?return=/3Dprojects/studio"
+              className="studio-cloud-login"
+            >
+              Cloud sign in
+            </a>
+          )}
           <button
             disabled={busy}
             onClick={() =>
@@ -383,8 +547,9 @@ export default function Studio() {
         )}
         YOUR DESIGN WORKSPACE{" "}
         <span>
-          Saved in this browser • Export backups for another device. Review
-          versions are local; they are not live publications.
+          {cloudSession?.authenticated
+            ? "Local cache + authenticated Engine cloud drafts. Review versions remain drafts until a later publish phase."
+            : "Local/offline cache is available. Cloud writes stay locked behind the dedicated Engine Admin session."}
         </span>
         <button disabled={busy} onClick={() => importInput.current?.click()}>
           Import backup
@@ -400,6 +565,107 @@ export default function Studio() {
       )}
       <div className="studio-layout">
         <aside className="studio-sidebar">
+          <section className="cloud-workspace" aria-label="Cloud project workspace">
+            <div className="section-label">ENGINE CLOUD</div>
+            {!cloudSession ? (
+              <small>Checking private cloud workspace…</small>
+            ) : !cloudSession.configured ? (
+              <small>
+                Cloud writes are locked until dedicated Engine Admin secrets are configured.
+              </small>
+            ) : !cloudSession.databaseReady ? (
+              <small>
+                Cloud schema is not installed yet. Local Studio remains available.
+              </small>
+            ) : !cloudSession.authenticated ? (
+              <a
+                className="wide cloud-signin-link"
+                href="/3Dprojects/login?return=/3Dprojects/studio"
+              >
+                Sign in to cloud workspace
+              </a>
+            ) : (
+              <>
+                <input
+                  aria-label="Search cloud projects"
+                  value={cloudSearch}
+                  onChange={(event) => setCloudSearch(event.target.value)}
+                  placeholder="Search cloud projects"
+                  disabled={busy}
+                />
+                <div className="cloud-filter">
+                  <button
+                    type="button"
+                    className={cloudFilter === "active" ? "active" : ""}
+                    onClick={() => setCloudFilter("active")}
+                    disabled={busy}
+                  >
+                    Active
+                  </button>
+                  <button
+                    type="button"
+                    className={cloudFilter === "archived" ? "active" : ""}
+                    onClick={() => setCloudFilter("archived")}
+                    disabled={busy}
+                  >
+                    Archived
+                  </button>
+                </div>
+                <select
+                  aria-label="Cloud project library"
+                  value=""
+                  disabled={busy || dirty || !cloudProjects.length}
+                  onChange={(event) => {
+                    const slug = event.target.value;
+                    if (!slug) return;
+                    void task(async () => {
+                      if (cloudFilter === "archived") {
+                        await cloud.patchProject(slug, { action: "restore" });
+                        setCloudFilter("active");
+                      }
+                      await openCloudProject(slug);
+                      await refreshCloudProjects();
+                    });
+                  }}
+                >
+                  <option value="">
+                    {cloudProjects.length
+                      ? "Open cloud project…"
+                      : "No matching cloud projects"}
+                  </option>
+                  {cloudProjects.map((entry) => (
+                    <option key={entry.id} value={entry.slug}>
+                      {cloudFilter === "archived" ? "Restore · " : ""}
+                      {entry.name} · r{entry.draftRevision ?? "—"}
+                    </option>
+                  ))}
+                </select>
+                <div className="cloud-account-row">
+                  <small>
+                    Signed in as {cloudSession.user?.email ?? "Engine Admin"}.
+                  </small>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      task(async () => {
+                        await cloud.logout();
+                        setCloudSession({
+                          configured: true,
+                          databaseReady: true,
+                          authenticated: false,
+                        });
+                        setCloudProjects([]);
+                        setMessage("Engine cloud session signed out. Local drafts remain available.");
+                      })
+                    }
+                  >
+                    Sign out
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
           {published.length > 0 && (
             <section aria-label="Published projects">
               <div className="section-label">PUBLISHED PROJECTS</div>
@@ -485,15 +751,53 @@ export default function Studio() {
             <input
               aria-label="Project slug"
               value={projectSlug(p)}
-              disabled={busy || Boolean(review)}
+              disabled={busy || Boolean(review) || Boolean(p.cloud)}
               onChange={(e) => edit({ ...p, slug: e.target.value })}
             />
           </label>
           <small>
             Planned customer path: /3Dprojects/{projectSlug(p)}
             <br />
-            Local draft · not published or globally reserved.
+            {p.cloud
+              ? `Cloud identity locked after first sync · revision ${p.cloud.revision}`
+              : "Local draft · slug is reserved only after the first cloud save."}
           </small>
+          <label>
+            Project location
+            <input
+              aria-label="Project location"
+              value={p.location ?? ""}
+              disabled={busy || Boolean(review)}
+              maxLength={180}
+              onChange={(event) =>
+                edit({ ...p, location: event.target.value })
+              }
+              placeholder="City / locality (optional)"
+            />
+          </label>
+          {p.cloud && cloudSession?.authenticated && (
+            <button
+              className="wide danger"
+              disabled={busy || dirty || Boolean(review)}
+              onClick={() =>
+                task(async () => {
+                  await cloud.patchProject(projectSlug(p), {
+                    action: "archive",
+                  });
+                  const localCopy = await storage.duplicateProject(p);
+                  await refresh();
+                  open(localCopy);
+                  setCloudFilter("active");
+                  await refreshCloudProjects();
+                  setMessage(
+                    "Cloud project archived. An independent local copy is open for further experimentation.",
+                  );
+                })
+              }
+            >
+              Archive cloud project
+            </button>
+          )}
           <div className="section-label">
             BUILDING STRUCTURE{" "}
             <button
