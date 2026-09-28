@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { roomArea, type Room, type Scene } from "./domain";
 
-export type RoomMapAction = "idle" | "create" | "polygon" | "reshape";
+export type RoomMapAction =
+  | "idle"
+  | "create"
+  | "polygon"
+  | "reshape"
+  | "edit-polygon";
 
 export default function VisualRoomMapper({
   scene,
@@ -176,6 +181,22 @@ export default function VisualRoomMapper({
           </button>
           <button
             type="button"
+            className={action === "edit-polygon" ? "active" : ""}
+            disabled={
+              disabled ||
+              !selectedRoom?.polygon?.length ||
+              selectedRoom.floorId !== floorId
+            }
+            onClick={() =>
+              onAction(
+                action === "edit-polygon" ? "idle" : "edit-polygon",
+              )
+            }
+          >
+            Edit corners
+          </button>
+          <button
+            type="button"
             disabled={disabled || !selectedRoom}
             onClick={onClone}
           >
@@ -238,6 +259,11 @@ export default function VisualRoomMapper({
             <b>
               Irregular room के corners click करें. Nearby wall/vertex पर snap
               होगा. First corner फिर click करें या Enter दबाएँ; Esc cancels.
+            </b>
+          ) : action === "edit-polygon" ? (
+            <b>
+              Purple corner handle को mouse से drag करें. Nearby mapped wall और
+              vertex पर snap होगा; invalid/self-crossing shape save नहीं होगी.
             </b>
           ) : action === "reshape" ? (
             <b>
