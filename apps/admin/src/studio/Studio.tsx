@@ -2315,6 +2315,7 @@ export default function Studio() {
               setRoomMapUnit(room?.unit ?? roomMapUnit ?? "Unit 101");
               setShowRoomMapper(true);
               setShowReferenceWorkspace(false);
+              setShowAssetShelf(false);
               setRoomMapAction("create");
               setView("building");
               setCameraOrientation("top");
@@ -2600,6 +2601,7 @@ export default function Studio() {
                   setShowRoomMapper(next);
                   if (next) {
                     setShowReferenceWorkspace(false);
+                    setShowAssetShelf(false);
                     setRoomMapFloorId(floorId);
                     setRoomMapUnit(room?.unit ?? roomMapUnit ?? "Unit 101");
                     setRoomMapAction("idle");
