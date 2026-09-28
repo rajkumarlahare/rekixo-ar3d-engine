@@ -39,6 +39,9 @@ Use Node 22.13 or newer, run `npm install` at the repository root, then
 8. Export backup, then click Download backup. Import that `.rekixo.json` package
    on another browser/device to create a separate project with its assets and
    review history. Imported files are checked against their SHA-256 hashes.
+9. Export Scene Manifest to produce the versioned `rekixo-scene-manifest` V2
+   interchange contract. It contains hierarchy, geometry metadata, evidence,
+   bindings and asset hashes, but not the asset bytes themselves.
 
 ## Storage and isolation
 
@@ -54,8 +57,10 @@ import package to 256 MB. Large models and base64 packages need substantial RAM;
 use optimized self-contained GLBs for practical browser work.
 
 Review versions are **local snapshots, not live publications or customer links**.
-No production write endpoint, platform database, Super Admin screen or platform
-authentication flow is changed. The old project registry remains available.
+Scene Manifest V2 is also metadata only; it does not upload assets or publish a
+customer release. No production write endpoint, platform database, Super Admin
+screen or platform authentication flow is changed. The old project registry
+remains available. See [Scene Manifest V2](SCENE-MANIFEST-V2.md).
 
 ## Model and measurement boundaries
 
