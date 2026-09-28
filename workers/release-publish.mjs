@@ -1,4 +1,9 @@
 import { releaseSchemaReady } from "./release-runtime.mjs";
+import {
+  assertDraftAssetKey,
+  assertProjectAssetKey,
+  assertReleaseAssetKey,
+} from "./storage-boundary.mjs";
 
 const RELEASE_FORMAT = "rekixo-release-manifest";
 const RELEASE_VERSION = 1;
@@ -355,9 +360,21 @@ export async function buildAndActivateRelease(
 
     let frozenModel;
     if (experience.model) {
+      assertProjectAssetKey(
+        currentProject.slug,
+        experience.model.sourceKey,
+        "models",
+      );
       const targetKey = `projects/${currentProject.slug}/releases/${releaseId}/models/${safeSegment(
         experience.model.id,
       )}`;
+      assertReleaseAssetKey(
+        currentProject.slug,
+        releaseId,
+        "model",
+        experience.model.id,
+        targetKey,
+      );
       const copied = await copyImmutableObject(env, {
         sourceKey: experience.model.sourceKey,
         targetKey,
@@ -385,8 +402,16 @@ export async function buildAndActivateRelease(
 
     const mediaFiles = [];
     for (const sourceKey of [...mediaKeys].sort()) {
+      assertProjectAssetKey(currentProject.slug, sourceKey, "media");
       const fileName = mediaFileName(sourceKey, currentProject.slug);
       const targetKey = `projects/${currentProject.slug}/releases/${releaseId}/media/${fileName}`;
+      assertReleaseAssetKey(
+        currentProject.slug,
+        releaseId,
+        "media",
+        fileName,
+        targetKey,
+      );
       const copied = await copyImmutableObject(env, {
         sourceKey,
         targetKey,
@@ -409,9 +434,17 @@ export async function buildAndActivateRelease(
         const asset = studioById.get(assetId);
         if (!asset)
           throw Error(`Cloud draft asset metadata is missing: ${assetId}`);
+        assertDraftAssetKey(currentProject.slug, asset.id, asset.r2_key);
         const targetKey = `projects/${currentProject.slug}/releases/${releaseId}/studio/${safeSegment(
           asset.id,
         )}`;
+        assertReleaseAssetKey(
+          currentProject.slug,
+          releaseId,
+          "studio",
+          asset.id,
+          targetKey,
+        );
         const copied = await copyImmutableObject(env, {
           sourceKey: asset.r2_key,
           targetKey,
@@ -433,9 +466,21 @@ export async function buildAndActivateRelease(
       const studioModel = studioById.get(cloudDraft.draft.scene.modelId);
       if (!studioModel)
         throw Error("Studio model asset metadata is missing.");
+      assertDraftAssetKey(
+        currentProject.slug,
+        studioModel.id,
+        studioModel.r2_key,
+      );
       const targetKey = `projects/${currentProject.slug}/releases/${releaseId}/models/${safeSegment(
         studioModel.id,
       )}`;
+      assertReleaseAssetKey(
+        currentProject.slug,
+        releaseId,
+        "model",
+        studioModel.id,
+        targetKey,
+      );
       const copied = await copyImmutableObject(env, {
         sourceKey: studioModel.r2_key,
         targetKey,
@@ -669,6 +714,13 @@ async function verifyReleaseIntegrity(env, project, releaseId) {
     const chunk = assets.slice(index, index + 20);
     await Promise.all(
       chunk.map(async (asset) => {
+        assertReleaseAssetKey(
+          project.slug,
+          releaseId,
+          asset.kind,
+          asset.logicalId,
+          asset.r2Key,
+        );
         const object = await env.MODEL_ASSETS.head(asset.r2Key);
         if (!object)
           throw Error(`Release asset is missing from storage: ${asset.logicalId}`);
