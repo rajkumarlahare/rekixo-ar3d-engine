@@ -1,3 +1,5 @@
+import { assertReleaseAssetKey } from "./storage-boundary.mjs";
+import { serveR2Object } from "./http-range.mjs";
 const BASE_PATH = "/3Dprojects";
 const RELEASE_BASE = `${BASE_PATH}/api/releases`;
 
@@ -65,9 +67,45 @@ export async function releaseSchemaReady(env) {
   }
 }
 
+function finiteVector3(value) {
+  return (
+    Array.isArray(value) &&
+    value.length === 3 &&
+    value.every((item) => typeof item === "number" && Number.isFinite(item))
+  );
+}
+
+function validManifestScene(scene, projectId) {
+  return (
+    scene &&
+    typeof scene === "object" &&
+    !Array.isArray(scene) &&
+    validToken(scene.id) &&
+    scene.projectId === projectId &&
+    typeof scene.name === "string" &&
+    scene.name.trim().length > 0 &&
+    [
+      "project-navigation",
+      "section",
+      "wing-distance",
+      "balcony",
+      "typical-floor",
+      "amenity",
+    ].includes(scene.type) &&
+    Number.isInteger(scene.sortOrder) &&
+    typeof scene.enabled === "boolean" &&
+    (scene.settings === undefined ||
+      (scene.settings &&
+        typeof scene.settings === "object" &&
+        !Array.isArray(scene.settings)))
+  );
+}
+
 function validateManifestShape(manifest, row) {
   if (
     !manifest ||
+    typeof manifest !== "object" ||
+    Array.isArray(manifest) ||
     manifest.format !== "rekixo-release-manifest" ||
     manifest.version !== 1 ||
     !manifest.release ||
@@ -81,9 +119,103 @@ function validateManifestShape(manifest, row) {
     manifest.release.projectSlug !== row.slug ||
     Number(manifest.release.version) !== Number(row.release_version) ||
     manifest.project.id !== row.project_id ||
-    manifest.project.slug !== row.slug
+    manifest.project.slug !== row.slug ||
+    manifest.project.status !== "published" ||
+    typeof manifest.project.name !== "string" ||
+    !manifest.project.name.trim()
   )
     throw Error("Active release manifest identity is invalid.");
+
+  if (
+    manifest.experience.scenes.length > 5000 ||
+    manifest.experience.scenes.some(
+      (scene) => !validManifestScene(scene, row.project_id),
+    )
+  )
+    throw Error("Active release scene payload is invalid.");
+
+  const mediaFiles = manifest.experience.mediaFiles;
+  if (
+    mediaFiles.length > 5000 ||
+    new Set(mediaFiles).size !== mediaFiles.length ||
+    mediaFiles.some(
+      (file) =>
+        typeof file !== "string" ||
+        !/^[A-Za-z0-9][A-Za-z0-9._-]{0,140}$/.test(file),
+    )
+  )
+    throw Error("Active release media list is invalid.");
+
+  const assetIds = new Set();
+  const assetKeys = new Set();
+  for (const asset of manifest.assets) {
+    if (
+      !asset ||
+      typeof asset !== "object" ||
+      Array.isArray(asset) ||
+      !validToken(asset.id) ||
+      !["model", "media", "studio"].includes(asset.kind) ||
+      !validToken(asset.logicalId, 500) ||
+      typeof asset.name !== "string" ||
+      !asset.name.trim() ||
+      typeof asset.mimeType !== "string" ||
+      !asset.mimeType.trim() ||
+      !Number.isSafeInteger(asset.byteSize) ||
+      asset.byteSize < 0 ||
+      (asset.sha256 !== undefined &&
+        (typeof asset.sha256 !== "string" ||
+          !/^[a-f0-9]{64}$/.test(asset.sha256)))
+    )
+      throw Error("Active release asset manifest is invalid.");
+    const logicalKey = `${asset.kind}:${asset.logicalId}`;
+    if (assetIds.has(asset.id) || assetKeys.has(logicalKey))
+      throw Error("Active release contains duplicate assets.");
+    assetIds.add(asset.id);
+    assetKeys.add(logicalKey);
+  }
+
+  const model = manifest.experience.model;
+  if (
+    model &&
+    (!validToken(model.id) ||
+      model.projectId !== row.project_id ||
+      typeof model.name !== "string" ||
+      !model.name.trim() ||
+      !Number.isInteger(model.version) ||
+      model.version < 1 ||
+      typeof model.mimeType !== "string" ||
+      !validToken(model.releaseAssetId) ||
+      !assetIds.has(model.releaseAssetId))
+  )
+    throw Error("Active release model payload is invalid.");
+
+  const camera = manifest.experience.camera;
+  if (
+    camera &&
+    (!validToken(camera.id) ||
+      camera.projectId !== row.project_id ||
+      typeof camera.name !== "string" ||
+      !camera.name.trim() ||
+      !finiteVector3(camera.position) ||
+      !finiteVector3(camera.target) ||
+      (camera.fov !== undefined &&
+        (typeof camera.fov !== "number" ||
+          !Number.isFinite(camera.fov) ||
+          camera.fov <= 0 ||
+          camera.fov > 180)))
+  )
+    throw Error("Active release camera payload is invalid.");
+
+  const studioProject = manifest.studio?.project;
+  if (
+    studioProject &&
+    (studioProject.schema !== 1 ||
+      studioProject.id !== row.project_id ||
+      studioProject.slug !== row.slug ||
+      !Array.isArray(studioProject.assets) ||
+      studioProject.assets.some((assetId) => !validToken(assetId)))
+  )
+    throw Error("Active release Studio payload is invalid.");
 }
 
 export async function activeReleaseState(env, slug) {
@@ -298,7 +430,7 @@ export async function serveReleaseAsset(env, releaseId, pathKind, logicalId, req
 
   const row = await env.DB.prepare(
     `SELECT a.r2_key,a.mime_type,a.byte_size,a.name,a.sha256,a.source_etag,
-            p.status
+            p.status,p.slug
        FROM release_assets_3d a
        JOIN releases_3d r ON r.id=a.release_id AND r.project_id=a.project_id
        JOIN projects_3d p ON p.id=r.project_id
@@ -309,34 +441,54 @@ export async function serveReleaseAsset(env, releaseId, pathKind, logicalId, req
   if (!row || row.status !== "published")
     return json({ error: "Release asset not found." }, { status: 404 });
 
-  const object =
-    request.method === "HEAD"
-      ? await env.MODEL_ASSETS.head(row.r2_key)
-      : await env.MODEL_ASSETS.get(row.r2_key);
-  if (!object)
+  try {
+    assertReleaseAssetKey(
+      row.slug,
+      releaseId,
+      kind,
+      logicalId,
+      row.r2_key,
+    );
+  } catch (error) {
+    return json(
+      {
+        error: "Immutable release storage ownership is corrupted.",
+        diagnostic:
+          error instanceof Error
+            ? error.message
+            : "Invalid immutable release storage key.",
+      },
+      { status: 500 },
+    );
+  }
+
+  const mimeType = row.mime_type || "application/octet-stream";
+  const served = await serveR2Object(
+    env.MODEL_ASSETS,
+    row.r2_key,
+    request,
+    {
+      mimeType,
+      cacheControl: "public, max-age=31536000, immutable",
+      expectedSize: Number(row.byte_size),
+      sha256: row.sha256 || undefined,
+      allowRange: kind === "media" && mimeType === "video/mp4",
+    },
+  );
+  if (served.corruption)
+    return json(
+      {
+        error: "Immutable release asset is corrupted.",
+        diagnostic: served.corruption,
+      },
+      { status: 500 },
+    );
+  if (served.missing)
     return json(
       { error: "Immutable release asset is missing from storage." },
       { status: 500 },
     );
-
-  if (Number(row.byte_size) !== Number(object.size))
-    return json(
-      { error: "Immutable release asset size mismatch." },
-      { status: 500 },
-    );
-
-  const headers = new Headers();
-  object.writeHttpMetadata?.(headers);
-  headers.set("Content-Type", row.mime_type || "application/octet-stream");
-  headers.set("Content-Length", String(object.size));
-  headers.set("Cache-Control", "public, max-age=31536000, immutable");
-  headers.set("ETag", object.httpEtag);
-  headers.set("X-Content-Type-Options", "nosniff");
-  if (row.sha256) headers.set("X-Rekixo-SHA256", row.sha256);
-
-  if (request.method === "HEAD")
-    return new Response(null, { status: 200, headers });
-  return new Response(object.body, { status: 200, headers });
+  return served.response;
 }
 
 export async function handleReleaseReadRequest(

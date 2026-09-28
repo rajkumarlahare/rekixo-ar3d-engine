@@ -3,6 +3,7 @@ import {
   buildAndActivateRelease,
   listProjectReleases,
 } from "./release-publish.mjs";
+import { assertDraftAssetKey } from "./storage-boundary.mjs";
 const BASE_PATH = "/3Dprojects";
 const CLOUD_PATH = `${BASE_PATH}/api/cloud`;
 const COOKIE = "rekixo_3d_admin";
@@ -250,6 +251,30 @@ async function sessionFor(request, env) {
   )
     return null;
   return session;
+}
+
+export async function engineAdminReadAccess(request, env) {
+  if (!authConfigured(env))
+    return {
+      ok: false,
+      status: 503,
+      error:
+        "Engine Admin authentication is not configured. Provision the dedicated Engine Admin secrets first.",
+    };
+  if (!(await schemaReady(env)))
+    return {
+      ok: false,
+      status: 503,
+      error: "Engine Admin cloud schema is not installed.",
+    };
+  const actor = await sessionFor(request, env);
+  if (!actor)
+    return {
+      ok: false,
+      status: 401,
+      error: "Engine Admin sign-in required.",
+    };
+  return { ok: true, actor };
 }
 
 async function writeAudit(env, actor, action, projectId = null, targetId = null, details = {}) {
@@ -927,9 +952,18 @@ async function assetContent(env, project, slug, assetId) {
   ).bind(assetId, project.id).first();
   if (!row) return json({ error: "Asset not found." }, { status: 404 });
 
-  const expectedPrefix = `projects/${slug}/draft-assets/`;
-  if (!String(row.r2_key || "").startsWith(expectedPrefix))
-    return json({ error: "Asset storage key violates project isolation." }, { status: 500 });
+  try {
+    assertDraftAssetKey(slug, assetId, row.r2_key);
+  } catch (error) {
+    return json(
+      {
+        error: "Asset storage key violates project isolation.",
+        diagnostic:
+          error instanceof Error ? error.message : "Invalid draft asset key.",
+      },
+      { status: 500 },
+    );
+  }
 
   const object = await env.MODEL_ASSETS.get(row.r2_key);
   if (!object)

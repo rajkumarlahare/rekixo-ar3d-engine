@@ -25,8 +25,65 @@ function assertPackShape(pack) {
       !/^[a-f0-9]{64}$/i.test(source.sha256)
     )
       throw Error("Invalid source pack item.");
+    if (!portableSourceFilename(source.filename))
+      throw Error(`Unsafe source filename: ${source.filename}`);
     ids.add(source.id);
   }
+}
+
+function portableSourceFilename(filename) {
+  if (
+    typeof filename !== "string" ||
+    !filename.trim() ||
+    filename.length > 500 ||
+    filename.includes("\0") ||
+    filename.includes("\\") ||
+    filename.startsWith("/") ||
+    /^[A-Za-z]:/.test(filename)
+  )
+    return false;
+  const segments = filename.split("/");
+  return (
+    segments.length <= 32 &&
+    segments.every(
+      (segment) =>
+        segment.length > 0 &&
+        segment !== "." &&
+        segment !== ".." &&
+        segment.length <= 240,
+    )
+  );
+}
+
+async function containedSourcePath(root, filename) {
+  if (!portableSourceFilename(filename))
+    throw Error(`Unsafe source filename: ${filename}`);
+
+  const segments = filename.split("/");
+  let cursor = root;
+  for (const segment of segments) {
+    cursor = path.join(cursor, segment);
+    let item;
+    try {
+      item = await fs.lstat(cursor);
+    } catch {
+      throw Error(`Missing source file: ${filename}`);
+    }
+    if (item.isSymbolicLink())
+      throw Error(`Source symlink is not allowed: ${filename}`);
+  }
+
+  const resolved = await fs.realpath(cursor);
+  const relative = path.relative(root, resolved);
+  if (
+    !relative ||
+    relative === "." ||
+    relative.startsWith(`..${path.sep}`) ||
+    relative === ".." ||
+    path.isAbsolute(relative)
+  )
+    throw Error(`Source path escapes source directory: ${filename}`);
+  return resolved;
 }
 
 async function sha256(file) {
@@ -44,16 +101,12 @@ async function sha256(file) {
 export async function verifySourcePackFiles(manifestPath, sourceDirectory) {
   const pack = JSON.parse(await fs.readFile(manifestPath, "utf8"));
   assertPackShape(pack);
+  const root = await fs.realpath(sourceDirectory);
 
   const verified = [];
   for (const source of pack.sources) {
-    const file = path.join(sourceDirectory, source.filename);
-    let stat;
-    try {
-      stat = await fs.stat(file);
-    } catch {
-      throw Error(`Missing source file: ${source.filename}`);
-    }
+    const file = await containedSourcePath(root, source.filename);
+    const stat = await fs.stat(file);
     if (!stat.isFile()) throw Error(`Source is not a file: ${source.filename}`);
     if (stat.size !== source.byteSize)
       throw Error(

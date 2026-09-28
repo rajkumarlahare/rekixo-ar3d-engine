@@ -106,6 +106,29 @@ const isText = (value: unknown, max = 1000) =>
   value.trim().length > 0 &&
   value.length <= max;
 
+function validPortableRelativeFilename(value: unknown) {
+  if (!isText(value, 500)) return false;
+  const filename = value as string;
+  if (
+    filename.includes("\0") ||
+    filename.includes("\\") ||
+    filename.startsWith("/") ||
+    /^[A-Za-z]:/.test(filename)
+  )
+    return false;
+  const segments = filename.split("/");
+  return (
+    segments.length <= 32 &&
+    segments.every(
+      (segment) =>
+        segment.length > 0 &&
+        segment !== "." &&
+        segment !== ".." &&
+        segment.length <= 240,
+    )
+  );
+}
+
 const isFiniteNumber = (value: unknown, min = -1e15, max = 1e15) =>
   typeof value === "number" &&
   Number.isFinite(value) &&
@@ -184,7 +207,7 @@ export function assertProjectSourcePackV1(
     if (!isObject(item)) throw Error("Invalid source item.");
     if (
       !isText(item.id, 200) ||
-      !isText(item.filename, 500) ||
+      !validPortableRelativeFilename(item.filename) ||
       typeof item.mediaType !== "string" ||
       item.mediaType.length > 300 ||
       !isFiniteNumber(item.byteSize, 0, 1024 ** 4) ||

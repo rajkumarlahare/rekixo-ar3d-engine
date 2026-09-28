@@ -44,6 +44,8 @@ const baseManifest = () => ({
       projectId: "project_12345678",
       name: "Project Navigation",
       type: "project-navigation",
+      sortOrder: 10,
+      enabled: true,
       settings: {},
     }],
     model: {

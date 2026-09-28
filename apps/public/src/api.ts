@@ -1,5 +1,6 @@
 import {
   PUBLIC_BASE_PATH,
+  assertPublic3DExperiencePayload,
   type Public3DExperience,
 } from "@rekixo/3d-contracts";
 
@@ -38,5 +39,16 @@ export async function loadPublicExperience(
     throw new ExperienceApiError(message, response.status);
   }
 
-  return (await response.json()) as Public3DExperience;
+  const body = await response.json();
+  try {
+    assertPublic3DExperiencePayload(body);
+  } catch (error) {
+    throw new ExperienceApiError(
+      error instanceof Error
+        ? `3D project response is corrupted: ${error.message}`
+        : "3D project response is corrupted.",
+      502,
+    );
+  }
+  return body as Public3DExperience;
 }

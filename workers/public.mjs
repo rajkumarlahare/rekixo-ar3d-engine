@@ -4,6 +4,8 @@ import {
   handleReleaseReadRequest,
   serveReleaseAsset,
 } from "./release-runtime.mjs";
+import { assertProjectAssetKey } from "./storage-boundary.mjs";
+import { serveR2Object } from "./http-range.mjs";
 const BASE_PATH = "/3Dprojects";
 const MODEL_ROUTE_PREFIX = `${BASE_PATH}/api/models/`;
 const PROJECT_ROUTE_PREFIX = `${BASE_PATH}/api/projects/`;
@@ -25,13 +27,32 @@ function json(value, init = {}) {
   return new Response(JSON.stringify(value), { ...init, headers });
 }
 
-function parseJson(value, fallback) {
-  if (typeof value !== "string") return fallback;
+function parseJsonValue(value, label) {
+  if (typeof value !== "string")
+    throw Error(`${label} is missing.`);
   try {
     return JSON.parse(value);
   } catch {
-    return fallback;
+    throw Error(`${label} contains malformed JSON.`);
   }
+}
+
+function parseJsonObject(value, label) {
+  const parsed = parseJsonValue(value, label);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    throw Error(`${label} must be a JSON object.`);
+  return parsed;
+}
+
+function parseVector3(value, label) {
+  const parsed = parseJsonValue(value, label);
+  if (
+    !Array.isArray(parsed) ||
+    parsed.length !== 3 ||
+    parsed.some((item) => typeof item !== "number" || !Number.isFinite(item))
+  )
+    throw Error(`${label} must be a finite 3D vector.`);
+  return parsed;
 }
 
 function addSecurityHeaders(response) {
@@ -66,7 +87,10 @@ function mapScene(row) {
     cameraPresetId: row.camera_preset_id ?? undefined,
     sortOrder: Number(row.sort_order || 0),
     enabled: Boolean(row.enabled),
-    settings: parseJson(row.settings_json, {}),
+    settings: parseJsonObject(
+      row.settings_json,
+      `Scene ${row.id} settings_json`,
+    ),
   };
 }
 
@@ -128,6 +152,7 @@ async function getProjectExperience(env, slug) {
   let modelPayload;
 
   if (model) {
+    assertProjectAssetKey(project.slug, model.asset_key, "models");
     const object = await env.MODEL_ASSETS.head(model.asset_key);
     const available = Boolean(object);
     modelPayload = {
@@ -161,8 +186,14 @@ async function getProjectExperience(env, slug) {
           id: defaultCamera.id,
           projectId: defaultCamera.project_id,
           name: defaultCamera.name,
-          position: parseJson(defaultCamera.position_json, [6, 4, 8]),
-          target: parseJson(defaultCamera.target_json, [0, 0, 0]),
+          position: parseVector3(
+            defaultCamera.position_json,
+            `Camera ${defaultCamera.id} position_json`,
+          ),
+          target: parseVector3(
+            defaultCamera.target_json,
+            `Camera ${defaultCamera.id} target_json`,
+          ),
           fov: Number(defaultCamera.fov || 45),
         }
       : undefined,
@@ -211,28 +242,32 @@ async function serveModel(env, modelId, request) {
       { status: 500 },
     );
 
-  const object =
-    request.method === "HEAD"
-      ? await env.MODEL_ASSETS.head(model.asset_key)
-      : await env.MODEL_ASSETS.get(model.asset_key);
+  try {
+    assertProjectAssetKey(model.slug, model.asset_key, "models");
+  } catch (error) {
+    return json(
+      {
+        error: "Model storage ownership is corrupted.",
+        diagnostic:
+          error instanceof Error ? error.message : "Invalid model storage key.",
+      },
+      { status: 500 },
+    );
+  }
 
-  if (!object) {
+  const served = await serveR2Object(env.MODEL_ASSETS, model.asset_key, request, {
+    mimeType: model.mime_type || "model/gltf-binary",
+    cacheControl: "public, max-age=300, must-revalidate",
+    expectedSize: model.byte_size ?? undefined,
+  });
+  if (served.corruption)
+    return json(
+      { error: "Model storage is corrupted.", diagnostic: served.corruption },
+      { status: 500 },
+    );
+  if (served.missing)
     return json({ error: "Model asset is not available." }, { status: 404 });
-  }
-
-  const headers = new Headers();
-  object.writeHttpMetadata?.(headers);
-  headers.set("Content-Type", model.mime_type || "model/gltf-binary");
-  headers.set("Cache-Control", "public, max-age=300, must-revalidate");
-  headers.set("ETag", object.httpEtag);
-  headers.set("X-Content-Type-Options", "nosniff");
-
-  if (request.method === "HEAD") {
-    headers.set("Content-Length", String(object.size));
-    return new Response(null, { status: 200, headers });
-  }
-
-  return new Response(object.body, { status: 200, headers });
+  return served.response;
 }
 
 function mediaType(fileName) {
@@ -279,24 +314,32 @@ async function serveProjectMedia(env, slug, fileName, request) {
     );
 
   const key = `projects/${slug}/media/${fileName}`;
-  const object =
-    request.method === "HEAD"
-      ? await env.MODEL_ASSETS.head(key)
-      : await env.MODEL_ASSETS.get(key);
-  if (!object) return json({ error: "Media asset is not available." }, { status: 404 });
-
-  const headers = new Headers();
-  object.writeHttpMetadata?.(headers);
-  if (!headers.has("Content-Type")) headers.set("Content-Type", mediaType(fileName));
-  headers.set("Cache-Control", "public, max-age=300, must-revalidate");
-  headers.set("ETag", object.httpEtag);
-  headers.set("X-Content-Type-Options", "nosniff");
-
-  if (request.method === "HEAD") {
-    headers.set("Content-Length", String(object.size));
-    return new Response(null, { status: 200, headers });
+  try {
+    assertProjectAssetKey(slug, key, "media");
+  } catch (error) {
+    return json(
+      {
+        error: "Media storage ownership is corrupted.",
+        diagnostic:
+          error instanceof Error ? error.message : "Invalid media storage key.",
+      },
+      { status: 500 },
+    );
   }
-  return new Response(object.body, { status: 200, headers });
+  const mimeType = mediaType(fileName);
+  const served = await serveR2Object(env.MODEL_ASSETS, key, request, {
+    mimeType,
+    cacheControl: "public, max-age=300, must-revalidate",
+    allowRange: mimeType === "video/mp4",
+  });
+  if (served.corruption)
+    return json(
+      { error: "Media storage is corrupted.", diagnostic: served.corruption },
+      { status: 500 },
+    );
+  if (served.missing)
+    return json({ error: "Media asset is not available." }, { status: 404 });
+  return served.response;
 }
 
 export default {
@@ -336,7 +379,21 @@ export default {
         return json({ error: "Method not allowed." }, { status: 405 });
       }
 
-      const experience = await getProjectExperience(env, slug);
+      let experience;
+      try {
+        experience = await getProjectExperience(env, slug);
+      } catch (error) {
+        return json(
+          {
+            error: "Published 3D project data is corrupted.",
+            diagnostic:
+              error instanceof Error
+                ? error.message
+                : "Unknown project data corruption.",
+          },
+          { status: 500 },
+        );
+      }
       if (!experience) {
         return json(
           { error: "This 3D project is not currently published." },

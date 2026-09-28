@@ -1,3 +1,4 @@
+export * from "./runtime-validation";
 export * from "./release-manifest-v1";
 export * from "./scene-source-evidence";
 export * from "./source-pack-v1";
@@ -83,6 +84,12 @@ export interface Admin3DProjectStatus {
   scenes: Scene3D[];
   models: Model3D[];
   activeModel?: Model3D;
+  modelPage?: {
+    limit: number;
+    offset: number;
+    total: number;
+    hasMore: boolean;
+  };
   storage: {
     bucket: string;
     activeModelObjectAvailable: boolean;
