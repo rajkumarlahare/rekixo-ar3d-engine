@@ -177,3 +177,27 @@ test("reference layers and model alignment are validated without mutating source
   p.scene.referenceLayers[0].assetId = "missing-reference";
   assert.throws(() => validateProject(p), /Reference layer asset is missing/);
 });
+
+test("source mesh semantic tags stay floor and room consistent", () => {
+  const p = fixture();
+  p.scene.modelNodeTags = [
+    {
+      nodeName: "Wall_A",
+      occurrence: 1,
+      floorId: p.scene.floors[0].id,
+      unit: "A1",
+      roomId: "living",
+    },
+  ];
+  assert.doesNotThrow(() => validateProject(p));
+
+  p.scene.modelNodeTags[0].floorId = "missing-floor";
+  assert.throws(() => validateProject(p), /model node floor\/unit tag/i);
+
+  p.scene.modelNodeTags[0].floorId = p.scene.floors[0].id;
+  p.scene.modelNodeTags.push({
+    nodeName: "Wall_A",
+    occurrence: 1,
+  });
+  assert.throws(() => validateProject(p), /model node tags/i);
+});
