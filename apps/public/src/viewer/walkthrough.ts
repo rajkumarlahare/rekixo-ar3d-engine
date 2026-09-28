@@ -24,7 +24,9 @@ export function floorEyeY(
   const levels =
     geometry?.length ? geometry : fallbackFloorGeometry(bounds, floor);
   const targetFloor =
-    floor === null ? levels[0]?.floor : floor;
+    floor === null
+      ? levels.find((item) => item.floor === 0)?.floor ?? levels[0]?.floor
+      : floor;
   const level =
     targetFloor === undefined ? undefined : floorGeometryFor(levels, targetFloor);
 
