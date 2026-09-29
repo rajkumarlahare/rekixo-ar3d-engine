@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { spawnSync } from "node:child_process";
+import { validProjectSlug } from "../shared/project-slug-policy.js";
 
 const read = (file) => fs.readFileSync(file, "utf8");
 
@@ -71,6 +73,47 @@ test("future project creation is controlled provisioning, not a schema migration
   assert.match(renderer, /'draft'/);
   assert.match(renderer, /ON CONFLICT\(slug\) DO NOTHING/);
   assert.doesNotMatch(renderer, /published/);
+});
+
+test("reserved Engine routes are rejected consistently before provisioning", () => {
+  for (const slug of [
+    "api",
+    "assets",
+    "studio",
+    "login",
+    "showcase",
+    "published",
+  ])
+    assert.equal(validProjectSlug(slug), false, slug);
+  assert.equal(validProjectSlug("garden-residences"), true);
+
+  const provision = spawnSync(
+    process.execPath,
+    [
+      "scripts/render-project-provision-sql.mjs",
+      "api",
+      "Reserved Route",
+      "",
+    ],
+    { encoding: "utf8" },
+  );
+  assert.notEqual(provision.status, 0);
+  assert.match(provision.stderr, /reserved route/i);
+
+  const consumers = [
+    "packages/engine-core/src/index.ts",
+    "apps/admin/src/studio/domain.ts",
+    "workers/admin.mjs",
+    "workers/admin-cloud.mjs",
+    "workers/release-runtime.mjs",
+    "scripts/render-project-provision-sql.mjs",
+  ];
+  for (const file of consumers)
+    assert.match(
+      read(file),
+      /project-slug-policy\.js/,
+      `${file} must use the shared project slug policy`,
+    );
 });
 
 test("historical Jyoti migrations remain immutable compatibility history", () => {
