@@ -38,9 +38,10 @@ test("Project Builder exposes one-click Jyoti source lock status", () => {
   assert.match(builder, /SOURCE LOCK DETECTED/);
   assert.match(builder, /Auto setup Jyoti Paradise/);
   assert.match(builder, /Exact SHA-256 source matches/);
-  assert.match(builder, /Primary 3D model/);
-  assert.match(builder, /Brochure \/ floor plan/);
-  assert.match(builder, /Exterior realism reference/);
+  const setup = read("apps/admin/src/studio/sourcePackSetup.ts");
+  assert.match(setup, /Primary 3D model/);
+  assert.match(setup, /Brochure \/ floor plan/);
+  assert.match(setup, /Exterior realism reference/);
 
   assert.match(studio, /detectQuickSourceSetup/);
   assert.match(studio, /applyQuickSourceSetup/);
