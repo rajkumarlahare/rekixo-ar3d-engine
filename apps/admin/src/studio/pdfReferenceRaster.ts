@@ -74,7 +74,7 @@ export async function rasterPdfReference(
     if (!context) throw Error("Canvas rendering is unavailable in this browser.");
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, canvas.width, canvas.height);
-    await page.render({ canvasContext: context, viewport }).promise;
+    await page.render({ canvas, canvasContext: context, viewport }).promise;
 
     const crop = clampCrop(options.crop);
     const sx = Math.round(canvas.width * crop.x);
@@ -103,6 +103,6 @@ export async function rasterPdfReference(
       { type: "image/png" },
     );
   } finally {
-    await pdfDocument.destroy();
+    await loadingTask.destroy();
   }
 }
