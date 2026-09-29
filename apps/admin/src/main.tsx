@@ -204,7 +204,7 @@ function App() {
       <section>
         <div className="section-heading">
           <div><p className="eyebrow">PROJECT WORKSPACE</p><h3>Configured modules</h3></div>
-          <span className="read-only">Read-only until authenticated write APIs are enabled</span>
+          <span className="read-only">Status view · edit, sync and publish from Design Studio</span>
         </div>
         <div className="module-grid">
           {moduleOrder.map(([type, label], index) => {
