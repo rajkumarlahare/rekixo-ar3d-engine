@@ -17,6 +17,7 @@ import {
   projectSlug,
   id,
   newProject,
+  reviewedDoorConnections,
   roomArea,
   roomGeometryFromPolygon,
   snapshot,
@@ -679,6 +680,19 @@ export default function Studio() {
           Boolean(entry.floorId),
       ),
     ).length,
+    walkConnections = room
+      ? reviewedDoorConnections(scene, room.id)
+          .map((connection) => ({
+            ...connection,
+            room: scene.rooms.find(
+              (candidate) => candidate.id === connection.toRoomId,
+            ),
+          }))
+          .filter(
+            (connection): connection is typeof connection & { room: Room } =>
+              Boolean(connection.room),
+          )
+      : [],
     appearance = p.scene.appearance ?? DEFAULT_APPEARANCE,
     materialOverride = p.scene.materialOverrides?.find(
       (entry) => entry.materialName === selectedMaterial,
@@ -3282,6 +3296,17 @@ export default function Studio() {
             onRoomDraw={commitMappedRoom}
             onRoomPolygonDraw={commitMappedPolygon}
             onRoomPolygonChange={commitEditedPolygon}
+            onWalkRoomChange={(nextRoomId) => {
+              const nextRoom = scene.rooms.find(
+                (candidate) => candidate.id === nextRoomId,
+              );
+              if (!nextRoom) return;
+              setRoomId(nextRoom.id);
+              setSelected(nextRoom.id);
+              setMesh("");
+              setSelectedModelNodeKey("");
+              setIsolateFloorId(nextRoom.floorId);
+            }}
             onModelNodes={setModelNodes}
             onModelMaterials={setModelMaterials}
           />
@@ -3725,6 +3750,41 @@ export default function Studio() {
                     ? ` · ${room.polygon.length} corners`
                     : ""}
                 </p>
+                <section
+                  className="room-door-connectivity"
+                  aria-label="Reviewed walkthrough connections"
+                >
+                  <div className="section-label">WALKTHROUGH CONNECTIONS</div>
+                  {walkConnections.length ? (
+                    walkConnections.map((connection) => (
+                      <div key={connection.openingId}>
+                        <span>
+                          <b>Reviewed door</b>
+                          <small>
+                            Connects to {connection.room.unit} ·{" "}
+                            {connection.room.name}
+                          </small>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRoomId(connection.room.id);
+                            setSelected(connection.room.id);
+                            setView("walk");
+                            setCameraOrientation("perspective");
+                          }}
+                        >
+                          Walk there
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <small>
+                      No reviewed shared doors connect this room to another mapped
+                      room.
+                    </small>
+                  )}
+                </section>
                 <section className="room-opening-list" aria-label="Approved room openings">
                   <div className="section-label">APPROVED OPENINGS</div>
                   {(p.scene.openings ?? []).filter((opening) =>
