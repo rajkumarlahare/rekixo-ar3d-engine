@@ -13,7 +13,15 @@ const compile = (path) =>
 const url = (code) =>
   "data:text/javascript;base64," + Buffer.from(code).toString("base64");
 
-const domainUrl = url(compile("apps/admin/src/studio/domain.ts"));
+const slugPolicyUrl = url(
+  fs.readFileSync("shared/project-slug-policy.js", "utf8"),
+);
+const domainUrl = url(
+  compile("apps/admin/src/studio/domain.ts").replace(
+    /(["'])\.\.\/\.\.\/\.\.\/\.\.\/shared\/project-slug-policy\.js\1/,
+    JSON.stringify(slugPolicyUrl),
+  ),
+);
 const associatorUrl = url(
   compile("apps/admin/src/studio/openingAssociator.ts").replace(
     /(["'])\.\/domain\1/,
