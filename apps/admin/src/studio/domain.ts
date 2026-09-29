@@ -76,6 +76,12 @@ export interface ReferenceLayer {
   z: number;
   rotation: number;
 }
+export type ModelNodeSemantic =
+  | "wall"
+  | "door"
+  | "window"
+  | "opening"
+  | "ignore";
 export interface ModelNodeTag {
   nodeName: string;
   occurrence: number;
@@ -84,6 +90,9 @@ export interface ModelNodeTag {
   roomId?: string;
   assignment?: "auto" | "manual";
   confidence?: number;
+  semantic?: ModelNodeSemantic;
+  semanticAssignment?: "auto" | "manual";
+  semanticConfidence?: number;
 }
 export interface Scene {
   floors: Floor[];
@@ -560,6 +569,14 @@ export function validateScene(s: Scene): void {
           !["auto", "manual"].includes(tag.assignment)) ||
         (tag.confidence !== undefined &&
           !number(tag.confidence, 0, 1)) ||
+        (tag.semantic !== undefined &&
+          !["wall", "door", "window", "opening", "ignore"].includes(
+            tag.semantic,
+          )) ||
+        (tag.semanticAssignment !== undefined &&
+          !["auto", "manual"].includes(tag.semanticAssignment)) ||
+        (tag.semanticConfidence !== undefined &&
+          !number(tag.semanticConfidence, 0, 1)) ||
         (tag.roomId !== undefined && !room) ||
         (room && tag.floorId !== undefined && room.floorId !== tag.floorId) ||
         (room &&
