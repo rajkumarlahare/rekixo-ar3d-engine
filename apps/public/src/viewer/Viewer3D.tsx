@@ -4,7 +4,10 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
-import type { CameraPreset3D } from "@rekixo/3d-contracts";
+import type {
+  CameraPreset3D,
+  PublicWalkthroughGraph,
+} from "@rekixo/3d-contracts";
 import { createFloorExploder, enhanceArchitecturalModel } from "./realism";
 import {
   floorFocusElevation,
@@ -16,6 +19,9 @@ import {
 import {
   clampWalkPosition,
   collectWalkColliders,
+  publicWalkConnections,
+  publicWalkStart,
+  resolvePublicWalkStep,
   walkDelta,
   walkStartPosition,
   type WalkDirection,
@@ -50,6 +56,7 @@ interface Viewer3DProps {
   onFeatureSelect?: (feature: Omit<ExperienceFeature, "object">) => void;
   availableFloors?: number[];
   floorGeometry?: FloorGeometryInput[];
+  walkthrough?: PublicWalkthroughGraph;
 }
 
 interface HomeView {
@@ -221,6 +228,7 @@ export function Viewer3D({
   onFeatureSelect,
   availableFloors = [],
   floorGeometry = [],
+  walkthrough,
 }: Viewer3DProps) {
   const floorSignature = [
     availableFloors.join(","),
@@ -255,6 +263,7 @@ export function Viewer3D({
   const [nightMode, setNightMode] = useState(false);
   const [exploded, setExploded] = useState(initialExploded);
   const [walkMode, setWalkMode] = useState(false);
+  const [walkNotice, setWalkNotice] = useState("");
 
   useEffect(() => {
     featureCallbackRef.current = onFeatureSelect;
@@ -288,6 +297,7 @@ export function Viewer3D({
     let currentExperienceMode = experienceMode;
     let walkBounds: THREE.Box3 | undefined;
     let walkScale = 1;
+    let graphWalkRoomId = "";
     let pressX = 0;
     let pressY = 0;
     let pointerTravel = 0;
@@ -474,6 +484,66 @@ export function Viewer3D({
       if (referenceExterior) scene.background = night ? referenceExterior.eveningSky : referenceExterior.daylightSky;
     };
 
+    const graphRoom = (id: string) =>
+      walkthrough?.rooms.find((room) => room.id === id);
+
+    const enterGraphRoom = (id: string, preserveDirection = false) => {
+      if (!walkthrough) return false;
+      const room = graphRoom(id);
+      if (!room) return false;
+      const start = publicWalkStart(walkthrough, room);
+      const centerX =
+        room.boundary.reduce((sum, point) => sum + point[0], 0) /
+        room.boundary.length;
+      const centerZ =
+        room.boundary.reduce((sum, point) => sum + point[1], 0) /
+        room.boundary.length;
+      graphWalkRoomId = room.id;
+      walkActive = true;
+      setWalkMode(true);
+      setActiveRoom(room.id);
+      setWalkNotice(
+        `${room.unit} · ${room.name} · ${publicWalkConnections(
+          walkthrough,
+          room.id,
+        ).length} reviewed door connection${publicWalkConnections(
+          walkthrough,
+          room.id,
+        ).length === 1 ? "" : "s"}`,
+      );
+      clearInput();
+      cameraTween = undefined;
+      floorExploder?.reset();
+      renderer.clippingPlanes = [];
+      controls.enabled = false;
+      walkScale = 1 / Math.max(walkthrough.metresPerUnit, 0.0001);
+      walkBounds = modelBounds;
+      walkColliders = [];
+      if (activeObject) activeObject.visible = true;
+      if (siteEnvironment) siteEnvironment.root.visible = false;
+      if (projectExperience) {
+        projectExperience.setWalk(false);
+        projectExperience.root.visible = false;
+      }
+      camera.position.set(
+        start.x,
+        room.elevation + 1.6 / Math.max(walkthrough.metresPerUnit, 0.0001),
+        start.z,
+      );
+      camera.near = Math.max(0.015 * walkScale, 0.005);
+      camera.fov = 68;
+      camera.updateProjectionMatrix();
+      if (!preserveDirection) {
+        walkYaw = Math.atan2(
+          camera.position.x - centerX,
+          camera.position.z - centerZ,
+        );
+        walkPitch = -0.12;
+      }
+      applyWalkRotation();
+      return true;
+    };
+
     const enterWalkMode = (enabled: boolean, floor: number | null) => {
       walkActive = enabled;
       setWalkMode(enabled);
@@ -491,6 +561,23 @@ export function Viewer3D({
       if (!modelBounds) return;
       floorExploder?.reset();
       renderer.clippingPlanes = [];
+
+      if (walkthrough?.rooms.length) {
+        const current = graphRoom(graphWalkRoomId || activeRoom);
+        let target = current;
+        if (!target && floor !== null) {
+          const level = floorGeometryFor(resolvedFloorGeometry, floor);
+          if (level)
+            target = [...walkthrough.rooms].sort(
+              (left, right) =>
+                Math.abs(left.elevation - level.elevationM) -
+                Math.abs(right.elevation - level.elevationM),
+            )[0];
+        }
+        target ??= walkthrough.rooms[0];
+        if (target && enterGraphRoom(target.id)) return;
+      }
+
       camera.position.copy(
         walkStartPosition(modelBounds, floor, resolvedFloorGeometry),
       );
@@ -518,6 +605,10 @@ export function Viewer3D({
     };
 
     const enterRoom = (id: string) => {
+      if (walkthrough && graphRoom(id)) {
+        enterGraphRoom(id);
+        return;
+      }
       if (!projectExperience || currentExperienceMode !== "interior") return;
       const entry = projectExperience.roomEntry(id);
       if (!entry) return;
@@ -548,6 +639,71 @@ export function Viewer3D({
     const moveWalk = (direction: WalkDirection, distance: number) => {
       if (!walkActive || !walkBounds) return;
       const delta = walkDelta(walkYaw, direction, distance);
+
+      if (walkthrough && graphWalkRoomId) {
+        const room = graphRoom(graphWalkRoomId);
+        if (!room) return;
+        const fromX = camera.position.x;
+        const fromZ = camera.position.z;
+        let result = resolvePublicWalkStep(
+          walkthrough,
+          room,
+          fromX,
+          fromZ,
+          fromX + delta.x,
+          fromZ + delta.z,
+        );
+        if (
+          result.roomId === room.id &&
+          result.x === fromX &&
+          result.z === fromZ
+        ) {
+          const slideX = resolvePublicWalkStep(
+            walkthrough,
+            room,
+            fromX,
+            fromZ,
+            fromX + delta.x,
+            fromZ,
+          );
+          if (
+            slideX.roomId !== room.id ||
+            slideX.x !== fromX ||
+            slideX.z !== fromZ
+          )
+            result = slideX;
+          else
+            result = resolvePublicWalkStep(
+              walkthrough,
+              room,
+              fromX,
+              fromZ,
+              fromX,
+              fromZ + delta.z,
+            );
+        }
+        camera.position.x = result.x;
+        camera.position.z = result.z;
+        if (result.roomId !== room.id && result.openingId) {
+          const destination = graphRoom(result.roomId);
+          graphWalkRoomId = result.roomId;
+          setActiveRoom(result.roomId);
+          if (destination) {
+            camera.position.y =
+              destination.elevation +
+              1.6 / Math.max(walkthrough.metresPerUnit, 0.0001);
+            const connections = publicWalkConnections(
+              walkthrough,
+              destination.id,
+            ).length;
+            setWalkNotice(
+              `Entered ${destination.unit} · ${destination.name} through reviewed door · ${connections} connection${connections === 1 ? "" : "s"}`,
+            );
+          }
+        }
+        return;
+      }
+
       const obstacles = walkColliders;
       const radius = 0.18 * walkScale;
       for (const axis of ["x", "z"] as const) {
@@ -756,7 +912,15 @@ export function Viewer3D({
       projectExperience?.dispose();
       if (projectExperience) scene.remove(projectExperience.root);
       projectExperience = undefined;
-      setRooms([]);
+      setRooms(
+        walkthrough?.rooms.length
+          ? walkthrough.rooms.map((room) => ({
+              id: room.id,
+              label: room.name,
+              category: room.unit,
+            }))
+          : [],
+      );
       let preserveSourceSite = false;
       object.traverse((node) => {
         if (node.userData.sourceGeometry?.siteGeometry === "included-in-source")
@@ -950,11 +1114,17 @@ export function Viewer3D({
           scene.add(experience.root);
           experience.setNight(currentNight);
           setRooms(
-            experience.rooms.map(({ id, label, category }) => ({
-              id,
-              label,
-              category,
-            })),
+            walkthrough?.rooms.length
+              ? walkthrough.rooms.map((room) => ({
+                  id: room.id,
+                  label: room.name,
+                  category: room.unit,
+                }))
+              : experience.rooms.map(({ id, label, category }) => ({
+                  id,
+                  label,
+                  category,
+                })),
           );
           setExperience(currentExperienceMode, true);
           if (resumeInteriorWalk)
@@ -1118,6 +1288,7 @@ export function Viewer3D({
       experienceRef.current = null;
       enterRoomRef.current = null;
       holdWalkRef.current = null;
+      setWalkNotice("");
     };
   }, [
     modelUrl,
@@ -1127,6 +1298,7 @@ export function Viewer3D({
     initialWalkFloor,
     visualPreset,
     floorSignature,
+    walkthrough,
   ]);
 
   useEffect(() => {
