@@ -3,6 +3,14 @@ import { roomArea, type Room, type Scene } from "./domain";
 import type { RoomSheetRow } from "./roomSheet";
 import type { BatchRepeatPreview } from "./unitRepeat";
 
+export interface OpeningWorkflowStatus {
+  analyzed: boolean;
+  approved: number;
+  ready: number;
+  review: number;
+  detected: number;
+}
+
 export type RoomMapAction =
   | "idle"
   | "stamp"
@@ -35,6 +43,9 @@ export default function VisualRoomMapper({
   onPrepareSuggestedLayout,
   batchRepeatPreview,
   onGenerateBatchRepeat,
+  openingWorkflow,
+  onAnalyzeReadyOpenings,
+  onReviewOpenings,
   onRepeatUnit,
   onClose,
 }: {
@@ -61,6 +72,9 @@ export default function VisualRoomMapper({
   onPrepareSuggestedLayout: (floorId: string) => void;
   batchRepeatPreview?: BatchRepeatPreview;
   onGenerateBatchRepeat: () => void;
+  openingWorkflow: OpeningWorkflowStatus;
+  onAnalyzeReadyOpenings: () => void;
+  onReviewOpenings: () => void;
   onRepeatUnit: (targetFloorId: string, targetUnit: string) => void;
   onClose: () => void;
 }) {
@@ -417,6 +431,70 @@ export default function VisualRoomMapper({
             </span>
           )}
         </div>
+
+        <section
+          className="room-opening-workflow"
+          aria-label="Doors windows and walkthrough preparation"
+        >
+          <div className="room-opening-workflow-head">
+            <div>
+              <small>DOORS / WINDOWS → WALKTHROUGH</small>
+              <b>One-click opening preparation</b>
+              <span>
+                Fresh model scan + mapped-wall matching. केवल confident,
+                dimension-plausible associations approve होंगे.
+              </span>
+            </div>
+            <button
+              type="button"
+              className="primary"
+              disabled={disabled || !scene.modelId || scene.rooms.length === 0}
+              onClick={onAnalyzeReadyOpenings}
+            >
+              Analyze & approve ready
+            </button>
+          </div>
+          <div className="room-opening-workflow-stats">
+            <span>
+              Approved <b>{openingWorkflow.approved}</b>
+            </span>
+            <span>
+              Ready <b>{openingWorkflow.ready}</b>
+            </span>
+            <span>
+              Review <b>{openingWorkflow.review}</b>
+            </span>
+            <span>
+              Detected <b>{openingWorkflow.detected}</b>
+            </span>
+          </div>
+          {!scene.modelId ? (
+            <p>Select/lock the project model first.</p>
+          ) : !scene.rooms.length ? (
+            <p>Prepare and review the typical-floor rooms first.</p>
+          ) : openingWorkflow.review > 0 ? (
+            <div className="room-opening-workflow-review">
+              <span>
+                {openingWorkflow.review} unclear candidate
+                {openingWorkflow.review === 1 ? "" : "s"} auto-approved नहीं
+                हुए.
+              </span>
+              <button type="button" disabled={disabled} onClick={onReviewOpenings}>
+                Review unclear
+              </button>
+            </div>
+          ) : openingWorkflow.analyzed ? (
+            <p>
+              No unclear opening candidate remains from the latest analysis.
+              Reviewed shared doors automatically power room-to-room walkthrough.
+            </p>
+          ) : (
+            <p>
+              Typical floor correction के बाद यह एक button चलाएँ. Existing
+              reviewed openings और manual labels preserve रहेंगे.
+            </p>
+          )}
+        </section>
 
         {batchRepeatPreview?.rows.length ? (
           <section

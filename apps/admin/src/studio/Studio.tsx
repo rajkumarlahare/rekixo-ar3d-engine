@@ -61,6 +61,7 @@ import {
   suggestOpeningAssociations,
   type OpeningSuggestion,
 } from "./openingAssociator";
+import { applyReadyOpeningWorkflow } from "./openingWorkflow";
 import {
   applyQuickSourceSetup,
   detectQuickSourceSetup,
@@ -644,6 +645,37 @@ export default function Studio() {
       quickSourceSetup.floorSkeleton,
       quickSourceSetup.repeatPlan,
     ),
+    approvedOpeningKeys = new Set(
+      (p.scene.openings ?? [])
+        .filter(
+          (opening) =>
+            opening.sourceNodeName &&
+            opening.sourceOccurrence !== undefined,
+        )
+        .map(
+          (opening) =>
+            `${opening.sourceNodeName}\u0000${opening.sourceOccurrence}`,
+        ),
+    ),
+    openingWorkflowStatus = {
+      analyzed: Boolean(smartAnalysis),
+      approved: (p.scene.openings ?? []).filter(
+        (opening) =>
+          opening.reviewed &&
+          (opening.kind === "door" || opening.kind === "window"),
+      ).length,
+      ready: openingSuggestions.filter(
+        (suggestion) =>
+          suggestion.ready && !approvedOpeningKeys.has(suggestion.key),
+      ).length,
+      review: openingSuggestions.filter(
+        (suggestion) =>
+          !suggestion.ready && !approvedOpeningKeys.has(suggestion.key),
+      ).length,
+      detected: openingSuggestions.filter(
+        (suggestion) => !approvedOpeningKeys.has(suggestion.key),
+      ).length,
+    },
     activeRoomSheetRow = roomSheetRows.find(
       (row) => row.key === selectedRoomSheetKey,
     ),
@@ -2004,6 +2036,49 @@ export default function Studio() {
       `Smart draft built · ${floors.length} floors · ${autoTagged} meshes auto-tagged. Ambiguous/multi-floor meshes remain unassigned for visual review.`,
     );
   }
+  async function analyzeAndApproveReadyOpenings() {
+    if (!p.scene.modelId)
+      throw Error("Select the project model before analyzing doors/windows.");
+    if (!p.scene.rooms.length)
+      throw Error("Map the typical-floor rooms before analyzing doors/windows.");
+
+    const analysis = await analyzeProjectFiles(
+      files,
+      p.scene.modelId,
+      sourceAudits,
+    );
+    const suggestions = suggestOpeningAssociations(analysis, p.scene);
+    const workflow = applyReadyOpeningWorkflow(
+      p.scene,
+      analysis.architecturalCandidates,
+      suggestions,
+      id,
+    );
+    const next: Project = {
+      ...p,
+      scene: workflow.scene,
+    };
+    validateProject(next);
+    edit(next);
+    setSmartAnalysis(analysis);
+
+    const approved =
+      workflow.approved > 0
+        ? `${workflow.approved} ready opening${workflow.approved === 1 ? "" : "s"} approved`
+        : workflow.alreadyApproved > 0
+          ? "ready openings already approved"
+          : "no ready opening approved";
+    const review = workflow.reviewRemaining
+      ? ` · ${workflow.reviewRemaining} unclear candidate${workflow.reviewRemaining === 1 ? "" : "s"} left for review`
+      : "";
+    const labels = workflow.autoLabelsApplied
+      ? ` · ${workflow.autoLabelsApplied} high-confidence source label${workflow.autoLabelsApplied === 1 ? "" : "s"} refreshed`
+      : "";
+    setMessage(
+      `Door/window analysis complete · ${approved}${review}${labels}. Existing reviewed openings and manual labels were preserved.`,
+    );
+  }
+
   function applyArchitecturalCandidates() {
     if (!smartAnalysis?.architecturalCandidates.length) return;
     const threshold = 0.82;
@@ -3653,6 +3728,14 @@ export default function Studio() {
               onPrepareSuggestedLayout={prepareSuggestedTypicalFloor}
               batchRepeatPreview={batchRepeatPreview}
               onGenerateBatchRepeat={generateBatchRepeatedUnits}
+              openingWorkflow={openingWorkflowStatus}
+              onAnalyzeReadyOpenings={() =>
+                void task(analyzeAndApproveReadyOpenings)
+              }
+              onReviewOpenings={() => {
+                setWorkspace("builder");
+                setEditorFocus(false);
+              }}
               onRepeatUnit={repeatMappedUnit}
               onClose={() => {
                 setShowRoomMapper(false);

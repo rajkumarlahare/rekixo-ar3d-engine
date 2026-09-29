@@ -1145,6 +1145,122 @@
 }
 
 
+.room-opening-workflow {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #36506a;
+  border-radius: 10px;
+  background:
+    linear-gradient(90deg, rgba(80, 129, 181, .08), transparent 54%),
+    #081321;
+}
+
+.room-opening-workflow-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.room-opening-workflow-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.room-opening-workflow-head small {
+  color: #7fb0dd;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.room-opening-workflow-head b {
+  color: #e8f1fa;
+  font-size: 11px;
+}
+
+.room-opening-workflow-head span {
+  color: #8498ad;
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.room-opening-workflow-head button {
+  min-height: 36px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.room-opening-workflow-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(90px, 1fr));
+  gap: 6px;
+}
+
+.room-opening-workflow-stats span {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid #2b4056;
+  border-radius: 7px;
+  background: #0c1727;
+  color: #8495aa;
+  font-size: 8px;
+}
+
+.room-opening-workflow-stats b {
+  color: #dce9f5;
+  font-size: 10px;
+}
+
+.room-opening-workflow > p {
+  margin: 0;
+  color: #8091a7;
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.room-opening-workflow-review {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 8px;
+  border: 1px solid #5a4d2d;
+  border-radius: 7px;
+  background: rgba(208, 165, 63, .06);
+  color: #b9a46e;
+  font-size: 8px;
+}
+
+.room-opening-workflow-review button {
+  flex: 0 0 auto;
+  min-height: 30px;
+}
+
+@media (max-width: 820px) {
+  .room-opening-workflow-head,
+  .room-opening-workflow-review {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .room-opening-workflow-head button,
+  .room-opening-workflow-review button {
+    width: 100%;
+  }
+
+  .room-opening-workflow-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .room-mapper-batch-repeat {
   grid-column: 1 / -1;
   display: grid;
