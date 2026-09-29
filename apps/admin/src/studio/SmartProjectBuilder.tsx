@@ -89,6 +89,9 @@ export default function SmartProjectBuilder({
     project.slug === quickSetup.slug &&
     (!quickSetup.primaryModelId ||
       project.scene.modelId === quickSetup.primaryModelId) &&
+    (!quickSetup.publishModel ||
+      (Boolean(quickSetup.publishModelId) &&
+        project.scene.publishModelId === quickSetup.publishModelId)) &&
     (!floorStatus || floorStatus.missing === 0);
   const roles = useMemo(() => {
     const count = new Map<SmartSourceRole, number>();
@@ -315,6 +318,32 @@ export default function SmartProjectBuilder({
                 </div>
               </div>
               <div className="builder-source-lock-grid">
+                {quickSetup.publishModel ? (
+                  <div
+                    className={
+                      quickSetup.publishModelId &&
+                      project.scene.publishModelId === quickSetup.publishModelId
+                        ? "ready"
+                        : "missing"
+                    }
+                    title={quickSetup.publishModel.sha256}
+                  >
+                    <span>
+                      {quickSetup.publishModelId &&
+                      project.scene.publishModelId === quickSetup.publishModelId
+                        ? "✓"
+                        : "↓"}
+                    </span>
+                    <span>
+                      <b>Web publish model</b>
+                      <small>
+                        {quickSetup.publishModelId
+                          ? quickSetup.publishModel.name
+                          : `${quickSetup.publishModel.name} · Auto setup will attach verified GLB`}
+                      </small>
+                    </span>
+                  </div>
+                ) : null}
                 {quickSetup.floorSkeleton?.length ? (
                   <div
                     className={floorStatus?.missing ? "missing" : "ready"}
@@ -347,15 +376,15 @@ export default function SmartProjectBuilder({
                 ))}
               </div>
               <p>
-                Rekixo project identity, primary model और known source floor
-                levels automatically तैयार करेगा. Raw source files unchanged रहेंगी;
-                model-derived floors reviewable रहेंगे.
+                Rekixo source/authoring model, separate verified web GLB और
+                known source floor levels automatically तैयार करेगा. Raw source
+                files unchanged रहेंगी; customer publish FBX पर depend नहीं करेगा.
               </p>
             </div>
           )}
           {modelCandidates.length > 0 && (
             <label className="builder-model-picker">
-              Active 3D model
+              Authoring / source 3D model
               <select
                 value={project.scene.modelId ?? ""}
                 disabled={busy}
