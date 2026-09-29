@@ -66,3 +66,29 @@ test("Studio opens alignment in top view and reuses the existing model transform
   assert.match(canvas, /setRotationSnap\(props\.snap \? Math\.PI \/ 12 : null\)/);
   assert.match(builder, /Align floor plan →/);
 });
+
+
+test("alignment mode prioritizes the canvas and removes editor-side clutter", () => {
+  const studio = read("apps/admin/src/studio/Studio.tsx");
+  const css = read("apps/admin/src/studio/studio-editor-core.css");
+
+  assert.match(studio, /editor-core--alignment/);
+  assert.match(studio, /aria-label="Plan alignment tools"/);
+  assert.match(studio, /Drag the building over the reference plan/);
+  assert.match(studio, />Top view</);
+  assert.match(studio, />Move <kbd>W<\/kbd>/);
+  assert.match(studio, />Rotate <kbd>E<\/kbd>/);
+  assert.match(studio, />\+ Reference</);
+  assert.match(studio, /className="primary alignment-done"/);
+  assert.match(studio, /sectionCutEnabled && !showReferenceWorkspace/);
+
+  assert.match(css, /\/\* Phase 3 dedicated plan-alignment workspace \*\//);
+  assert.match(css, /\.editor-core--alignment > \.studio-sidebar,/);
+  assert.match(css, /\.editor-core--alignment > \.studio-inspector/);
+  assert.match(css, /grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(css, /\.editor-core--alignment \.canvas-wrap/);
+  assert.match(css, /min-height: clamp\(280px, 52vh, 650px\)/);
+  assert.match(css, /flex: 0 0 clamp\(150px, 24vh, 220px\)/);
+  assert.match(css, /\.editor-core--alignment \.reference-workspace-head,/);
+  assert.match(css, /\.editor-core--alignment \.reference-quickbar/);
+});
