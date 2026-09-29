@@ -49,7 +49,8 @@ test("Project Builder exposes one-click Jyoti source lock status", () => {
   assert.match(studio, /applyQuickSourceSetup/);
   assert.match(studio, /autoSetupDetectedSourcePack/);
   assert.match(studio, /duplicate checksum/);
-  assert.match(studio, /primary model selected/);
+  assert.match(studio, /source authoring model selected/);
+  assert.match(studio, /verified web GLB attached for publish/);
 });
 
 test("source-pack drop deduplicates identical bytes before they enter project assets", () => {
