@@ -15,14 +15,15 @@ test("Studio cloud discovery and release state live in a focused hook", () => {
   assert.match(hook, /markCloudSignedOut/);
 });
 
-test("browser E2E smoke covers authoring, analysis, persistence and unsaved guard", () => {
+test("browser E2E smoke covers authoring, analysis and reload-safe autosave", () => {
   const config = read("playwright.config.ts");
   const e2e = read("e2e/studio-authoring.spec.ts");
   const workflow = read(".github/workflows/deploy-cloudflare.yml");
   assert.match(config, /Desktop Chrome/);
   assert.match(e2e, /Analyze project/);
   assert.match(e2e, /Build smart draft/);
-  assert.match(e2e, /Saved in the local offline cache/);
+  assert.match(e2e, /Autosaved locally/);
+  assert.match(e2e, /hard reload without pressing Save local/);
   assert.match(e2e, /page\.reload\(\)/);
   assert.match(e2e, /toBeDisabled/);
   assert.match(e2e, /Selected local project/);
