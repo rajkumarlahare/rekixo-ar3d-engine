@@ -91,6 +91,11 @@ test("Studio exposes accessible one-click presets without hiding fine tuning", (
   assert.match(studio, /activeLookPreset\?\.label \?\? "CUSTOM"/);
   assert.match(studio, /Fine tune/);
   assert.match(studio, /Source model bytes remain unchanged/);
+  assert.ok(
+    (studio.match(/if \(p\.scene\.modelId\) setView\("building"\)/g) ?? [])
+      .length >= 2,
+    "Builder and Overview should open model projects in Building view",
+  );
 
   assert.match(css, /\.look-preset-grid/);
   assert.match(css, /\.look-preset-grid \.look-preset\.active/);
