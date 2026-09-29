@@ -158,6 +158,15 @@ export const studioSourceProfiles = [
     requireAnyOf: ["primaryModel", "floorPlan"],
     floorSkeleton: jyotiFloorSkeleton,
     repeatPlan: jyotiRepeatPlan,
+    publishModel: {
+      name: "jyoti-source-preserved.glb",
+      mimeType: "model/gltf-binary",
+      byteSize: 25582856,
+      sha256:
+        "45316366101b3790da9699949bef7e4507a800da2321c3de874b55e5fa3e64d8",
+      url:
+        "/3Dprojects/published/jyoti-paradise/45316366101b3790da9699949bef7e4507a800da2321c3de874b55e5fa3e64d8.glb",
+    },
     roomSheetTemplate: jyotiRoomSheetTemplate,
     alignment: {
       slotKey: "floorPlan",
