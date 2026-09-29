@@ -110,3 +110,31 @@ test("plan calibration reference has operator-friendly zoom and large view", () 
   assert.match(css, /\.reference-image-viewer--expanded/);
   assert.match(css, /overflow: auto/);
 });
+
+
+test("alignment mode locks camera and prevents vertical model movement", () => {
+  const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+  const studio = read("apps/admin/src/studio/Studio.tsx");
+
+  assert.match(canvas, /alignmentMode\?: boolean/);
+  assert.match(canvas, /controls\.enableRotate = !latest\.current\.alignmentMode/);
+  assert.match(canvas, /controls\.enablePan = !latest\.current\.alignmentMode/);
+  assert.match(canvas, /runtime\.transform\.showY = mode === "rotate" && Boolean\(props\.alignmentMode\)/);
+  assert.match(canvas, /if \(props\.alignmentMode\) return;[\s\S]*api\.current\?\.focus\(\)/);
+  assert.match(studio, /alignmentMode=\{showReferenceWorkspace\}/);
+});
+
+test("alignment mode offers fine nudge controls and identifies the faded plan", () => {
+  const studio = read("apps/admin/src/studio/Studio.tsx");
+  const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+  const css = read("apps/admin/src/studio/studio-editor-core.css");
+
+  assert.match(studio, /aria-label="Fine move"/);
+  assert.match(studio, /Fine move 10 cm/);
+  assert.match(studio, /Move model left 10 centimetres/);
+  assert.match(studio, /aria-label="Fine rotate"/);
+  assert.match(studio, /Fine rotate 1°/);
+  assert.match(canvas, /BLUE FADED = REFERENCE PLAN/);
+  assert.match(canvas, /Math\.min\(layer\.opacity, 0\.34\)/);
+  assert.match(css, /\.alignment-canvas-legend/);
+});
