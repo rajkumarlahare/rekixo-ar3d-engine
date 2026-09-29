@@ -148,6 +148,12 @@ test("admin-infra deployment applies Engine D1/R2 without deploying Public Worke
     workflow,
     /Deploy isolated 3D Public Worker[\s\S]*deployment_scope == 'engine-all'/,
   );
+  assert.match(workflow, /Detect public runtime changes/);
+  assert.match(workflow, /steps\.public_runtime\.outputs\.changed == 'true'/);
+  assert.match(
+    workflow,
+    /apps\/public\/\|workers\/\(public\|release-runtime\|http-range\|storage-boundary\)/,
+  );
 });
 
 test("Platform credentials and cookies are not reused by Engine cloud auth", () => {
