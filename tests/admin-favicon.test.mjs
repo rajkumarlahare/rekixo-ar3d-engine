@@ -8,7 +8,7 @@ test("3D Design Admin uses the Super Admin favicon geometry with a golden palett
   const favicon = read("apps/admin/public/favicon.svg");
   const html = read("apps/admin/index.html");
 
-  assert.match(html, /rel="icon" type="image\/svg\+xml" href="\/3Dprojects\/favicon\.svg"/);
+  assert.match(html, /rel="icon" type="image\/svg\+xml" href="\/favicon\.svg"/);
   assert.match(favicon, /viewBox="0 0 24 24"/);
 
   for (const geometry of [
