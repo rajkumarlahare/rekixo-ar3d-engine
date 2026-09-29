@@ -215,6 +215,10 @@ function validateScene(scene, assetIds) {
       typeof room.source !== "string" ||
       room.source.length > 2000 ||
       typeof room.verified !== "boolean" ||
+      (room.verified &&
+        !room.source.trim() &&
+        !room.sourceAssetId &&
+        !room.sourcePackSourceId) ||
       (room.sourceAssetId !== undefined && !assetIds.has(room.sourceAssetId)) ||
       (room.sourcePackSourceId !== undefined && !text(room.sourcePackSourceId, 200)) ||
       (room.sourceClaimIds !== undefined &&
@@ -405,6 +409,8 @@ export function validateStudioDraft(draft, project) {
     throw Error("Cloud draft project identity mismatch.");
   if (!text(draft.name, 200))
     throw Error("Cloud draft project name is invalid.");
+  if (!text(draft.updated, 100))
+    throw Error("Cloud draft update timestamp is invalid.");
   if (
     draft.location !== undefined &&
     (typeof draft.location !== "string" || draft.location.length > 180)
