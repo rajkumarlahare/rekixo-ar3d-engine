@@ -25,6 +25,10 @@ async function get(path, kind) {
   );
 }
 const html = await get('/3Dprojects/studio', 'text/html');
+if (!html.includes('href="/3Dprojects/favicon.svg"')) throw Error('Missing 3D Design Admin favicon link.');
+const favicon = await get('/3Dprojects/favicon.svg', 'image/svg+xml');
+for (const gold of ['#FFD166', '#B77900', '#E4A11B'])
+  if (!favicon.includes(gold)) throw Error(`Deployed golden favicon is missing ${gold}.`);
 const entry = html.match(/src="(\/3Dprojects\/assets\/[^" ]+\.js)"/);
 if (!entry) throw Error('Missing admin entry script.');
 const code = await get(entry[1], 'javascript');
