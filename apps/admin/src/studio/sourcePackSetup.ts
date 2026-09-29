@@ -1,4 +1,8 @@
 import type { Asset, Project } from "./domain";
+import {
+  applyFloorSkeleton,
+  type FloorSkeletonLevel,
+} from "./floorSkeleton";
 import type { RoomSheetTemplateRow } from "./roomSheet";
 
 export type QuickSourceSlotKey =
@@ -35,6 +39,7 @@ export interface QuickSourceSetup {
   slug?: string;
   location?: string;
   alignment?: QuickAlignmentPreset;
+  floorSkeleton?: readonly FloorSkeletonLevel[];
   roomSheetTemplate?: readonly RoomSheetTemplateRow[];
   slots: QuickSourceSlot[];
   matchedCount: number;
@@ -51,6 +56,7 @@ interface SourceProfileDefinition {
   minMatches?: number;
   requireAnyOf?: readonly QuickSourceSlotKey[];
   alignment?: QuickAlignmentPreset;
+  floorSkeleton?: readonly FloorSkeletonLevel[];
   roomSheetTemplate?: readonly RoomSheetTemplateRow[];
   sources: ReadonlyArray<{
     key: QuickSourceSlotKey;
@@ -116,6 +122,7 @@ function detectProfile(
     slug: profile.slug,
     location: profile.location,
     alignment: profile.alignment,
+    floorSkeleton: profile.floorSkeleton,
     roomSheetTemplate: profile.roomSheetTemplate,
     slots,
     matchedCount,
@@ -148,6 +155,11 @@ export function applyQuickSourceSetup(
   const nextModelId = setup.primaryModelId ?? project.scene.modelId;
   const modelChanged =
     Boolean(nextModelId) && nextModelId !== project.scene.modelId;
+  const floorResult = applyFloorSkeleton(
+    project.scene,
+    setup.profile,
+    setup.floorSkeleton,
+  );
 
   return {
     ...project,
@@ -158,6 +170,7 @@ export function applyQuickSourceSetup(
       : setup.location ?? "",
     scene: {
       ...project.scene,
+      floors: floorResult.floors,
       ...(nextModelId ? { modelId: nextModelId } : {}),
       ...(modelChanged
         ? {
