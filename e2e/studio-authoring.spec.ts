@@ -108,6 +108,14 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
   await expect(build).toBeEnabled();
   await build.click();
 
+  await page.getByRole("button", { name: "Open visual editor" }).click();
+  await expect(page.getByLabel("Visual realism presets")).toBeVisible();
+  const cleanDay = page.getByRole("button", { name: /Clean Day/i });
+  await cleanDay.click();
+  await expect(cleanDay).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("Exposure")).toHaveValue("1.08");
+
+  await page.getByRole("button", { name: "Exit full screen" }).click();
   await page.getByRole("button", { name: "Save local" }).click();
   await expect(page.getByRole("status")).toContainText(
     "Saved in the local offline cache",
@@ -120,6 +128,13 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
   );
   await expect(page.getByLabel("Authoring / source 3D model")).toContainText(
     "four-floor.glb",
+  );
+
+  await page.getByRole("button", { name: "3D Editor" }).click();
+  await expect(page.getByLabel("Visual realism presets")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Clean Day/i })).toHaveAttribute(
+    "aria-pressed",
+    "true",
   );
 });
 
