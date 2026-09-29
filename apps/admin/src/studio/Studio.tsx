@@ -61,6 +61,10 @@ import {
   suggestOpeningAssociations,
   type OpeningSuggestion,
 } from "./openingAssociator";
+import {
+  applyQuickSourceSetup,
+  detectQuickSourceSetup,
+} from "./sourcePackSetup";
 import "./studio.css";
 import "./studio-operations.css";
 import "./studio-superadmin-theme.css";
@@ -1418,18 +1422,34 @@ export default function Studio() {
   }
   async function uploadSourcePack(selectedFiles: File[]) {
     if (!selectedFiles.length) return;
-    const assets = await Promise.all(
+    const incoming = await Promise.all(
       selectedFiles.map((file) => storage.makeAsset(file, p.id)),
     );
+    const knownHashes = new Set(files.map((asset) => asset.hash.toLowerCase()));
+    const batchHashes = new Set<string>();
+    const assets = incoming.filter((asset) => {
+      const hash = asset.hash.toLowerCase();
+      if (knownHashes.has(hash) || batchHashes.has(hash)) return false;
+      batchHashes.add(hash);
+      return true;
+    });
+    const duplicateCount = incoming.length - assets.length;
+    const combinedFiles = [...files, ...assets];
+    const quickSetup = detectQuickSourceSetup(combinedFiles);
     const existing = new Set(p.assets);
     const nextAssetIds = [
       ...p.assets,
       ...assets.map((asset) => asset.id).filter((key) => !existing.has(key)),
     ];
-    const modelCandidates = assets.filter((asset) => /\.(glb|fbx)$/i.test(asset.name));
-    const glbCandidates = modelCandidates.filter((asset) => /\.glb$/i.test(asset.name));
+    const modelCandidates = combinedFiles.filter((asset) =>
+      /\.(glb|fbx)$/i.test(asset.name),
+    );
+    const glbCandidates = modelCandidates.filter((asset) =>
+      /\.glb$/i.test(asset.name),
+    );
     const autoModel =
       p.scene.modelId ??
+      quickSetup.primaryModelId ??
       (glbCandidates.length === 1
         ? glbCandidates[0].id
         : modelCandidates.length === 1
@@ -1456,8 +1476,40 @@ export default function Studio() {
     setSmartAnalysis(undefined);
     undo.current = [];
     redo.current = [];
+    const sourceLock =
+      quickSetup.profile === "jyoti-paradise"
+        ? ` · Jyoti source lock ${quickSetup.matchedCount}/${quickSetup.requiredCount} detected`
+        : "";
+    const skipped = duplicateCount
+      ? ` · ${duplicateCount} duplicate checksum${duplicateCount === 1 ? "" : "s"} skipped`
+      : "";
     setMessage(
-      `${assets.length} source file${assets.length === 1 ? "" : "s"} attached${autoModel && autoModel !== p.scene.modelId ? " · 3D model selected automatically" : ""}.`,
+      `${assets.length} new source file${assets.length === 1 ? "" : "s"} attached${skipped}${sourceLock}${autoModel && autoModel !== p.scene.modelId ? " · primary 3D model selected automatically" : ""}.`,
+    );
+  }
+
+  async function autoSetupJyotiSourcePack() {
+    const setup = detectQuickSourceSetup(files);
+    if (setup.profile !== "jyoti-paradise")
+      throw Error("Attach at least two verified Jyoti Paradise source files before auto setup.");
+    const slug = setup.slug ?? "jyoti-paradise";
+    const owner = list.find(
+      (entry) => entry.id !== p.id && projectSlug(entry) === slug,
+    );
+    if (owner)
+      throw Error(
+        "Jyoti Paradise already exists in this browser workspace. Open that project instead of creating a duplicate.",
+      );
+    const next = applyQuickSourceSetup(p, setup);
+    validateProject(next);
+    await persist(next);
+    setSmartAnalysis(undefined);
+    undo.current = [];
+    redo.current = [];
+    setMesh("");
+    setView("building");
+    setMessage(
+      `Jyoti Paradise source lock applied · ${setup.matchedCount}/${setup.requiredCount} canonical sources recognized · primary FBX selected · project identity and Hingna/Nagpur context ready.`,
     );
   }
 
@@ -2148,6 +2200,7 @@ export default function Studio() {
             setEditorFocus(true);
           }}
           onOpenSources={() => setWorkspace("sources")}
+          onAutoSetup={() => void task(autoSetupJyotiSourcePack)}
         />
       )}
       {workspace === "overview" && (
