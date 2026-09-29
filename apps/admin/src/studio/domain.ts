@@ -33,6 +33,24 @@ export interface Furniture {
   rotation: number;
   color: string;
 }
+export type OpeningKind = "door" | "window" | "opening";
+export interface Opening {
+  id: string;
+  floorId: string;
+  kind: OpeningKind;
+  roomIds: string[];
+  x: number;
+  y: number;
+  z: number;
+  width: number;
+  height: number;
+  sillHeight?: number;
+  rotationY: number;
+  reviewed: boolean;
+  sourceNodeName?: string;
+  sourceOccurrence?: number;
+  confidence?: number;
+}
 export interface Asset {
   id: string;
   projectId: string;
@@ -98,6 +116,7 @@ export interface Scene {
   floors: Floor[];
   rooms: Room[];
   furniture: Furniture[];
+  openings?: Opening[];
   modelId?: string;
   scale: number;
   appearance?: SceneAppearance;
@@ -446,6 +465,7 @@ export function newProject(name: string): Project {
       floors: [{ id: id(), name: "Ground", elevation: 0 }],
       rooms: [],
       furniture: [],
+      openings: [],
     },
   };
 }
@@ -468,10 +488,17 @@ export function validateScene(s: Scene): void {
     s.rooms.length > 500 ||
     !Array.isArray(s.furniture) ||
     s.furniture.length > 2000 ||
+    (s.openings !== undefined &&
+      (!Array.isArray(s.openings) || s.openings.length > 5000)) ||
     !number(s.scale, 0.0001, 10000)
   )
     throw Error("Invalid scene or scene limits exceeded.");
-  if (!unique(s.floors) || !unique(s.rooms) || !unique(s.furniture))
+  if (
+    !unique(s.floors) ||
+    !unique(s.rooms) ||
+    !unique(s.furniture) ||
+    (s.openings !== undefined && !unique(s.openings))
+  )
     throw Error("Duplicate or invalid object IDs.");
   if (s.modelId !== undefined && !text(s.modelId, 100))
     throw Error("Invalid model reference.");
@@ -632,6 +659,40 @@ export function validateScene(s: Scene): void {
       (r.mesh !== undefined && !text(r.mesh, 500))
     )
       throw Error("Check room dimensions, floor and measurement source.");
+  for (const opening of s.openings ?? []) {
+    const rooms = opening.roomIds.map((roomId) =>
+      s.rooms.find((room) => room.id === roomId),
+    );
+    if (
+      !text(opening.id, 100) ||
+      !s.floors.some((floor) => floor.id === opening.floorId) ||
+      !["door", "window", "opening"].includes(opening.kind) ||
+      !Array.isArray(opening.roomIds) ||
+      opening.roomIds.length < 1 ||
+      opening.roomIds.length > 2 ||
+      new Set(opening.roomIds).size !== opening.roomIds.length ||
+      rooms.some((room) => !room || room.floorId !== opening.floorId) ||
+      !number(opening.x, -10000, 10000) ||
+      !number(opening.y, -1000, 5000) ||
+      !number(opening.z, -10000, 10000) ||
+      !number(opening.width, 0.05, 50) ||
+      !number(opening.height, 0.05, 50) ||
+      (opening.sillHeight !== undefined &&
+        !number(opening.sillHeight, 0, 50)) ||
+      !number(opening.rotationY, -3600, 3600) ||
+      typeof opening.reviewed !== "boolean" ||
+      (opening.sourceNodeName !== undefined &&
+        !text(opening.sourceNodeName, 500)) ||
+      (opening.sourceOccurrence !== undefined &&
+        (!Number.isInteger(opening.sourceOccurrence) ||
+          opening.sourceOccurrence < 1 ||
+          opening.sourceOccurrence > 100000 ||
+          !opening.sourceNodeName)) ||
+      (opening.confidence !== undefined &&
+        !number(opening.confidence, 0, 1))
+    )
+      throw Error("Invalid reviewed wall opening.");
+  }
   for (const f of s.furniture) {
     const r = s.rooms.find((r) => r.id === f.roomId);
     if (
