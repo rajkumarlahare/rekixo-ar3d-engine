@@ -6,15 +6,17 @@ const read = (path) => fs.readFileSync(path, "utf8");
 
 test("public viewer uses reviewed graph movement and destination mini-map", () => {
   const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
+  const panel = read("apps/public/src/viewer/WalkGraphPanel.tsx");
   const main = read("apps/public/src/main.tsx");
   const css = read("apps/public/src/viewer/walkthrough-ui.css");
 
   assert.match(viewer, /resolvePublicWalkStep/);
   assert.match(viewer, /publicWalkConnections/);
-  assert.match(viewer, /REVIEWED ROOM GRAPH/);
-  assert.match(viewer, /CONNECTED ROOMS/);
-  assert.match(viewer, /viewer-walk-map__room--connected/);
-  assert.match(viewer, /via reviewed door/);
+  assert.match(viewer, /WalkGraphPanel/);
+  assert.match(panel, /REVIEWED ROOM GRAPH/);
+  assert.match(panel, /CONNECTED ROOMS/);
+  assert.match(panel, /viewer-walk-map__room--connected/);
+  assert.match(panel, /via reviewed door/);
   assert.match(main, /walkthrough=\{experience\.walkthrough\}/);
   assert.match(main, /crosses only approved shared doors/);
   assert.match(css, /\.viewer-walk-graph/);
