@@ -292,7 +292,10 @@ export async function syncProject(project: Project, files: Asset[]) {
     await uploadAsset(
       slug,
       local,
-      assetId === project.scene.modelId ? "model" : "reference",
+      assetId === project.scene.modelId ||
+        assetId === project.scene.publishModelId
+        ? "model"
+        : "reference",
     );
   }
 
