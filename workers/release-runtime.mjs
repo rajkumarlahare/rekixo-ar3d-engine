@@ -1,5 +1,6 @@
 import { assertReleaseAssetKey } from "./storage-boundary.mjs";
 import { serveR2Object } from "./http-range.mjs";
+import { validProjectSlug } from "../shared/project-slug-policy.js";
 const BASE_PATH = "/3Dprojects";
 const RELEASE_BASE = `${BASE_PATH}/api/releases`;
 
@@ -17,15 +18,6 @@ function json(value, init = {}) {
   for (const [key, item] of Object.entries(SECURITY_HEADERS))
     headers.set(key, item);
   return new Response(JSON.stringify(value), { ...init, headers });
-}
-
-function validSlug(value) {
-  return (
-    typeof value === "string" &&
-    value.length >= 2 &&
-    value.length <= 80 &&
-    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)
-  );
 }
 
 function validToken(value, max = 180) {
@@ -219,7 +211,7 @@ function validateManifestShape(manifest, row) {
 }
 
 export async function activeReleaseState(env, slug) {
-  if (!validSlug(slug)) return { state: "invalid-slug" };
+  if (!validProjectSlug(slug)) return { state: "invalid-slug" };
   if (!(await releaseSchemaReady(env))) return { state: "schema-missing" };
 
   const row = await env.DB.prepare(
@@ -589,7 +581,9 @@ export async function serveReleaseAsset(env, releaseId, pathKind, logicalId, req
             p.status,p.slug
        FROM release_assets_3d a
        JOIN releases_3d r ON r.id=a.release_id AND r.project_id=a.project_id
-       JOIN projects_3d p ON p.id=r.project_id
+       JOIN projects_3d p
+         ON p.id=r.project_id
+        AND p.active_release_id=r.id
       WHERE a.release_id=? AND a.kind=? AND a.logical_id=?
       LIMIT 1`,
   ).bind(releaseId, kind, logicalId).first();
@@ -665,7 +659,7 @@ export async function handleReleaseReadRequest(
 
   if (parts[0] === "projects" && parts[1]) {
     const slug = String(parts[1]).trim().toLowerCase();
-    if (!validSlug(slug))
+    if (!validProjectSlug(slug))
       return json({ error: "Valid project slug is required." }, { status: 400 });
     if (parts.length === 2) {
       if (request.method !== "GET")
