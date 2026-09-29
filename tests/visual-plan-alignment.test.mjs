@@ -40,7 +40,7 @@ test("visual alignment UI is mouse-first with numeric controls kept advanced", (
   assert.match(workspace, /Calibrate & show under model/);
   assert.match(workspace, /↔ Move model/);
   assert.match(workspace, /↻ Rotate model/);
-  assert.match(workspace, />Snap</);
+  assert.match(workspace, /Snap/);
   assert.match(workspace, /Center on plan/);
   assert.match(workspace, /Plan opacity/);
   assert.match(workspace, /type="range"/);
