@@ -205,3 +205,61 @@ test("model alignment is exported as an explicit model transform", () => {
     Math.abs(manifest.models[0].transform.rotation[1] - Math.PI / 2) < 1e-9,
   );
 });
+
+
+test("reviewed Studio openings export into Scene Manifest V2", () => {
+  const { p, files } = fixture();
+  p.scene.openings = [
+    {
+      id: "opening-door-1",
+      floorId: p.scene.floors[0].id,
+      kind: "door",
+      roomIds: [p.scene.rooms[0].id],
+      x: 8,
+      y: 1.05,
+      z: -5,
+      width: 0.9,
+      height: 2.1,
+      rotationY: 90,
+      reviewed: true,
+      sourceNodeName: "Door_Main",
+      sourceOccurrence: 1,
+      confidence: 0.92,
+    },
+  ];
+  const manifest = buildSceneManifestV2(p, files);
+  assert.deepEqual(manifest.openings, [
+    {
+      id: "opening-door-1",
+      floorId: p.scene.floors[0].id,
+      kind: "door",
+      roomIds: [p.scene.rooms[0].id],
+      position: [8, 1.05, -5],
+      widthM: 0.9,
+      heightM: 2.1,
+    },
+  ]);
+  assertSceneManifestV2(manifest);
+});
+
+test("unreviewed Studio opening drafts do not publish into Scene Manifest V2", () => {
+  const { p, files } = fixture();
+  p.scene.openings = [
+    {
+      id: "opening-window-draft",
+      floorId: p.scene.floors[0].id,
+      kind: "window",
+      roomIds: [p.scene.rooms[0].id],
+      x: 8,
+      y: 1.6,
+      z: -5,
+      width: 1.2,
+      height: 1.2,
+      sillHeight: 1,
+      rotationY: 0,
+      reviewed: false,
+    },
+  ];
+  const manifest = buildSceneManifestV2(p, files);
+  assert.equal(manifest.openings.length, 0);
+});
