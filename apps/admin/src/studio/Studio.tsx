@@ -67,6 +67,7 @@ import {
   emptyQuickSourceSetup,
   type QuickSourceSetup,
 } from "./sourcePackSetup";
+import type { PdfReferenceRasterOptions } from "./pdfReferenceRaster";
 import "./studio.css";
 import "./studio-operations.css";
 import "./studio-superadmin-theme.css";
@@ -921,6 +922,72 @@ export default function Studio() {
         modelTransform: { ...modelTransform, ...change },
       },
     });
+  }
+
+  function startVisualAlignment() {
+    setWorkspace("editor");
+    setEditorFocus(true);
+    setShowReferenceWorkspace(true);
+    setShowRoomMapper(false);
+    setRoomMapAction("idle");
+    setShowAssetShelf(false);
+    setView("building");
+    setCameraOrientation("top");
+    setTransformMode("translate");
+    setSelected("");
+    setMesh("");
+    setSelectedModelNodeKey("");
+  }
+
+  async function createPdfReferenceAsset(
+    source: Asset,
+    file: File,
+    options: PdfReferenceRasterOptions,
+  ) {
+    const created = await storage.makeAsset(file, p.id);
+    const existing = files.find(
+      (candidate) =>
+        candidate.hash === created.hash && candidate.size === created.size,
+    );
+    const nextAsset = existing ?? created;
+    const currentLayers = p.scene.referenceLayers ?? [];
+    const hasLayer = currentLayers.some(
+      (layer) => layer.assetId === nextAsset.id,
+    );
+    const next: Project = {
+      ...p,
+      assets: p.assets.includes(nextAsset.id)
+        ? p.assets
+        : [...p.assets, nextAsset.id],
+      scene: {
+        ...p.scene,
+        referenceLayers: hasLayer
+          ? currentLayers
+          : [
+              ...currentLayers,
+              {
+                id: id(),
+                assetId: nextAsset.id,
+                visible: true,
+                opacity: 0.46,
+                x: 0,
+                y: 0.01,
+                z: 0,
+                rotation: 0,
+              },
+            ],
+      },
+    };
+    await persist(next, existing ? [] : [nextAsset]);
+    if (!existing)
+      setFiles((current) => [
+        ...current.filter((asset) => asset.id !== nextAsset.id),
+        nextAsset,
+      ]);
+    setMessage(
+      `${source.name} page ${options.page} prepared as a cropped visual alignment reference. Original PDF remains unchanged.`,
+    );
+    return nextAsset;
   }
   function commitCanvasTransform(change: TransformCommit) {
     if (review || busy) return;
@@ -2221,6 +2288,7 @@ export default function Studio() {
           }}
           onOpenSources={() => setWorkspace("sources")}
           onAutoSetup={() => void task(autoSetupDetectedSourcePack)}
+          onStartAlignment={startVisualAlignment}
           quickSetup={quickSourceSetup}
         />
       )}
@@ -3067,7 +3135,7 @@ export default function Studio() {
                   setCameraOrientation("top");
                 }}
               >
-                Reference
+                Align Plan
               </button>
               <button
                 type="button"
@@ -3292,10 +3360,16 @@ export default function Studio() {
               modelId={p.scene.modelId}
               layers={p.scene.referenceLayers ?? []}
               modelTransform={modelTransform}
+              quickSetup={quickSourceSetup}
+              transformMode={transformMode}
+              snap={transformSnap}
               disabled={Boolean(review) || busy}
               onUpsertLayer={upsertReferenceLayer}
               onRemoveLayer={removeReferenceLayer}
               onModelTransform={patchModelTransform}
+              onTransformMode={(mode) => setTransformMode(mode)}
+              onSnap={setTransformSnap}
+              onCreatePdfReference={createPdfReferenceAsset}
               onTopView={() => {
                 setView("building");
                 setCameraOrientation("top");
