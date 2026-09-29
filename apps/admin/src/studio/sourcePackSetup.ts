@@ -1,4 +1,4 @@
-import type { Asset, Project } from "./domain";
+import { id, type Asset, type Project } from "./domain";
 import {
   applyFloorSkeleton,
   type FloorSkeletonLevel,
@@ -34,6 +34,14 @@ export interface QuickAlignmentPreset {
   label?: string;
 }
 
+export interface TrustedPublishModel {
+  name: string;
+  mimeType: string;
+  byteSize: number;
+  sha256: string;
+  url: string;
+}
+
 export interface QuickSourceSetup {
   profile?: string;
   name?: string;
@@ -42,6 +50,8 @@ export interface QuickSourceSetup {
   alignment?: QuickAlignmentPreset;
   floorSkeleton?: readonly FloorSkeletonLevel[];
   repeatPlan?: BatchRepeatPlan;
+  publishModel?: TrustedPublishModel;
+  publishModelId?: string;
   roomSheetTemplate?: readonly RoomSheetTemplateRow[];
   slots: QuickSourceSlot[];
   matchedCount: number;
@@ -60,6 +70,7 @@ interface SourceProfileDefinition {
   alignment?: QuickAlignmentPreset;
   floorSkeleton?: readonly FloorSkeletonLevel[];
   repeatPlan?: BatchRepeatPlan;
+  publishModel?: TrustedPublishModel;
   roomSheetTemplate?: readonly RoomSheetTemplateRow[];
   sources: ReadonlyArray<{
     key: QuickSourceSlotKey;
@@ -109,6 +120,14 @@ function detectProfile(
     requiredKeys.some((key) =>
       slots.some((slot) => slot.key === key && slot.exact),
     );
+  const publishModelId = profile.publishModel
+    ? files.find(
+        (candidate) =>
+          candidate.hash.toLowerCase() ===
+            profile.publishModel!.sha256.toLowerCase() &&
+          candidate.size === profile.publishModel!.byteSize,
+      )?.id
+    : undefined;
   const recognizable =
     matchedCount >= (profile.minMatches ?? 2) && hasRequiredIdentity;
   if (!recognizable)
@@ -127,6 +146,8 @@ function detectProfile(
     alignment: profile.alignment,
     floorSkeleton: profile.floorSkeleton,
     repeatPlan: profile.repeatPlan,
+    publishModel: profile.publishModel,
+    publishModelId,
     roomSheetTemplate: profile.roomSheetTemplate,
     slots,
     matchedCount,
@@ -149,6 +170,67 @@ export async function detectQuickSourceSetup(
   return best;
 }
 
+async function sha256Hex(blob: Blob) {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()),
+  );
+  return Array.from(digest, (value) =>
+    value.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+export async function prepareQuickPublishModel(
+  setup: QuickSourceSetup,
+  files: Asset[],
+  projectId: string,
+): Promise<{ setup: QuickSourceSetup; asset?: Asset }> {
+  const descriptor = setup.publishModel;
+  if (!descriptor) return { setup };
+
+  const existing = files.find(
+    (candidate) =>
+      candidate.hash.toLowerCase() === descriptor.sha256.toLowerCase() &&
+      candidate.size === descriptor.byteSize,
+  );
+  if (existing)
+    return {
+      setup: { ...setup, publishModelId: existing.id },
+    };
+
+  if (
+    !/^\/3Dprojects\/published\/[a-z0-9]+(?:-[a-z0-9]+)*\/[a-f0-9]{64}\.glb$/.test(
+      descriptor.url,
+    )
+  )
+    throw Error("Trusted publish-model URL is invalid.");
+
+  const response = await fetch(descriptor.url, { cache: "no-store" });
+  if (!response.ok)
+    throw Error(
+      `Web publish model could not be prepared (${response.status}).`,
+    );
+  const blob = await response.blob();
+  if (blob.size !== descriptor.byteSize)
+    throw Error("Web publish model size verification failed.");
+  const hash = await sha256Hex(blob);
+  if (hash !== descriptor.sha256.toLowerCase())
+    throw Error("Web publish model checksum verification failed.");
+
+  const asset: Asset = {
+    id: id(),
+    projectId,
+    name: descriptor.name,
+    type: descriptor.mimeType || "model/gltf-binary",
+    size: blob.size,
+    hash,
+    blob,
+  };
+  return {
+    setup: { ...setup, publishModelId: asset.id },
+    asset,
+  };
+}
+
 export function applyQuickSourceSetup(
   project: Project,
   setup: QuickSourceSetup,
@@ -157,6 +239,8 @@ export function applyQuickSourceSetup(
     throw Error("No recognized project source pack is ready for auto setup.");
 
   const nextModelId = setup.primaryModelId ?? project.scene.modelId;
+  const nextPublishModelId =
+    setup.publishModelId ?? project.scene.publishModelId;
   const modelChanged =
     Boolean(nextModelId) && nextModelId !== project.scene.modelId;
   const floorResult = applyFloorSkeleton(
@@ -167,6 +251,10 @@ export function applyQuickSourceSetup(
 
   return {
     ...project,
+    assets:
+      setup.publishModelId && !project.assets.includes(setup.publishModelId)
+        ? [...project.assets, setup.publishModelId]
+        : project.assets,
     name: setup.name ?? project.name,
     slug: setup.slug ?? project.slug,
     location: project.location?.trim()
@@ -176,6 +264,9 @@ export function applyQuickSourceSetup(
       ...project.scene,
       floors: floorResult.floors,
       ...(nextModelId ? { modelId: nextModelId } : {}),
+      ...(nextPublishModelId
+        ? { publishModelId: nextPublishModelId }
+        : {}),
       ...(modelChanged
         ? {
             modelNodeTags: [],
