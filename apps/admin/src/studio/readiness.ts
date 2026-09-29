@@ -29,6 +29,7 @@ export interface StudioReadiness {
   totalRooms: number;
   referenceAssets: number;
   modelAsset?: Asset;
+  sourceModelAsset?: Asset;
   activeRelease?: CloudReleaseSummary;
 }
 
@@ -80,36 +81,63 @@ export function buildStudioReadiness(
     });
   }
 
-  const modelAsset = project.scene.modelId
+  const sourceModelAsset = project.scene.modelId
     ? fileById.get(project.scene.modelId)
     : undefined;
-  if (!project.scene.modelId && !project.scene.rooms.length) {
+  const publishModelId =
+    project.scene.publishModelId ?? project.scene.modelId;
+  const modelAsset = publishModelId
+    ? fileById.get(publishModelId)
+    : undefined;
+
+  if (!project.scene.modelId && !publishModelId && !project.scene.rooms.length) {
     items.push({
       id: "content",
       severity: "blocker",
       title: "No publishable 3D content",
       detail: "Import a model or author at least one measured room before publish.",
     });
-  } else if (project.scene.modelId && !modelAsset) {
+  }
+  if (project.scene.modelId && !sourceModelAsset) {
+    items.push({
+      id: "source-model-missing",
+      severity: "blocker",
+      title: "Authoring model bytes are missing",
+      detail: "Re-import the source model before continuing Studio authoring.",
+    });
+  } else if (
+    sourceModelAsset &&
+    project.scene.publishModelId &&
+    project.scene.publishModelId !== project.scene.modelId
+  ) {
+    items.push({
+      id: "authoring-model",
+      severity: "ready",
+      title: "Source model retained for authoring",
+      detail: `${sourceModelAsset.name} stays in Studio for analysis and mesh review; it is not sent as the customer web model.`,
+    });
+  }
+
+  if (publishModelId && !modelAsset) {
     items.push({
       id: "model-missing",
       severity: "blocker",
-      title: "Model bytes are missing",
-      detail: "Re-import the project model before creating a release.",
+      title: "Web publish model bytes are missing",
+      detail: "Run project Auto Setup again or re-attach the approved GLB before publish.",
     });
-  } else if (modelAsset?.name.toLowerCase().endsWith(".fbx")) {
+  } else if (modelAsset && !modelAsset.name.toLowerCase().endsWith(".glb")) {
     items.push({
       id: "model-format",
       severity: "blocker",
-      title: "Convert the publish model to self-contained GLB",
+      title: "Web publish model must be self-contained GLB",
       detail:
-        "FBX is accepted for Studio inspection, but the customer runtime release should use a self-contained GLB with embedded textures.",
+        "FBX may remain the Studio authoring model, but the customer release requires a separate web-safe GLB.",
     });
   } else if (modelAsset) {
     items.push({
       id: "model-format",
       severity: "ready",
-      title: "Web model ready",
+      title: "Web publish model ready",
       detail: `${modelAsset.name} · ${(modelAsset.size / 1048576).toFixed(1)} MB`,
     });
   }
@@ -118,7 +146,9 @@ export function buildStudioReadiness(
     .map((assetId) => fileById.get(assetId))
     .filter((asset): asset is Asset => Boolean(asset));
   const referenceAssets = referencedFiles.filter(
-    (asset) => asset.id !== project.scene.modelId,
+    (asset) =>
+      asset.id !== project.scene.modelId &&
+      asset.id !== project.scene.publishModelId,
   ).length;
   if (referenceAssets) {
     items.push({
@@ -238,6 +268,7 @@ export function buildStudioReadiness(
     totalRooms: project.scene.rooms.length,
     referenceAssets,
     modelAsset,
+    sourceModelAsset,
     activeRelease,
   };
 }
