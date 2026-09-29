@@ -60,8 +60,8 @@ test("advanced editor capabilities stay available but collapsed by default", () 
 
   assert.match(studio, /className="room-object-details"/);
   assert.match(studio, /view === "rooms" && showAssetShelf/);
-  assert.match(studio, /showReferenceWorkspace && \(/);
-  assert.match(studio, /aria-label="Plan alignment mode"/);
+  assert.match(studio, /showReferenceWorkspace \? "editor-core--alignment" : ""/);
+  assert.match(studio, /aria-label="Plan alignment tools"/);
   assert.match(studio, /<strong>Plan alignment<\/strong>/);
 });
 
