@@ -2882,7 +2882,9 @@ export default function Studio() {
           >
             + Reference drawing or image
           </button>
-          {local && !p.scene.modelId && (
+          {local &&
+            projectSlug(p) === "jyoti-paradise" &&
+            !p.scene.modelId && (
             <button
               className="wide subtle"
               disabled={busy || Boolean(review)}
@@ -3978,7 +3980,7 @@ export default function Studio() {
                       patchAppearance({ referenceVisual: event.target.checked })
                     }
                   />
-                  Jyoti verified reference look
+                  Verified source/reference look
                 </label>
                 <label className="check">
                   <input
