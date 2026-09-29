@@ -70,6 +70,15 @@ export interface SceneAppearance {
   referenceVisual: boolean;
   nightMode: boolean;
 }
+
+export const DEFAULT_SCENE_APPEARANCE: SceneAppearance = {
+  exposure: 1,
+  sunIntensity: 3.2,
+  hemisphereIntensity: 2.8,
+  background: "#dbe3e7",
+  referenceVisual: true,
+  nightMode: false,
+};
 export interface MaterialOverride {
   materialName: string;
   baseColor?: string;
@@ -450,14 +459,7 @@ export function newProject(name: string): Project {
     releases: [],
     scene: {
       scale: 1,
-      appearance: {
-        exposure: 1,
-        sunIntensity: 3.2,
-        hemisphereIntensity: 2.8,
-        background: "#dbe3e7",
-        referenceVisual: true,
-        nightMode: false,
-      },
+      appearance: { ...DEFAULT_SCENE_APPEARANCE },
       materialOverrides: [],
       modelTransform: { x: 0, y: 0, z: 0, rotationY: 0 },
       referenceLayers: [],
