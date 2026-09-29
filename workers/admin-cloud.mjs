@@ -465,10 +465,14 @@ export function cloudAssetKey(slug, assetId) {
 }
 
 export function validateCloudDraft(draft, project) {
-  const assetIds = validateStudioDraft(draft, project);
-  if (assetIds.some((assetId) => !validAssetId(assetId)))
+  if (
+    !Array.isArray(draft?.assets) ||
+    draft.assets.length > 100 ||
+    new Set(draft.assets).size !== draft.assets.length ||
+    draft.assets.some((assetId) => !validAssetId(assetId))
+  )
     throw Error("Cloud draft contains invalid asset IDs.");
-  return assetIds;
+  return validateStudioDraft(draft, project);
 }
 
 async function assertAssetsOwned(env, projectId, assetIds) {
