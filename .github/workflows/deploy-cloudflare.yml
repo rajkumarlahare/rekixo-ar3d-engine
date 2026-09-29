@@ -35,6 +35,26 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect public runtime changes
+        id: public_runtime
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            BEFORE="$(git rev-parse HEAD^)"
+          fi
+          CHANGED="$(git diff --name-only "$BEFORE" "$GITHUB_SHA")"
+          printf '%s\n' "$CHANGED"
+          if printf '%s\n' "$CHANGED" | grep -Eq '^(apps/public/|workers/(public|release-runtime|http-range|storage-boundary)\.mjs$|packages/(contracts|engine-core)/|shared/|wrangler\.public\.jsonc$|\.github/workflows/deploy-cloudflare\.yml$)'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -96,7 +116,11 @@ jobs:
           --config wrangler.admin.jsonc
 
       - name: Deploy isolated 3D Public Worker
-        if: github.event_name == 'workflow_dispatch' && inputs.deployment_scope == 'engine-all'
+        # Manual engine-all always deploys Public. Normal main pushes deploy
+        # Public only when public runtime code/dependencies changed.
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.deployment_scope == 'engine-all') ||
+          (github.event_name == 'push' && steps.public_runtime.outputs.changed == 'true')
         run: >-
           npx --yes wrangler@4
           deploy
