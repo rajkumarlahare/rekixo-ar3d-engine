@@ -25,10 +25,44 @@ export interface SmartSourceItem {
 export interface SmartMeshAnalysis {
   name: string;
   occurrence: number;
+  minX: number;
   minY: number;
+  minZ: number;
+  maxX: number;
   maxY: number;
+  maxZ: number;
+  centreX: number;
   centreY: number;
+  centreZ: number;
+  width: number;
   height: number;
+  depth: number;
+  materialNames: string[];
+}
+
+export type SmartArchitecturalKind = "wall" | "door" | "window";
+
+export interface SmartArchitecturalCandidate {
+  nodeName: string;
+  occurrence: number;
+  kind: SmartArchitecturalKind;
+  confidence: number;
+  floorIndex?: number;
+  position: [number, number, number];
+  size: [number, number, number];
+  reasons: string[];
+}
+
+export interface SmartCadAudit {
+  assetId: string;
+  name: string;
+  kind: "dxf" | "dwg" | "skp" | "skb";
+  semanticReady: boolean;
+  layerHints: Array<{
+    layer: string;
+    kind: SmartArchitecturalKind;
+  }>;
+  note: string;
 }
 
 export interface SmartFloorCandidate {
@@ -58,6 +92,8 @@ export interface SmartProjectAnalysis {
   };
   floorCandidates: SmartFloorCandidate[];
   nodeAssignments: SmartNodeAssignment[];
+  architecturalCandidates: SmartArchitecturalCandidate[];
+  cadAudits: SmartCadAudit[];
   highConfidenceAssignments: number;
   reviewAssignments: number;
   commonAssignments: number;
@@ -316,6 +352,243 @@ export function suggestNodeFloorAssignments(
   });
 }
 
+function typicalFloorSpacing(floors: SmartFloorCandidate[], nodes: SmartMeshAnalysis[]) {
+  const sorted = [...floors].sort((left, right) => left.elevation - right.elevation);
+  const spacings = sorted
+    .slice(1)
+    .map((floor, index) => floor.elevation - sorted[index].elevation)
+    .filter((value) => value > 0.01)
+    .sort((left, right) => left - right);
+  if (spacings.length)
+    return spacings[Math.floor(spacings.length / 2)];
+  if (!nodes.length) return 3;
+  const minY = Math.min(...nodes.map((node) => node.minY));
+  const maxY = Math.max(...nodes.map((node) => node.maxY));
+  return Math.max((maxY - minY) / Math.max(floors.length, 1), 0.1);
+}
+
+function semanticWords(node: SmartMeshAnalysis) {
+  return [node.name, ...node.materialNames]
+    .join(" ")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ");
+}
+
+export function suggestArchitecturalCandidates(
+  nodes: SmartMeshAnalysis[],
+  floors: SmartFloorCandidate[],
+  assignments: SmartNodeAssignment[],
+): SmartArchitecturalCandidate[] {
+  if (!nodes.length) return [];
+  const spacing = Math.max(typicalFloorSpacing(floors, nodes), 0.1);
+  const assignmentByKey = new Map(
+    assignments.map((entry) => [
+      `${entry.nodeName}\u0000${entry.occurrence}`,
+      entry,
+    ]),
+  );
+  const candidates: SmartArchitecturalCandidate[] = [];
+
+  for (const node of nodes) {
+    const text = semanticWords(node);
+    const assignment = assignmentByKey.get(
+      `${node.name}\u0000${node.occurrence}`,
+    );
+    const floor =
+      assignment?.floorIndex !== undefined
+        ? floors[assignment.floorIndex]
+        : undefined;
+    const horizontalMin = Math.min(node.width, node.depth);
+    const horizontalMax = Math.max(node.width, node.depth);
+    const heightRatio = node.height / spacing;
+    const thicknessRatio = horizontalMin / spacing;
+    const spanRatio = horizontalMax / spacing;
+    const bottomRatio = floor ? (node.minY - floor.elevation) / spacing : 0;
+    const scores: Record<SmartArchitecturalKind, number> = {
+      wall: 0,
+      door: 0,
+      window: 0,
+    };
+    const reasons: Record<SmartArchitecturalKind, string[]> = {
+      wall: [],
+      door: [],
+      window: [],
+    };
+
+    if (/\b(wall|partition|parapet|masonry|brick)\b/.test(text)) {
+      scores.wall += 0.88;
+      reasons.wall.push("source name/material says wall");
+    }
+    if (/\b(door|doors|gate|entry door|shutter)\b/.test(text)) {
+      scores.door += 0.94;
+      reasons.door.push("source name/material says door");
+    }
+    if (/\b(window|windows|glazing|glazed|fenestration)\b/.test(text)) {
+      scores.window += 0.94;
+      reasons.window.push("source name/material says window");
+    }
+    if (/\b(glass|glazing)\b/.test(text) && !/\b(railing|balustrade|balcony)\b/.test(text)) {
+      scores.window += 0.28;
+      reasons.window.push("glass-like material");
+    }
+
+    if (
+      heightRatio >= 0.55 &&
+      heightRatio <= 1.35 &&
+      thicknessRatio <= 0.2 &&
+      spanRatio >= 0.45
+    ) {
+      scores.wall += 0.58;
+      reasons.wall.push("thin vertical storey-scale geometry");
+    }
+
+    if (
+      floor &&
+      heightRatio >= 0.48 &&
+      heightRatio <= 1.05 &&
+      thicknessRatio <= 0.22 &&
+      spanRatio >= 0.18 &&
+      spanRatio <= 1.15 &&
+      bottomRatio >= -0.12 &&
+      bottomRatio <= 0.18
+    ) {
+      scores.door += 0.52;
+      reasons.door.push("opening-sized geometry starts near floor");
+    }
+
+    if (
+      floor &&
+      heightRatio >= 0.18 &&
+      heightRatio <= 0.78 &&
+      thicknessRatio <= 0.22 &&
+      spanRatio >= 0.16 &&
+      bottomRatio >= 0.08 &&
+      bottomRatio <= 0.72
+    ) {
+      scores.window += 0.47;
+      reasons.window.push("opening-sized geometry has a sill");
+    }
+
+    if (/\b(column|beam|slab|floor|ceiling|roof|stair|railing|balustrade)\b/.test(text)) {
+      scores.door *= 0.35;
+      scores.window *= 0.35;
+    }
+    if (/\b(railing|balustrade|balcony)\b/.test(text))
+      scores.window *= 0.35;
+
+    const ranked = (Object.entries(scores) as Array<[SmartArchitecturalKind, number]>)
+      .sort((left, right) => right[1] - left[1]);
+    const [kind, rawScore] = ranked[0];
+    const second = ranked[1]?.[1] ?? 0;
+    if (rawScore < 0.55 || rawScore - second < 0.08) continue;
+    const floorFactor =
+      kind === "wall" || assignment?.floorIndex !== undefined ? 1 : 0.82;
+    candidates.push({
+      nodeName: node.name,
+      occurrence: node.occurrence,
+      kind,
+      confidence: Number(
+        Math.max(0.5, Math.min(0.98, rawScore * floorFactor)).toFixed(3),
+      ),
+      floorIndex: assignment?.floorIndex,
+      position: [node.centreX, node.centreY, node.centreZ],
+      size: [node.width, node.height, node.depth],
+      reasons: reasons[kind].slice(0, 3),
+    });
+  }
+
+  return candidates.sort(
+    (left, right) =>
+      right.confidence - left.confidence ||
+      left.nodeName.localeCompare(right.nodeName),
+  );
+}
+
+function semanticLayerKind(layer: string): SmartArchitecturalKind | undefined {
+  const normalized = layer.toLowerCase().replace(/[^a-z0-9]+/g, " ");
+  if (/\b(door|doors|gate)\b/.test(normalized)) return "door";
+  if (/\b(window|windows|glazing|fenestration)\b/.test(normalized))
+    return "window";
+  if (/\b(wall|walls|partition|masonry)\b/.test(normalized)) return "wall";
+  return undefined;
+}
+
+async function auditCadSources(files: Asset[]): Promise<SmartCadAudit[]> {
+  const cad = files.filter((file) => /\.(dxf|dwg|skp|skb)$/i.test(file.name));
+  const result: SmartCadAudit[] = [];
+  for (const file of cad) {
+    const extension = file.name.toLowerCase().split(".").pop() as
+      | "dxf"
+      | "dwg"
+      | "skp"
+      | "skb";
+    if (extension !== "dxf") {
+      result.push({
+        assetId: file.id,
+        name: file.name,
+        kind: extension,
+        semanticReady: false,
+        layerHints: [],
+        note:
+          extension === "dwg"
+            ? "DWG is preserved as source evidence. Convert/export to ASCII DXF for safe browser-side layer detection."
+            : "SketchUp source is preserved as evidence; semantic layer extraction is not enabled in-browser.",
+      });
+      continue;
+    }
+    if (file.size > 25 * 1024 * 1024) {
+      result.push({
+        assetId: file.id,
+        name: file.name,
+        kind: "dxf",
+        semanticReady: false,
+        layerHints: [],
+        note: "DXF is too large for safe in-browser semantic scanning; use a reduced/exported drawing.",
+      });
+      continue;
+    }
+    const text = await file.blob.text();
+    if (!/\bSECTION\b/i.test(text)) {
+      result.push({
+        assetId: file.id,
+        name: file.name,
+        kind: "dxf",
+        semanticReady: false,
+        layerHints: [],
+        note: "DXF does not look like readable ASCII DXF; no CAD semantics were guessed.",
+      });
+      continue;
+    }
+    const lines = text.split(/\r?\n/);
+    const layers = new Set<string>();
+    for (let index = 0; index + 1 < lines.length; index += 2) {
+      const code = lines[index].trim();
+      const value = lines[index + 1].trim();
+      if (code === "8" && value) layers.add(value);
+    }
+    const layerHints = [...layers]
+      .map((layer) => {
+        const kind = semanticLayerKind(layer);
+        return kind ? { layer, kind } : undefined;
+      })
+      .filter(
+        (entry): entry is { layer: string; kind: SmartArchitecturalKind } =>
+          Boolean(entry),
+      );
+    result.push({
+      assetId: file.id,
+      name: file.name,
+      kind: "dxf",
+      semanticReady: true,
+      layerHints,
+      note: layerHints.length
+        ? `${layerHints.length} wall/door/window layer hint(s) found. They are hints only until geometry is reviewed.`
+        : "ASCII DXF is readable, but no clearly named wall/door/window layers were found.",
+    });
+  }
+  return result;
+}
+
 export async function analyzeProjectFiles(
   files: Asset[],
   modelAssetId: string | undefined,
@@ -357,6 +630,8 @@ export async function analyzeProjectFiles(
   let bounds: SmartProjectAnalysis["bounds"];
   let floorCandidates: SmartFloorCandidate[] = [];
   let nodeAssignments: SmartNodeAssignment[] = [];
+  let architecturalCandidates: SmartArchitecturalCandidate[] = [];
+  const cadAudits = await auditCadSources(files);
 
   if (selected) {
     let root: T.Object3D | undefined;
@@ -377,19 +652,31 @@ export async function analyzeProjectFiles(
         if (box.isEmpty()) return;
         const centre = box.getCenter(new T.Vector3());
         const size = box.getSize(new T.Vector3());
-        meshNodes.push({
-          name,
-          occurrence,
-          minY: box.min.y,
-          maxY: box.max.y,
-          centreY: centre.y,
-          height: size.y,
-        });
         const materials = Array.isArray(node.material)
           ? node.material
           : [node.material];
-        for (const material of materials)
-          materialNames.add(material?.name || material?.uuid || "Unnamed");
+        const nodeMaterialNames = materials.map(
+          (material) => material?.name || material?.uuid || "Unnamed",
+        );
+        meshNodes.push({
+          name,
+          occurrence,
+          minX: box.min.x,
+          minY: box.min.y,
+          minZ: box.min.z,
+          maxX: box.max.x,
+          maxY: box.max.y,
+          maxZ: box.max.z,
+          centreX: centre.x,
+          centreY: centre.y,
+          centreZ: centre.z,
+          width: size.x,
+          height: size.y,
+          depth: size.z,
+          materialNames: nodeMaterialNames,
+        });
+        for (const materialName of nodeMaterialNames)
+          materialNames.add(materialName);
       });
       meshCount = meshNodes.length;
       materialCount = materialNames.size;
@@ -401,6 +688,11 @@ export async function analyzeProjectFiles(
         };
       floorCandidates = inferFloorCandidates(meshNodes);
       nodeAssignments = suggestNodeFloorAssignments(meshNodes, floorCandidates);
+      architecturalCandidates = suggestArchitecturalCandidates(
+        meshNodes,
+        floorCandidates,
+        nodeAssignments,
+      );
       if (floorCandidates.length < 2 && meshNodes.length)
         issues.push("Floor levels were not confidently detected; review them manually.");
     } catch (error) {
@@ -434,6 +726,8 @@ export async function analyzeProjectFiles(
     bounds,
     floorCandidates,
     nodeAssignments,
+    architecturalCandidates,
+    cadAudits,
     highConfidenceAssignments,
     reviewAssignments,
     commonAssignments,
