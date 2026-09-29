@@ -70,6 +70,37 @@ export interface Scene3D {
   settings?: Record<string, unknown>;
 }
 
+export type PublicWalkthroughPoint = [number, number];
+
+export interface PublicWalkthroughRoom {
+  id: string;
+  floorId: string;
+  name: string;
+  unit: string;
+  elevation: number;
+  height: number;
+  boundary: PublicWalkthroughPoint[];
+}
+
+export interface PublicWalkthroughDoor {
+  id: string;
+  floorId: string;
+  roomIds: [string, string];
+  x: number;
+  y: number;
+  z: number;
+  width: number;
+  height: number;
+  rotationY: number;
+}
+
+export interface PublicWalkthroughGraph {
+  version: 1;
+  metresPerUnit: number;
+  rooms: PublicWalkthroughRoom[];
+  doors: PublicWalkthroughDoor[];
+}
+
 export interface Public3DExperience {
   project: Project3D;
   scene?: Scene3D;
@@ -77,6 +108,7 @@ export interface Public3DExperience {
   camera?: CameraPreset3D;
   model?: Model3D;
   mediaBaseUrl?: string;
+  walkthrough?: PublicWalkthroughGraph;
 }
 
 export interface Admin3DProjectStatus {
