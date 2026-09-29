@@ -9,6 +9,9 @@ export interface RoomSheetTemplateRow {
   depth: number;
   height?: number;
   sourceNote?: string;
+  suggestedX?: number;
+  suggestedZ?: number;
+  sourcePackSourceId?: string;
 }
 
 export interface RoomSheetRow {
@@ -23,6 +26,9 @@ export interface RoomSheetRow {
   depth: number;
   height?: number;
   sourceNote: string;
+  suggestedX?: number;
+  suggestedZ?: number;
+  sourcePackSourceId?: string;
   origin: "csv" | "profile";
 }
 
@@ -389,6 +395,15 @@ export function profileRoomSheetRows(
       ...(row.height !== undefined && Number.isFinite(row.height)
         ? { height: cleanDimension(row.height) }
         : {}),
+      ...(typeof row.suggestedX === "number" && Number.isFinite(row.suggestedX)
+        ? { suggestedX: cleanDimension(row.suggestedX) }
+        : {}),
+      ...(typeof row.suggestedZ === "number" && Number.isFinite(row.suggestedZ)
+        ? { suggestedZ: cleanDimension(row.suggestedZ) }
+        : {}),
+      ...(row.sourcePackSourceId?.trim()
+        ? { sourcePackSourceId: row.sourcePackSourceId.trim() }
+        : {}),
       sourceNote:
         row.sourceNote?.trim() ||
         "Project-profile room measurement; review against the attached source.",
@@ -407,12 +422,164 @@ export function roomSheetKeyFromRoom(room: Room) {
   return room.source.slice(ROOM_SHEET_MARKER.length, end);
 }
 
-export function mappedRoomSheetKeys(rooms: Room[]) {
+export function mappedRoomSheetKeys(rooms: readonly Room[]) {
   return new Set(
     rooms
       .map(roomSheetKeyFromRoom)
       .filter((key): key is string => Boolean(key)),
   );
+}
+
+function roomIdentity(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function closeTo(value: number, expected: number, tolerance = 0.08) {
+  return Math.abs(value - expected) <= tolerance;
+}
+
+function normalizeDegrees(value: number) {
+  return ((value % 360) + 360) % 360;
+}
+
+function nearAngle(value: number, target: number) {
+  const delta = Math.abs(normalizeDegrees(value) - target);
+  return Math.min(delta, 360 - delta) < 0.001;
+}
+
+export function createSuggestedRoomDrafts(
+  rows: readonly RoomSheetRow[],
+  existingRooms: readonly Room[],
+  floorId: string,
+  modelTransform: { x: number; y: number; z: number; rotationY: number } = {
+    x: 0,
+    y: 0,
+    z: 0,
+    rotationY: 0,
+  },
+  modelScale = 1,
+  makeId: () => string = () => crypto.randomUUID(),
+): Room[] {
+  if (!floorId) return [];
+  const scale =
+    Number.isFinite(modelScale) && modelScale > 0 ? modelScale : 1;
+  const rotationY = Number.isFinite(modelTransform.rotationY)
+    ? modelTransform.rotationY
+    : 0;
+  const angle = (rotationY * Math.PI) / 180;
+  const cosine = Math.cos(angle);
+  const sine = Math.sin(angle);
+  const translateX = Number.isFinite(modelTransform.x) ? modelTransform.x : 0;
+  const translateZ = Number.isFinite(modelTransform.z) ? modelTransform.z : 0;
+  const mappedKeys = mappedRoomSheetKeys(existingRooms);
+  const additions: Room[] = [];
+
+  const worldPoint = (x: number, z: number): [number, number] => {
+    const scaledX = x * scale;
+    const scaledZ = z * scale;
+    return [
+      translateX + scaledX * cosine + scaledZ * sine,
+      translateZ - scaledX * sine + scaledZ * cosine,
+    ];
+  };
+
+  for (const row of rows) {
+    if (
+      row.origin !== "profile" ||
+      typeof row.suggestedX !== "number" ||
+      !Number.isFinite(row.suggestedX) ||
+      typeof row.suggestedZ !== "number" ||
+      !Number.isFinite(row.suggestedZ) ||
+      mappedKeys.has(row.key)
+    )
+      continue;
+
+    const [x, z] = worldPoint(row.suggestedX, row.suggestedZ);
+    const sourceWidth = row.width * scale;
+    const sourceDepth = row.depth * scale;
+    const quarterTurn = nearAngle(rotationY, 90) || nearAngle(rotationY, 270);
+    const axisAligned =
+      nearAngle(rotationY, 0) ||
+      nearAngle(rotationY, 90) ||
+      nearAngle(rotationY, 180) ||
+      nearAngle(rotationY, 270);
+    const expectedWidth = quarterTurn ? sourceDepth : sourceWidth;
+    const expectedDepth = quarterTurn ? sourceWidth : sourceDepth;
+    const candidates = [...existingRooms, ...additions];
+    const duplicate = candidates.some(
+      (room) =>
+        room.floorId === floorId &&
+        roomIdentity(room.unit) === roomIdentity(row.unit) &&
+        roomIdentity(room.name) === roomIdentity(row.name) &&
+        closeTo(room.width, expectedWidth) &&
+        closeTo(room.depth, expectedDepth),
+    );
+    if (duplicate) continue;
+
+    let geometry: Pick<Room, "x" | "z" | "width" | "depth" | "polygon"> = {
+      x,
+      z,
+      width: expectedWidth,
+      depth: expectedDepth,
+      polygon: undefined,
+    };
+
+    if (!axisAligned) {
+      const halfWidth = row.width / 2;
+      const halfDepth = row.depth / 2;
+      const polygon = [
+        [row.suggestedX - halfWidth, row.suggestedZ - halfDepth],
+        [row.suggestedX + halfWidth, row.suggestedZ - halfDepth],
+        [row.suggestedX + halfWidth, row.suggestedZ + halfDepth],
+        [row.suggestedX - halfWidth, row.suggestedZ + halfDepth],
+      ].map(([pointX, pointZ]) => worldPoint(pointX, pointZ));
+      const minX = Math.min(...polygon.map((point) => point[0]));
+      const maxX = Math.max(...polygon.map((point) => point[0]));
+      const minZ = Math.min(...polygon.map((point) => point[1]));
+      const maxZ = Math.max(...polygon.map((point) => point[1]));
+      geometry = {
+        x: (minX + maxX) / 2,
+        z: (minZ + maxZ) / 2,
+        width: maxX - minX,
+        depth: maxZ - minZ,
+        polygon,
+      };
+    }
+
+    const room: Room = {
+      id: makeId(),
+      name: row.name,
+      unit: row.unit,
+      floorId,
+      x: Number(geometry.x.toFixed(3)),
+      z: Number(geometry.z.toFixed(3)),
+      width: Number(geometry.width.toFixed(3)),
+      depth: Number(geometry.depth.toFixed(3)),
+      ...(geometry.polygon
+        ? {
+            polygon: geometry.polygon.map(
+              ([pointX, pointZ]) =>
+                [
+                  Number(pointX.toFixed(3)),
+                  Number(pointZ.toFixed(3)),
+                ] as [number, number],
+            ),
+          }
+        : {}),
+      height: Number(((row.height ?? 2.8) * scale).toFixed(3)),
+      color: "#cdbfa9",
+      source: roomSheetMarker(row),
+      verified: false,
+      ...(row.assetId ? { sourceAssetId: row.assetId } : {}),
+      ...(row.sourcePackSourceId
+        ? { sourcePackSourceId: row.sourcePackSourceId }
+        : {}),
+    };
+    additions.push(room);
+    mappedKeys.add(row.key);
+  }
+
+  return additions;
 }
 
 function normalizeFloor(value: string) {

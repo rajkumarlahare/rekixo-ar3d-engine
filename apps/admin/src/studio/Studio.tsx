@@ -69,6 +69,7 @@ import {
 } from "./sourcePackSetup";
 import type { PdfReferenceRasterOptions } from "./pdfReferenceRaster";
 import {
+  createSuggestedRoomDrafts,
   mappedRoomSheetKeys,
   parseRoomSheetAssets,
   profileRoomSheetRows,
@@ -1205,6 +1206,77 @@ export default function Studio() {
     );
   }
 
+  function prepareSuggestedTypicalFloor(targetFloorId: string) {
+    if (!targetFloorId) {
+      setError("Choose a floor before preparing the suggested layout.");
+      return;
+    }
+    const suggestedRows = roomSheetRows.filter(
+      (row) =>
+        row.origin === "profile" &&
+        typeof row.suggestedX === "number" &&
+        Number.isFinite(row.suggestedX) &&
+        typeof row.suggestedZ === "number" &&
+        Number.isFinite(row.suggestedZ),
+    );
+    if (!suggestedRows.length) {
+      setMessage("No project-profile suggested room positions are available.");
+      return;
+    }
+    const additions = createSuggestedRoomDrafts(
+      roomSheetRows,
+      p.scene.rooms,
+      targetFloorId,
+      modelTransform,
+      p.scene.scale,
+    );
+    if (!additions.length) {
+      setMessage(
+        "Suggested floor is already represented by mapped/existing rooms. Nothing was overwritten.",
+      );
+      return;
+    }
+    const next: Project = {
+      ...p,
+      scene: {
+        ...p.scene,
+        rooms: [...p.scene.rooms, ...additions],
+      },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      const first = additions[0];
+      setShowRoomMapper(true);
+      setShowReferenceWorkspace(false);
+      setShowAssetShelf(false);
+      setView("building");
+      setCameraOrientation("top");
+      setRoomMapFloorId(targetFloorId);
+      setIsolateFloorId(targetFloorId);
+      setRoomId(first.id);
+      setSelected(first.id);
+      setRoomMapUnit(first.unit);
+      setRoomMapName(first.name);
+      setRoomMapAction("idle");
+      setSelectedRoomSheetKey("");
+      const target = next.scene.floors.find(
+        (entry) => entry.id === targetFloorId,
+      );
+      if (target) setSectionCutOffset(target.elevation + 1.5);
+      const kept = suggestedRows.length - additions.length;
+      setMessage(
+        `${additions.length} suggested room${additions.length === 1 ? "" : "s"} prepared as unverified draft positions${kept > 0 ? ` · ${kept} existing/mapped room${kept === 1 ? "" : "s"} kept untouched` : ""}. Review against the plan and adjust with mouse/touch.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Suggested floor could not be prepared.",
+      );
+    }
+  }
+
   function commitMappedRoom(bounds: RoomDrawResult) {
     const floorId = roomMapFloorId || p.scene.floors[0]?.id;
     if (!floorId) {
@@ -1263,6 +1335,9 @@ export default function Studio() {
         : "Visual Room Mapper draft",
       verified: false,
       ...(sheetRow?.assetId ? { sourceAssetId: sheetRow.assetId } : {}),
+      ...(sheetRow?.sourcePackSourceId
+        ? { sourcePackSourceId: sheetRow.sourcePackSourceId }
+        : {}),
     };
     const next: Project = {
       ...p,
@@ -3499,6 +3574,7 @@ export default function Studio() {
               selectedRoomSheetKey={selectedRoomSheetKey}
               roomSheetIssues={roomSheetIssues}
               onRoomSheetSelect={selectRoomSheetRow}
+              onPrepareSuggestedLayout={prepareSuggestedTypicalFloor}
               onRepeatUnit={repeatMappedUnit}
               onClose={() => {
                 setShowRoomMapper(false);

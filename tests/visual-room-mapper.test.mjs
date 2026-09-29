@@ -12,6 +12,8 @@ test("visual room mapper is mouse-first and keeps exact numbers as advanced fall
   assert.match(mapper, /\+ Draw room/);
   assert.match(mapper, /\+ Draw corners/);
   assert.match(mapper, /Repeat layout/);
+  assert.match(mapper, /Prepare suggested floor/);
+  assert.match(mapper, /reconstructed placements ready/);
   assert.match(mapper, /Reshape selected/);
   assert.match(mapper, /Clone \+ drag/);
   assert.match(mapper, /Mirror X/);
@@ -37,6 +39,8 @@ test("visual room mapping preserves evidence discipline", () => {
 
   assert.match(studio, /Visual Room Mapper draft/);
   assert.match(studio, /roomSheetMarker\(sheetRow\)/);
+  assert.match(studio, /createSuggestedRoomDrafts/);
+  assert.match(studio, /existing\/mapped room/);
   assert.match(studio, /verified: false/);
   assert.match(studio, /sourceAssetId: undefined/);
   assert.match(studio, /sourcePackSourceId: undefined/);

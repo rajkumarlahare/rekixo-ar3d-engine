@@ -95,7 +95,7 @@ test("room-sheet markers make mapped/unmapped state reconstructable after reload
   assert.deepEqual([...roomSheet.mappedRoomSheetKeys([room])], [row.key]);
 });
 
-test("Jyoti profile derives starter queue from the existing interior scene evidence", () => {
+test("Jyoti profile derives starter queue and suggested centres from existing evidence", () => {
   const profile = fs.readFileSync(
     "project-profiles/studio-source-profiles.ts",
     "utf8",
@@ -104,6 +104,69 @@ test("Jyoti profile derives starter queue from the existing interior scene evide
   assert.match(profile, /jyotiInteriorScene\.rooms/);
   assert.match(profile, /unit\.id\.includes\("101"\)/);
   assert.match(profile, /roomSheetTemplate: jyotiRoomSheetTemplate/);
+  assert.match(profile, /suggestedX:/);
+  assert.match(profile, /suggestedZ:/);
+  assert.match(profile, /sourcePackSourceId:/);
+});
+
+test("profile suggested rooms seed once and preserve evidence provenance", () => {
+  const sourceAsset = {
+    id: "brochure",
+    projectId: "project",
+    name: "Jyoti Paradise.pdf",
+    type: "application/pdf",
+    size: 10,
+    hash: "c".repeat(64),
+    blob: new Blob(["pdf"]),
+  };
+  const [row] = roomSheet.profileRoomSheetRows(
+    [
+      {
+        key: "101-living",
+        floor: "Typical residential floor",
+        unit: "101",
+        name: "Living",
+        width: 4.95,
+        depth: 3.05,
+        height: 2.75,
+        suggestedX: 10,
+        suggestedZ: -5,
+        sourcePackSourceId: "jyoti-source-brochure",
+        sourceNote: "Reconstructed placement from brochure page 2",
+      },
+    ],
+    "jyoti-paradise",
+    sourceAsset,
+  );
+
+  const rooms = roomSheet.createSuggestedRoomDrafts(
+    [row],
+    [],
+    "floor-1",
+    { x: 2, y: 0, z: 3, rotationY: 0 },
+    1,
+    () => "seed-room",
+  );
+  assert.equal(rooms.length, 1);
+  assert.equal(rooms[0].id, "seed-room");
+  assert.equal(rooms[0].x, 12);
+  assert.equal(rooms[0].z, -2);
+  assert.equal(rooms[0].width, 4.95);
+  assert.equal(rooms[0].depth, 3.05);
+  assert.equal(rooms[0].verified, false);
+  assert.equal(rooms[0].sourceAssetId, "brochure");
+  assert.equal(rooms[0].sourcePackSourceId, "jyoti-source-brochure");
+  assert.equal(roomSheet.roomSheetKeyFromRoom(rooms[0]), row.key);
+
+  const repeated = roomSheet.createSuggestedRoomDrafts(
+    [row],
+    rooms,
+    "floor-1",
+    { x: 2, y: 0, z: 3, rotationY: 0 },
+    1,
+    () => "should-not-be-used",
+  );
+  assert.equal(repeated.length, 0);
 });
 
 test("visual mapper exposes Unmapped Rooms and exact one-click placement", () => {
@@ -122,6 +185,9 @@ test("visual mapper exposes Unmapped Rooms and exact one-click placement", () =>
   assert.match(mapper, /Click\/tap once on the plan to place exact size/);
   assert.match(studio, /roomMapAction === "stamp"/);
   assert.match(studio, /roomSheetMarker\(sheetRow\)/);
+  assert.match(mapper, /Prepare suggested floor/);
+  assert.match(studio, /prepareSuggestedTypicalFloor/);
+  assert.match(studio, /createSuggestedRoomDrafts/);
   assert.match(studio, /nextMappedKeys/);
   assert.match(studio, /nextRow/);
   assert.match(canvas, /roomStamp\?:/);

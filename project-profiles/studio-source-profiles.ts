@@ -14,6 +14,36 @@ const jyotiUnitById = new Map(
   ]),
 );
 
+function sourceVectorClaim(key: string) {
+  const claim = jyotiSourcePack.claims.find((candidate) => candidate.key === key);
+  if (
+    !claim ||
+    !Array.isArray(claim.value) ||
+    claim.value.length !== 3 ||
+    !claim.value.every(
+      (value) => typeof value === "number" && Number.isFinite(value),
+    )
+  )
+    throw Error(`Jyoti source profile is missing numeric claim ${key}.`);
+  return claim.value as number[];
+}
+
+const jyotiBoundsMin = sourceVectorClaim("audit.bounds.min");
+const jyotiBoundsMax = sourceVectorClaim("audit.bounds.max");
+const jyotiSpanX = jyotiBoundsMax[0] - jyotiBoundsMin[0];
+const jyotiSpanZ = jyotiBoundsMax[2] - jyotiBoundsMin[2];
+const jyotiLayoutScale = Math.min(
+  (jyotiSpanX * 1.25) / 18.6,
+  (jyotiSpanZ * 1.35) / 20,
+  1.15,
+);
+const jyotiLayoutCenterX = (jyotiBoundsMin[0] + jyotiBoundsMax[0]) / 2;
+const jyotiLayoutCenterZ =
+  (jyotiBoundsMin[2] + jyotiBoundsMax[2]) / 2 - jyotiSpanZ * 0.02;
+
+// These centres mirror the existing reconstructed typical-floor presentation
+// envelope against the verified FBX bounds. They are draft placement aids,
+// never promoted to surveyed/verified architecture.
 const jyotiRoomSheetTemplate = jyotiInteriorScene.rooms
   .filter((room) => room.boundary.kind === "rectangle")
   .map((room) => ({
@@ -27,6 +57,17 @@ const jyotiRoomSheetTemplate = jyotiInteriorScene.rooms
     width: room.boundary.size[0],
     depth: room.boundary.size[1],
     height: room.ceilingHeightM,
+    suggestedX: Number(
+      (jyotiLayoutCenterX + room.boundary.center[0] * jyotiLayoutScale).toFixed(
+        4,
+      ),
+    ),
+    suggestedZ: Number(
+      (jyotiLayoutCenterZ + room.boundary.center[1] * jyotiLayoutScale).toFixed(
+        4,
+      ),
+    ),
+    sourcePackSourceId: room.evidence.sourcePackSourceId,
     sourceNote: room.evidence.sourceNote,
   }));
 
