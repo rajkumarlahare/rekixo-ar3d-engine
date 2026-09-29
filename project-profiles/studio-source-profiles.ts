@@ -106,6 +106,48 @@ const jyotiRoomSheetTemplate = jyotiInteriorScene.rooms
     sourceNote: room.evidence.sourceNote,
   }));
 
+const jyotiExpectedRoomCount = (unit: string) =>
+  jyotiRoomSheetTemplate.filter((room) => room.unit === unit).length;
+
+const jyotiRepeatPlan = {
+  id: "jyoti-brochure-unit-series",
+  label: "Jyoti brochure unit-series preview",
+  sourceFloorKey: "floor-1",
+  note:
+    "Brochure page 2 states 101 to 501, 102 to 502 and 103 to 403, while the same brochure labels the drawing 1st to 3rd FLOOR PLAN. Rekixo therefore treats generated upper-floor layouts as unverified authoring copies, not a certified legal floor schedule.",
+  series: [
+    {
+      sourceUnit: "101",
+      expectedRoomCount: jyotiExpectedRoomCount("101"),
+      targets: [
+        { floorKey: "floor-2", targetUnit: "201" },
+        { floorKey: "floor-3", targetUnit: "301" },
+        { floorKey: "floor-4", targetUnit: "401" },
+        { floorKey: "floor-5", targetUnit: "501" },
+      ],
+    },
+    {
+      sourceUnit: "102",
+      expectedRoomCount: jyotiExpectedRoomCount("102"),
+      targets: [
+        { floorKey: "floor-2", targetUnit: "202" },
+        { floorKey: "floor-3", targetUnit: "302" },
+        { floorKey: "floor-4", targetUnit: "402" },
+        { floorKey: "floor-5", targetUnit: "502" },
+      ],
+    },
+    {
+      sourceUnit: "103",
+      expectedRoomCount: jyotiExpectedRoomCount("103"),
+      targets: [
+        { floorKey: "floor-2", targetUnit: "203" },
+        { floorKey: "floor-3", targetUnit: "303" },
+        { floorKey: "floor-4", targetUnit: "403" },
+      ],
+    },
+  ],
+};
+
 export const studioSourceProfiles = [
   {
     id: "jyoti-paradise",
@@ -115,6 +157,7 @@ export const studioSourceProfiles = [
     minMatches: 2,
     requireAnyOf: ["primaryModel", "floorPlan"],
     floorSkeleton: jyotiFloorSkeleton,
+    repeatPlan: jyotiRepeatPlan,
     roomSheetTemplate: jyotiRoomSheetTemplate,
     alignment: {
       slotKey: "floorPlan",
