@@ -159,7 +159,7 @@ test("reusing a design creates independent assets and clears review history", as
 });
 
 
-test("cloud-linked design copies become independent and remap evidence assets", async () => {
+test("cloud-linked design copies clear project-specific review evidence", async () => {
   const p = newProject("Cloud source");
   p.slug = "cloud-source";
   p.cloud = { revision: 4, syncedAt: new Date().toISOString() };
@@ -173,11 +173,12 @@ test("cloud-linked design copies become independent and remap evidence assets", 
   );
   p.assets = [model.id, drawing.id];
   p.scene.modelId = model.id;
+  const floorId = p.scene.floors[0].id;
   p.scene.rooms.push({
     id: "evidence-room",
     name: "Living",
     unit: "A1",
-    floorId: p.scene.floors[0].id,
+    floorId,
     x: 0,
     z: 0,
     width: 4,
@@ -187,13 +188,52 @@ test("cloud-linked design copies become independent and remap evidence assets", 
     source: "Plan",
     verified: true,
     sourceAssetId: drawing.id,
+    sourcePackSourceId: "source-plan",
+    sourceClaimIds: ["claim-room"],
+    mesh: "LivingMesh",
   });
+  p.scene.openings = [{
+    id: "door-reviewed",
+    floorId,
+    kind: "door",
+    roomIds: ["evidence-room"],
+    x: 0,
+    y: 1.05,
+    z: -1.5,
+    width: 0.9,
+    height: 2.1,
+    rotationY: 0,
+    reviewed: true,
+    sourceNodeName: "DoorMesh",
+    sourceOccurrence: 1,
+    confidence: 0.98,
+  }];
+  p.scene.modelNodeTags = [{
+    nodeName: "DoorMesh",
+    occurrence: 1,
+    floorId,
+    unit: "A1",
+    roomId: "evidence-room",
+    assignment: "manual",
+    confidence: 1,
+    semantic: "door",
+    semanticAssignment: "manual",
+    semanticConfidence: 1,
+  }];
   await storage.save(p, [model, drawing]);
 
   const copied = await storage.duplicateProject(p);
   assert.equal(copied.cloud, undefined);
   assert.notEqual(copied.id, p.id);
   assert.notEqual(copied.scene.modelId, model.id);
-  assert.notEqual(copied.scene.rooms[0].sourceAssetId, drawing.id);
-  assert.ok(copied.assets.includes(copied.scene.rooms[0].sourceAssetId));
+  assert.equal(copied.scene.rooms[0].verified, false);
+  assert.equal(copied.scene.rooms[0].sourceAssetId, undefined);
+  assert.equal(copied.scene.rooms[0].sourcePackSourceId, undefined);
+  assert.equal(copied.scene.rooms[0].sourceClaimIds, undefined);
+  assert.equal(copied.scene.rooms[0].mesh, undefined);
+  assert.match(copied.scene.rooms[0].source, /review for this project/i);
+  assert.equal(copied.scene.openings[0].reviewed, false);
+  assert.equal(copied.scene.openings[0].sourceNodeName, undefined);
+  assert.equal(copied.scene.openings[0].confidence, undefined);
+  assert.deepEqual(copied.scene.modelNodeTags, []);
 });
