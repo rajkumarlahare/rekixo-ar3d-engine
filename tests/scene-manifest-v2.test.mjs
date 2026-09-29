@@ -14,7 +14,15 @@ const url = (code) =>
   "data:text/javascript;base64," + Buffer.from(code).toString("base64");
 
 const contractUrl = url(compile("packages/contracts/src/scene-manifest-v2.ts"));
-const domainUrl = url(compile("apps/admin/src/studio/domain.ts"));
+const slugPolicyUrl = url(
+  fs.readFileSync("shared/project-slug-policy.js", "utf8"),
+);
+const domainUrl = url(
+  compile("apps/admin/src/studio/domain.ts").replace(
+    /(["'])\.\.\/\.\.\/\.\.\/\.\.\/shared\/project-slug-policy\.js\1/,
+    JSON.stringify(slugPolicyUrl),
+  ),
+);
 const adapterUrl = url(
   compile("apps/admin/src/studio/manifestV2.ts")
     .replace(/(["'])@rekixo\/3d-contracts\1/, JSON.stringify(contractUrl))
