@@ -7,12 +7,14 @@ const read = (path) => fs.readFileSync(path, "utf8");
 test("Studio walkthrough uses reviewed-door transition resolver", () => {
   const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
   const studio = read("apps/admin/src/studio/Studio.tsx");
+  const panel = read("apps/admin/src/studio/RoomNavigationPanel.tsx");
 
   assert.match(canvas, /resolveReviewedDoorWalkStep/);
   assert.match(canvas, /onWalkRoomChange/);
   assert.match(canvas, /reviewed shared doors connect rooms/);
-  assert.match(studio, /WALKTHROUGH CONNECTIONS/);
-  assert.match(studio, /Walk there/);
+  assert.match(studio, /RoomNavigationPanel/);
+  assert.match(panel, /WALKTHROUGH CONNECTIONS/);
+  assert.match(panel, /Walk there/);
   assert.match(studio, /onWalkRoomChange=/);
 });
 
