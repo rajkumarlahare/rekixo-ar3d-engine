@@ -68,6 +68,14 @@ import {
   type QuickSourceSetup,
 } from "./sourcePackSetup";
 import type { PdfReferenceRasterOptions } from "./pdfReferenceRaster";
+import {
+  mappedRoomSheetKeys,
+  parseRoomSheetAssets,
+  profileRoomSheetRows,
+  resolveRoomSheetFloorId,
+  roomSheetMarker,
+  type RoomSheetRow,
+} from "./roomSheet";
 import "./studio.css";
 import "./studio-operations.css";
 import "./studio-superadmin-theme.css";
@@ -121,6 +129,9 @@ export default function Studio() {
   const [roomMapAction, setRoomMapAction] =
     useState<RoomMapAction>("idle");
   const [roomMapSnap, setRoomMapSnap] = useState(true);
+  const [roomSheetRows, setRoomSheetRows] = useState<RoomSheetRow[]>([]);
+  const [roomSheetIssues, setRoomSheetIssues] = useState<string[]>([]);
+  const [selectedRoomSheetKey, setSelectedRoomSheetKey] = useState("");
   const [cameraOrientation, setCameraOrientation] = useState<
     "perspective" | "top"
   >("perspective");
@@ -206,6 +217,9 @@ export default function Studio() {
     setRoomMapName("Room");
     setRoomMapAction("idle");
     setRoomMapSnap(true);
+    setRoomSheetRows([]);
+    setRoomSheetIssues([]);
+    setSelectedRoomSheetKey("");
     setCameraOrientation("perspective");
     setProject(p);
     setRoomId(p.scene.rooms[0]?.id ?? "");
@@ -271,6 +285,40 @@ export default function Studio() {
       active = false;
     };
   }, [files]);
+
+  useEffect(() => {
+    let active = true;
+    void parseRoomSheetAssets(files)
+      .then((parsed) => {
+        if (!active) return;
+        const floorPlanAsset = quickSourceSetup.slots.find(
+          (slot) => slot.key === "floorPlan",
+        )?.asset;
+        const profileRows =
+          quickSourceSetup.profile && quickSourceSetup.roomSheetTemplate?.length
+            ? profileRoomSheetRows(
+                quickSourceSetup.roomSheetTemplate,
+                quickSourceSetup.profile,
+                floorPlanAsset,
+              )
+            : [];
+        const rows = parsed.rows.length ? parsed.rows : profileRows;
+        setRoomSheetRows(rows);
+        setRoomSheetIssues(parsed.issues);
+        setSelectedRoomSheetKey((current) =>
+          rows.some((row) => row.key === current) ? current : "",
+        );
+      })
+      .catch(() => {
+        if (!active) return;
+        setRoomSheetRows([]);
+        setRoomSheetIssues(["Room-sheet source could not be read."]);
+        setSelectedRoomSheetKey("");
+      });
+    return () => {
+      active = false;
+    };
+  }, [files, quickSourceSetup]);
 
   useEffect(() => {
     let active = true;
@@ -583,6 +631,10 @@ export default function Studio() {
           `${candidate.floorId}\u0000${candidate.unit.trim()}`,
       ),
     ).size,
+    mappedSheetKeys = mappedRoomSheetKeys(p.scene.rooms),
+    activeRoomSheetRow = roomSheetRows.find(
+      (row) => row.key === selectedRoomSheetKey,
+    ),
     filteredModelNodes = modelNodes
       .filter((node) => {
         const query = modelNodeFilter.trim().toLowerCase();
