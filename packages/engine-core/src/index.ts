@@ -1,15 +1,14 @@
 import { PUBLIC_BASE_PATH } from "@rekixo/3d-contracts";
+import {
+  normalizeProjectSlug,
+  validProjectSlug,
+} from "../../../shared/project-slug-policy.js";
 
-const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
-export function normalizeProjectSlug(value: string | null | undefined) {
-  return String(value || "").trim().toLowerCase();
-}
-
-export function validProjectSlug(value: string | null | undefined) {
-  const slug = normalizeProjectSlug(value);
-  return slug.length >= 2 && slug.length <= 80 && SLUG_PATTERN.test(slug);
-}
+export {
+  RESERVED_PROJECT_SLUGS,
+  normalizeProjectSlug,
+  validProjectSlug,
+} from "../../../shared/project-slug-policy.js";
 
 export function projectSlugFromPathname(pathname: string) {
   const prefix = `${PUBLIC_BASE_PATH}/`;
