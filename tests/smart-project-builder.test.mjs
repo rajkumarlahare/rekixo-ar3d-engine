@@ -19,6 +19,10 @@ test("Smart Project Builder exposes the guided source-to-draft workflow", () => 
   assert.match(builder, /Build smart draft/);
   assert.match(analyzer, /inferFloorCandidates/);
   assert.match(analyzer, /suggestNodeFloorAssignments/);
+  assert.match(analyzer, /suggestArchitecturalCandidates/);
+  assert.match(analyzer, /auditCadSources/);
+  assert.match(builder, /Architectural candidate detection/);
+  assert.match(builder, /Apply .* confident labels/);
 });
 
 test("Smart analyzer keeps ambiguous geometry in review instead of inventing semantics", () => {
@@ -36,4 +40,28 @@ test("builder metadata stays authoring-only in public Studio snapshots", () => {
   const publisher = read("workers/release-publish.mjs");
   assert.match(publisher, /delete project\.referenceUrl/);
   assert.match(publisher, /delete project\.brief/);
+});
+
+
+test("architectural automation stays suggestion-first and preserves manual labels", () => {
+  const analyzer = read("apps/admin/src/studio/projectAnalyzer.ts");
+  const studio = read("apps/admin/src/studio/Studio.tsx");
+
+  assert.match(analyzer, /kind: SmartArchitecturalKind/);
+  assert.match(analyzer, /confidence:/);
+  assert.match(analyzer, /source name\/material says door/);
+  assert.match(analyzer, /source name\/material says window/);
+  assert.match(analyzer, /thin vertical storey-scale geometry/);
+  assert.match(studio, /semanticAssignment === "manual"/);
+  assert.match(studio, /semanticAssignment: "auto"/);
+  assert.match(studio, /const threshold = 0\.82/);
+  assert.match(studio, /Review them visually before treating them as architecture/);
+});
+
+test("CAD intake does not pretend binary DWG is semantically parsed", () => {
+  const analyzer = read("apps/admin/src/studio/projectAnalyzer.ts");
+  assert.match(analyzer, /extension === "dwg"/);
+  assert.match(analyzer, /Convert\/export to ASCII DXF/);
+  assert.match(analyzer, /no CAD semantics were guessed/);
+  assert.match(analyzer, /code === "8"/);
 });
