@@ -24,7 +24,8 @@ test("browser E2E smoke covers authoring, analysis, persistence and unsaved guar
   assert.match(e2e, /Build smart draft/);
   assert.match(e2e, /Saved in the local offline cache/);
   assert.match(e2e, /page\.reload\(\)/);
-  assert.match(e2e, /Save your changes before creating a project/);
+  assert.match(e2e, /toBeDisabled/);
+  assert.match(e2e, /Selected local project/);
   assert.match(workflow, /Run browser E2E smoke/);
   assert.match(workflow, /playwright install --with-deps chromium/);
 });
