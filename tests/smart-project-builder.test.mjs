@@ -10,7 +10,8 @@ test("Smart Project Builder exposes the guided source-to-draft workflow", () => 
   const analyzer = read("apps/admin/src/studio/projectAnalyzer.ts");
 
   assert.match(studio, /"builder" \| "overview" \| "editor"/);
-  assert.match(studio, /\["builder", "Project Builder"\]/);
+  assert.match(studio, /\["builder", "Setup"\]/);
+  assert.match(studio, /aria-label="Project workflow"/);
   assert.match(studio, /uploadSourcePack/);
   assert.match(studio, /analyzeSmartProject/);
   assert.match(studio, /buildSmartDraft/);

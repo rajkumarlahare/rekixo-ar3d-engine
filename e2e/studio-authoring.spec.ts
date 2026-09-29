@@ -116,10 +116,10 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
   await expect(page.getByLabel("Exposure")).toHaveValue("1.08");
 
   await page.getByRole("button", { name: "Exit full screen" }).click();
-  await expect(page.getByText("Autosaved locally")).toBeVisible();
+  await expect(page.getByText("Autosaved")).toBeVisible();
 
   await page.reload();
-  await page.getByRole("button", { name: "Project Builder" }).click();
+  await page.getByRole("button", { name: "Setup" }).click();
   await expect(page.getByLabel("Project title")).toHaveValue(
     "Browser E2E Tower",
   );
@@ -127,7 +127,7 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
     "four-floor.glb",
   );
 
-  await page.getByRole("button", { name: "3D Editor" }).click();
+  await page.getByRole("button", { name: "3D Edit" }).click();
   await expect(page.getByLabel("Visual realism presets")).toBeVisible();
   await expect(page.getByRole("button", { name: /Clean Day/i })).toHaveAttribute(
     "aria-pressed",
@@ -139,10 +139,12 @@ test("local autosave survives hard reload without pressing Save local", async ({
   page,
 }) => {
   await page.getByLabel("Project title").fill("Autosaved E2E Change");
+
+  await page.getByLabel("More project actions").click();
   await expect(page.getByRole("button", { name: "+ New project" })).toBeDisabled();
   await expect(page.getByLabel("Selected local project")).toBeDisabled();
 
-  await expect(page.getByText("Autosaved locally")).toBeVisible();
+  await expect(page.getByText("Autosaved")).toBeVisible();
   await expect(page.getByRole("button", { name: "+ New project" })).toBeEnabled();
 
   await page.reload();

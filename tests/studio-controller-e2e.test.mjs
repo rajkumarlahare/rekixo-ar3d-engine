@@ -22,7 +22,10 @@ test("browser E2E smoke covers authoring, analysis and reload-safe autosave", ()
   assert.match(config, /Desktop Chrome/);
   assert.match(e2e, /Analyze project/);
   assert.match(e2e, /Build smart draft/);
-  assert.match(e2e, /Autosaved locally/);
+  assert.match(e2e, /Autosaved/);
+  assert.match(e2e, /More project actions/);
+  assert.match(e2e, /name: "Setup"/);
+  assert.match(e2e, /name: "3D Edit"/);
   assert.match(e2e, /hard reload without pressing Save local/);
   assert.match(e2e, /page\.reload\(\)/);
   assert.match(e2e, /toBeDisabled/);
