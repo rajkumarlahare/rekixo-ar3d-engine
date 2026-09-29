@@ -92,3 +92,21 @@ test("alignment mode prioritizes the canvas and removes editor-side clutter", ()
   assert.match(css, /\.editor-core--alignment \.reference-workspace-head,/);
   assert.match(css, /\.editor-core--alignment \.reference-quickbar/);
 });
+
+
+test("plan calibration reference has operator-friendly zoom and large view", () => {
+  const workspace = read("apps/admin/src/studio/ReferenceWorkspace.tsx");
+  const css = read("apps/admin/src/studio/studio-editor-core.css");
+
+  assert.match(workspace, /const \[previewZoom, setPreviewZoom\] = useState\(1\)/);
+  assert.match(workspace, /const \[previewExpanded, setPreviewExpanded\] = useState\(false\)/);
+  assert.match(workspace, /aria-label="Plan preview zoom"/);
+  assert.match(workspace, /Zoom out plan/);
+  assert.match(workspace, /Zoom in plan/);
+  assert.match(workspace, /Large view/);
+  assert.match(workspace, /Close large view/);
+  assert.match(workspace, /event\.key !== "Escape"/);
+  assert.match(workspace, /naturalSize\.width \* previewZoom/);
+  assert.match(css, /\.reference-image-viewer--expanded/);
+  assert.match(css, /overflow: auto/);
+});
