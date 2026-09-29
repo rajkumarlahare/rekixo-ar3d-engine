@@ -1181,6 +1181,30 @@ export default function Studio() {
     return 2.8;
   }
 
+  function selectRoomSheetRow(row: RoomSheetRow) {
+    const fallbackFloorId =
+      roomMapFloorId || room?.floorId || p.scene.floors[0]?.id || "";
+    const floorId = resolveRoomSheetFloorId(row, p.scene, fallbackFloorId);
+    setSelectedRoomSheetKey(row.key);
+    setRoomMapFloorId(floorId);
+    setRoomMapUnit(row.unit);
+    setRoomMapName(row.name);
+    setRoomMapAction("stamp");
+    setShowRoomMapper(true);
+    setShowReferenceWorkspace(false);
+    setShowAssetShelf(false);
+    setView("building");
+    setCameraOrientation("top");
+    setIsolateFloorId(floorId);
+    setSelected("");
+    setRoomId("");
+    const target = p.scene.floors.find((entry) => entry.id === floorId);
+    if (target) setSectionCutOffset(target.elevation + 1.5);
+    setMessage(
+      `${row.unit} · ${row.name} ready · ${row.width.toFixed(2)} × ${row.depth.toFixed(2)} m. Click/tap once on the plan to place it.`,
+    );
+  }
+
   function commitMappedRoom(bounds: RoomDrawResult) {
     const floorId = roomMapFloorId || p.scene.floors[0]?.id;
     if (!floorId) {
@@ -1219,19 +1243,27 @@ export default function Studio() {
       return;
     }
 
+    const sheetRow =
+      roomMapAction === "stamp" ? activeRoomSheetRow : undefined;
     const mapped: Room = {
       id: id(),
-      name: roomMapName.trim() || `Room ${p.scene.rooms.length + 1}`,
-      unit: roomMapUnit.trim() || "Unit",
+      name:
+        sheetRow?.name ??
+        roomMapName.trim() ||
+        `Room ${p.scene.rooms.length + 1}`,
+      unit: sheetRow?.unit ?? roomMapUnit.trim() || "Unit",
       floorId,
       x: bounds.x,
       z: bounds.z,
-      width: bounds.width,
-      depth: bounds.depth,
-      height: roomHeightForFloor(floorId),
+      width: sheetRow?.width ?? bounds.width,
+      depth: sheetRow?.depth ?? bounds.depth,
+      height: sheetRow?.height ?? roomHeightForFloor(floorId),
       color: "#cdbfa9",
-      source: "Visual Room Mapper draft",
+      source: sheetRow
+        ? roomSheetMarker(sheetRow)
+        : "Visual Room Mapper draft",
       verified: false,
+      ...(sheetRow?.assetId ? { sourceAssetId: sheetRow.assetId } : {}),
     };
     const next: Project = {
       ...p,
@@ -1242,10 +1274,45 @@ export default function Studio() {
       edit(next);
       setRoomId(mapped.id);
       setSelected(mapped.id);
-      setRoomMapAction("create");
-      setMessage(
-        `${mapped.name} mapped · ${mapped.width.toFixed(2)} × ${mapped.depth.toFixed(2)} m · ${(mapped.width * mapped.depth).toFixed(2)} m².`,
-      );
+      if (sheetRow) {
+        const nextMappedKeys = mappedRoomSheetKeys(next.scene.rooms);
+        const nextRow =
+          roomSheetRows.find(
+            (candidate) =>
+              candidate.unit === sheetRow.unit &&
+              !nextMappedKeys.has(candidate.key),
+          ) ??
+          roomSheetRows.find(
+            (candidate) => !nextMappedKeys.has(candidate.key),
+          );
+        if (nextRow) {
+          const nextFloorId = resolveRoomSheetFloorId(
+            nextRow,
+            next.scene,
+            floorId,
+          );
+          setSelectedRoomSheetKey(nextRow.key);
+          setRoomMapFloorId(nextFloorId);
+          setRoomMapUnit(nextRow.unit);
+          setRoomMapName(nextRow.name);
+          setRoomMapAction("stamp");
+          setIsolateFloorId(nextFloorId);
+          setMessage(
+            `${mapped.name} placed exactly · next: ${nextRow.unit} · ${nextRow.name} ${nextRow.width.toFixed(2)} × ${nextRow.depth.toFixed(2)} m.`,
+          );
+        } else {
+          setSelectedRoomSheetKey("");
+          setRoomMapAction("idle");
+          setMessage(
+            `${mapped.name} placed exactly · room sheet complete (${roomSheetRows.length}/${roomSheetRows.length}).`,
+          );
+        }
+      } else {
+        setRoomMapAction("create");
+        setMessage(
+          `${mapped.name} mapped · ${mapped.width.toFixed(2)} × ${mapped.depth.toFixed(2)} m · ${(mapped.width * mapped.depth).toFixed(2)} m².`,
+        );
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Room mapping failed.");
     }
@@ -3322,6 +3389,16 @@ export default function Studio() {
               floorId: roomMapFloorId,
               snap: roomMapSnap,
             }}
+            roomStamp={{
+              enabled:
+                showRoomMapper &&
+                roomMapAction === "stamp" &&
+                Boolean(activeRoomSheetRow),
+              floorId: roomMapFloorId,
+              snap: roomMapSnap,
+              width: activeRoomSheetRow?.width ?? 1,
+              depth: activeRoomSheetRow?.depth ?? 1,
+            }}
             roomPolygonDraw={{
               enabled: showRoomMapper && roomMapAction === "polygon",
               floorId: roomMapFloorId,
@@ -3399,6 +3476,11 @@ export default function Studio() {
               onSnap={setRoomMapSnap}
               onClone={cloneMappedRoom}
               onMirror={mirrorMappedRoom}
+              roomSheetRows={roomSheetRows}
+              mappedRoomSheetKeys={mappedSheetKeys}
+              selectedRoomSheetKey={selectedRoomSheetKey}
+              roomSheetIssues={roomSheetIssues}
+              onRoomSheetSelect={selectRoomSheetRow}
               onRepeatUnit={repeatMappedUnit}
               onClose={() => {
                 setShowRoomMapper(false);
