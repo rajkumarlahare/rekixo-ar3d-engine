@@ -2,15 +2,25 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs";
 import ts from "typescript";
-const code = ts.transpileModule(
-  fs.readFileSync("apps/admin/src/studio/domain.ts", "utf8"),
-  {
-    compilerOptions: {
-      module: ts.ModuleKind.ESNext,
-      target: ts.ScriptTarget.ES2022,
+const slugPolicyUrl =
+  "data:text/javascript;base64," +
+  Buffer.from(
+    fs.readFileSync("shared/project-slug-policy.js", "utf8"),
+  ).toString("base64");
+const code = ts
+  .transpileModule(
+    fs.readFileSync("apps/admin/src/studio/domain.ts", "utf8"),
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.ESNext,
+        target: ts.ScriptTarget.ES2022,
+      },
     },
-  },
-).outputText;
+  )
+  .outputText.replace(
+    "../../../../shared/project-slug-policy.js",
+    slugPolicyUrl,
+  );
 const {
   newProject,
   validateProject,
