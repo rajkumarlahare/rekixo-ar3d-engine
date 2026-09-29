@@ -3001,6 +3001,13 @@ export default function Studio() {
             className="wide"
             disabled={busy || Boolean(review)}
             onClick={() => {
+              const pending = roomSheetRows.find(
+                (row) => !mappedSheetKeys.has(row.key),
+              );
+              if (pending) {
+                selectRoomSheetRow(pending);
+                return;
+              }
               const floorId =
                 room?.floorId ??
                 roomMapFloorId ??
@@ -3269,6 +3276,18 @@ export default function Studio() {
                     "";
                   setShowRoomMapper(next);
                   if (next) {
+                    const pending =
+                      roomSheetRows.find(
+                        (row) => row.key === selectedRoomSheetKey &&
+                          !mappedSheetKeys.has(row.key),
+                      ) ??
+                      roomSheetRows.find(
+                        (row) => !mappedSheetKeys.has(row.key),
+                      );
+                    if (pending) {
+                      selectRoomSheetRow(pending);
+                      return;
+                    }
                     setShowReferenceWorkspace(false);
                     setShowAssetShelf(false);
                     setRoomMapFloorId(floorId);
