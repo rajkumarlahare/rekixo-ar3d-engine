@@ -25,7 +25,6 @@ import {
   type Furniture,
   type Kind,
   type MaterialOverride,
-  type ModelNodeSemantic,
   type ModelNodeTag,
   type Opening,
   type ModelTransform,
@@ -47,6 +46,7 @@ import { buildSceneManifestV2 } from "./manifestV2";
 import StudioOverview from "./StudioOverview";
 import SmartProjectBuilder from "./SmartProjectBuilder";
 import RoomNavigationPanel from "./RoomNavigationPanel";
+import ModelNodeInspector from "./ModelNodeInspector";
 import StudioSources from "./StudioSources";
 import StudioEvidence from "./StudioEvidence";
 import StudioPublish from "./StudioPublish";
@@ -3383,173 +3383,21 @@ export default function Studio() {
           </div>
           <fieldset disabled={Boolean(review) || busy}>
             {view === "building" && mesh ? (
-              <>
-                <h2>{mesh}</h2>
-                <p>
-                  Source geometry stays read-only. Tag this exact source mesh to
-                  a floor, unit or room so isolation and future project
-                  navigation use reviewed semantics instead of guesses.
-                </p>
-                <label>
-                  Source mesh
-                  <input
-                    readOnly
-                    value={
-                      selectedModelNode
-                        ? `${selectedModelNode.name} · occurrence ${selectedModelNode.occurrence}`
-                        : mesh
-                    }
-                  />
-                </label>
-                {selectedModelNode && (
-                  <>
-                    <div className="semantic-tag-status">
-                      <span>
-                        Tagged {taggedModelNodeCount}/{modelNodes.length}
-                      </span>
-                      <span>
-                        Source Y {selectedModelNode.centreY.toFixed(3)}
-                      </span>
-                    </div>
-                    <div className="semantic-tag-status">
-                      <span>
-                        Architecture{" "}
-                        <b>
-                          {selectedModelNodeTag?.semantic
-                            ? selectedModelNodeTag.semantic.toUpperCase()
-                            : "UNASSIGNED"}
-                        </b>
-                      </span>
-                      <span>
-                        {selectedModelNodeTag?.semanticAssignment === "auto"
-                          ? `Auto ${Math.round(
-                              (selectedModelNodeTag.semanticConfidence ?? 0) *
-                                100,
-                            )}%`
-                          : selectedModelNodeTag?.semanticAssignment ===
-                              "manual"
-                            ? "Reviewed manually"
-                            : "Needs review"}
-                      </span>
-                    </div>
-                    <label>
-                      Architectural label
-                      <select
-                        value={selectedModelNodeTag?.semantic ?? ""}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          if (!value) {
-                            clearModelNodeSemantic();
-                            return;
-                          }
-                          patchModelNodeTag({
-                            semantic: value as ModelNodeSemantic,
-                          });
-                        }}
-                      >
-                        <option value="">Unassigned</option>
-                        <option value="wall">Wall</option>
-                        <option value="door">Door</option>
-                        <option value="window">Window</option>
-                        <option value="opening">Other opening</option>
-                        <option value="ignore">Ignore candidate</option>
-                      </select>
-                    </label>
-                    <label>
-                      Floor tag
-                      <select
-                        value={selectedModelNodeTag?.floorId ?? ""}
-                        onChange={(event) =>
-                          patchModelNodeTag({ floorId: event.target.value })
-                        }
-                      >
-                        <option value="">Unassigned</option>
-                        {[...p.scene.floors]
-                          .sort((a, b) => a.elevation - b.elevation)
-                          .map((floor) => (
-                            <option key={floor.id} value={floor.id}>
-                              {floor.name} · {floor.elevation}m
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                    <label>
-                      Unit / flat tag
-                      <input
-                        value={selectedModelNodeTag?.unit ?? ""}
-                        onChange={(event) =>
-                          patchModelNodeTag({ unit: event.target.value })
-                        }
-                        placeholder="e.g. 101"
-                        list="model-node-units"
-                      />
-                    </label>
-                    <datalist id="model-node-units">
-                      {[
-                        ...new Set(
-                          p.scene.rooms
-                            .filter(
-                              (candidate) =>
-                                !selectedModelNodeTag?.floorId ||
-                                candidate.floorId ===
-                                  selectedModelNodeTag.floorId,
-                            )
-                            .map((candidate) => candidate.unit)
-                            .filter(Boolean),
-                        ),
-                      ].map((unit) => (
-                        <option key={unit} value={unit} />
-                      ))}
-                    </datalist>
-                    <label>
-                      Exact room binding
-                      <select
-                        value={selectedModelNodeTag?.roomId ?? ""}
-                        onChange={(event) => {
-                          const targetRoomId = event.target.value;
-                          if (targetRoomId) bindSelectedMeshToRoom(targetRoomId);
-                          else patchModelNodeTag({ roomId: "" });
-                        }}
-                      >
-                        <option value="">No exact room</option>
-                        {p.scene.rooms
-                          .filter(
-                            (candidate) =>
-                              !selectedModelNodeTag?.floorId ||
-                              candidate.floorId ===
-                                selectedModelNodeTag.floorId,
-                          )
-                          .map((candidate) => (
-                            <option key={candidate.id} value={candidate.id}>
-                              {candidate.unit} · {candidate.name}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                    <button
-                      type="button"
-                      disabled={!selectedModelNodeTag}
-                      onClick={clearModelNodeTag}
-                    >
-                      Clear semantic tag
-                    </button>
-                  </>
-                )}
-                <button
-                  disabled={!room}
-                  onClick={() => {
-                    if (room) bindSelectedMeshToRoom(room.id);
-                  }}
-                >
-                  Bind mesh to current room
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFocusRequest((value) => value + 1)}
-                >
-                  Focus selected mesh
-                </button>
-              </>
+              <ModelNodeInspector
+                mesh={mesh}
+                selectedNode={selectedModelNode}
+                selectedTag={selectedModelNodeTag}
+                taggedCount={taggedModelNodeCount}
+                totalCount={modelNodes.length}
+                floors={p.scene.floors}
+                rooms={p.scene.rooms}
+                currentRoom={room}
+                onPatchTag={patchModelNodeTag}
+                onClearSemantic={clearModelNodeSemantic}
+                onClearTag={clearModelNodeTag}
+                onBindRoom={bindSelectedMeshToRoom}
+                onFocus={() => setFocusRequest((value) => value + 1)}
+              />
             ) : item ? (
               <>
                 <h2>{catalog[item.kind].name}</h2>
