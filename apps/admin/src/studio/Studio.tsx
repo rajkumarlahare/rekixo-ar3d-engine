@@ -78,6 +78,10 @@ import {
   roomSheetMarker,
   type RoomSheetRow,
 } from "./roomSheet";
+import {
+  applyBatchRepeatPlan,
+  buildBatchRepeatPreview,
+} from "./unitRepeat";
 import "./studio.css";
 import "./studio-operations.css";
 import "./studio-superadmin-theme.css";
@@ -634,6 +638,12 @@ export default function Studio() {
       ),
     ).size,
     mappedSheetKeys = mappedRoomSheetKeys(p.scene.rooms),
+    batchRepeatPreview = buildBatchRepeatPreview(
+      p.scene,
+      quickSourceSetup.profile,
+      quickSourceSetup.floorSkeleton,
+      quickSourceSetup.repeatPlan,
+    ),
     activeRoomSheetRow = roomSheetRows.find(
       (row) => row.key === selectedRoomSheetKey,
     ),
@@ -1567,6 +1577,58 @@ export default function Studio() {
       setError(reason instanceof Error ? reason.message : "Room mirror failed.");
     }
   }
+  function generateBatchRepeatedUnits() {
+    const result = applyBatchRepeatPlan(
+      p.scene,
+      quickSourceSetup.profile,
+      quickSourceSetup.floorSkeleton,
+      quickSourceSetup.repeatPlan,
+      id,
+    );
+    if (!result.createdRooms.length) {
+      const existing = result.existingTargets
+        ? ` · ${result.existingTargets} existing target${result.existingTargets === 1 ? "" : "s"} preserved`
+        : "";
+      const blocked = result.blockedTargets
+        ? ` · ${result.blockedTargets} target${result.blockedTargets === 1 ? "" : "s"} need review`
+        : "";
+      setMessage(`No repeated unit was generated${existing}${blocked}.`);
+      return;
+    }
+    const next: Project = {
+      ...p,
+      scene: {
+        ...p.scene,
+        rooms: result.rooms,
+      },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      const first = result.createdRooms[0];
+      setRoomMapFloorId(first.floorId);
+      setRoomMapUnit(first.unit);
+      setRoomMapName(first.name);
+      setIsolateFloorId(first.floorId);
+      setRoomId(first.id);
+      setSelected(first.id);
+      setRoomMapAction("idle");
+      const target = next.scene.floors.find(
+        (floor) => floor.id === first.floorId,
+      );
+      if (target) setSectionCutOffset(target.elevation + 1.5);
+      setMessage(
+        `${result.generatedTargets} repeated unit${result.generatedTargets === 1 ? "" : "s"} generated · ${result.createdRooms.length} unverified room drafts created${result.existingTargets ? ` · ${result.existingTargets} existing target${result.existingTargets === 1 ? "" : "s"} preserved` : ""}${result.blockedTargets ? ` · ${result.blockedTargets} target${result.blockedTargets === 1 ? "" : "s"} still need review` : ""}.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Repeated floors could not be generated.",
+      );
+    }
+  }
+
   function repeatMappedUnit(targetFloorId: string, targetUnit: string) {
     const sourceFloorId = roomMapFloorId;
     const sourceUnit = roomMapUnit.trim();
@@ -3589,6 +3651,8 @@ export default function Studio() {
               roomSheetIssues={roomSheetIssues}
               onRoomSheetSelect={selectRoomSheetRow}
               onPrepareSuggestedLayout={prepareSuggestedTypicalFloor}
+              batchRepeatPreview={batchRepeatPreview}
+              onGenerateBatchRepeat={generateBatchRepeatedUnits}
               onRepeatUnit={repeatMappedUnit}
               onClose={() => {
                 setShowRoomMapper(false);
