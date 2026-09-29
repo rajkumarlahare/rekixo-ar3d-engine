@@ -12,6 +12,9 @@ test("visual room mapper is mouse-first and keeps exact numbers as advanced fall
   assert.match(mapper, /\+ Draw room/);
   assert.match(mapper, /\+ Draw corners/);
   assert.match(mapper, /Repeat layout/);
+  assert.match(mapper, /REPEAT TYPICAL FLOOR · PREVIEW FIRST/);
+  assert.match(mapper, /batchRepeatPreview\.roomsToCreate/);
+  assert.match(mapper, /Manual single-unit repeat fallback/);
   assert.match(mapper, /Prepare suggested floor/);
   assert.match(mapper, /reconstructed placements ready/);
   assert.match(mapper, /Reshape selected/);
@@ -61,4 +64,6 @@ test("polygon mapper snaps to existing room walls and exports polygon callbacks"
   assert.match(studio, /commitMappedPolygon/);
   assert.match(studio, /roomGeometryFromPolygon/);
   assert.match(studio, /repeatMappedUnit/);
+  assert.match(studio, /generateBatchRepeatedUnits/);
+  assert.match(studio, /applyBatchRepeatPlan/);
 });

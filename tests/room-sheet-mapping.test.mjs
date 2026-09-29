@@ -109,6 +109,10 @@ test("Jyoti profile derives starter queue and suggested centres from existing ev
   assert.match(profile, /sourcePackSourceId:/);
   assert.match(profile, /audit\.architecturalFloorLevelsM/);
   assert.match(profile, /floorSkeleton: jyotiFloorSkeleton/);
+  assert.match(profile, /repeatPlan: jyotiRepeatPlan/);
+  assert.match(profile, /101 to 501/);
+  assert.match(profile, /102 to 502/);
+  assert.match(profile, /103 to 403/);
 });
 
 test("profile suggested rooms seed once and preserve evidence provenance", () => {
