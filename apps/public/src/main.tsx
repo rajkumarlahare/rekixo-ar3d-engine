@@ -165,6 +165,7 @@ function ProjectNavigation({ experience, walkFloor }: { experience: Public3DExpe
           initialWalkFloor={walkFloor ?? null}
           availableFloors={availableFloors}
           floorGeometry={floorSettings.floorLevels ?? []}
+          walkthrough={experience.walkthrough}
         />
       </section>
 
@@ -348,6 +349,7 @@ function ModelModule({
         interactionMode={interactionMode}
         availableFloors={availableFloors}
         floorGeometry={floorSettings.floorLevels ?? []}
+          walkthrough={experience.walkthrough}
       />
     </section>
   );
@@ -470,6 +472,7 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
           onFeatureSelect={setSelectedFeature}
           availableFloors={availableFloors}
           floorGeometry={floorSettings.floorLevels ?? []}
+          walkthrough={experience.walkthrough}
           compactUi
         />
 
@@ -594,8 +597,9 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
             <h2>Touch + Desktop Navigation</h2>
             <p>
               Drag on the 3D view to look around. On desktop use WASD or arrow keys; on phone/tablet
-              use the on-screen arrows. Movement is intentionally free inside the verified typical-floor
-              envelope so unverified door/collision boundaries are not invented.
+              use the on-screen arrows. When a reviewed room graph is published, movement stays inside
+              mapped room boundaries and crosses only approved shared doors. Unreviewed openings never
+              become navigation links.
             </p>
             <div className="twin-chip-list">
               {verifiedSpaces.map((space) => (
