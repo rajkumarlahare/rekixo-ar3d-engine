@@ -4,6 +4,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import type { Asset } from "./domain";
 import type { FbxSourceAudit } from "./sourceAudit";
+import { disposeObjectResources } from "./threeResources";
 
 export type SmartSourceRole =
   | "model"
@@ -126,26 +127,6 @@ export function classifySmartSource(
     return "visual";
   }
   return "other";
-}
-
-function disposeObject(root: T.Object3D) {
-  const materials = new Set<T.Material>();
-  const textures = new Set<T.Texture>();
-  root.traverse((node) => {
-    if (!(node instanceof T.Mesh)) return;
-    node.geometry?.dispose();
-    const nodeMaterials = Array.isArray(node.material)
-      ? node.material
-      : [node.material];
-    for (const material of nodeMaterials)
-      if (material) materials.add(material);
-  });
-  for (const material of materials) {
-    for (const value of Object.values(material))
-      if (value instanceof T.Texture) textures.add(value);
-    material.dispose();
-  }
-  for (const texture of textures) texture.dispose();
 }
 
 async function parseModel(asset: Asset) {
@@ -711,7 +692,7 @@ export async function analyzeProjectFiles(
           : "Model analysis could not complete.",
       );
     } finally {
-      if (root) disposeObject(root);
+      if (root) disposeObjectResources(root);
     }
   }
 
