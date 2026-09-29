@@ -61,6 +61,12 @@ import {
   suggestOpeningAssociations,
   type OpeningSuggestion,
 } from "./openingAssociator";
+import {
+  applyQuickSourceSetup,
+  detectQuickSourceSetup,
+  emptyQuickSourceSetup,
+  type QuickSourceSetup,
+} from "./sourcePackSetup";
 import "./studio.css";
 import "./studio-operations.css";
 import "./studio-superadmin-theme.css";
@@ -130,6 +136,8 @@ export default function Studio() {
   const [sourceAudits, setSourceAudits] = useState<FbxSourceAudit[]>([]);
   const [sourceAuditBusy, setSourceAuditBusy] = useState(false);
   const [smartAnalysis, setSmartAnalysis] = useState<SmartProjectAnalysis>();
+  const [quickSourceSetup, setQuickSourceSetup] =
+    useState<QuickSourceSetup>(emptyQuickSourceSetup());
   const [manifestText, setManifestText] = useState("");
   const [projectSearch, setProjectSearch] = useState("");
   const [published, setPublished] = useState<PublishedCatalogEntry[]>([]);
@@ -170,6 +178,8 @@ export default function Studio() {
     setList(entries.sort((a, b) => b.updated.localeCompare(a.updated)));
   }
   function open(p: Project) {
+    setFiles([]);
+    setQuickSourceSetup(emptyQuickSourceSetup());
     setManifestText("");
     setBackup(undefined);
     setMessage("");
@@ -247,6 +257,20 @@ export default function Studio() {
       active = false;
     };
   }, [project?.id, project?.assets]);
+  useEffect(() => {
+    let active = true;
+    void detectQuickSourceSetup(files)
+      .then((setup) => {
+        if (active) setQuickSourceSetup(setup);
+      })
+      .catch(() => {
+        if (active) setQuickSourceSetup(emptyQuickSourceSetup());
+      });
+    return () => {
+      active = false;
+    };
+  }, [files]);
+
   useEffect(() => {
     let active = true;
     const fbxFiles = files.filter((file) => /\.fbx$/i.test(file.name));
@@ -1418,18 +1442,34 @@ export default function Studio() {
   }
   async function uploadSourcePack(selectedFiles: File[]) {
     if (!selectedFiles.length) return;
-    const assets = await Promise.all(
+    const incoming = await Promise.all(
       selectedFiles.map((file) => storage.makeAsset(file, p.id)),
     );
+    const knownHashes = new Set(files.map((asset) => asset.hash.toLowerCase()));
+    const batchHashes = new Set<string>();
+    const assets = incoming.filter((asset) => {
+      const hash = asset.hash.toLowerCase();
+      if (knownHashes.has(hash) || batchHashes.has(hash)) return false;
+      batchHashes.add(hash);
+      return true;
+    });
+    const duplicateCount = incoming.length - assets.length;
+    const combinedFiles = [...files, ...assets];
+    const quickSetup = await detectQuickSourceSetup(combinedFiles);
     const existing = new Set(p.assets);
     const nextAssetIds = [
       ...p.assets,
       ...assets.map((asset) => asset.id).filter((key) => !existing.has(key)),
     ];
-    const modelCandidates = assets.filter((asset) => /\.(glb|fbx)$/i.test(asset.name));
-    const glbCandidates = modelCandidates.filter((asset) => /\.glb$/i.test(asset.name));
+    const modelCandidates = combinedFiles.filter((asset) =>
+      /\.(glb|fbx)$/i.test(asset.name),
+    );
+    const glbCandidates = modelCandidates.filter((asset) =>
+      /\.glb$/i.test(asset.name),
+    );
     const autoModel =
       p.scene.modelId ??
+      quickSetup.primaryModelId ??
       (glbCandidates.length === 1
         ? glbCandidates[0].id
         : modelCandidates.length === 1
@@ -1456,8 +1496,40 @@ export default function Studio() {
     setSmartAnalysis(undefined);
     undo.current = [];
     redo.current = [];
+    const sourceLock =
+      quickSetup.profile
+        ? ` · ${quickSetup.name ?? "project"} source lock ${quickSetup.matchedCount}/${quickSetup.requiredCount} detected`
+        : "";
+    const skipped = duplicateCount
+      ? ` · ${duplicateCount} duplicate checksum${duplicateCount === 1 ? "" : "s"} skipped`
+      : "";
     setMessage(
-      `${assets.length} source file${assets.length === 1 ? "" : "s"} attached${autoModel && autoModel !== p.scene.modelId ? " · 3D model selected automatically" : ""}.`,
+      `${assets.length} new source file${assets.length === 1 ? "" : "s"} attached${skipped}${sourceLock}${autoModel && autoModel !== p.scene.modelId ? " · primary 3D model selected automatically" : ""}.`,
+    );
+  }
+
+  async function autoSetupDetectedSourcePack() {
+    const setup = await detectQuickSourceSetup(files);
+    if (!setup.profile || !setup.slug)
+      throw Error("Attach enough verified project source files before auto setup.");
+    const slug = setup.slug;
+    const owner = list.find(
+      (entry) => entry.id !== p.id && projectSlug(entry) === slug,
+    );
+    if (owner)
+      throw Error(
+        `${setup.name ?? "This project"} already exists in this browser workspace. Open that project instead of creating a duplicate.`,
+      );
+    const next = applyQuickSourceSetup(p, setup);
+    validateProject(next);
+    await persist(next);
+    setSmartAnalysis(undefined);
+    undo.current = [];
+    redo.current = [];
+    setMesh("");
+    setView("building");
+    setMessage(
+      `${setup.name ?? "Project"} source lock applied · ${setup.matchedCount}/${setup.requiredCount} canonical sources recognized · primary model selected · project identity/context ready.`,
     );
   }
 
@@ -2148,6 +2220,8 @@ export default function Studio() {
             setEditorFocus(true);
           }}
           onOpenSources={() => setWorkspace("sources")}
+          onAutoSetup={() => void task(autoSetupDetectedSourcePack)}
+          quickSetup={quickSourceSetup}
         />
       )}
       {workspace === "overview" && (
