@@ -3287,7 +3287,7 @@ export default function Studio() {
                           patchModelNodeTag({
                             semantic: value as ModelNodeSemantic,
                           });
-                        }
+                        }}
                       >
                         <option value="">Unassigned</option>
                         <option value="wall">Wall</option>
