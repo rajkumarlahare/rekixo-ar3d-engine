@@ -28,8 +28,43 @@ function sourceVectorClaim(key: string) {
   return claim.value as number[];
 }
 
+function sourceNumberArrayClaim(key: string) {
+  const claim = jyotiSourcePack.claims.find((candidate) => candidate.key === key);
+  if (
+    !claim ||
+    !Array.isArray(claim.value) ||
+    !claim.value.length ||
+    !claim.value.every(
+      (value) => typeof value === "number" && Number.isFinite(value),
+    )
+  )
+    throw Error(`Jyoti source profile is missing numeric-array claim ${key}.`);
+  return claim.value as number[];
+}
+
 const jyotiBoundsMin = sourceVectorClaim("audit.bounds.min");
 const jyotiBoundsMax = sourceVectorClaim("audit.bounds.max");
+const jyotiArchitecturalLevels = sourceNumberArrayClaim(
+  "audit.architecturalFloorLevelsM",
+);
+const jyotiFloorSkeleton = jyotiArchitecturalLevels.map((elevation, index) => {
+  const last = index === jyotiArchitecturalLevels.length - 1;
+  return {
+    key: index === 0 ? "ground" : last ? "roof" : `floor-${index}`,
+    name: index === 0 ? "Ground" : last ? "Roof" : `Floor ${index}`,
+    sourceElevation: elevation,
+    kind:
+      index === 0
+        ? ("ground" as const)
+        : last
+          ? ("roof" as const)
+          : ("residential" as const),
+    sourcePackSourceId: "jyoti-source-fbx",
+    sourceClaimIds: ["fbx-floor-levels"],
+    note:
+      "Model-derived FBX level band. Useful for authoring alignment; not an independent as-built survey.",
+  };
+});
 const jyotiSpanX = jyotiBoundsMax[0] - jyotiBoundsMin[0];
 const jyotiSpanZ = jyotiBoundsMax[2] - jyotiBoundsMin[2];
 const jyotiLayoutScale = Math.min(
@@ -79,6 +114,7 @@ export const studioSourceProfiles = [
     location: "Hingna, Nagpur",
     minMatches: 2,
     requireAnyOf: ["primaryModel", "floorPlan"],
+    floorSkeleton: jyotiFloorSkeleton,
     roomSheetTemplate: jyotiRoomSheetTemplate,
     alignment: {
       slotKey: "floorPlan",

@@ -67,6 +67,7 @@ import {
   emptyQuickSourceSetup,
   type QuickSourceSetup,
 } from "./sourcePackSetup";
+import { floorSkeletonStatus } from "./floorSkeleton";
 import type { PdfReferenceRasterOptions } from "./pdfReferenceRaster";
 import {
   createSuggestedRoomDrafts,
@@ -1783,13 +1784,26 @@ export default function Studio() {
     const next = applyQuickSourceSetup(p, setup);
     validateProject(next);
     await persist(next);
+    const floors = floorSkeletonStatus(
+      next.scene,
+      setup.profile,
+      setup.floorSkeleton,
+    );
+    if (floors.preferredFloorId) {
+      setRoomMapFloorId(floors.preferredFloorId);
+      setIsolateFloorId(floors.preferredFloorId);
+      const target = next.scene.floors.find(
+        (floor) => floor.id === floors.preferredFloorId,
+      );
+      if (target) setSectionCutOffset(target.elevation + 1.5);
+    }
     setSmartAnalysis(undefined);
     undo.current = [];
     redo.current = [];
     setMesh("");
     setView("building");
     setMessage(
-      `${setup.name ?? "Project"} source lock applied · ${setup.matchedCount}/${setup.requiredCount} canonical sources recognized · primary model selected · project identity/context ready.`,
+      `${setup.name ?? "Project"} source lock applied · ${setup.matchedCount}/${setup.requiredCount} canonical sources recognized · primary model selected${setup.floorSkeleton?.length ? ` · ${floors.matched}/${floors.total} model-derived source levels ready` : ""} · project context ready.`,
     );
   }
 

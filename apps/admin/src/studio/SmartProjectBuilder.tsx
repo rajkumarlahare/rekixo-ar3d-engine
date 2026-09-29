@@ -3,6 +3,7 @@ import type { Asset, Project } from "./domain";
 import type { FbxSourceAudit } from "./sourceAudit";
 import type { SmartProjectAnalysis, SmartSourceRole } from "./projectAnalyzer";
 import type { OpeningSuggestion } from "./openingAssociator";
+import { floorSkeletonStatus } from "./floorSkeleton";
 import type { QuickSourceSetup } from "./sourcePackSetup";
 
 const ROLE_LABEL: Record<SmartSourceRole, string> = {
@@ -76,11 +77,19 @@ export default function SmartProjectBuilder({
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const modelCandidates = files.filter((file) => /\.(glb|fbx)$/i.test(file.name));
+  const floorStatus = quickSetup.profile
+    ? floorSkeletonStatus(
+        project.scene,
+        quickSetup.profile,
+        quickSetup.floorSkeleton,
+      )
+    : undefined;
   const quickSetupApplied =
     Boolean(quickSetup.profile) &&
     project.slug === quickSetup.slug &&
     (!quickSetup.primaryModelId ||
-      project.scene.modelId === quickSetup.primaryModelId);
+      project.scene.modelId === quickSetup.primaryModelId) &&
+    (!floorStatus || floorStatus.missing === 0);
   const roles = useMemo(() => {
     const count = new Map<SmartSourceRole, number>();
     for (const source of analysis?.sources ?? [])
@@ -306,6 +315,23 @@ export default function SmartProjectBuilder({
                 </div>
               </div>
               <div className="builder-source-lock-grid">
+                {quickSetup.floorSkeleton?.length ? (
+                  <div
+                    className={floorStatus?.missing ? "missing" : "ready"}
+                    title="Model-derived source-coordinate level bands; reviewable and not an as-built survey."
+                  >
+                    <span>{floorStatus?.missing ? "—" : "✓"}</span>
+                    <span>
+                      <b>Source floor skeleton</b>
+                      <small>
+                        {floorStatus?.matched ?? 0}/{quickSetup.floorSkeleton.length} levels ready
+                        {floorStatus?.missing
+                          ? ` · ${floorStatus.missing} will be prepared by Auto setup`
+                          : ""}
+                      </small>
+                    </span>
+                  </div>
+                ) : null}
                 {quickSetup.slots.map((slot) => (
                   <div
                     key={slot.key}
@@ -321,8 +347,9 @@ export default function SmartProjectBuilder({
                 ))}
               </div>
               <p>
-                Rekixo project identity, known project context और primary model
-                automatically lock करेगा. Raw source files unchanged रहेंगी.
+                Rekixo project identity, primary model और known source floor
+                levels automatically तैयार करेगा. Raw source files unchanged रहेंगी;
+                model-derived floors reviewable रहेंगे.
               </p>
             </div>
           )}
