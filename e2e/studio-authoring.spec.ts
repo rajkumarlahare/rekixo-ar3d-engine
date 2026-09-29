@@ -151,5 +151,5 @@ test("local autosave survives hard reload without pressing Save local", async ({
   await expect(page.getByLabel("Project title")).toHaveValue(
     "Autosaved E2E Change",
   );
-  await expect(page.getByText("Autosaved locally")).toBeVisible();
+  await expect(page.getByText("Autosaved")).toBeVisible();
 });
