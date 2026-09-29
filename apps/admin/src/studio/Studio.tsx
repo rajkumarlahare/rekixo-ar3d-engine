@@ -1603,80 +1603,115 @@ export default function Studio() {
       throw Error("Create or detect at least one floor before auto-tagging meshes.");
 
     const existingTags = p.scene.modelNodeTags ?? [];
-    const manualKeys = new Set(
-      existingTags
-        .filter((tag) => tag.assignment !== "auto")
-        .map((tag) => `${tag.nodeName}\u0000${tag.occurrence}`),
-    );
-    const autoTags = smartAnalysis.nodeAssignments
-      .filter(
-        (assignment) =>
-          assignment.floorIndex !== undefined &&
-          assignment.confidence >= 0.62,
+    const byKey = new Map<string, ModelNodeTag>();
+    for (const tag of existingTags) {
+      const cleaned = { ...tag };
+      if (cleaned.assignment === "auto") {
+        delete cleaned.floorId;
+        delete cleaned.assignment;
+        delete cleaned.confidence;
+      }
+      const keep =
+        Boolean(cleaned.floorId) ||
+        Boolean(cleaned.unit) ||
+        Boolean(cleaned.roomId) ||
+        Boolean(cleaned.semantic) ||
+        Boolean(cleaned.semanticAssignment) ||
+        cleaned.semanticConfidence !== undefined;
+      if (keep)
+        byKey.set(
+          `${cleaned.nodeName}\u0000${cleaned.occurrence}`,
+          cleaned,
+        );
+    }
+
+    let autoTagged = 0;
+    for (const assignment of smartAnalysis.nodeAssignments) {
+      if (
+        assignment.floorIndex === undefined ||
+        assignment.confidence < 0.62
       )
-      .map((assignment) => {
-        const sourceFloor = smartAnalysis.floorCandidates[assignment.floorIndex!];
-        const worldElevation = sourceFloor.elevation * scale + modelY;
-        const targetFloor = [...floors].sort(
-          (left, right) =>
-            Math.abs(left.elevation - worldElevation) -
-            Math.abs(right.elevation - worldElevation),
-        )[0];
-        return {
+        continue;
+      const key = `${assignment.nodeName}\u0000${assignment.occurrence}`;
+      const current = byKey.get(key);
+      if (current?.assignment === "manual") continue;
+      const sourceFloor =
+        smartAnalysis.floorCandidates[assignment.floorIndex];
+      const worldElevation = sourceFloor.elevation * scale + modelY;
+      const targetFloor = [...floors].sort(
+        (left, right) =>
+          Math.abs(left.elevation - worldElevation) -
+          Math.abs(right.elevation - worldElevation),
+      )[0];
+      byKey.set(key, {
+        ...(current ?? {
           nodeName: assignment.nodeName,
           occurrence: assignment.occurrence,
-          floorId: targetFloor.id,
-          assignment: "auto" as const,
-          confidence: Number(assignment.confidence.toFixed(3)),
-        };
-      })
-      .filter(
-        (tag) => !manualKeys.has(`${tag.nodeName}\u0000${tag.occurrence}`),
-      );
+        }),
+        floorId: targetFloor.id,
+        assignment: "auto",
+        confidence: Number(assignment.confidence.toFixed(3)),
+      });
+      autoTagged += 1;
+    }
 
-    const autoKeys = new Set(
-      autoTags.map((tag) => `${tag.nodeName}\u0000${tag.occurrence}`),
-    );
-    const preserved = existingTags.filter(
-      (tag) =>
-        tag.assignment !== "auto" ||
-        !autoKeys.has(`${tag.nodeName}\u0000${tag.occurrence}`),
-    );
     edit({
       ...p,
       scene: {
         ...p.scene,
         floors,
-        modelNodeTags: [...preserved, ...autoTags],
+        modelNodeTags: [...byKey.values()],
       },
     });
     setMessage(
-      `Smart draft built · ${floors.length} floors · ${autoTags.length} meshes auto-tagged. Ambiguous/multi-floor meshes remain unassigned for visual review.`,
+      `Smart draft built · ${floors.length} floors · ${autoTagged} meshes auto-tagged. Ambiguous/multi-floor meshes remain unassigned for visual review.`,
     );
   }
   function applyArchitecturalCandidates() {
     if (!smartAnalysis?.architecturalCandidates.length) return;
     const threshold = 0.82;
     const previous = p.scene.modelNodeTags ?? [];
-    const byKey = new Map(
-      previous.map((tag) => [
-        `${tag.nodeName}\u0000${tag.occurrence}`,
-        { ...tag },
-      ]),
-    );
+    const byKey = new Map<string, ModelNodeTag>();
+    for (const tag of previous) {
+      const cleaned = { ...tag };
+      if (cleaned.semanticAssignment === "auto") {
+        delete cleaned.semantic;
+        delete cleaned.semanticAssignment;
+        delete cleaned.semanticConfidence;
+      }
+      const keep =
+        Boolean(cleaned.floorId) ||
+        Boolean(cleaned.unit) ||
+        Boolean(cleaned.roomId) ||
+        Boolean(cleaned.assignment) ||
+        cleaned.confidence !== undefined ||
+        Boolean(cleaned.semantic) ||
+        Boolean(cleaned.semanticAssignment) ||
+        cleaned.semanticConfidence !== undefined;
+      if (keep)
+        byKey.set(
+          `${cleaned.nodeName}\u0000${cleaned.occurrence}`,
+          cleaned,
+        );
+    }
     let applied = 0;
     let preservedManual = 0;
     for (const candidate of smartAnalysis.architecturalCandidates) {
       if (candidate.confidence < threshold) continue;
       const key = `${candidate.nodeName}\u0000${candidate.occurrence}`;
+      const original = previous.find(
+        (tag) =>
+          tag.nodeName === candidate.nodeName &&
+          tag.occurrence === candidate.occurrence,
+      );
+      if (original?.semanticAssignment === "manual") {
+        preservedManual += 1;
+        continue;
+      }
       const current = byKey.get(key) ?? {
         nodeName: candidate.nodeName,
         occurrence: candidate.occurrence,
       };
-      if (current.semanticAssignment === "manual") {
-        preservedManual += 1;
-        continue;
-      }
       byKey.set(key, {
         ...current,
         semantic: candidate.kind,
@@ -1685,7 +1720,7 @@ export default function Studio() {
       });
       applied += 1;
     }
-    if (!applied) {
+    if (!applied && !previous.some((tag) => tag.semanticAssignment === "auto")) {
       setMessage(
         preservedManual
           ? "No auto labels changed; existing manual architectural labels were preserved."
