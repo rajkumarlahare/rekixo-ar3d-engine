@@ -8,6 +8,17 @@ export const studioSourceProfiles = [
     location: "Hingna, Nagpur",
     minMatches: 2,
     requireAnyOf: ["primaryModel", "floorPlan"],
+    alignment: {
+      slotKey: "floorPlan",
+      page: 2,
+      crop: {
+        x: 0.5,
+        y: 0.12,
+        width: 0.48,
+        height: 0.84,
+      },
+      label: "typical-floor-plan",
+    },
     sources: [
       {
         key: "primaryModel",
