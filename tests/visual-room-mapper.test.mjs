@@ -22,7 +22,7 @@ test("visual room mapper is mouse-first and keeps exact numbers as advanced fall
   assert.match(mapper, /Mirror X/);
   assert.match(mapper, /Edit corners/);
   assert.match(mapper, /Snap to grid, walls & vertices/);
-  assert.match(studio, /Advanced numeric geometry/);
+  assert.match(studio, /<summary>More properties<\/summary>/);
   assert.match(studio, /\+ Map room with mouse/);
 });
 

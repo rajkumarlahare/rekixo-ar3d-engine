@@ -2813,7 +2813,9 @@ export default function Studio() {
             .join(" ")}
         >
         <aside className="studio-sidebar">
-          <div className="editor-project-admin">
+          <details className="editor-sidebar-details editor-project-tools">
+            <summary>Project utilities</summary>
+            <div className="editor-project-admin">
           <section className="cloud-workspace" aria-label="Cloud project workspace">
             <div className="section-label">ENGINE CLOUD</div>
             {!cloudSession ? (
@@ -3118,8 +3120,11 @@ export default function Studio() {
               Archive cloud project
             </button>
           )}
-          </div>
-          <section className="editor-outliner" aria-label="Scene outliner">
+            </div>
+          </details>
+          <details className="editor-sidebar-details editor-advanced-model">
+            <summary>Advanced model structure</summary>
+            <section className="editor-outliner" aria-label="Scene outliner">
             <div className="section-label">SCENE OUTLINER</div>
             {p.scene.modelId ? (
               <>
@@ -3236,9 +3241,10 @@ export default function Studio() {
                 )}
               </article>
             ))}
-          </section>
+            </section>
+          </details>
           <div className="section-label">
-            BUILDING STRUCTURE{" "}
+            PROJECT{" "}
             <button
               disabled={busy || Boolean(review)}
               onClick={() => {
@@ -3299,31 +3305,45 @@ export default function Studio() {
                           {r.unit} · {roomArea(r).toFixed(1)} m²
                         </small>
                       </button>
-                      {scene.furniture
-                        .filter((entry) => entry.roomId === r.id)
-                        .map((entry) => (
-                          <button
-                            type="button"
-                            key={entry.id}
-                            className={
-                              selected === entry.id
-                                ? "outliner-object active"
-                                : "outliner-object"
-                            }
-                            onClick={() => {
-                              setRoomId(r.id);
-                              setSelected(entry.id);
-                              setMesh("");
-                              setSelectedModelNodeKey("");
-                              setView("rooms");
-                            }}
-                          >
-                            <span>└ {catalog[entry.kind].name}</span>
-                            <small>
-                              {entry.x.toFixed(1)}, {entry.z.toFixed(1)}
-                            </small>
-                          </button>
-                        ))}
+                      {scene.furniture.some(
+                        (entry) => entry.roomId === r.id,
+                      ) && (
+                        <details className="room-object-details">
+                          <summary>
+                            {
+                              scene.furniture.filter(
+                                (entry) => entry.roomId === r.id,
+                              ).length
+                            }{" "}
+                            objects
+                          </summary>
+                          {scene.furniture
+                            .filter((entry) => entry.roomId === r.id)
+                            .map((entry) => (
+                              <button
+                                type="button"
+                                key={entry.id}
+                                className={
+                                  selected === entry.id
+                                    ? "outliner-object active"
+                                    : "outliner-object"
+                                }
+                                onClick={() => {
+                                  setRoomId(r.id);
+                                  setSelected(entry.id);
+                                  setMesh("");
+                                  setSelectedModelNodeKey("");
+                                  setView("rooms");
+                                }}
+                              >
+                                <span>{catalog[entry.kind].name}</span>
+                                <small>
+                                  {entry.x.toFixed(1)}, {entry.z.toFixed(1)}
+                                </small>
+                              </button>
+                            ))}
+                        </details>
+                      )}
                     </div>
                   ))}
               </section>
@@ -3369,6 +3389,8 @@ export default function Studio() {
               Add default rectangular room
             </button>
           </details>
+          <details className="editor-sidebar-details editor-source-files">
+            <summary>Source files</summary>
           <div className="section-label">SOURCE LIBRARY</div>
           <button
             className="wide"
@@ -3396,10 +3418,11 @@ export default function Studio() {
               </button>
             ))}
           </div>
+          </details>
         </aside>
         <section className="studio-center">
-          <nav className="canvas-toolbar editor-toolbar" aria-label="3D editor tools">
-            <div className="editor-tool-group" aria-label="Viewer modes">
+          <nav className="canvas-toolbar editor-toolbar editor-toolbar--simple" aria-label="3D editor tools">
+            <div className="editor-mode-switch" role="group" aria-label="Editor mode">
               {(
                 [
                   ["building", "Building"],
@@ -3409,6 +3432,7 @@ export default function Studio() {
               ).map(([v, label]) => (
                 <button
                   key={v}
+                  type="button"
                   className={view === v ? "active" : ""}
                   disabled={v === "walk" && !room}
                   onClick={() => {
@@ -3420,255 +3444,229 @@ export default function Studio() {
                 </button>
               ))}
             </div>
-            <div className="editor-tool-group" aria-label="Camera orientation">
-              <button
-                type="button"
-                className={cameraOrientation === "perspective" ? "active" : ""}
-                disabled={view === "walk"}
-                onClick={() => setCameraOrientation("perspective")}
-              >
-                Perspective
-              </button>
-              <button
-                type="button"
-                className={cameraOrientation === "top" ? "active" : ""}
-                disabled={view === "walk"}
-                onClick={() => {
-                  setView("building");
-                  setCameraOrientation("top");
-                }}
-              >
-                Top
-              </button>
-            </div>
-            <div className="editor-tool-group editor-transform-tools" aria-label="Transform tools">
-              <button
-                type="button"
-                className={transformMode === "translate" ? "active" : ""}
-                disabled={
-                  Boolean(review) ||
-                  busy ||
-                  view === "walk" ||
-                  (view === "building" &&
-                    !showReferenceWorkspace &&
-                    !(showRoomMapper && Boolean(room) && selected === room?.id))
-                }
-                title="Move selected object (W)"
-                onClick={() => setTransformMode("translate")}
-              >
-                ↔ Move <kbd>W</kbd>
-              </button>
-              <button
-                type="button"
-                className={transformMode === "rotate" ? "active" : ""}
-                disabled={
-                  Boolean(review) ||
-                  busy ||
-                  !(
-                    (view === "rooms" && Boolean(item)) ||
-                    (view === "building" && showReferenceWorkspace)
-                  )
-                }
-                title="Rotate selected furniture (E)"
-                onClick={() => setTransformMode("rotate")}
-              >
-                ↻ Rotate <kbd>E</kbd>
-              </button>
-              <button
-                type="button"
-                className={transformMode === "scale" ? "active" : ""}
-                disabled={
-                  Boolean(review) ||
-                  busy ||
-                  !(
-                    view === "rooms" ||
-                    (view === "building" && showRoomMapper)
-                  ) ||
-                  !room ||
-                  Boolean(item)
-                }
-                title="Scale selected room (R)"
-                onClick={() => setTransformMode("scale")}
-              >
-                ⤢ Scale <kbd>R</kbd>
-              </button>
-              <button
-                type="button"
-                className={transformSnap ? "active" : ""}
-                disabled={Boolean(review) || busy}
-                title="Toggle transform snapping"
-                onClick={() => setTransformSnap((value) => !value)}
-              >
-                # Snap
-              </button>
-            </div>
-            <div className="editor-tool-group editor-floor-tools" aria-label="Floor isolation">
-              <select
-                aria-label="Isolate floor"
-                value={isolateFloorId}
-                disabled={view === "walk"}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setIsolateFloorId(next);
-                  if (next) {
-                    const target = scene.floors.find((floor) => floor.id === next);
-                    if (target) {
-                      setSectionCutOffset(target.elevation + 1.5);
-                      setView("building");
-                    }
+
+            <details className="editor-tool-menu">
+              <summary>View <span aria-hidden="true">▾</span></summary>
+              <div className="editor-tool-popover">
+                <button
+                  type="button"
+                  className={cameraOrientation === "perspective" && !sectionCutEnabled ? "active" : ""}
+                  disabled={view === "walk"}
+                  onClick={() => {
+                    setCameraOrientation("perspective");
+                    setSectionCutEnabled(false);
+                  }}
+                >
+                  Perspective
+                </button>
+                <button
+                  type="button"
+                  className={cameraOrientation === "top" && !sectionCutEnabled ? "active" : ""}
+                  disabled={view === "walk"}
+                  onClick={() => {
+                    setView("building");
+                    setCameraOrientation("top");
+                    setSectionCutEnabled(false);
+                  }}
+                >
+                  Top
+                </button>
+                <button
+                  type="button"
+                  className={sectionCutEnabled ? "active" : ""}
+                  disabled={view === "walk"}
+                  onClick={() => {
+                    setView("building");
+                    setSectionCutEnabled((value) => !value);
+                  }}
+                >
+                  Section
+                </button>
+                <div className="editor-menu-divider" />
+                <button
+                  type="button"
+                  className={showLeftPanel ? "active" : ""}
+                  onClick={() => setShowLeftPanel((value) => !value)}
+                >
+                  Project panel
+                </button>
+                <button
+                  type="button"
+                  className={showRightPanel ? "active" : ""}
+                  onClick={() => setShowRightPanel((value) => !value)}
+                >
+                  Properties panel
+                </button>
+                <button
+                  type="button"
+                  className={showAssetShelf ? "active" : ""}
+                  disabled={view !== "rooms"}
+                  onClick={() => setShowAssetShelf((value) => !value)}
+                >
+                  Furniture shelf
+                </button>
+                <button
+                  type="button"
+                  className={editorFocus ? "active" : ""}
+                  onClick={() => setEditorFocus((value) => !value)}
+                >
+                  {editorFocus ? "Exit full screen" : "Full screen"}
+                </button>
+              </div>
+            </details>
+
+            <details className="editor-tool-menu">
+              <summary>Edit <span aria-hidden="true">▾</span></summary>
+              <div className="editor-tool-popover">
+                <button
+                  type="button"
+                  className={transformMode === "translate" ? "active" : ""}
+                  disabled={
+                    Boolean(review) ||
+                    busy ||
+                    view === "walk" ||
+                    (view === "building" &&
+                      !showReferenceWorkspace &&
+                      !(showRoomMapper && Boolean(room) && selected === room?.id))
                   }
-                }}
-              >
-                <option value="">All floors</option>
-                {[...scene.floors]
-                  .sort((a, b) => a.elevation - b.elevation)
-                  .map((floor) => (
-                    <option key={floor.id} value={floor.id}>
-                      {floor.name} · {floor.elevation}m
-                    </option>
-                  ))}
-              </select>
-              <button
-                type="button"
-                className={isolateFloorId ? "active" : ""}
-                disabled={!isolateFloorId || view === "walk"}
-                onClick={() => setIsolateFloorId("")}
-                title="Clear floor isolation"
-              >
-                {isolateFloorId ? "Isolated" : "Floor"}
-              </button>
-              <button
-                type="button"
-                className={sectionCutEnabled ? "active" : ""}
-                disabled={view === "walk"}
-                onClick={() => setSectionCutEnabled((value) => !value)}
-                title="Toggle live section clipping"
-              >
-                Section
-              </button>
-            </div>
-            <div className="editor-toolbar-spacer" />
-            <div className="editor-tool-group">
-              <button
-                type="button"
-                title="Frame selected object (F)"
-                onClick={() => setFocusRequest((value) => value + 1)}
-              >
-                Focus <kbd>F</kbd>
-              </button>
-              {!review && (
-                <>
-                  <button
-                    disabled={!undo.current.length || busy}
-                    title="Undo (Ctrl+Z)"
-                    onClick={() => history(true)}
+                  title="Move selected object (W)"
+                  onClick={() => setTransformMode("translate")}
+                >
+                  Move <kbd>W</kbd>
+                </button>
+                <button
+                  type="button"
+                  className={transformMode === "rotate" ? "active" : ""}
+                  disabled={
+                    Boolean(review) ||
+                    busy ||
+                    !(
+                      (view === "rooms" && Boolean(item)) ||
+                      (view === "building" && showReferenceWorkspace)
+                    )
+                  }
+                  title="Rotate selected object (E)"
+                  onClick={() => setTransformMode("rotate")}
+                >
+                  Rotate <kbd>E</kbd>
+                </button>
+                <button
+                  type="button"
+                  className={transformMode === "scale" ? "active" : ""}
+                  disabled={
+                    Boolean(review) ||
+                    busy ||
+                    !(
+                      view === "rooms" ||
+                      (view === "building" && showRoomMapper)
+                    ) ||
+                    !room ||
+                    Boolean(item)
+                  }
+                  title="Scale selected room (R)"
+                  onClick={() => setTransformMode("scale")}
+                >
+                  Scale <kbd>R</kbd>
+                </button>
+                <button
+                  type="button"
+                  className={transformSnap ? "active" : ""}
+                  disabled={Boolean(review) || busy}
+                  onClick={() => setTransformSnap((value) => !value)}
+                >
+                  Snap {transformSnap ? "On" : "Off"}
+                </button>
+                {!review && (
+                  <>
+                    <div className="editor-menu-divider" />
+                    <button
+                      type="button"
+                      disabled={!undo.current.length || busy}
+                      title="Undo (Ctrl+Z)"
+                      onClick={() => history(true)}
+                    >
+                      Undo
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!redo.current.length || busy}
+                      title="Redo (Ctrl+Y)"
+                      onClick={() => history(false)}
+                    >
+                      Redo
+                    </button>
+                  </>
+                )}
+              </div>
+            </details>
+
+            <details className="editor-tool-menu editor-floor-menu">
+              <summary>Floor <span aria-hidden="true">▾</span></summary>
+              <div className="editor-tool-popover">
+                <label>
+                  <span>Visible floor</span>
+                  <select
+                    aria-label="Isolate floor"
+                    value={isolateFloorId}
+                    disabled={view === "walk"}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setIsolateFloorId(next);
+                      if (next) {
+                        const target = scene.floors.find((floor) => floor.id === next);
+                        if (target) {
+                          setSectionCutOffset(target.elevation + 1.5);
+                          setView("building");
+                        }
+                      }
+                    }}
                   >
-                    ↶
+                    <option value="">All floors</option>
+                    {[...scene.floors]
+                      .sort((a, b) => a.elevation - b.elevation)
+                      .map((floor) => (
+                        <option key={floor.id} value={floor.id}>
+                          {floor.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                {isolateFloorId && (
+                  <button type="button" onClick={() => setIsolateFloorId("")}>
+                    Show all floors
                   </button>
-                  <button
-                    disabled={!redo.current.length || busy}
-                    title="Redo (Ctrl+Y)"
-                    onClick={() => history(false)}
-                  >
-                    ↷
-                  </button>
-                </>
-              )}
+                )}
+              </div>
+            </details>
+
+            <button
+              type="button"
+              className="editor-focus-action"
+              title="Frame selected object (F)"
+              onClick={() => setFocusRequest((value) => value + 1)}
+            >
+              Focus <kbd>F</kbd>
+            </button>
+          </nav>
+          {showReferenceWorkspace && (
+            <div className="editor-context-bar" role="group" aria-label="Plan alignment mode">
+              <strong>Plan alignment</strong>
+              <span>Top view · drag and snap against the reference</span>
               <button
                 type="button"
                 disabled={busy || Boolean(review)}
-                title="Attach FBX/DWG/PDF/images/textures"
                 onClick={() => referenceInput.current?.click()}
               >
                 + Source
               </button>
               <button
                 type="button"
-                className={showReferenceWorkspace ? "active" : ""}
-                title="Open calibrated plan/reference workspace"
-                onClick={() => {
-                  setShowReferenceWorkspace((value) => !value);
-                  setView("building");
-                  setCameraOrientation("top");
-                }}
+                onClick={() => setShowReferenceWorkspace(false)}
               >
-                Align Plan
-              </button>
-              <button
-                type="button"
-                className={showRoomMapper ? "active" : ""}
-                disabled={Boolean(review) || busy}
-                title="Map units and rooms visually with the mouse"
-                onClick={() => {
-                  const next = !showRoomMapper;
-                  const floorId =
-                    room?.floorId ??
-                    roomMapFloorId ??
-                    p.scene.floors[0]?.id ??
-                    "";
-                  setShowRoomMapper(next);
-                  if (next) {
-                    const pending =
-                      roomSheetRows.find(
-                        (row) => row.key === selectedRoomSheetKey &&
-                          !mappedSheetKeys.has(row.key),
-                      ) ??
-                      roomSheetRows.find(
-                        (row) => !mappedSheetKeys.has(row.key),
-                      );
-                    if (pending) {
-                      selectRoomSheetRow(pending);
-                      return;
-                    }
-                    setShowReferenceWorkspace(false);
-                    setShowAssetShelf(false);
-                    setRoomMapFloorId(floorId);
-                    if (room) setSelected(room.id);
-                    setRoomMapUnit(room?.unit ?? roomMapUnit ?? "Unit 101");
-                    setRoomMapAction("idle");
-                    setView("building");
-                    setCameraOrientation("top");
-                    setIsolateFloorId(floorId);
-                  } else {
-                    setRoomMapAction("idle");
-                  }
-                }}
-              >
-                Map Rooms
-              </button>
-              <button
-                type="button"
-                className={showLeftPanel ? "active" : ""}
-                title="Toggle Scene Outliner"
-                onClick={() => setShowLeftPanel((value) => !value)}
-              >
-                Left
-              </button>
-              <button
-                type="button"
-                className={showAssetShelf ? "active" : ""}
-                title="Toggle Asset Shelf"
-                onClick={() => setShowAssetShelf((value) => !value)}
-              >
-                Assets
-              </button>
-              <button
-                type="button"
-                className={showRightPanel ? "active" : ""}
-                title="Toggle Inspector"
-                onClick={() => setShowRightPanel((value) => !value)}
-              >
-                Right
-              </button>
-              <button
-                type="button"
-                className={editorFocus ? "active" : ""}
-                onClick={() => setEditorFocus((value) => !value)}
-              >
-                {editorFocus ? "Exit full screen" : "Full screen"}
+                Done
               </button>
             </div>
-          </nav>
+          )}
           {sectionCutEnabled && (
             <div className="section-cut-bar" role="group" aria-label="Section cut controls">
               <b>SECTION CUT</b>
@@ -3882,6 +3880,7 @@ export default function Studio() {
               </p>
             </div>
           )}
+          {view === "rooms" && showAssetShelf && (
           <div className="catalog">
             <div>
               <b>{review ? "Customer review" : "Furniture library"}</b>
@@ -3930,6 +3929,7 @@ export default function Studio() {
               </button>
             ))}
           </div>
+          )}
         </section>
         <aside className="studio-inspector">
           <div className="section-label">
@@ -3937,7 +3937,9 @@ export default function Studio() {
           </div>
           <fieldset disabled={Boolean(review) || busy}>
             {view === "building" && mesh ? (
-              <ModelNodeInspector
+              <details className="advanced-properties editor-context-advanced">
+                <summary>Model properties</summary>
+                <ModelNodeInspector
                 mesh={mesh}
                 selectedNode={selectedModelNode}
                 selectedTag={selectedModelNodeTag}
@@ -3951,7 +3953,8 @@ export default function Studio() {
                 onClearTag={clearModelNodeTag}
                 onBindRoom={bindSelectedMeshToRoom}
                 onFocus={() => setFocusRequest((value) => value + 1)}
-              />
+                />
+              </details>
             ) : item ? (
               <>
                 <h2>{catalog[item.kind].name}</h2>
@@ -3994,30 +3997,6 @@ export default function Studio() {
             ) : room ? (
               <>
                 <h2>Room properties</h2>
-                <button
-                  onClick={() => {
-                    try {
-                      const next = duplicateFloor(p, room.floorId);
-                      const copiedRoom = next.scene.rooms.find(
-                        (r) => r.floorId === next.scene.floors.at(-1)!.id,
-                      );
-                      edit(next);
-                      if (copiedRoom) {
-                        setRoomId(copiedRoom.id);
-                        setSelected(copiedRoom.id);
-                      }
-                      setView("rooms");
-                    } catch (e) {
-                      setError(
-                        e instanceof Error
-                          ? e.message
-                          : "Could not copy floor.",
-                      );
-                    }
-                  }}
-                >
-                  Duplicate furnished floor
-                </button>
                 <label>
                   Room name
                   <input
@@ -4046,7 +4025,7 @@ export default function Studio() {
                   </select>
                 </label>
                 <details className="advanced-properties">
-                  <summary>Advanced numeric geometry</summary>
+                  <summary>More properties</summary>
                   <p>
                     Normally use Map Rooms, Move and Scale with the mouse. Exact
                     values stay available here when engineering-level correction
@@ -4087,6 +4066,8 @@ export default function Studio() {
                     onChange={(e) => patchRoom({ color: e.target.value })}
                   />
                 </label>
+                <details className="advanced-properties editor-room-evidence">
+                  <summary>Source & verification</summary>
                 <label>
                   Measurement source
                   <textarea
@@ -4112,6 +4093,7 @@ export default function Studio() {
                     ? ` · ${room.polygon.length} corners`
                     : ""}
                 </p>
+                </details>
                 <RoomNavigationPanel
                   scene={p.scene}
                   room={room}
@@ -4123,6 +4105,8 @@ export default function Studio() {
                   }}
                   onRemoveOpening={removeOpening}
                 />
+                <details className="advanced-properties editor-room-source-binding">
+                  <summary>Model binding</summary>
                 <label>
                   Model mesh binding
                   <input readOnly value={room.mesh ?? "Not bound"} />
@@ -4135,6 +4119,33 @@ export default function Studio() {
                   Binding identifies the source object; it does not move or
                   resize the room. Set its measured position above.
                 </p>
+                </details>
+                <details className="advanced-properties editor-room-actions">
+                  <summary>Room actions</summary>
+                <button
+                  onClick={() => {
+                    try {
+                      const next = duplicateFloor(p, room.floorId);
+                      const copiedRoom = next.scene.rooms.find(
+                        (r) => r.floorId === next.scene.floors.at(-1)!.id,
+                      );
+                      edit(next);
+                      if (copiedRoom) {
+                        setRoomId(copiedRoom.id);
+                        setSelected(copiedRoom.id);
+                      }
+                      setView("rooms");
+                    } catch (e) {
+                      setError(
+                        e instanceof Error
+                          ? e.message
+                          : "Could not copy floor.",
+                      );
+                    }
+                  }}
+                >
+                  Duplicate furnished floor
+                </button>
                 <button
                   className="danger"
                   onClick={() => {
@@ -4157,10 +4168,13 @@ export default function Studio() {
                 >
                   Remove room
                 </button>
+                </details>
               </>
             ) : (
               <p>Select a room or furniture item to edit its properties.</p>
             )}
+            <details className="advanced-properties editor-context-advanced">
+              <summary>Model scale</summary>
             {field(
               "Model scale → metres",
               p.scene.scale,
@@ -4171,10 +4185,11 @@ export default function Studio() {
               Confirm against a known drawing length. Imported units are not
               automatically certified.
             </p>
+            </details>
           </fieldset>
           {view === "building" && (
-            <section className="editor-materials" aria-label="Material editor">
-              <div className="section-label">MATERIALS</div>
+            <details className="editor-materials editor-inspector-details">
+              <summary>Materials</summary>
               {modelMaterials.length ? (
                 <>
                   <label>
@@ -4267,7 +4282,7 @@ export default function Studio() {
               ) : (
                 <small>Load the building model to inspect editable runtime materials.</small>
               )}
-            </section>
+            </details>
           )}
           {view === "building" && (
             <section className="editor-lighting" aria-label="Lighting editor">
@@ -4310,7 +4325,8 @@ export default function Studio() {
                     Presets change runtime lighting only. Source model bytes remain unchanged.
                   </small>
                 </div>
-                <div className="look-fine-tune-label">Fine tune</div>
+                <details className="look-fine-tune">
+                  <summary>Fine tune</summary>
                 <label className="check">
                   <input
                     type="checkbox"
@@ -4376,10 +4392,12 @@ export default function Studio() {
                 >
                   Reset look development
                 </button>
+                </details>
               </fieldset>
             </section>
           )}
-          <div className="section-label">REVIEW & VERSIONS</div>
+          <details className="editor-inspector-details editor-review-history">
+            <summary>Review & versions</summary>
           {review ? (
             <button className="wide primary" onClick={() => setReview("")}>
               Return to draft
@@ -4424,6 +4442,7 @@ export default function Studio() {
             Export a backup to move this project to another device. Public link
             publishing needs authenticated Engine storage.
           </p>
+          </details>
         </aside>
         </div>
       )}

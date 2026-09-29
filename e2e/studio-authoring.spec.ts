@@ -109,10 +109,29 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
   await build.click();
 
   await page.getByRole("button", { name: "Open visual editor" }).click();
+
+  const editorTools = page.getByLabel("3D editor tools");
+  await expect(editorTools.getByRole("button", { name: "Building" })).toBeVisible();
+  await expect(editorTools.getByRole("button", { name: "Interior" })).toBeVisible();
+  await expect(editorTools.getByRole("button", { name: "Walk" })).toBeVisible();
+
+  await editorTools.locator("summary").filter({ hasText: /^View/ }).click();
+  await expect(editorTools.getByRole("button", { name: "Perspective" })).toBeVisible();
+  await expect(editorTools.getByRole("button", { name: "Top" })).toBeVisible();
+  await expect(editorTools.getByRole("button", { name: "Section" })).toBeVisible();
+
+  await editorTools.locator("summary").filter({ hasText: /^Edit/ }).click();
+  await expect(editorTools.getByRole("button", { name: /Move/ })).toBeVisible();
+  await expect(editorTools.getByRole("button", { name: /Snap/ })).toBeVisible();
+
+  await editorTools.locator("summary").filter({ hasText: /^Floor/ }).click();
+  await expect(page.getByLabel("Isolate floor")).toBeVisible();
+
   await expect(page.getByLabel("Visual realism presets")).toBeVisible();
   const cleanDay = page.getByRole("button", { name: /Clean Day/i });
   await cleanDay.click();
   await expect(cleanDay).toHaveAttribute("aria-pressed", "true");
+  await page.locator(".look-fine-tune > summary").click();
   await expect(page.getByLabel("Exposure")).toHaveValue("1.08");
 
   await page.getByRole("button", { name: "Exit full screen" }).click();
