@@ -50,13 +50,13 @@ export async function rasterPdfReference(
 
   const bytes = new Uint8Array(await source.blob.arrayBuffer());
   const loadingTask = pdfjs.getDocument({ data: bytes });
-  const document = await loadingTask.promise;
+  const pdfDocument = await loadingTask.promise;
   try {
     const pageNumber = Math.max(
       1,
-      Math.min(document.numPages, Math.round(options.page || 1)),
+      Math.min(pdfDocument.numPages, Math.round(options.page || 1)),
     );
-    const page = await document.getPage(pageNumber);
+    const page = await pdfDocument.getPage(pageNumber);
     const baseViewport = page.getViewport({ scale: 1 });
     const targetLongEdge = 2200;
     const scale = Math.min(
@@ -67,7 +67,7 @@ export async function rasterPdfReference(
       ),
     );
     const viewport = page.getViewport({ scale });
-    const canvas = document.createElement("canvas");
+    const canvas = window.document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(viewport.width));
     canvas.height = Math.max(1, Math.round(viewport.height));
     const context = canvas.getContext("2d", { alpha: false });
@@ -81,7 +81,7 @@ export async function rasterPdfReference(
     const sy = Math.round(canvas.height * crop.y);
     const sw = Math.max(1, Math.round(canvas.width * crop.width));
     const sh = Math.max(1, Math.round(canvas.height * crop.height));
-    const output = document.createElement("canvas");
+    const output = window.document.createElement("canvas");
     output.width = sw;
     output.height = sh;
     const outputContext = output.getContext("2d", { alpha: false });
@@ -103,6 +103,6 @@ export async function rasterPdfReference(
       { type: "image/png" },
     );
   } finally {
-    await document.destroy();
+    await pdfDocument.destroy();
   }
 }
