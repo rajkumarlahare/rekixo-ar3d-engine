@@ -2656,6 +2656,7 @@ export default function Studio() {
           onOpenEditor={() => {
             setWorkspace("editor");
             setEditorFocus(true);
+            if (p.scene.modelId) setView("building");
           }}
           onOpenSources={() => setWorkspace("sources")}
           onAutoSetup={() => void task(autoSetupDetectedSourcePack)}
@@ -2672,6 +2673,7 @@ export default function Studio() {
           onOpenEditor={() => {
             setWorkspace("editor");
             setEditorFocus(true);
+            if (p.scene.modelId) setView("building");
           }}
           onOpenSources={() => setWorkspace("sources")}
           onOpenEvidence={() => setWorkspace("evidence")}
