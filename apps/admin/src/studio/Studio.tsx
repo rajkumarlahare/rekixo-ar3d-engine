@@ -17,7 +17,6 @@ import {
   projectSlug,
   id,
   newProject,
-  reviewedDoorConnections,
   roomArea,
   roomGeometryFromPolygon,
   snapshot,
@@ -47,6 +46,7 @@ import {
 import { buildSceneManifestV2 } from "./manifestV2";
 import StudioOverview from "./StudioOverview";
 import SmartProjectBuilder from "./SmartProjectBuilder";
+import RoomNavigationPanel from "./RoomNavigationPanel";
 import StudioSources from "./StudioSources";
 import StudioEvidence from "./StudioEvidence";
 import StudioPublish from "./StudioPublish";
@@ -680,14 +680,6 @@ export default function Studio() {
           Boolean(entry.floorId),
       ),
     ).length,
-    walkConnections = room
-      ? reviewedDoorConnections(scene, room.id).flatMap((connection) => {
-          const targetRoom = scene.rooms.find(
-            (candidate) => candidate.id === connection.toRoomId,
-          );
-          return targetRoom ? [{ ...connection, room: targetRoom }] : [];
-        })
-      : [],
     appearance = p.scene.appearance ?? DEFAULT_APPEARANCE,
     materialOverride = p.scene.materialOverrides?.find(
       (entry) => entry.materialName === selectedMaterial,
@@ -3718,81 +3710,17 @@ export default function Studio() {
                     ? ` · ${room.polygon.length} corners`
                     : ""}
                 </p>
-                <section
-                  className="room-door-connectivity"
-                  aria-label="Reviewed walkthrough connections"
-                >
-                  <div className="section-label">WALKTHROUGH CONNECTIONS</div>
-                  {walkConnections.length ? (
-                    walkConnections.map((connection) => (
-                      <div key={connection.openingId}>
-                        <span>
-                          <b>Reviewed door</b>
-                          <small>
-                            Connects to {connection.room.unit} ·{" "}
-                            {connection.room.name}
-                          </small>
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRoomId(connection.room.id);
-                            setSelected(connection.room.id);
-                            setView("walk");
-                            setCameraOrientation("perspective");
-                          }}
-                        >
-                          Walk there
-                        </button>
-                      </div>
-                    ))
-                  ) : (
-                    <small>
-                      No reviewed shared doors connect this room to another mapped
-                      room.
-                    </small>
-                  )}
-                </section>
-                <section className="room-opening-list" aria-label="Approved room openings">
-                  <div className="section-label">APPROVED OPENINGS</div>
-                  {(p.scene.openings ?? []).filter((opening) =>
-                    opening.roomIds.includes(room.id),
-                  ).length ? (
-                    (p.scene.openings ?? [])
-                      .filter((opening) => opening.roomIds.includes(room.id))
-                      .map((opening) => (
-                        <div key={opening.id}>
-                          <span>
-                            <b>{opening.kind.toUpperCase()}</b>
-                            <small>
-                              {opening.width.toFixed(2)} ×{" "}
-                              {opening.height.toFixed(2)} m
-                              {opening.kind === "window" &&
-                              opening.sillHeight !== undefined
-                                ? ` · sill ${opening.sillHeight.toFixed(2)} m`
-                                : ""}
-                            </small>
-                          </span>
-                          <span>
-                            {opening.roomIds.length === 2
-                              ? "Shared wall"
-                              : "Exterior / single-room wall"}
-                          </span>
-                          <button
-                            type="button"
-                            className="danger"
-                            onClick={() => removeOpening(opening.id)}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))
-                  ) : (
-                    <small>
-                      No approved door/window associations for this room.
-                    </small>
-                  )}
-                </section>
+                <RoomNavigationPanel
+                  scene={p.scene}
+                  room={room}
+                  onWalkRoom={(targetRoom) => {
+                    setRoomId(targetRoom.id);
+                    setSelected(targetRoom.id);
+                    setView("walk");
+                    setCameraOrientation("perspective");
+                  }}
+                  onRemoveOpening={removeOpening}
+                />
                 <label>
                   Model mesh binding
                   <input readOnly value={room.mesh ?? "Not bound"} />
