@@ -9,11 +9,16 @@ test("Studio editor keeps the default toolbar operator-first", () => {
 
   assert.match(studio, /aria-label="3D editor tools"/);
   assert.match(studio, /aria-label="Editor mode"/);
-  for (const label of ["Building", "Interior", "Walk", "View", "Edit", "Floor", "Focus"])
-    assert.match(studio, new RegExp(`[">]${label}(?:\\s|<)`));
+  assert.match(studio, /\["building", "Building"\]/);
+  assert.match(studio, /\["rooms", "Interior"\]/);
+  assert.match(studio, /\["walk", "Walk"\]/);
+  assert.match(studio, /<summary>View /);
+  assert.match(studio, /<summary>Edit /);
+  assert.match(studio, /<summary>Floor /);
+  assert.match(studio, /Focus <kbd>F<\/kbd>/);
 
   for (const label of ["Perspective", "Top", "Section"])
-    assert.match(studio, new RegExp(`>${label}<`));
+    assert.match(studio, new RegExp(`\\b${label}\\b`));
 
   for (const label of ["Move", "Rotate", "Scale", "Undo", "Redo"])
     assert.match(studio, new RegExp(`${label}`));
