@@ -37,6 +37,7 @@ export default function SmartProjectBuilder({
   onAnalyze,
   onSelectModel,
   onBuildDraft,
+  onApplyArchitecturalCandidates,
   onOpenEditor,
   onOpenSources,
 }: {
@@ -54,6 +55,7 @@ export default function SmartProjectBuilder({
   onAnalyze: () => void;
   onSelectModel: (assetId: string) => void;
   onBuildDraft: () => void;
+  onApplyArchitecturalCandidates: () => void;
   onOpenEditor: () => void;
   onOpenSources: () => void;
 }) {
@@ -65,6 +67,16 @@ export default function SmartProjectBuilder({
     for (const source of analysis?.sources ?? [])
       count.set(source.role, (count.get(source.role) ?? 0) + 1);
     return [...count.entries()];
+  }, [analysis]);
+  const architecturalCounts = useMemo(() => {
+    const rows = analysis?.architecturalCandidates ?? [];
+    return {
+      wall: rows.filter((row) => row.kind === "wall").length,
+      door: rows.filter((row) => row.kind === "door").length,
+      window: rows.filter((row) => row.kind === "window").length,
+      confident: rows.filter((row) => row.confidence >= 0.82).length,
+      review: rows.filter((row) => row.confidence < 0.82).length,
+    };
   }, [analysis]);
 
   function takeFiles(list: FileList | File[]) {
@@ -336,6 +348,91 @@ export default function SmartProjectBuilder({
                     </span>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {(analysis.architecturalCandidates.length > 0 ||
+              analysis.cadAudits.length > 0) && (
+              <div className="builder-architecture-review">
+                <div className="builder-architecture-head">
+                  <div>
+                    <b>Architectural candidate detection</b>
+                    <small>
+                      Source geometry और readable CAD layer names से wall/door/window
+                      suggestions. ये verified architecture नहीं हैं जब तक आप review
+                      नहीं करते.
+                    </small>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy || architecturalCounts.confident === 0}
+                    onClick={onApplyArchitecturalCandidates}
+                  >
+                    Apply {architecturalCounts.confident} confident labels
+                  </button>
+                </div>
+                <div className="builder-architecture-stats">
+                  <span>
+                    Walls <b>{architecturalCounts.wall}</b>
+                  </span>
+                  <span>
+                    Doors <b>{architecturalCounts.door}</b>
+                  </span>
+                  <span>
+                    Windows <b>{architecturalCounts.window}</b>
+                  </span>
+                  <span>
+                    Review <b>{architecturalCounts.review}</b>
+                  </span>
+                </div>
+                {analysis.architecturalCandidates.length > 0 && (
+                  <div className="builder-candidate-list">
+                    {analysis.architecturalCandidates.slice(0, 14).map((candidate) => (
+                      <div
+                        key={`${candidate.nodeName}:${candidate.occurrence}:${candidate.kind}`}
+                      >
+                        <span className={`candidate-kind candidate-kind--${candidate.kind}`}>
+                          {candidate.kind}
+                        </span>
+                        <span>
+                          <b>{candidate.nodeName}</b>
+                          <small>
+                            occurrence {candidate.occurrence}
+                            {candidate.floorIndex !== undefined
+                              ? ` · floor ${candidate.floorIndex}`
+                              : " · floor review"}
+                          </small>
+                        </span>
+                        <span>
+                          <b>{Math.round(candidate.confidence * 100)}%</b>
+                          <small>{candidate.reasons.join(" · ") || "geometry hint"}</small>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {analysis.cadAudits.length > 0 && (
+                  <div className="builder-cad-audits">
+                    {analysis.cadAudits.map((audit) => (
+                      <div key={audit.assetId}>
+                        <span
+                          className={
+                            audit.semanticReady
+                              ? "ops-pill ops-pill--ready"
+                              : "ops-pill ops-pill--warning"
+                          }
+                        >
+                          {audit.kind.toUpperCase()}
+                        </span>
+                        <span>
+                          <b>{audit.name}</b>
+                          <small>{audit.note}</small>
+                        </span>
+                        <strong>{audit.layerHints.length} layer hints</strong>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
