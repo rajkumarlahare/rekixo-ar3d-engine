@@ -92,6 +92,7 @@ interface Props {
   cameraOrientation?: "perspective" | "top";
   showReferenceLayers?: boolean;
   modelTransformEnabled?: boolean;
+  alignmentMode?: boolean;
   roomMapEnabled?: boolean;
   roomDraw?: {
     enabled: boolean;
@@ -184,6 +185,8 @@ export default function SceneCanvas(props: Props) {
     controls.enableDamping = true;
     controls.target.set(0, 0, 0);
     controls.maxPolarAngle = Math.PI * 0.49;
+    controls.enableRotate = !latest.current.alignmentMode;
+    controls.enablePan = !latest.current.alignmentMode;
     const hemi = new T.HemisphereLight(0xffffff, 0x687681, 2.8);
     scene.add(hemi);
     const sun = new T.DirectionalLight(0xfff1db, 3.2);
@@ -548,6 +551,8 @@ export default function SceneCanvas(props: Props) {
     transform.addEventListener("dragging-changed", (event) => {
       const dragging = Boolean(event.value);
       controls.enabled = !dragging && latest.current.view !== "walk";
+      controls.enableRotate = !latest.current.alignmentMode;
+      controls.enablePan = !latest.current.alignmentMode;
       if (dragging) {
         transformStart = true;
         return;
@@ -1365,8 +1370,11 @@ export default function SceneCanvas(props: Props) {
         );
         const material = new T.MeshBasicMaterial({
           map: texture,
+          color: props.alignmentMode ? 0xbfd7ee : 0xffffff,
           transparent: true,
-          opacity: layer.opacity,
+          opacity: props.alignmentMode
+            ? Math.min(layer.opacity, 0.34)
+            : layer.opacity,
           depthWrite: false,
           side: T.DoubleSide,
           toneMapped: false,
@@ -1396,6 +1404,7 @@ export default function SceneCanvas(props: Props) {
     props.scene.referenceLayers,
     props.resolveAsset,
     props.showReferenceLayers,
+    props.alignmentMode,
   ]);
 
   useEffect(() => {
@@ -1658,7 +1667,7 @@ export default function SceneCanvas(props: Props) {
     ) {
       runtime.transform.setMode(mode);
       runtime.transform.showX = mode === "translate";
-      runtime.transform.showY = true;
+      runtime.transform.showY = mode === "rotate" && Boolean(props.alignmentMode);
       runtime.transform.showZ = mode === "translate";
       runtime.transform.attach(runtime.model);
       return;
@@ -1690,6 +1699,7 @@ export default function SceneCanvas(props: Props) {
     props.transformMode,
     props.transformEnabled,
     props.modelTransformEnabled,
+    props.alignmentMode,
     props.roomMapEnabled,
     props.snap,
     props.view,
@@ -1766,6 +1776,7 @@ export default function SceneCanvas(props: Props) {
   }, [props.focusRequest]);
 
   useEffect(() => {
+    if (props.alignmentMode) return;
     api.current?.focus();
   }, [
     props.roomId,
@@ -1775,7 +1786,16 @@ export default function SceneCanvas(props: Props) {
     props.scene.modelTransform?.y,
     props.scene.modelTransform?.z,
     props.scene.modelTransform?.rotationY,
+    props.alignmentMode,
   ]);
+
+  useEffect(() => {
+    const runtime = api.current;
+    if (!runtime || !props.alignmentMode) return;
+    runtime.controls.enableRotate = false;
+    runtime.controls.enablePan = false;
+    runtime.focus();
+  }, [props.alignmentMode]);
   return (
     <div
       className={
@@ -1806,6 +1826,13 @@ export default function SceneCanvas(props: Props) {
         <div className="room-draw-hint">
           Click room corners · wall/vertex snap is active · click first corner
           or press Enter to finish · Esc cancels
+        </div>
+      )}
+      {props.alignmentMode && (
+        <div className="alignment-canvas-legend" aria-label="Alignment canvas legend">
+          <span className="model-key">3D MODEL</span>
+          <span className="plan-key">BLUE FADED = REFERENCE PLAN</span>
+          <small>Move only on the flat X/Z plane · camera rotation is locked</small>
         </div>
       )}
       <button className="reset-camera" onClick={() => api.current?.focus()}>
