@@ -170,7 +170,20 @@ export function buildSceneManifestV2(
           : [],
       finish: { color: room.color },
     })),
-    openings: [],
+    openings: (project.scene.openings ?? [])
+      .filter((opening) => opening.reviewed)
+      .map((opening) => ({
+        id: opening.id,
+        floorId: opening.floorId,
+        kind: opening.kind,
+        roomIds: [...opening.roomIds],
+        position: [opening.x, opening.y, opening.z],
+        widthM: opening.width,
+        heightM: opening.height,
+        ...(opening.sillHeight !== undefined
+          ? { sillHeightM: opening.sillHeight }
+          : {}),
+      })),
     furniture: project.scene.furniture.map((item) => {
       const room = project.scene.rooms.find((candidate) => candidate.id === item.roomId);
       const floor = project.scene.floors.find(
