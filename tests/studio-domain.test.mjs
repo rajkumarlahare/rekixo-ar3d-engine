@@ -21,6 +21,8 @@ const {
   validStudioSlug,
   roomArea,
   roomGeometryFromPolygon,
+  reviewedDoorConnections,
+  resolveReviewedDoorWalkStep,
 } = await import(
   "data:text/javascript;base64," + Buffer.from(code).toString("base64")
 );
@@ -325,4 +327,165 @@ test("opening source provenance validates occurrence and confidence", () => {
   assert.doesNotThrow(() => validateProject(p));
   p.scene.openings[0].sourceOccurrence = 0;
   assert.throws(() => validateProject(p), /reviewed wall opening/i);
+});
+
+
+test("walkthrough crosses only reviewed shared doors", () => {
+  const p = newProject("Walk doors");
+  const floorId = p.scene.floors[0].id;
+  p.scene.rooms.push(
+    {
+      id: "left",
+      name: "Living",
+      unit: "101",
+      floorId,
+      x: -2,
+      z: 0,
+      width: 4,
+      depth: 4,
+      height: 2.8,
+      color: "#dddddd",
+      source: "",
+      verified: false,
+    },
+    {
+      id: "right",
+      name: "Bedroom",
+      unit: "101",
+      floorId,
+      x: 2,
+      z: 0,
+      width: 4,
+      depth: 4,
+      height: 2.8,
+      color: "#dddddd",
+      source: "",
+      verified: false,
+    },
+  );
+  p.scene.openings = [
+    {
+      id: "door-shared",
+      floorId,
+      kind: "door",
+      roomIds: ["left", "right"],
+      x: 0,
+      y: 1.05,
+      z: 0,
+      width: 0.9,
+      height: 2.1,
+      rotationY: -90,
+      reviewed: true,
+    },
+  ];
+
+  const connections = reviewedDoorConnections(p.scene, "left");
+  assert.deepEqual(connections, [
+    {
+      openingId: "door-shared",
+      fromRoomId: "left",
+      toRoomId: "right",
+    },
+  ]);
+
+  const result = resolveReviewedDoorWalkStep(
+    p.scene,
+    p.scene.rooms[0],
+    -0.3,
+    0,
+    0.05,
+    0,
+  );
+  assert.equal(result.roomId, "right");
+  assert.equal(result.openingId, "door-shared");
+  assert.equal(canWalk(p.scene, p.scene.rooms[1], result.x, result.z), true);
+});
+
+test("unreviewed, exterior and window openings never create room transitions", () => {
+  const p = newProject("Safe walk doors");
+  const floorId = p.scene.floors[0].id;
+  p.scene.rooms.push(
+    {
+      id: "left",
+      name: "Living",
+      unit: "101",
+      floorId,
+      x: -2,
+      z: 0,
+      width: 4,
+      depth: 4,
+      height: 2.8,
+      color: "#dddddd",
+      source: "",
+      verified: false,
+    },
+    {
+      id: "right",
+      name: "Bedroom",
+      unit: "101",
+      floorId,
+      x: 2,
+      z: 0,
+      width: 4,
+      depth: 4,
+      height: 2.8,
+      color: "#dddddd",
+      source: "",
+      verified: false,
+    },
+  );
+  p.scene.openings = [
+    {
+      id: "door-unreviewed",
+      floorId,
+      kind: "door",
+      roomIds: ["left", "right"],
+      x: 0,
+      y: 1.05,
+      z: 0,
+      width: 0.9,
+      height: 2.1,
+      rotationY: -90,
+      reviewed: false,
+    },
+    {
+      id: "window-reviewed",
+      floorId,
+      kind: "window",
+      roomIds: ["left", "right"],
+      x: 0,
+      y: 1.5,
+      z: 1,
+      width: 1.2,
+      height: 1.2,
+      sillHeight: 0.9,
+      rotationY: -90,
+      reviewed: true,
+    },
+    {
+      id: "exterior-door",
+      floorId,
+      kind: "door",
+      roomIds: ["left"],
+      x: -4,
+      y: 1.05,
+      z: 0,
+      width: 0.9,
+      height: 2.1,
+      rotationY: -90,
+      reviewed: true,
+    },
+  ];
+
+  assert.equal(reviewedDoorConnections(p.scene, "left").length, 0);
+  const result = resolveReviewedDoorWalkStep(
+    p.scene,
+    p.scene.rooms[0],
+    -0.3,
+    0,
+    0.05,
+    0,
+  );
+  assert.equal(result.roomId, "left");
+  assert.equal(result.openingId, undefined);
 });
