@@ -399,17 +399,16 @@ export default function Studio() {
           );
           setDirty(false);
           setLocalSaveState("saved");
-          setList((current) =>
-            current
-              .map((entry) =>
-                entry.id === projectId
-                  ? { ...next, updated: next.updated }
-                  : entry,
-              )
-              .sort((left, right) =>
-                right.updated.localeCompare(left.updated),
-              ),
-          );
+          setList((current) => {
+            const updated = current.some((entry) => entry.id === projectId)
+              ? current.map((entry) =>
+                  entry.id === projectId ? next : entry,
+                )
+              : [...current, next];
+            return updated.sort((left, right) =>
+              right.updated.localeCompare(left.updated),
+            );
+          });
         })
         .catch(() => {
           if (serial !== localEditSerial.current) return;
@@ -2901,7 +2900,7 @@ export default function Studio() {
                         type="button"
                         disabled={
                           busy ||
-                          dirty ||
+                          cloudDirty ||
                           Boolean(review) ||
                           !readiness.publishable
                         }
