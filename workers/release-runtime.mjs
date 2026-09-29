@@ -20,6 +20,12 @@ function json(value, init = {}) {
   return new Response(JSON.stringify(value), { ...init, headers });
 }
 
+function serverError(error, diagnostic) {
+  const requestId = crypto.randomUUID();
+  console.error(`[rekixo-public:${requestId}] ${error}`, diagnostic);
+  return json({ error, requestId }, { status: 500 });
+}
+
 function validToken(value, max = 180) {
   return (
     typeof value === "string" &&
@@ -492,12 +498,9 @@ async function activeProjectRelease(env, slug) {
   if (state.state === "project-missing" || state.state === "unpublished")
     return json({ error: "Published project not found." }, { status: 404 });
   if (state.state !== "ok")
-    return json(
-      {
-        error: "Active release is corrupted.",
-        diagnostic: state.reason || state.state,
-      },
-      { status: 500 },
+    return serverError(
+      "Active release is unavailable.",
+      state.reason || state.state,
     );
 
   return json({
@@ -515,17 +518,14 @@ async function activeProjectRelease(env, slug) {
 async function activeStudioRelease(env, slug) {
   const state = await activeReleaseState(env, slug);
   if (state.state !== "ok") {
-    const status =
-      state.state === "corrupt" ? 500 : 404;
+    if (state.state === "corrupt")
+      return serverError(
+        "Published Studio release is unavailable.",
+        state.reason || state.state,
+      );
     return json(
-      {
-        error:
-          state.state === "corrupt"
-            ? "Active release is corrupted."
-            : "Published Studio release not found.",
-        ...(state.reason ? { diagnostic: state.reason } : {}),
-      },
-      { status },
+      { error: "Published Studio release not found." },
+      { status: 404 },
     );
   }
   const project = state.manifest.studio?.project;
@@ -600,15 +600,11 @@ export async function serveReleaseAsset(env, releaseId, pathKind, logicalId, req
       row.r2_key,
     );
   } catch (error) {
-    return json(
-      {
-        error: "Immutable release storage ownership is corrupted.",
-        diagnostic:
-          error instanceof Error
-            ? error.message
-            : "Invalid immutable release storage key.",
-      },
-      { status: 500 },
+    return serverError(
+      "Immutable release asset is unavailable.",
+      error instanceof Error
+        ? error.message
+        : "Invalid immutable release storage key.",
     );
   }
 
@@ -626,17 +622,14 @@ export async function serveReleaseAsset(env, releaseId, pathKind, logicalId, req
     },
   );
   if (served.corruption)
-    return json(
-      {
-        error: "Immutable release asset is corrupted.",
-        diagnostic: served.corruption,
-      },
-      { status: 500 },
+    return serverError(
+      "Immutable release asset is unavailable.",
+      served.corruption,
     );
   if (served.missing)
-    return json(
-      { error: "Immutable release asset is missing from storage." },
-      { status: 500 },
+    return serverError(
+      "Immutable release asset is unavailable.",
+      "Immutable release asset is missing from storage.",
     );
   return served.response;
 }
