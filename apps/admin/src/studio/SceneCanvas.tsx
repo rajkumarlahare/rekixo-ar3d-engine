@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as T from "three";
+import { disposeObjectResources } from "./threeResources";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -121,23 +122,6 @@ interface Props {
     offset: number;
     flip: boolean;
   };
-}
-function dispose(root: T.Object3D) {
-  const materials = new Set<T.Material>(),
-    textures = new Set<T.Texture>();
-  root.traverse((n) => {
-    if (n instanceof T.Mesh || n instanceof T.Line) {
-      n.geometry.dispose();
-      for (const m of Array.isArray(n.material) ? n.material : [n.material])
-        materials.add(m);
-    }
-  });
-  for (const m of materials) {
-    for (const v of Object.values(m))
-      if (v instanceof T.Texture) textures.add(v);
-    m.dispose();
-  }
-  for (const t of textures) t.dispose();
 }
 function block(
   root: T.Object3D,
@@ -459,13 +443,13 @@ export default function SceneCanvas(props: Props) {
       polygonDraftPoints.length = 0;
       for (const child of [...polygonDraft.children]) {
         polygonDraft.remove(child);
-        dispose(child);
+        disposeObjectResources(child);
       }
     };
     const renderPolygonEdit = (room?: Room, points?: RoomPoint[]) => {
       for (const child of [...polygonEdit.children]) {
         polygonEdit.remove(child);
-        dispose(child);
+        disposeObjectResources(child);
       }
       if (!room?.polygon?.length) return;
       const floorY =
@@ -501,7 +485,7 @@ export default function SceneCanvas(props: Props) {
     const redrawPolygonDraft = (hover?: T.Vector3) => {
       for (const child of [...polygonDraft.children]) {
         polygonDraft.remove(child);
-        dispose(child);
+        disposeObjectResources(child);
       }
       const points = hover
         ? [...polygonDraftPoints, hover]
@@ -1319,7 +1303,7 @@ export default function SceneCanvas(props: Props) {
       transform.detach();
       transform.dispose();
       controls.dispose();
-      dispose(scene);
+      disposeObjectResources(scene);
       renderer.dispose();
       el.replaceChildren();
       api.current = null;
@@ -1332,11 +1316,11 @@ export default function SceneCanvas(props: Props) {
     let finishCleanup: (() => void) | undefined;
     runtime.transform.detach();
     runtime.modelSelection?.removeFromParent();
-    if (runtime.modelSelection) dispose(runtime.modelSelection);
+    if (runtime.modelSelection) disposeObjectResources(runtime.modelSelection);
     runtime.modelSelection = undefined;
     for (const n of [...runtime.model.children]) {
       runtime.model.remove(n);
-      dispose(n);
+      disposeObjectResources(n);
     }
     latest.current.onModelNodes?.([]);
     latest.current.onModelMaterials?.([]);
@@ -1403,7 +1387,7 @@ export default function SceneCanvas(props: Props) {
       });
       latest.current.onModelNodes?.(modelNodes);
       if (cancelled) {
-        dispose(object);
+        disposeObjectResources(object);
         return;
       }
       const referenceVisual =
@@ -1474,7 +1458,7 @@ export default function SceneCanvas(props: Props) {
     const urls: string[] = [];
     for (const child of [...runtime.references.children]) {
       runtime.references.remove(child);
-      dispose(child);
+      disposeObjectResources(child);
     }
     if (!props.showReferenceLayers) return;
 
@@ -1546,7 +1530,7 @@ export default function SceneCanvas(props: Props) {
       for (const url of urls) URL.revokeObjectURL(url);
       for (const child of [...runtime.references.children]) {
         runtime.references.remove(child);
-        dispose(child);
+        disposeObjectResources(child);
       }
     };
   }, [
@@ -1678,7 +1662,7 @@ export default function SceneCanvas(props: Props) {
     r.selectables.clear();
     for (const n of [...r.rooms.children]) {
       r.rooms.remove(n);
-      dispose(n);
+      disposeObjectResources(n);
     }
     r.model.visible = props.view === "building";
     r.rooms.visible = props.view !== "building" || Boolean(props.roomMapEnabled);
@@ -1858,7 +1842,7 @@ export default function SceneCanvas(props: Props) {
     const runtime = api.current;
     if (!runtime) return;
     runtime.modelSelection?.removeFromParent();
-    if (runtime.modelSelection) dispose(runtime.modelSelection);
+    if (runtime.modelSelection) disposeObjectResources(runtime.modelSelection);
     runtime.modelSelection = undefined;
     if (
       (!props.selectedMesh && !props.selectedMeshKey) ||
