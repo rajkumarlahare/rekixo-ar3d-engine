@@ -111,14 +111,27 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
   await page.getByRole("button", { name: "Open visual editor" }).click();
 
   const editorTools = page.getByLabel("3D editor tools");
+  await expect(page.getByRole("button", { name: "Setup" })).toBeVisible();
   await expect(editorTools.getByRole("button", { name: "Building" })).toBeVisible();
   await expect(editorTools.getByRole("button", { name: "Interior" })).toBeVisible();
   await expect(editorTools.getByRole("button", { name: "Walk" })).toBeVisible();
 
-  await editorTools.locator("summary").filter({ hasText: /^View/ }).click();
+  const viewMenu = editorTools.locator("summary").filter({ hasText: /^View/ });
+  await viewMenu.click();
   await expect(editorTools.getByRole("button", { name: "Perspective" })).toBeVisible();
   await expect(editorTools.getByRole("button", { name: "Top" })).toBeVisible();
   await expect(editorTools.getByRole("button", { name: "Section" })).toBeVisible();
+
+  await editorTools.getByRole("button", { name: "Full screen" }).click();
+  await expect(page.getByRole("button", { name: "Setup" })).toBeHidden();
+  await expect(page.locator(".editor-fullscreen-exit")).toBeVisible();
+  await page.locator(".editor-fullscreen-exit").click();
+  await expect(page.getByRole("button", { name: "Setup" })).toBeVisible();
+
+  await editorTools.getByRole("button", { name: "Full screen" }).click();
+  await expect(page.locator(".editor-fullscreen-exit")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Setup" })).toBeVisible();
 
   await editorTools.locator("summary").filter({ hasText: /^Edit/ }).click();
   await expect(editorTools.getByRole("button", { name: /Move/ })).toBeVisible();
@@ -134,7 +147,6 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
   await page.locator(".look-fine-tune > summary").click();
   await expect(page.getByLabel("Exposure")).toHaveValue("1.08");
 
-  await page.getByRole("button", { name: "Exit full screen" }).click();
   await expect(page.getByText("Autosaved", { exact: true })).toBeVisible();
 
   await page.reload();
