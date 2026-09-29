@@ -4,16 +4,16 @@ import test from "node:test";
 
 const read = (path) => fs.readFileSync(path, "utf8");
 
-test("Phase 7 Studio exposes operations-first project navigation", () => {
+test("Studio exposes a simplified four-step operator navigation", () => {
   const studio = read("apps/admin/src/studio/Studio.tsx");
-  for (const label of [
-    "Overview",
-    "3D Editor",
-    "Sources",
-    "Evidence",
-    "Preview & Publish",
-  ])
-    assert.match(studio, new RegExp(label.replace(/[&]/g, "\\&")));
+  for (const label of ["Setup", "3D Edit", "Review", "Publish"])
+    assert.match(studio, new RegExp(`["']${label}["']`));
+
+  assert.match(studio, /aria-label="Project workflow"/);
+  assert.match(studio, /aria-label="More project actions"/);
+  assert.match(studio, /Project summary/);
+  assert.match(studio, /Source library/);
+  assert.match(studio, /BACKUP & ADVANCED/);
   assert.match(studio, /aria-label="Search 3D projects"/);
   assert.match(studio, /aria-label="Selected local project"/);
   assert.match(studio, /aria-label="Selected cloud project"/);
