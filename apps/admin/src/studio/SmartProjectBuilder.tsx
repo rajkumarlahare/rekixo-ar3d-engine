@@ -3,6 +3,7 @@ import type { Asset, Project } from "./domain";
 import type { FbxSourceAudit } from "./sourceAudit";
 import type { SmartProjectAnalysis, SmartSourceRole } from "./projectAnalyzer";
 import type { OpeningSuggestion } from "./openingAssociator";
+import { detectQuickSourceSetup } from "./sourcePackSetup";
 
 const ROLE_LABEL: Record<SmartSourceRole, string> = {
   model: "3D model",
@@ -44,6 +45,7 @@ export default function SmartProjectBuilder({
   onApproveReadyOpenings,
   onOpenEditor,
   onOpenSources,
+  onAutoSetup,
 }: {
   project: Project;
   files: Asset[];
@@ -65,10 +67,17 @@ export default function SmartProjectBuilder({
   onApproveReadyOpenings: () => void;
   onOpenEditor: () => void;
   onOpenSources: () => void;
+  onAutoSetup: () => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const modelCandidates = files.filter((file) => /\.(glb|fbx)$/i.test(file.name));
+  const quickSetup = useMemo(() => detectQuickSourceSetup(files), [files]);
+  const quickSetupApplied =
+    quickSetup.profile === "jyoti-paradise" &&
+    project.slug === "jyoti-paradise" &&
+    (!quickSetup.primaryModelId ||
+      project.scene.modelId === quickSetup.primaryModelId);
   const roles = useMemo(() => {
     const count = new Map<SmartSourceRole, number>();
     for (const source of analysis?.sources ?? [])
@@ -263,6 +272,46 @@ export default function SmartProjectBuilder({
               event.target.value = "";
             }}
           />
+          {quickSetup.profile === "jyoti-paradise" && (
+            <div className="builder-source-lock" aria-label="Jyoti Paradise quick setup">
+              <div className="builder-source-lock-head">
+                <div>
+                  <span className="ops-eyebrow">SOURCE LOCK DETECTED</span>
+                  <strong>Jyoti Paradise</strong>
+                  <small>
+                    Exact SHA-256 source matches · {quickSetup.matchedCount}/{quickSetup.requiredCount}
+                  </small>
+                </div>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={busy || quickSetupApplied}
+                  onClick={onAutoSetup}
+                >
+                  {quickSetupApplied ? "Auto setup applied" : "Auto setup Jyoti Paradise"}
+                </button>
+              </div>
+              <div className="builder-source-lock-grid">
+                {quickSetup.slots.map((slot) => (
+                  <div
+                    key={slot.key}
+                    className={slot.exact ? "ready" : "missing"}
+                    title={slot.asset?.hash ?? "Source not attached"}
+                  >
+                    <span>{slot.exact ? "✓" : "—"}</span>
+                    <span>
+                      <b>{slot.label}</b>
+                      <small>{slot.asset?.name ?? "Not attached yet"}</small>
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p>
+                Rekixo identity, Hingna/Nagpur project context और primary FBX selection
+                automatically lock करेगा. Raw source files unchanged रहेंगी.
+              </p>
+            </div>
+          )}
           {modelCandidates.length > 0 && (
             <label className="builder-model-picker">
               Active 3D model
