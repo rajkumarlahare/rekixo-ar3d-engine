@@ -35,7 +35,8 @@ test("room drawing happens on the selected floor and derives geometry from a dra
 test("visual room mapping preserves evidence discipline", () => {
   const studio = read("apps/admin/src/studio/Studio.tsx");
 
-  assert.match(studio, /source: "Visual Room Mapper draft"/);
+  assert.match(studio, /Visual Room Mapper draft/);
+  assert.match(studio, /roomSheetMarker\(sheetRow\)/);
   assert.match(studio, /verified: false/);
   assert.match(studio, /sourceAssetId: undefined/);
   assert.match(studio, /sourcePackSourceId: undefined/);
