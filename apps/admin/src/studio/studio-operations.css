@@ -1401,3 +1401,79 @@
     white-space: normal;
   }
 }
+
+
+/* Door / window wall association review */
+.builder-opening-review {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #2d3b53;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 0% 100%, rgba(32, 201, 131, .06), transparent 28%),
+    #08111f;
+}
+
+.builder-opening-list {
+  display: grid;
+  gap: 6px;
+}
+
+.builder-opening-list > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 72px minmax(210px, 1.2fr) minmax(145px, .65fr) auto;
+  gap: 9px;
+  align-items: center;
+  padding: 8px 9px;
+  border: 1px solid #26364c;
+  border-radius: 8px;
+  background: #0b1524;
+}
+
+.builder-opening-list > div > span:not(.candidate-kind) {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.builder-opening-list b {
+  overflow: hidden;
+  color: #dfe7f2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+}
+
+.builder-opening-list small {
+  overflow: hidden;
+  color: #728299;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 8px;
+}
+
+.builder-opening-list button {
+  min-height: 31px;
+  padding: 4px 9px;
+}
+
+.opening-approved {
+  color: #55d59b;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 760px) {
+  .builder-opening-list > div {
+    grid-template-columns: 1fr;
+  }
+
+  .builder-opening-list b,
+  .builder-opening-list small {
+    white-space: normal;
+  }
+}
