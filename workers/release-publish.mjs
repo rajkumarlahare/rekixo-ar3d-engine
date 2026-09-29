@@ -520,6 +520,13 @@ export async function buildAndActivateRelease(
         mimeType: copied.manifest.mimeType,
         releaseAssetId: copied.manifest.id,
       };
+      if (explicitStudioPublishModelId && experience.scenes.length) {
+        experience.scenes = experience.scenes.map((scene) =>
+          scene.modelId
+            ? { ...scene, modelId: studioModel.id }
+            : scene,
+        );
+      }
       if (!experience.scenes.length) {
         experience.scenes.push({
           id: `release_scene_${currentProject.id}`,
