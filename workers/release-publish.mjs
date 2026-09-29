@@ -4,6 +4,10 @@ import {
   assertProjectAssetKey,
   assertReleaseAssetKey,
 } from "./storage-boundary.mjs";
+import {
+  publicStudioSnapshot,
+  validateStudioDraft,
+} from "./studio-draft-validation.mjs";
 
 const RELEASE_FORMAT = "rekixo-release-manifest";
 const RELEASE_VERSION = 1;
@@ -169,14 +173,15 @@ async function cloudDraftForRelease(env, project) {
   } catch {
     throw Error("Cloud draft is corrupted; release creation stopped.");
   }
-  if (
-    !draft ||
-    draft.schema !== 1 ||
-    draft.id !== project.id ||
-    draft.slug !== project.slug ||
-    !Array.isArray(draft.assets)
-  )
-    throw Error("Cloud draft identity is invalid; release creation stopped.");
+  try {
+    validateStudioDraft(draft, project);
+  } catch (error) {
+    throw Error(
+      `Cloud draft validation failed; release creation stopped: ${
+        error instanceof Error ? error.message : "invalid Studio draft"
+      }`,
+    );
+  }
   return {
     revision: Number(row.revision),
     updatedAt: row.updated_at,
@@ -192,47 +197,6 @@ async function studioAssetRows(env, projectId) {
       ORDER BY created_at ASC,id ASC`,
   ).bind(projectId).all();
   return result.results || [];
-}
-
-function publicStudioSnapshot(draft) {
-  const project = structuredClone(draft);
-  delete project.referenceUrl;
-  delete project.brief;
-  const activeModelId = project.scene?.modelId;
-  const publicAssetIds = new Set(activeModelId ? [activeModelId] : []);
-  project.assets = (project.assets || []).filter((assetId) =>
-    publicAssetIds.has(assetId),
-  );
-
-  for (const scene of [
-    project.scene,
-    ...(Array.isArray(project.releases)
-      ? project.releases.map((release) => release?.scene)
-      : []),
-  ]) {
-    if (!scene || typeof scene !== "object") continue;
-    scene.referenceLayers = [];
-    if (scene.modelId && !publicAssetIds.has(scene.modelId))
-      delete scene.modelId;
-    if (Array.isArray(scene.rooms))
-      scene.rooms = scene.rooms.map((room) => {
-        if (!room || typeof room !== "object") return room;
-        const safe = { ...room };
-        delete safe.sourceAssetId;
-        return safe;
-      });
-    if (Array.isArray(scene.openings))
-      scene.openings = scene.openings
-        .filter((opening) => opening && opening.reviewed === true)
-        .map((opening) => {
-          const safe = { ...opening };
-          delete safe.sourceNodeName;
-          delete safe.sourceOccurrence;
-          delete safe.confidence;
-          return safe;
-        });
-  }
-  return project;
 }
 
 async function copyImmutableObject(
