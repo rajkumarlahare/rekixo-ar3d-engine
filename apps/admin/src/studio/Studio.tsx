@@ -3305,31 +3305,45 @@ export default function Studio() {
                           {r.unit} · {roomArea(r).toFixed(1)} m²
                         </small>
                       </button>
-                      {scene.furniture
-                        .filter((entry) => entry.roomId === r.id)
-                        .map((entry) => (
-                          <button
-                            type="button"
-                            key={entry.id}
-                            className={
-                              selected === entry.id
-                                ? "outliner-object active"
-                                : "outliner-object"
-                            }
-                            onClick={() => {
-                              setRoomId(r.id);
-                              setSelected(entry.id);
-                              setMesh("");
-                              setSelectedModelNodeKey("");
-                              setView("rooms");
-                            }}
-                          >
-                            <span>└ {catalog[entry.kind].name}</span>
-                            <small>
-                              {entry.x.toFixed(1)}, {entry.z.toFixed(1)}
-                            </small>
-                          </button>
-                        ))}
+                      {scene.furniture.some(
+                        (entry) => entry.roomId === r.id,
+                      ) && (
+                        <details className="room-object-details">
+                          <summary>
+                            {
+                              scene.furniture.filter(
+                                (entry) => entry.roomId === r.id,
+                              ).length
+                            }{" "}
+                            objects
+                          </summary>
+                          {scene.furniture
+                            .filter((entry) => entry.roomId === r.id)
+                            .map((entry) => (
+                              <button
+                                type="button"
+                                key={entry.id}
+                                className={
+                                  selected === entry.id
+                                    ? "outliner-object active"
+                                    : "outliner-object"
+                                }
+                                onClick={() => {
+                                  setRoomId(r.id);
+                                  setSelected(entry.id);
+                                  setMesh("");
+                                  setSelectedModelNodeKey("");
+                                  setView("rooms");
+                                }}
+                              >
+                                <span>{catalog[entry.kind].name}</span>
+                                <small>
+                                  {entry.x.toFixed(1)}, {entry.z.toFixed(1)}
+                                </small>
+                              </button>
+                            ))}
+                        </details>
+                      )}
                     </div>
                   ))}
               </section>
@@ -3983,30 +3997,6 @@ export default function Studio() {
             ) : room ? (
               <>
                 <h2>Room properties</h2>
-                <button
-                  onClick={() => {
-                    try {
-                      const next = duplicateFloor(p, room.floorId);
-                      const copiedRoom = next.scene.rooms.find(
-                        (r) => r.floorId === next.scene.floors.at(-1)!.id,
-                      );
-                      edit(next);
-                      if (copiedRoom) {
-                        setRoomId(copiedRoom.id);
-                        setSelected(copiedRoom.id);
-                      }
-                      setView("rooms");
-                    } catch (e) {
-                      setError(
-                        e instanceof Error
-                          ? e.message
-                          : "Could not copy floor.",
-                      );
-                    }
-                  }}
-                >
-                  Duplicate furnished floor
-                </button>
                 <label>
                   Room name
                   <input
@@ -4076,6 +4066,8 @@ export default function Studio() {
                     onChange={(e) => patchRoom({ color: e.target.value })}
                   />
                 </label>
+                <details className="advanced-properties editor-room-evidence">
+                  <summary>Source & verification</summary>
                 <label>
                   Measurement source
                   <textarea
@@ -4101,6 +4093,7 @@ export default function Studio() {
                     ? ` · ${room.polygon.length} corners`
                     : ""}
                 </p>
+                </details>
                 <RoomNavigationPanel
                   scene={p.scene}
                   room={room}
@@ -4112,6 +4105,8 @@ export default function Studio() {
                   }}
                   onRemoveOpening={removeOpening}
                 />
+                <details className="advanced-properties editor-room-source-binding">
+                  <summary>Model binding</summary>
                 <label>
                   Model mesh binding
                   <input readOnly value={room.mesh ?? "Not bound"} />
@@ -4124,6 +4119,33 @@ export default function Studio() {
                   Binding identifies the source object; it does not move or
                   resize the room. Set its measured position above.
                 </p>
+                </details>
+                <details className="advanced-properties editor-room-actions">
+                  <summary>Room actions</summary>
+                <button
+                  onClick={() => {
+                    try {
+                      const next = duplicateFloor(p, room.floorId);
+                      const copiedRoom = next.scene.rooms.find(
+                        (r) => r.floorId === next.scene.floors.at(-1)!.id,
+                      );
+                      edit(next);
+                      if (copiedRoom) {
+                        setRoomId(copiedRoom.id);
+                        setSelected(copiedRoom.id);
+                      }
+                      setView("rooms");
+                    } catch (e) {
+                      setError(
+                        e instanceof Error
+                          ? e.message
+                          : "Could not copy floor.",
+                      );
+                    }
+                  }}
+                >
+                  Duplicate furnished floor
+                </button>
                 <button
                   className="danger"
                   onClick={() => {
@@ -4146,6 +4168,7 @@ export default function Studio() {
                 >
                   Remove room
                 </button>
+                </details>
               </>
             ) : (
               <p>Select a room or furniture item to edit its properties.</p>
