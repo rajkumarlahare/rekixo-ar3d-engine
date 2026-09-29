@@ -13,6 +13,7 @@ import VisualRoomMapper, {
 } from "./VisualRoomMapper";
 import {
   catalog,
+  DEFAULT_SCENE_APPEARANCE,
   duplicateFloor,
   projectSlug,
   id,
@@ -70,6 +71,12 @@ import {
   type QuickSourceSetup,
 } from "./sourcePackSetup";
 import { floorSkeletonStatus } from "./floorSkeleton";
+import {
+  APPEARANCE_PRESETS,
+  activeAppearancePreset,
+  appearancePreset,
+  type AppearancePresetId,
+} from "./appearancePresets";
 import type { PdfReferenceRasterOptions } from "./pdfReferenceRaster";
 import {
   createSuggestedRoomDrafts,
@@ -99,15 +106,6 @@ function download(blob: Blob, name: string) {
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
-const DEFAULT_APPEARANCE: SceneAppearance = {
-  exposure: 1,
-  sunIntensity: 3.2,
-  hemisphereIntensity: 2.8,
-  background: "#dbe3e7",
-  referenceVisual: true,
-  nightMode: false,
-};
-
 export default function Studio() {
   const [project, setProject] = useState<Project>(),
     [list, setList] = useState<Project[]>([]),
@@ -718,7 +716,8 @@ export default function Studio() {
           Boolean(entry.floorId),
       ),
     ).length,
-    appearance = p.scene.appearance ?? DEFAULT_APPEARANCE,
+    appearance = p.scene.appearance ?? DEFAULT_SCENE_APPEARANCE,
+    activeLookPreset = activeAppearancePreset(appearance),
     materialOverride = p.scene.materialOverrides?.find(
       (entry) => entry.materialName === selectedMaterial,
     ),
@@ -807,6 +806,19 @@ export default function Studio() {
         appearance: { ...appearance, ...change },
       },
     });
+  }
+  function applyAppearancePreset(presetId: AppearancePresetId) {
+    const preset = appearancePreset(presetId);
+    edit({
+      ...p,
+      scene: {
+        ...p.scene,
+        appearance: { ...preset.appearance },
+      },
+    });
+    setMessage(
+      `${preset.label} visual preset applied. Fine-tune the lighting controls below if needed.`,
+    );
   }
   function patchMaterial(change: Partial<MaterialOverride>) {
     if (!selectedMaterial) return;
@@ -4182,6 +4194,44 @@ export default function Studio() {
             <section className="editor-lighting" aria-label="Lighting editor">
               <div className="section-label">LIGHTING & LOOK</div>
               <fieldset disabled={Boolean(review) || busy}>
+                <div className="look-preset-panel">
+                  <div className="look-preset-head">
+                    <span>ONE-CLICK REALISM</span>
+                    <small>{activeLookPreset?.label ?? "CUSTOM"}</small>
+                  </div>
+                  <div
+                    className="look-preset-grid"
+                    role="group"
+                    aria-label="Visual realism presets"
+                  >
+                    {APPEARANCE_PRESETS.map((preset) => {
+                      const active = activeLookPreset?.id === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          className={active ? "look-preset active" : "look-preset"}
+                          aria-pressed={active}
+                          title={preset.detail}
+                          onClick={() => applyAppearancePreset(preset.id)}
+                        >
+                          <span
+                            className={`look-preset-swatch look-preset-swatch--${preset.id}`}
+                            aria-hidden="true"
+                          />
+                          <span>
+                            <b>{preset.label}</b>
+                            <small>{preset.shortDescription}</small>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <small className="look-preset-note">
+                    Presets change runtime lighting only. Source model bytes remain unchanged.
+                  </small>
+                </div>
+                <div className="look-fine-tune-label">Fine tune</div>
                 <label className="check">
                   <input
                     type="checkbox"
@@ -4239,7 +4289,7 @@ export default function Studio() {
                       ...p,
                       scene: {
                         ...p.scene,
-                        appearance: { ...DEFAULT_APPEARANCE },
+                        appearance: { ...DEFAULT_SCENE_APPEARANCE },
                         materialOverrides: [],
                       },
                     })
