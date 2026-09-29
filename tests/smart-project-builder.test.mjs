@@ -37,9 +37,12 @@ test("Smart analyzer keeps ambiguous geometry in review instead of inventing sem
 });
 
 test("builder metadata stays authoring-only in public Studio snapshots", () => {
-  const publisher = read("workers/release-publish.mjs");
-  assert.match(publisher, /delete project\.referenceUrl/);
-  assert.match(publisher, /delete project\.brief/);
+  const sanitizer = read("workers/studio-draft-validation.mjs");
+  assert.match(sanitizer, /export function publicStudioSnapshot/);
+  assert.match(sanitizer, /referenceLayers: \[\]/);
+  assert.match(sanitizer, /modelNodeTags: \[\]/);
+  assert.doesNotMatch(sanitizer, /referenceUrl:/);
+  assert.doesNotMatch(sanitizer, /brief:/);
 });
 
 
