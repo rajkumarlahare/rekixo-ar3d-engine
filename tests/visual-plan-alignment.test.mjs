@@ -75,10 +75,10 @@ test("alignment mode prioritizes the canvas and removes editor-side clutter", ()
   assert.match(studio, /editor-core--alignment/);
   assert.match(studio, /aria-label="Plan alignment tools"/);
   assert.match(studio, /Drag the building over the reference plan/);
-  assert.match(studio, />Top view</);
-  assert.match(studio, />Move <kbd>W<\/kbd>/);
-  assert.match(studio, />Rotate <kbd>E<\/kbd>/);
-  assert.match(studio, />\+ Reference</);
+  assert.match(studio, /\bTop view\b/);
+  assert.match(studio, /Move <kbd>W<\/kbd>/);
+  assert.match(studio, /Rotate <kbd>E<\/kbd>/);
+  assert.match(studio, /\+ Reference/);
   assert.match(studio, /className="primary alignment-done"/);
   assert.match(studio, /sectionCutEnabled && !showReferenceWorkspace/);
 
