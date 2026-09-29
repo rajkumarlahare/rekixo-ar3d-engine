@@ -14,6 +14,8 @@ import { asset } from "./storage";
 import {
   canWalk,
   catalog,
+  reviewedDoorConnections,
+  resolveReviewedDoorWalkStep,
   roomBoundaryPoints,
   type Asset,
   type Room,
@@ -111,6 +113,7 @@ interface Props {
   onRoomDraw?: (result: RoomDrawResult) => void;
   onRoomPolygonDraw?: (points: RoomPoint[]) => void;
   onRoomPolygonChange?: (roomId: string, points: RoomPoint[]) => void;
+  onWalkRoomChange?: (roomId: string, openingId: string) => void;
   isolateFloorId?: string;
   sectionCut?: {
     enabled: boolean;
@@ -355,6 +358,7 @@ export default function SceneCanvas(props: Props) {
     rooms: T.Group;
     references: T.Group;
     keys: Set<string>;
+    walkRoomId: string;
     selectables: Map<string, T.Object3D>;
     transform: TransformControls;
     hemi: T.HemisphereLight;
@@ -441,8 +445,10 @@ export default function SceneCanvas(props: Props) {
     const transform = new TransformControls(camera, renderer.domElement);
     scene.add(transform.getHelper());
     const roomFloor = () => {
-      const { scene: s, roomId } = latest.current;
-      const r = s.rooms.find((r) => r.id === roomId);
+      const { scene: s, roomId, view } = latest.current;
+      const activeRoomId =
+        view === "walk" ? api.current?.walkRoomId || roomId : roomId;
+      const r = s.rooms.find((candidate) => candidate.id === activeRoomId);
       return {
         r,
         y: s.floors.find((f) => f.id === r?.floorId)?.elevation ?? 0,
@@ -540,6 +546,18 @@ export default function SceneCanvas(props: Props) {
         { view } = latest.current;
       keys.clear();
       if (view === "walk" && r) {
+        if (canWalk(latest.current.scene, r, camera.position.x, camera.position.z)) {
+          const connections = reviewedDoorConnections(
+            latest.current.scene,
+            r.id,
+          ).length;
+          setStatus(
+            connections
+              ? `${r.name} · ${connections} reviewed door connection${connections === 1 ? "" : "s"}`
+              : `${r.name} · no reviewed room-to-room doors`,
+          );
+          return;
+        }
         let start: [number, number] = [r.x, r.z + r.depth / 2 - 0.4];
         if (!canWalk(latest.current.scene, r, ...start)) {
           const candidates: [number, number][] = [];
@@ -684,6 +702,7 @@ export default function SceneCanvas(props: Props) {
       rooms,
       references,
       keys,
+      walkRoomId: props.roomId,
       selectables,
       transform,
       hemi,
@@ -1203,24 +1222,67 @@ export default function SceneCanvas(props: Props) {
         const step = (dt * 1.5) / Math.max(1, Math.hypot(forward, side));
         const dx = (-Math.sin(yaw) * forward + Math.cos(yaw) * side) * step,
           dz = (-Math.cos(yaw) * forward - Math.sin(yaw) * side) * step;
-        if (
-          canWalk(
-            latest.current.scene,
+        if (Math.abs(dx) > 0.000001 || Math.abs(dz) > 0.000001) {
+          const sceneData = latest.current.scene;
+          const fromX = camera.position.x;
+          const fromZ = camera.position.z;
+          let resolved = resolveReviewedDoorWalkStep(
+            sceneData,
             r,
-            camera.position.x + dx,
-            camera.position.z,
-          )
-        )
-          camera.position.x += dx;
-        if (
-          canWalk(
-            latest.current.scene,
-            r,
-            camera.position.x,
-            camera.position.z + dz,
-          )
-        )
-          camera.position.z += dz;
+            fromX,
+            fromZ,
+            fromX + dx,
+            fromZ + dz,
+          );
+          if (
+            resolved.roomId === r.id &&
+            resolved.x === fromX &&
+            resolved.z === fromZ
+          ) {
+            const slideX = resolveReviewedDoorWalkStep(
+              sceneData,
+              r,
+              fromX,
+              fromZ,
+              fromX + dx,
+              fromZ,
+            );
+            if (
+              slideX.roomId !== r.id ||
+              slideX.x !== fromX ||
+              slideX.z !== fromZ
+            )
+              resolved = slideX;
+            else
+              resolved = resolveReviewedDoorWalkStep(
+                sceneData,
+                r,
+                fromX,
+                fromZ,
+                fromX,
+                fromZ + dz,
+              );
+          }
+          camera.position.x = resolved.x;
+          camera.position.z = resolved.z;
+          if (resolved.roomId !== r.id && resolved.openingId) {
+            api.current!.walkRoomId = resolved.roomId;
+            const destination = sceneData.rooms.find(
+              (candidate) => candidate.id === resolved.roomId,
+            );
+            const connections = reviewedDoorConnections(
+              sceneData,
+              resolved.roomId,
+            ).length;
+            setStatus(
+              `Entered ${destination?.name ?? "connected room"} through reviewed door · ${connections} connection${connections === 1 ? "" : "s"}`,
+            );
+            latest.current.onWalkRoomChange?.(
+              resolved.roomId,
+              resolved.openingId,
+            );
+          }
+        }
         camera.lookAt(
           camera.position
             .clone()
@@ -1820,6 +1882,12 @@ export default function SceneCanvas(props: Props) {
   ]);
 
   useEffect(() => {
+    const runtime = api.current;
+    if (!runtime) return;
+    runtime.walkRoomId = props.roomId;
+  }, [props.roomId, props.view]);
+
+  useEffect(() => {
     if (props.roomPolygonDraw?.enabled) return;
     api.current?.clearPolygonDraft();
   }, [props.roomPolygonDraw?.enabled, props.roomPolygonDraw?.floorId]);
@@ -1887,7 +1955,9 @@ export default function SceneCanvas(props: Props) {
       </button>
       {props.view === "walk" && (
         <div className="walk-pad">
-          <span>Drag to look · WASD to walk · room-bounded</span>
+          <span>
+            Drag to look · WASD to walk · reviewed shared doors connect rooms
+          </span>
           {[
             ["w", "↑"],
             ["a", "←"],
