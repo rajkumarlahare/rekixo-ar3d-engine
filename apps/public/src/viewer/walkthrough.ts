@@ -166,13 +166,42 @@ export function publicRoomContains(
   return true;
 }
 
-export function publicRoomCenter(room: PublicWalkthroughRoom) {
+function roomPointClearance(
+  room: PublicWalkthroughRoom,
+  x: number,
+  z: number,
+) {
+  let clearance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < room.boundary.length; index += 1) {
+    clearance = Math.min(
+      clearance,
+      pointSegmentDistance(
+        x,
+        z,
+        room.boundary[index],
+        room.boundary[(index + 1) % room.boundary.length],
+      ),
+    );
+  }
+  return clearance;
+}
+
+/**
+ * Find a deterministic point inside a simple room polygon.
+ *
+ * Bounding-box/vertex averages can sit outside concave L/U-shaped rooms.
+ * Horizontal scanlines always produce interior intervals for a valid polygon;
+ * choosing the interval midpoint with the greatest wall clearance gives walk
+ * mode a safe start without inventing geometry.
+ */
+export function publicRoomInteriorPoint(
+  room: PublicWalkthroughRoom,
+  margin = 0,
+) {
   const minX = Math.min(...room.boundary.map((point) => point[0]));
   const maxX = Math.max(...room.boundary.map((point) => point[0]));
   const minZ = Math.min(...room.boundary.map((point) => point[1]));
   const maxZ = Math.max(...room.boundary.map((point) => point[1]));
-  const center = { x: (minX + maxX) / 2, z: (minZ + maxZ) / 2 };
-  if (publicRoomContains(room, center.x, center.z)) return center;
   const average = {
     x:
       room.boundary.reduce((sum, point) => sum + point[0], 0) /
@@ -181,7 +210,73 @@ export function publicRoomCenter(room: PublicWalkthroughRoom) {
       room.boundary.reduce((sum, point) => sum + point[1], 0) /
       room.boundary.length,
   };
-  return average;
+  const direct = [
+    { x: (minX + maxX) / 2, z: (minZ + maxZ) / 2 },
+    average,
+  ];
+
+  let best:
+    | { x: number; z: number; clearance: number }
+    | undefined;
+  const consider = (x: number, z: number) => {
+    if (!publicRoomContains(room, x, z)) return;
+    const clearance = roomPointClearance(room, x, z);
+    if (!best || clearance > best.clearance)
+      best = { x, z, clearance };
+  };
+
+  for (const point of direct) consider(point.x, point.z);
+
+  const levels = [...new Set(room.boundary.map((point) => point[1]))].sort(
+    (left, right) => left - right,
+  );
+  const scanlines = new Set<number>([
+    (minZ + maxZ) / 2,
+    average.z,
+  ]);
+  for (let index = 0; index + 1 < levels.length; index += 1) {
+    if (levels[index + 1] - levels[index] > 1e-7)
+      scanlines.add((levels[index] + levels[index + 1]) / 2);
+  }
+
+  for (const z of scanlines) {
+    const intersections: number[] = [];
+    for (let index = 0; index < room.boundary.length; index += 1) {
+      const left = room.boundary[index];
+      const right = room.boundary[(index + 1) % room.boundary.length];
+      if (
+        (left[1] <= z && right[1] > z) ||
+        (right[1] <= z && left[1] > z)
+      ) {
+        const ratio = (z - left[1]) / (right[1] - left[1]);
+        intersections.push(left[0] + ratio * (right[0] - left[0]));
+      }
+    }
+    intersections.sort((left, right) => left - right);
+    for (let index = 0; index + 1 < intersections.length; index += 2) {
+      const left = intersections[index];
+      const right = intersections[index + 1];
+      if (right - left <= 1e-7) continue;
+      consider((left + right) / 2, z);
+      if (margin > 0 && right - left > margin * 2) {
+        consider(left + margin, z);
+        consider(right - margin, z);
+      }
+    }
+  }
+
+  if (best && best.clearance >= margin)
+    return { x: best.x, z: best.z };
+  if (best) return { x: best.x, z: best.z };
+
+  // Public contracts validate simple polygons, so this is only a corruption
+  // fallback. Keep it deterministic and let the caller's containment check fail
+  // closed rather than producing NaN coordinates.
+  return { x: average.x, z: average.z };
+}
+
+export function publicRoomCenter(room: PublicWalkthroughRoom) {
+  return publicRoomInteriorPoint(room);
 }
 
 export function publicWalkConnections(
@@ -304,23 +399,14 @@ export function publicWalkStart(
   graph: PublicWalkthroughGraph,
   room: PublicWalkthroughRoom,
 ) {
-  const center = publicRoomCenter(room);
-  if (publicRoomContains(room, center.x, center.z, 0.18 / graph.metresPerUnit))
-    return center;
-  for (const point of room.boundary) {
-    const candidate = {
-      x: (point[0] + center.x) / 2,
-      z: (point[1] + center.z) / 2,
-    };
-    if (
-      publicRoomContains(
-        room,
-        candidate.x,
-        candidate.z,
-        0.18 / graph.metresPerUnit,
-      )
-    )
-      return candidate;
-  }
-  return center;
+  const unit = Math.max(graph.metresPerUnit, 0.0001);
+  const margin = 0.18 / unit;
+  const candidate = publicRoomInteriorPoint(room, margin);
+  if (publicRoomContains(room, candidate.x, candidate.z, margin))
+    return candidate;
+
+  const inside = publicRoomInteriorPoint(room);
+  return publicRoomContains(room, inside.x, inside.z)
+    ? inside
+    : publicRoomCenter(room);
 }
