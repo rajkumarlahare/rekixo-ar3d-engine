@@ -241,11 +241,7 @@ export default function Studio() {
     setRoomId(p.scene.rooms[0]?.id ?? "");
     setSelected(p.scene.rooms[0]?.id ?? "");
     setReview("");
-    setWorkspace(
-      p.assets.length || p.scene.rooms.length || p.scene.floors.length > 1
-        ? "overview"
-        : "builder",
-    );
+    setWorkspace("builder");
     setView(p.scene.modelId ? "building" : "rooms");
     setDirty(false);
     setCloudDirty(projectAheadOfCloud(p));
@@ -2429,274 +2425,275 @@ export default function Studio() {
           : "studio"
       }
     >
-      <header className="studio-head">
-        <a className="studio-brand" href="/3Dprojects">
+      <header className="studio-head studio-head--simple">
+        <a className="studio-brand" href="/3Dprojects" aria-label="Rekixo 3D projects">
           R
           <span>
             REKIXO <small>3D DESIGN ADMIN</small>
           </span>
         </a>
-        <div className="project-name">
-          <input
-            aria-label="Project name"
-            value={p.name}
-            disabled={Boolean(review) || busy}
-            onChange={(e) => edit({ ...p, name: e.target.value })}
-          />
+
+        <div className="project-name project-name--simple">
+          <strong>{p.name || "Untitled project"}</strong>
           <span>
-            {dirty
-              ? "Saving locally…"
-              : localSaveState === "error"
-                ? "Local autosave failed"
-                : cloudDirty
-                  ? `Saved locally · cloud r${p.cloud?.revision ?? "—"} update pending`
-                  : p.cloud
-                    ? `Cloud r${p.cloud.revision} · local autosave`
-                    : "Local autosave"}{" "}
-            · {p.scene.rooms.length} rooms
+            {p.scene.rooms.length} room{p.scene.rooms.length === 1 ? "" : "s"}
+            {p.cloud ? ` · Cloud r${p.cloud.revision}` : " · Local project"}
           </span>
         </div>
-        <div className="studio-project-switcher">
-          <label className="studio-project-search">
-            <span>SEARCH</span>
-            <input
-              aria-label="Search 3D projects"
-              value={projectSearch}
-              onChange={(event) => {
-                const value = event.target.value;
-                setProjectSearch(value);
-                setCloudSearch(value);
-              }}
-              placeholder="Name / slug"
-              disabled={busy}
-            />
-          </label>
-          <label>
-            <span>PROJECT</span>
-            <select
-              aria-label="Selected local project"
-              value={list.some((entry) => entry.id === p.id) ? p.id : ""}
-              disabled={busy || dirty}
-              onChange={(event) => {
-                const next = list.find(
-                  (entry) => entry.id === event.target.value,
-                );
-                if (next) switchProject(next);
-              }}
-            >
-              <option value="">
-                {list.some((entry) => entry.id === p.id)
-                  ? "Select project"
-                  : "Unsaved project"}
-              </option>
-              {visibleLocalProjects.map((entry) => (
-                <option value={entry.id} key={entry.id}>
-                  {entry.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {cloudSession?.authenticated && (
-            <label>
-              <span>CLOUD</span>
-              <select
-                aria-label="Selected cloud project"
-                value=""
-                disabled={busy || dirty || !cloudProjects.length}
-                onChange={(event) => {
-                  const slug = event.target.value;
-                  if (!slug) return;
-                  void task(() => openCloudProject(slug));
+
+        <nav className="studio-primary-nav" aria-label="Project workflow">
+          {(
+            [
+              ["builder", "Setup"],
+              ["editor", "3D Edit"],
+              ["evidence", "Review"],
+              ["publish", "Publish"],
+            ] as const
+          ).map(([key, label]) => {
+            const active =
+              workspace === key ||
+              (key === "builder" &&
+                (workspace === "sources" || workspace === "overview"));
+            const reviewRemaining = Math.max(
+              0,
+              readiness.totalRooms - readiness.reviewedRooms,
+            );
+            return (
+              <button
+                key={key}
+                type="button"
+                className={active ? "active" : ""}
+                onClick={() => {
+                  setWorkspace(key);
+                  if (key === "editor") {
+                    setEditorFocus(true);
+                    if (p.scene.modelId) setView("building");
+                  }
                 }}
               >
-                <option value="">
-                  {cloudProjects.length ? "Open cloud project…" : "No cloud projects"}
-                </option>
-                {cloudProjects.map((entry) => (
-                  <option key={entry.id} value={entry.slug}>
-                    {entry.name} · r{entry.draftRevision ?? "—"}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-        </div>
-        <div className="studio-actions">
-          <button
-            disabled={busy || dirty}
-            onClick={() => {
-              if (dirty) {
-                setError("Save your changes before creating a project.");
-                return;
-              }
-              open(newProject("Untitled project"));
-              setWorkspace("builder");
-            }}
-          >
-            + New project
-          </button>
-          <button
-            disabled={busy || Boolean(review)}
-            onClick={() =>
-              task(async () => {
-                await persist(p);
-              })
-            }
-          >
-            Save local
-          </button>
-          {cloudSession?.authenticated ? (
-            <>
-              <button
-                disabled={busy || Boolean(review)}
-                onClick={() => task(syncCloudProject)}
-              >
-                Save to cloud
+                {label}
+                {key === "evidence" && reviewRemaining > 0 && (
+                  <small>{reviewRemaining}</small>
+                )}
+                {key === "publish" && readiness.blockers.length > 0 && (
+                  <small className="ops-tab-alert">
+                    {readiness.blockers.length}
+                  </small>
+                )}
               </button>
-              {p.cloud && (
-                <button
-                  disabled={
-                    busy ||
-                    cloudDirty ||
-                    Boolean(review) ||
-                    !readiness.publishable
-                  }
-                  title={
-                    readiness.publishable
-                      ? "Publish current immutable release"
-                      : readiness.blockers[0]?.detail
-                  }
-                  onClick={() => task(publishCurrentRelease)}
-                >
-                  Publish release
-                </button>
-              )}
-            </>
-          ) : (
-            <a
-              href="/3Dprojects/login?return=/3Dprojects/studio"
-              className="studio-cloud-login"
-            >
-              Cloud sign in
-            </a>
-          )}
-          <button
-            disabled={busy}
-            onClick={() =>
-              task(async () => {
-                const blob = await storage.exportPackage(p);
-                setBackup({
-                  url: URL.createObjectURL(blob),
-                  name: `${p.name.replace(/[^a-z0-9-]/gi, "-")}.rekixo.json`,
-                });
-                setMessage(
-                  "Backup ready with models, references and review versions. Click Download backup to save the file.",
-                );
-              })
-            }
+            );
+          })}
+        </nav>
+
+        <div className="studio-shell-status">
+          <strong
+            className={`storage-autosave storage-autosave--${localSaveState}`}
+            role="status"
           >
-            Export backup
-          </button>
-          {backup && (
-            <a href={backup.url} download={backup.name}>
-              Download backup
-            </a>
-          )}
-          <button
-            disabled={busy}
-            onClick={() =>
-              task(async () => {
-                validateProject(p);
-                const manifest = buildSceneManifestV2(p, files);
-                setManifestText(JSON.stringify(manifest, null, 2));
-                setMessage(
-                  "Scene Manifest V2 ready. It is a portable scene contract; keep the full backup for model/reference bytes.",
-                );
-              })
-            }
-          >
-            Export scene manifest
-          </button>
+            {localSaveState === "saving"
+              ? "Saving…"
+              : localSaveState === "error"
+                ? "Save failed"
+                : dirty
+                  ? "Save queued"
+                  : "Autosaved"}
+          </strong>
+          {cloudDirty && <small>Cloud update pending</small>}
         </div>
+
+        <details className="studio-more-menu">
+          <summary aria-label="More project actions" title="More project actions">
+            <span aria-hidden="true">•••</span>
+          </summary>
+          <div className="studio-more-popover">
+            <div className="studio-more-section">
+              <span>PROJECT</span>
+              <button
+                type="button"
+                disabled={busy || dirty}
+                onClick={() => {
+                  if (dirty) {
+                    setError("Wait for local autosave before creating a project.");
+                    return;
+                  }
+                  open(newProject("Untitled project"));
+                  setWorkspace("builder");
+                }}
+              >
+                + New project
+              </button>
+              <label>
+                <span>Find project</span>
+                <input
+                  aria-label="Search 3D projects"
+                  value={projectSearch}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setProjectSearch(value);
+                    setCloudSearch(value);
+                  }}
+                  placeholder="Name / slug"
+                  disabled={busy}
+                />
+              </label>
+              <label>
+                <span>Switch local project</span>
+                <select
+                  aria-label="Selected local project"
+                  value={list.some((entry) => entry.id === p.id) ? p.id : ""}
+                  disabled={busy || dirty}
+                  onChange={(event) => {
+                    const next = list.find(
+                      (entry) => entry.id === event.target.value,
+                    );
+                    if (next) switchProject(next);
+                  }}
+                >
+                  <option value="">
+                    {list.some((entry) => entry.id === p.id)
+                      ? "Select project"
+                      : "Unsaved project"}
+                  </option>
+                  {visibleLocalProjects.map((entry) => (
+                    <option value={entry.id} key={entry.id}>
+                      {entry.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="studio-more-links">
+                <button type="button" onClick={() => setWorkspace("overview")}>
+                  Project summary
+                </button>
+                <button type="button" onClick={() => setWorkspace("sources")}>
+                  Source library
+                </button>
+              </div>
+            </div>
+
+            <div className="studio-more-section">
+              <span>CLOUD</span>
+              {cloudSession?.authenticated ? (
+                <>
+                  <label>
+                    <span>Open cloud project</span>
+                    <select
+                      aria-label="Selected cloud project"
+                      value=""
+                      disabled={busy || dirty || !cloudProjects.length}
+                      onChange={(event) => {
+                        const slug = event.target.value;
+                        if (!slug) return;
+                        void task(() => openCloudProject(slug));
+                      }}
+                    >
+                      <option value="">
+                        {cloudProjects.length
+                          ? "Choose cloud project…"
+                          : "No cloud projects"}
+                      </option>
+                      {cloudProjects.map((entry) => (
+                        <option key={entry.id} value={entry.slug}>
+                          {entry.name} · r{entry.draftRevision ?? "—"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    disabled={busy || Boolean(review)}
+                    onClick={() => task(syncCloudProject)}
+                  >
+                    Save latest to cloud
+                  </button>
+                </>
+              ) : (
+                <a
+                  href="/3Dprojects/login?return=/3Dprojects/studio"
+                  className="studio-cloud-login"
+                >
+                  Cloud sign in
+                </a>
+              )}
+            </div>
+
+            <div className="studio-more-section">
+              <span>BACKUP & ADVANCED</span>
+              <div className="studio-more-links">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => importInput.current?.click()}
+                >
+                  Import backup
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || Boolean(review)}
+                  onClick={() =>
+                    task(async () => {
+                      await persist(p);
+                    })
+                  }
+                >
+                  Save local now
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    task(async () => {
+                      const blob = await storage.exportPackage(p);
+                      setBackup({
+                        url: URL.createObjectURL(blob),
+                        name: `${p.name.replace(/[^a-z0-9-]/gi, "-")}.rekixo.json`,
+                      });
+                      setMessage(
+                        "Backup ready with models, references and review versions.",
+                      );
+                    })
+                  }
+                >
+                  Export backup
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    task(async () => {
+                      validateProject(p);
+                      const manifest = buildSceneManifestV2(p, files);
+                      setManifestText(JSON.stringify(manifest, null, 2));
+                      setMessage("Scene Manifest V2 ready.");
+                    })
+                  }
+                >
+                  Export scene manifest
+                </button>
+              </div>
+              {backup && (
+                <a
+                  className="studio-more-download"
+                  href={backup.url}
+                  download={backup.name}
+                >
+                  Download backup
+                </a>
+              )}
+              {manifestText && (
+                <details className="studio-manifest-details">
+                  <summary>Scene manifest</summary>
+                  <textarea
+                    aria-label="Scene manifest"
+                    readOnly
+                    value={manifestText}
+                  />
+                </details>
+              )}
+            </div>
+          </div>
+        </details>
       </header>
-      <nav className="studio-ops-tabs" aria-label="3D project workspace">
-        {(
-          [
-            ["builder", "Project Builder"],
-            ["overview", "Overview"],
-            ["editor", "3D Editor"],
-            ["sources", "Sources"],
-            ["evidence", "Evidence"],
-            ["publish", "Preview & Publish"],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            className={workspace === key ? "active" : ""}
-            onClick={() => {
-              setWorkspace(key);
-              if (key === "editor") setEditorFocus(true);
-            }}
-          >
-            <span aria-hidden="true">
-              {key === "builder"
-                ? "✦"
-                : key === "overview"
-                  ? "⌂"
-                  : key === "editor"
-                    ? "◫"
-                    : key === "sources"
-                      ? "⇧"
-                      : key === "evidence"
-                        ? "✓"
-                        : "↗"}
-            </span>
-            {label}
-            {key === "evidence" && p.scene.rooms.length > 0 && (
-              <small>
-                {readiness.reviewedRooms}/{readiness.totalRooms}
-              </small>
-            )}
-            {key === "publish" && readiness.blockers.length > 0 && (
-              <small className="ops-tab-alert">{readiness.blockers.length}</small>
-            )}
-          </button>
-        ))}
-      </nav>
-      <div className="storage-banner">
-        {manifestText && (
-          <label>
-            Scene manifest
-            <textarea
-              aria-label="Scene manifest"
-              readOnly
-              value={manifestText}
-            />
-          </label>
-        )}
-        YOUR DESIGN WORKSPACE{" "}
-        <span>
-          {cloudSession?.authenticated
-            ? "Edits autosave to this browser. Engine cloud stays explicit; Publish creates an immutable release."
-            : "Edits autosave to this browser. Cloud writes stay locked behind the dedicated Engine Admin session."}
-        </span>
-        <strong
-          className={`storage-autosave storage-autosave--${localSaveState}`}
-          role="status"
-        >
-          {localSaveState === "saving"
-            ? "Autosaving…"
-            : localSaveState === "error"
-              ? "Autosave failed"
-              : dirty
-                ? "Autosave queued"
-                : "Autosaved locally"}
-        </strong>
-        <button disabled={busy} onClick={() => importInput.current?.click()}>
-          Import backup
-        </button>
-      </div>
       {(error || message || busy) && (
         <div
           className={error ? "studio-feedback error" : "studio-feedback"}
