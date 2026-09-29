@@ -37,6 +37,9 @@ import {
   type ExperienceRuntime,
   type ModelProfileRuntime,
 } from "./projectProfiles";
+import { applyPreset, fitCamera, type HomeView } from "./viewerCamera";
+import { createPreviewBuilding } from "./viewerPreview";
+import { disposeViewerObject } from "./viewerResources";
 
 type ViewerMode = "booting" | "loading" | "model" | "demo" | "error";
 type PresentationView = "default" | "aerial" | "building" | "top" | "balcony" | "context";
@@ -60,157 +63,11 @@ interface Viewer3DProps {
   walkthrough?: PublicWalkthroughGraph;
 }
 
-interface HomeView {
-  position: THREE.Vector3;
-  target: THREE.Vector3;
-  fov: number;
-}
-
 function isMobileDevice() {
   return (
     window.matchMedia("(max-width: 760px)").matches ||
     /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
   );
-}
-
-function disposeMaterial(material: THREE.Material | THREE.Material[]) {
-  const materials = Array.isArray(material) ? material : [material];
-  for (const item of materials) {
-    for (const value of Object.values(item)) {
-      if (value instanceof THREE.Texture) value.dispose();
-    }
-    item.dispose();
-  }
-}
-
-function disposeObject(root: THREE.Object3D) {
-  root.traverse((object) => {
-    if (!(object instanceof THREE.Mesh)) return;
-    object.geometry?.dispose();
-    disposeMaterial(object.material);
-  });
-}
-
-function createPreviewBuilding() {
-  const group = new THREE.Group();
-  group.name = "Rekixo AR3D preview geometry";
-
-  const wall = new THREE.MeshStandardMaterial({
-    color: 0xe8edf2,
-    roughness: 0.72,
-    metalness: 0.02,
-  });
-  const frame = new THREE.MeshStandardMaterial({
-    color: 0x26313d,
-    roughness: 0.52,
-    metalness: 0.12,
-  });
-  const glass = new THREE.MeshPhysicalMaterial({
-    color: 0x8fc8dd,
-    roughness: 0.18,
-    transmission: 0.24,
-    transparent: true,
-    opacity: 0.78,
-  });
-  const warm = new THREE.MeshStandardMaterial({
-    color: 0xf0c3a3,
-    emissive: 0x9b4d24,
-    emissiveIntensity: 0.22,
-    roughness: 0.76,
-  });
-
-  const podium = new THREE.Mesh(new THREE.BoxGeometry(7.4, 0.8, 5.2), frame);
-  podium.position.y = 0.4;
-  podium.castShadow = true;
-  podium.receiveShadow = true;
-  group.add(podium);
-
-  for (let floor = 0; floor < 5; floor += 1) {
-    const y = 1.3 + floor * 1.55;
-
-    const core = new THREE.Mesh(new THREE.BoxGeometry(6.6, 1.35, 4.45), wall);
-    core.position.y = y;
-    core.castShadow = true;
-    core.receiveShadow = true;
-    group.add(core);
-
-    const balcony = new THREE.Mesh(
-      new THREE.BoxGeometry(4.5, 0.18, 1.05),
-      frame,
-    );
-    balcony.position.set(0.7, y - 0.25, 2.55);
-    balcony.castShadow = true;
-    group.add(balcony);
-
-    const glow = new THREE.Mesh(new THREE.BoxGeometry(4.1, 0.72, 0.08), warm);
-    glow.position.set(0.7, y + 0.08, 2.09);
-    group.add(glow);
-
-    for (const x of [-2.1, 0, 2.1]) {
-      const windowMesh = new THREE.Mesh(
-        new THREE.BoxGeometry(1.15, 0.78, 0.08),
-        glass,
-      );
-      windowMesh.position.set(x, y + 0.06, 2.27);
-      group.add(windowMesh);
-    }
-  }
-
-  const crown = new THREE.Mesh(new THREE.BoxGeometry(6.9, 0.35, 4.7), frame);
-  crown.position.y = 8.75;
-  crown.castShadow = true;
-  group.add(crown);
-
-  return group;
-}
-
-function fitCamera(
-  object: THREE.Object3D,
-  camera: THREE.PerspectiveCamera,
-  controls: OrbitControls,
-): HomeView {
-  const box = new THREE.Box3().setFromObject(object);
-  const sphere = box.getBoundingSphere(new THREE.Sphere());
-  const radius = Math.max(sphere.radius, 1);
-  const halfFov = THREE.MathUtils.degToRad(camera.fov * 0.5);
-  const distance = Math.max(radius / Math.sin(halfFov), radius * 2.1);
-  const direction = new THREE.Vector3(1, 0.72, 1).normalize();
-
-  camera.position.copy(
-    sphere.center.clone().add(direction.multiplyScalar(distance * 0.72)),
-  );
-  camera.near = Math.max(distance / 1000, 0.01);
-  camera.far = Math.max(distance * 30, 250);
-  camera.updateProjectionMatrix();
-
-  controls.target.copy(sphere.center);
-  controls.minDistance = Math.max(radius * 0.55, 1.5);
-  controls.maxDistance = Math.max(radius * 8, 40);
-  controls.update();
-
-  return {
-    position: camera.position.clone(),
-    target: controls.target.clone(),
-    fov: camera.fov,
-  };
-}
-
-function applyPreset(
-  preset: CameraPreset3D,
-  camera: THREE.PerspectiveCamera,
-  controls: OrbitControls,
-): HomeView {
-  const position = new THREE.Vector3(...preset.position);
-  const target = new THREE.Vector3(...preset.target);
-  const fov = preset.fov ?? 45;
-
-  camera.position.copy(position);
-  camera.fov = fov;
-  camera.updateProjectionMatrix();
-  controls.target.copy(target);
-  controls.update();
-
-  return { position, target, fov };
 }
 
 export function Viewer3D({
@@ -835,7 +692,7 @@ export function Viewer3D({
       if (activeObject) {
         referenceExterior?.dispose();
         scene.remove(activeObject);
-        disposeObject(activeObject);
+        disposeViewerObject(activeObject);
       }
       activeObject = object;
       scene.add(object);
@@ -1175,7 +1032,7 @@ export function Viewer3D({
         modelUrl,
         (gltf) => {
           if (disposed) {
-            disposeObject(gltf.scene);
+            disposeViewerObject(gltf.scene);
             return;
           }
 
@@ -1262,7 +1119,7 @@ export function Viewer3D({
       renderer.domElement.removeEventListener("pointerup", handlePointerUp);
       renderer.domElement.removeEventListener("pointercancel", handlePointerUp);
       renderer.domElement.removeEventListener("click", handleFeatureClick);
-      if (activeObject) disposeObject(activeObject);
+      if (activeObject) disposeViewerObject(activeObject);
       referenceExterior?.dispose();
       if (siteEnvironment) {
         scene.remove(siteEnvironment.root);
