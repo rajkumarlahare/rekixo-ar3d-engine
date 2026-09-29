@@ -17,7 +17,8 @@ on:
 
 concurrency:
   group: rekixo-3d-production
-  cancel-in-progress: true
+  # Production deploys must finish verification once started; newer commits queue behind them.
+  cancel-in-progress: false
 
 permissions:
   contents: read
