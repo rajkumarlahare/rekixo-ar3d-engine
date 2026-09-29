@@ -1,4 +1,3 @@
-import jyotiSourcePack from "../../../../project-profiles/jyoti-paradise/source-pack.json";
 import type { Asset, Project } from "./domain";
 
 export type QuickSourceSlotKey =
@@ -18,7 +17,7 @@ export interface QuickSourceSlot {
 }
 
 export interface QuickSourceSetup {
-  profile?: "jyoti-paradise";
+  profile?: string;
   name?: string;
   slug?: string;
   location?: string;
@@ -29,68 +28,63 @@ export interface QuickSourceSetup {
   primaryModelId?: string;
 }
 
-const SLOT_DEFINITIONS: Array<{
-  key: QuickSourceSlotKey;
-  label: string;
-  sourceId: string;
-}> = [
-  {
-    key: "primaryModel",
-    label: "Primary 3D model",
-    sourceId: "jyoti-source-fbx",
-  },
-  {
-    key: "floorPlan",
-    label: "Brochure / floor plan",
-    sourceId: "jyoti-source-brochure",
-  },
-  {
-    key: "cad",
-    label: "CAD dimensional source",
-    sourceId: "jyoti-source-dwg",
-  },
-  {
-    key: "visualReference",
-    label: "Exterior realism reference",
-    sourceId: "jyoti-source-render",
-  },
-  {
-    key: "backupModel",
-    label: "SketchUp backup",
-    sourceId: "jyoti-source-skb",
-  },
-  {
-    key: "renderMetadata",
-    label: "D5 render metadata",
-    sourceId: "jyoti-source-drs",
-  },
-];
-
-const sourceById = new Map(
-  jyotiSourcePack.sources.map((source) => [source.id, source] as const),
-);
-
-function assetForSource(files: Asset[], sourceId: string) {
-  const source = sourceById.get(sourceId);
-  if (!source) return undefined;
-  return files.find(
-    (asset) =>
-      asset.hash.toLowerCase() === String(source.sha256).toLowerCase() &&
-      asset.size === Number(source.byteSize),
-  );
+interface SourceProfileDefinition {
+  id: string;
+  name: string;
+  slug: string;
+  location?: string;
+  minMatches?: number;
+  requireAnyOf?: readonly QuickSourceSlotKey[];
+  sources: ReadonlyArray<{
+    key: QuickSourceSlotKey;
+    label: string;
+    sourceId: string;
+    sha256: string;
+    byteSize: number;
+  }>;
 }
 
-export function detectQuickSourceSetup(files: Asset[]): QuickSourceSetup {
-  const slots = SLOT_DEFINITIONS.map(({ key, label, sourceId }) => {
-    const asset = assetForSource(files, sourceId);
-    return { key, label, sourceId, asset, exact: Boolean(asset) };
+export function emptyQuickSourceSetup(): QuickSourceSetup {
+  return {
+    slots: [],
+    matchedCount: 0,
+    requiredCount: 0,
+    complete: false,
+  };
+}
+
+async function sourceProfiles(): Promise<readonly SourceProfileDefinition[]> {
+  const module = await import("../../../../project-profiles/studio-source-profiles");
+  return module.studioSourceProfiles as readonly SourceProfileDefinition[];
+}
+
+function detectProfile(
+  files: Asset[],
+  profile: SourceProfileDefinition,
+): QuickSourceSetup {
+  const slots = profile.sources.map((source) => {
+    const asset = files.find(
+      (candidate) =>
+        candidate.hash.toLowerCase() === source.sha256.toLowerCase() &&
+        candidate.size === source.byteSize,
+    );
+    return {
+      key: source.key,
+      label: source.label,
+      sourceId: source.sourceId,
+      asset,
+      exact: Boolean(asset),
+    };
   });
   const matchedCount = slots.filter((slot) => slot.exact).length;
-  const primaryModel = slots.find((slot) => slot.key === "primaryModel")?.asset;
-  const floorPlan = slots.find((slot) => slot.key === "floorPlan")?.asset;
+  const requiredKeys = profile.requireAnyOf ?? [];
+  const hasRequiredIdentity =
+    requiredKeys.length === 0 ||
+    requiredKeys.some((key) =>
+      slots.some((slot) => slot.key === key && slot.exact),
+    );
   const recognizable =
-    matchedCount >= 2 && Boolean(primaryModel || floorPlan);
-
+    matchedCount >= (profile.minMatches ?? 2) && hasRequiredIdentity;
   if (!recognizable)
     return {
       slots,
@@ -100,23 +94,36 @@ export function detectQuickSourceSetup(files: Asset[]): QuickSourceSetup {
     };
 
   return {
-    profile: "jyoti-paradise",
-    name: "Jyoti Paradise",
-    slug: "jyoti-paradise",
-    location: "Hingna, Nagpur",
+    profile: profile.id,
+    name: profile.name,
+    slug: profile.slug,
+    location: profile.location,
     slots,
     matchedCount,
     requiredCount: slots.length,
     complete: matchedCount === slots.length,
-    primaryModelId: primaryModel?.id,
+    primaryModelId: slots.find((slot) => slot.key === "primaryModel")?.asset?.id,
   };
+}
+
+export async function detectQuickSourceSetup(
+  files: Asset[],
+): Promise<QuickSourceSetup> {
+  const profiles = await sourceProfiles();
+  let best = emptyQuickSourceSetup();
+  for (const profile of profiles) {
+    const candidate = detectProfile(files, profile);
+    if (candidate.profile && candidate.matchedCount > best.matchedCount)
+      best = candidate;
+  }
+  return best;
 }
 
 export function applyQuickSourceSetup(
   project: Project,
   setup: QuickSourceSetup,
 ): Project {
-  if (setup.profile !== "jyoti-paradise")
+  if (!setup.profile)
     throw Error("No recognized project source pack is ready for auto setup.");
 
   const nextModelId = setup.primaryModelId ?? project.scene.modelId;
