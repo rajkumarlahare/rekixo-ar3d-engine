@@ -10,10 +10,11 @@ from shared loading, navigation, floor selection, and project discovery.
 The recovered Jyoti reference design and its required model asset are documented
 in [Jyoti reference design](docs/JYOTI-REFERENCE-DESIGN.md).
 
-The new **Design Studio** at `/3Dprojects/studio` provides local project authoring:
-model import, measured room layouts, furniture placement, room walkthroughs and
-versioned review snapshots. See [Design Studio](docs/DESIGN-STUDIO.md) for use,
-backup instructions and the boundary between this prototype and cloud publishing.
+The **Design Studio** at `/3Dprojects/studio` provides authenticated project
+authoring with local/offline cache support: source intake, model analysis, measured
+polygon rooms, reviewed openings, furniture, materials/lighting, cloud drafts,
+immutable releases and rollback. See [Design Studio](docs/DESIGN-STUDIO.md) for
+the operator workflow and source-evidence boundaries.
 
 It is a sibling of `rekixo-ar3d-platform`, not a separate product family. The repositories intentionally keep separate production databases, R2 assets, Workers and deployment pipelines so heavy 3D workloads cannot destabilize the plot/project platform.
 
@@ -98,7 +99,12 @@ npm run dev:public
 
 ## Production deployment
 
-Merges to `main` deploy through GitHub Actions. The workflow verifies the generalized Engine, applies only checked-in additive D1 migrations, keeps the isolated R2 bucket, deploys both Workers, verifies the generic project registry, and then verifies the existing Jyoti production compatibility fixture.
+Pushes to `main` run the full test/build gate and deploy the isolated **Admin Worker**
+as the safe default. D1/R2 infrastructure changes require a manual `admin-infra`
+or `engine-all` workflow dispatch; the **Public Worker** deploys only with
+`engine-all`. Production deploys are serialized and are not cancelled once
+verification has started. The workflow then checks protected Admin reads, the
+Platform ↔ Engine contract and the Jyoti compatibility fixture.
 
 ## Safety rules
 
@@ -108,7 +114,8 @@ Merges to `main` deploy through GitHub Actions. The workflow verifies the genera
 - Never treat Jyoti Paradise or any customer project as the Engine identity/default.
 - Never create a code repository per normal 3D customer project.
 - Never add host-wide route takeovers.
-- Do not expose privileged 3D HTTP write APIs before authenticated Stage 5 handoff exists.
+- Keep every privileged 3D read/write behind the dedicated Engine Admin session,
+  same-origin mutation checks and project-scoped ownership validation.
 
 
 ## Jyoti Paradise — completed public product
