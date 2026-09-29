@@ -181,7 +181,26 @@ export async function duplicateProject(source: Project): Promise<Project> {
   p.updated = new Date().toISOString();
   delete p.cloud;
   p.releases = [];
-  p.scene.rooms = p.scene.rooms.map((r) => ({ ...r, verified: false }));
+  p.scene.rooms = p.scene.rooms.map((room) => ({
+    ...room,
+    verified: false,
+    source: "Copied layout — review for this project.",
+    sourceAssetId: undefined,
+    sourcePackSourceId: undefined,
+    sourceClaimIds: undefined,
+    mesh: undefined,
+  }));
+  p.scene.openings = (p.scene.openings ?? []).map((opening) => ({
+    ...opening,
+    reviewed: false,
+    sourceNodeName: undefined,
+    sourceOccurrence: undefined,
+    confidence: undefined,
+  }));
+  // Imported-node semantics are tied to a specific source model and review.
+  // A reusable design copy starts clean rather than carrying architectural
+  // approvals into a different customer/project.
+  p.scene.modelNodeTags = [];
   const files: Asset[] = [];
   const remap = new Map<string, string>();
   for (const key of source.assets) {
