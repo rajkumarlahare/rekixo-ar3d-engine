@@ -29,8 +29,8 @@ function fourFloorGltf() {
   const values = [
     -2, 0, -2,
      2, 0, -2,
-    -2, 0.1, 2,
-     2, 0.1, 2,
+    -2, 0.06, 2,
+     2, 0.06, 2,
   ];
   values.forEach((value, index) => positions.writeFloatLE(value, index * 4));
   return JSON.stringify({
@@ -49,7 +49,7 @@ function fourFloorGltf() {
         count: 4,
         type: "VEC3",
         min: [-2, 0, -2],
-        max: [2, 0.1, 2],
+        max: [2, 0.06, 2],
       },
     ],
     meshes: [
