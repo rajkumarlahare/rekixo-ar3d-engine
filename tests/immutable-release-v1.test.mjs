@@ -266,6 +266,45 @@ test("public runtime prefers active immutable release and refuses corrupt releas
   );
 });
 
+test("immutable asset route exposes only the currently active release", async () => {
+  const source = fs.readFileSync("workers/release-runtime.mjs", "utf8");
+  assert.match(source, /p\.active_release_id=r\.id/);
+
+  const DB = {
+    prepare(sql) {
+      return {
+        bind() {
+          return this;
+        },
+        async first() {
+          if (sql.includes("sqlite_master")) return { total: 3 };
+          if (sql.includes("pragma_table_info")) return { total: 1 };
+          if (sql.includes("FROM release_assets_3d")) return null;
+          throw new Error("Unexpected first SQL: " + sql);
+        },
+      };
+    },
+  };
+  const response = await runtime.serveReleaseAsset(
+    {
+      DB,
+      MODEL_ASSETS: {
+        async head() {
+          throw new Error("Inactive release must not reach R2.");
+        },
+      },
+    },
+    "release_old",
+    "models",
+    "model_main",
+    new Request(
+      "https://ar3dstudio.in/3Dprojects/api/releases/release_old/models/model_main/content",
+    ),
+  );
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "Release asset not found." });
+});
+
 test("Published Showcase prefers immutable active release and keeps legacy static fallback", () => {
   const published = fs.readFileSync(
     "apps/admin/src/studio/published.ts",

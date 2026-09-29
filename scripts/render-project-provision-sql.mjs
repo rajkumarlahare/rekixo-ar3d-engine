@@ -1,11 +1,15 @@
+import { validProjectSlug } from "../shared/project-slug-policy.js";
+
 const [slugArg, nameArg, locationArg = ""] = process.argv.slice(2);
 
 const slug = String(slugArg || "").trim().toLowerCase();
 const name = String(nameArg || "").trim();
 const location = String(locationArg || "").trim();
 
-if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length < 2 || slug.length > 80) {
-  throw new Error("Slug must be 2-80 chars of lowercase letters, numbers and single hyphens.");
+if (!validProjectSlug(slug)) {
+  throw new Error(
+    "Slug must be 2-80 lowercase letters, numbers and single hyphens, and must not use an Engine-reserved route.",
+  );
 }
 if (name.length < 2 || name.length > 120) {
   throw new Error("Project name must be 2-120 characters.");

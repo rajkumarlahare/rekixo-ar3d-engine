@@ -5,6 +5,7 @@ import {
 } from "./release-publish.mjs";
 import { assertDraftAssetKey } from "./storage-boundary.mjs";
 import { validateStudioDraft } from "./studio-draft-validation.mjs";
+import { validProjectSlug } from "../shared/project-slug-policy.js";
 const BASE_PATH = "/3Dprojects";
 const CLOUD_PATH = `${BASE_PATH}/api/cloud`;
 const COOKIE = "rekixo_3d_admin";
@@ -34,16 +35,6 @@ function json(value, init = {}) {
 
 function safeText(value, max) {
   return typeof value === "string" && value.trim().length > 0 && value.length <= max;
-}
-
-function validSlug(value) {
-  return (
-    typeof value === "string" &&
-    value.length >= 2 &&
-    value.length <= 80 &&
-    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) &&
-    !["api", "assets", "studio", "login", "showcase", "published"].includes(value)
-  );
 }
 
 function validProjectId(value) {
@@ -177,7 +168,7 @@ function sameOrigin(request) {
   const origin = request.headers.get("origin");
   if (!origin) return false;
   try {
-    return new URL(origin).host === new URL(request.url).host;
+    return new URL(origin).origin === new URL(request.url).origin;
   } catch {
     return false;
   }
@@ -459,7 +450,7 @@ async function projectBySlug(env, slug) {
 }
 
 export function cloudAssetKey(slug, assetId) {
-  if (!validSlug(slug) || !validAssetId(assetId))
+  if (!validProjectSlug(slug) || !validAssetId(assetId))
     throw Error("Invalid cloud asset identity.");
   return `projects/${slug}/draft-assets/${assetId}`;
 }
@@ -558,7 +549,7 @@ async function createCloudProject(request, env, actor) {
 
   if (
     !validProjectId(id) ||
-    !validSlug(slug) ||
+    !validProjectSlug(slug) ||
     !safeText(name, 200) ||
     location.length > 180
   )
@@ -1206,7 +1197,7 @@ async function routeProjects(request, env, actor, url) {
 
   const parts = relative.split("/").filter(Boolean).map(decodeURIComponent);
   const slug = String(parts[0] || "").trim().toLowerCase();
-  if (!validSlug(slug))
+  if (!validProjectSlug(slug))
     return json({ error: "Valid project slug is required." }, { status: 400 });
   const project = await projectBySlug(env, slug);
   if (!project) return json({ error: "Cloud project not found." }, { status: 404 });

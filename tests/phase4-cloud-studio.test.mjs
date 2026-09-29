@@ -122,6 +122,18 @@ test("Studio treats IndexedDB as cache and exposes authenticated cloud sync", ()
   assert.match(storage, /removeAssetIfUnreferenced/);
 });
 
+test("Engine Admin mutations require an exact same origin", () => {
+  const worker = fs.readFileSync("workers/admin-cloud.mjs", "utf8");
+  assert.match(
+    worker,
+    /new URL\(origin\)\.origin === new URL\(request\.url\)\.origin/,
+  );
+  assert.doesNotMatch(
+    worker,
+    /new URL\(origin\)\.host === new URL\(request\.url\)\.host/,
+  );
+});
+
 test("admin-infra deployment applies Engine D1/R2 without deploying Public Worker", () => {
   const workflow = fs.readFileSync(
     ".github/workflows/deploy-cloudflare.yml",

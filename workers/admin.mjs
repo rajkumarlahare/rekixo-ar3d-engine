@@ -1,6 +1,7 @@
 import { handleReleaseReadRequest } from "./release-runtime.mjs";
 import { engineAdminReadAccess, handleCloudAdminRequest } from "./admin-cloud.mjs";
 import { assertProjectAssetKey } from "./storage-boundary.mjs";
+import { validProjectSlug } from "../shared/project-slug-policy.js";
 const BASE_PATH = "/3Dprojects";
 const BUCKET_NAME = "rekixo-3d-assets";
 const PLATFORM_ENGINE_CONTRACT_VERSION = 1;
@@ -328,7 +329,7 @@ export default {
       const slug = decodeURIComponent(
         url.pathname.slice(`${BASE_PATH}/api/integration/projects/`.length),
       ).trim().toLowerCase();
-      if (!slug || slug.includes("/")) {
+      if (!validProjectSlug(slug)) {
         return json({ error: "Valid project slug is required." }, { status: 400 });
       }
       const integration = await getIntegrationProject(env, slug);
@@ -344,7 +345,8 @@ export default {
       }
 
       const slug = (url.searchParams.get("slug") || "").trim().toLowerCase();
-      if (!slug) return json({ error: "Project slug is required." }, { status: 400 });
+      if (!validProjectSlug(slug))
+        return json({ error: "Valid project slug is required." }, { status: 400 });
 
       const access = await engineAdminReadAccess(request, env);
       if (!access.ok)
