@@ -3,7 +3,7 @@ import type { Asset, Project } from "./domain";
 import type { FbxSourceAudit } from "./sourceAudit";
 import type { SmartProjectAnalysis, SmartSourceRole } from "./projectAnalyzer";
 import type { OpeningSuggestion } from "./openingAssociator";
-import { detectQuickSourceSetup } from "./sourcePackSetup";
+import type { QuickSourceSetup } from "./sourcePackSetup";
 
 const ROLE_LABEL: Record<SmartSourceRole, string> = {
   model: "3D model",
@@ -46,6 +46,7 @@ export default function SmartProjectBuilder({
   onOpenEditor,
   onOpenSources,
   onAutoSetup,
+  quickSetup,
 }: {
   project: Project;
   files: Asset[];
@@ -68,14 +69,14 @@ export default function SmartProjectBuilder({
   onOpenEditor: () => void;
   onOpenSources: () => void;
   onAutoSetup: () => void;
+  quickSetup: QuickSourceSetup;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const modelCandidates = files.filter((file) => /\.(glb|fbx)$/i.test(file.name));
-  const quickSetup = useMemo(() => detectQuickSourceSetup(files), [files]);
   const quickSetupApplied =
-    quickSetup.profile === "jyoti-paradise" &&
-    project.slug === "jyoti-paradise" &&
+    Boolean(quickSetup.profile) &&
+    project.slug === quickSetup.slug &&
     (!quickSetup.primaryModelId ||
       project.scene.modelId === quickSetup.primaryModelId);
   const roles = useMemo(() => {
@@ -272,12 +273,12 @@ export default function SmartProjectBuilder({
               event.target.value = "";
             }}
           />
-          {quickSetup.profile === "jyoti-paradise" && (
-            <div className="builder-source-lock" aria-label="Jyoti Paradise quick setup">
+          {quickSetup.profile && (
+            <div className="builder-source-lock" aria-label="Recognized project quick setup">
               <div className="builder-source-lock-head">
                 <div>
                   <span className="ops-eyebrow">SOURCE LOCK DETECTED</span>
-                  <strong>Jyoti Paradise</strong>
+                  <strong>{quickSetup.name ?? "Recognized project"}</strong>
                   <small>
                     Exact SHA-256 source matches · {quickSetup.matchedCount}/{quickSetup.requiredCount}
                   </small>
@@ -288,7 +289,9 @@ export default function SmartProjectBuilder({
                   disabled={busy || quickSetupApplied}
                   onClick={onAutoSetup}
                 >
-                  {quickSetupApplied ? "Auto setup applied" : "Auto setup Jyoti Paradise"}
+                  {quickSetupApplied
+                    ? "Auto setup applied"
+                    : `Auto setup ${quickSetup.name ?? "project"}`}
                 </button>
               </div>
               <div className="builder-source-lock-grid">
@@ -307,7 +310,7 @@ export default function SmartProjectBuilder({
                 ))}
               </div>
               <p>
-                Rekixo identity, Hingna/Nagpur project context और primary FBX selection
+                Rekixo project identity, known project context और primary model
                 automatically lock करेगा. Raw source files unchanged रहेंगी.
               </p>
             </div>
