@@ -2603,3 +2603,28 @@
   width: 100%;
   margin-top: 6px;
 }
+
+
+/* Full-screen safety exit */
+.editor-fullscreen-exit {
+  min-height: 36px;
+  border-color: #67506f !important;
+  background: #211527 !important;
+  color: #f1dff5 !important;
+}
+
+.editor-fullscreen-exit:hover:not(:disabled) {
+  border-color: #8f6b99 !important;
+  background: #2c1c34 !important;
+}
+
+.editor-fullscreen-exit:focus-visible {
+  outline: 2px solid #d7a9e2;
+  outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+  .editor-fullscreen-exit {
+    flex: 1 1 100%;
+  }
+}

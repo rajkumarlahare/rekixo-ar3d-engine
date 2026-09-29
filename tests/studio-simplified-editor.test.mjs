@@ -27,6 +27,18 @@ test("Studio editor keeps the default toolbar operator-first", () => {
   assert.match(studio, /aria-label="Isolate floor"/);
 });
 
+test("Studio editor never traps the operator in full screen", () => {
+  const studio = read("apps/admin/src/studio/Studio.tsx");
+  const css = read("apps/admin/src/studio/studio-editor-core.css");
+
+  assert.match(studio, /const \[editorFocus, setEditorFocus\] = useState\(false\)/);
+  assert.doesNotMatch(studio, /setEditorFocus\(true\);/);
+  assert.match(studio, /event\.key === "Escape" && editorFocus/);
+  assert.match(studio, /className="editor-fullscreen-exit"/);
+  assert.match(studio, /Exit full screen <kbd>Esc<\/kbd>/);
+  assert.match(css, /\.editor-fullscreen-exit/);
+});
+
 test("advanced editor capabilities stay available but collapsed by default", () => {
   const studio = read("apps/admin/src/studio/Studio.tsx");
 
