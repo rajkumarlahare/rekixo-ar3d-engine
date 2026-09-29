@@ -374,7 +374,7 @@ async function login(request, env) {
 
   const valid =
     email === cfg.email &&
-    password.length >= 8 &&
+    password.length >= 12 &&
     (await verifyPassword(password, cfg.passwordSalt, cfg.passwordHash));
 
   if (!valid) {
