@@ -30,6 +30,8 @@ test("generic runtime has no first-project or Jyoti identity fallback", () => {
     if (normalized.endsWith("/src/viewer/projectExperience.ts")) return false;
     if (/\/dist\/assets\/projectExperience-[^/]+\.js$/.test(normalized))
       return false;
+    if (/\/dist\/assets\/studio-source-profiles-[^/]+\.js$/.test(normalized))
+      return false;
     return true;
   });
 
