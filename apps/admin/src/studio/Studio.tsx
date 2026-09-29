@@ -1869,6 +1869,7 @@ export default function Studio() {
     if (!setup.profile || !setup.slug)
       throw Error("Attach enough verified project source files before auto setup.");
     const slug = setup.slug;
+    const profileId = setup.profile;
     const owner = list.find(
       (entry) => entry.id !== p.id && projectSlug(entry) === slug,
     );
@@ -1894,7 +1895,7 @@ export default function Studio() {
 
     const floors = floorSkeletonStatus(
       next.scene,
-      setup.profile,
+      profileId,
       setup.floorSkeleton,
     );
     if (floors.preferredFloorId) {
