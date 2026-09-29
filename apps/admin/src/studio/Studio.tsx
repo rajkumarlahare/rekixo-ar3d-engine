@@ -2815,6 +2815,7 @@ export default function Studio() {
             showLeftPanel ? "" : "editor-core--no-left",
             showRightPanel ? "" : "editor-core--no-right",
             showAssetShelf ? "" : "editor-core--no-assets",
+            showReferenceWorkspace ? "editor-core--alignment" : "",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -3428,6 +3429,68 @@ export default function Studio() {
           </details>
         </aside>
         <section className="studio-center">
+          {showReferenceWorkspace ? (
+          <nav
+            className="canvas-toolbar editor-toolbar editor-toolbar--alignment"
+            aria-label="Plan alignment tools"
+          >
+            <div className="alignment-toolbar-title">
+              <strong>Plan alignment</strong>
+              <small>Drag the building over the reference plan</small>
+            </div>
+            <button
+              type="button"
+              className={cameraOrientation === "top" ? "active" : ""}
+              onClick={() => {
+                setView("building");
+                setCameraOrientation("top");
+                setSectionCutEnabled(false);
+              }}
+            >
+              Top view
+            </button>
+            <button
+              type="button"
+              className={transformMode === "translate" ? "active" : ""}
+              disabled={Boolean(review) || busy || !p.scene.modelId}
+              onClick={() => setTransformMode("translate")}
+            >
+              Move <kbd>W</kbd>
+            </button>
+            <button
+              type="button"
+              className={transformMode === "rotate" ? "active" : ""}
+              disabled={Boolean(review) || busy || !p.scene.modelId}
+              onClick={() => setTransformMode("rotate")}
+            >
+              Rotate <kbd>E</kbd>
+            </button>
+            <label className="alignment-toolbar-snap">
+              <input
+                type="checkbox"
+                checked={transformSnap}
+                disabled={Boolean(review) || busy}
+                onChange={(event) => setTransformSnap(event.target.checked)}
+              />
+              Snap
+            </label>
+            <span className="editor-toolbar-spacer" />
+            <button
+              type="button"
+              disabled={busy || Boolean(review)}
+              onClick={() => referenceInput.current?.click()}
+            >
+              + Reference
+            </button>
+            <button
+              type="button"
+              className="primary alignment-done"
+              onClick={() => setShowReferenceWorkspace(false)}
+            >
+              Done
+            </button>
+          </nav>
+          ) : (
           <nav className="canvas-toolbar editor-toolbar editor-toolbar--simple" aria-label="3D editor tools">
             <div className="editor-mode-switch" role="group" aria-label="Editor mode">
               {(
@@ -3665,26 +3728,8 @@ export default function Studio() {
               </button>
             )}
           </nav>
-          {showReferenceWorkspace && (
-            <div className="editor-context-bar" role="group" aria-label="Plan alignment mode">
-              <strong>Plan alignment</strong>
-              <span>Top view · drag and snap against the reference</span>
-              <button
-                type="button"
-                disabled={busy || Boolean(review)}
-                onClick={() => referenceInput.current?.click()}
-              >
-                + Source
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowReferenceWorkspace(false)}
-              >
-                Done
-              </button>
-            </div>
           )}
-          {sectionCutEnabled && (
+          {sectionCutEnabled && !showReferenceWorkspace && (
             <div className="section-cut-bar" role="group" aria-label="Section cut controls">
               <b>SECTION CUT</b>
               <div className="section-axis">
