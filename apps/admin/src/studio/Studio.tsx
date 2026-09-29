@@ -586,7 +586,7 @@ export default function Studio() {
     if (!cloudSession?.authenticated)
       throw Error("Sign in to Engine Admin before changing the active release.");
     if (cloudDirty)
-      throw Error("Save the current local draft to cloud before switching a release.");
+      throw Error("Save to cloud before switching a release.");
     await cloud.activateRelease(projectSlug(p), releaseId);
     await Promise.all([
       refreshCloudReleases(p),
