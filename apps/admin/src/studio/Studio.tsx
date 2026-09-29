@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import SceneCanvas, {
   type ModelMaterialSummary,
   type ModelNodeSummary,
@@ -27,6 +27,7 @@ import {
   type MaterialOverride,
   type ModelNodeSemantic,
   type ModelNodeTag,
+  type Opening,
   type ModelTransform,
   type Project,
   type ReferenceLayer,
@@ -54,6 +55,10 @@ import {
   analyzeProjectFiles,
   type SmartProjectAnalysis,
 } from "./projectAnalyzer";
+import {
+  suggestOpeningAssociations,
+  type OpeningSuggestion,
+} from "./openingAssociator";
 import "./studio.css";
 import "./studio-operations.css";
 import "./studio-superadmin-theme.css";
@@ -592,6 +597,13 @@ export default function Studio() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [workspace, review, busy, project]);
+  const openingSuggestions = useMemo(
+    () =>
+      project && smartAnalysis
+        ? suggestOpeningAssociations(smartAnalysis, project.scene)
+        : [],
+    [project, smartAnalysis],
+  );
   if (!project)
     return (
       <main className="studio">
@@ -1740,6 +1752,163 @@ export default function Studio() {
     );
   }
 
+  function applyOpeningSuggestions(
+    suggestions: OpeningSuggestion[],
+  ) {
+    const ready = suggestions.filter(
+      (suggestion) =>
+        suggestion.ready &&
+        suggestion.floorId &&
+        suggestion.roomIds.length > 0,
+    );
+    if (!ready.length) {
+      setMessage("No reviewed-ready door/window associations to approve.");
+      return;
+    }
+
+    const existingOpenings = p.scene.openings ?? [];
+    const existingKeys = new Set(
+      existingOpenings
+        .filter(
+          (opening) =>
+            opening.sourceNodeName &&
+            opening.sourceOccurrence !== undefined,
+        )
+        .map(
+          (opening) =>
+            `${opening.sourceNodeName}\u0000${opening.sourceOccurrence}`,
+        ),
+    );
+    const nextOpenings: Opening[] = [...existingOpenings];
+    const tagByKey = new Map<string, ModelNodeTag>(
+      (p.scene.modelNodeTags ?? []).map((tag) => [
+        `${tag.nodeName}\u0000${tag.occurrence}`,
+        { ...tag },
+      ]),
+    );
+    let approved = 0;
+
+    for (const suggestion of ready) {
+      if (existingKeys.has(suggestion.key) || !suggestion.floorId) continue;
+      const opening: Opening = {
+        id: id(),
+        floorId: suggestion.floorId,
+        kind: suggestion.kind,
+        roomIds: [...suggestion.roomIds],
+        x: suggestion.position[0],
+        y: suggestion.position[1],
+        z: suggestion.position[2],
+        width: suggestion.width,
+        height: suggestion.height,
+        ...(suggestion.sillHeight !== undefined
+          ? { sillHeight: suggestion.sillHeight }
+          : {}),
+        rotationY: suggestion.rotationY,
+        reviewed: true,
+        sourceNodeName: suggestion.sourceNodeName,
+        sourceOccurrence: suggestion.sourceOccurrence,
+        confidence: suggestion.confidence,
+      };
+      nextOpenings.push(opening);
+      existingKeys.add(suggestion.key);
+
+      const current = tagByKey.get(suggestion.key) ?? {
+        nodeName: suggestion.sourceNodeName,
+        occurrence: suggestion.sourceOccurrence,
+      };
+      const associatedRooms = suggestion.roomIds
+        .map((roomId) =>
+          p.scene.rooms.find((candidate) => candidate.id === roomId),
+        )
+        .filter((candidate): candidate is Room => Boolean(candidate));
+      const sharedUnit =
+        associatedRooms.length > 0 &&
+        associatedRooms.every(
+          (candidate) => candidate.unit === associatedRooms[0].unit,
+        )
+          ? associatedRooms[0].unit
+          : undefined;
+      tagByKey.set(suggestion.key, {
+        ...current,
+        floorId: suggestion.floorId,
+        ...(suggestion.roomIds.length === 1
+          ? {
+              roomId: suggestion.roomIds[0],
+              unit: associatedRooms[0]?.unit,
+            }
+          : {
+              roomId: undefined,
+              ...(sharedUnit ? { unit: sharedUnit } : {}),
+            }),
+        assignment: "manual",
+        confidence: 1,
+        semantic: suggestion.kind,
+        semanticAssignment: "manual",
+        semanticConfidence: 1,
+      });
+      approved += 1;
+    }
+
+    if (!approved) {
+      setMessage("These detected openings are already approved.");
+      return;
+    }
+    const next: Project = {
+      ...p,
+      scene: {
+        ...p.scene,
+        openings: nextOpenings,
+        modelNodeTags: [...tagByKey.values()],
+      },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      setMessage(
+        `${approved} door/window opening${approved === 1 ? "" : "s"} approved and attached to mapped wall/room context.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Opening approval could not be saved.",
+      );
+    }
+  }
+
+  function approveOpeningSuggestion(suggestion: OpeningSuggestion) {
+    applyOpeningSuggestions([suggestion]);
+  }
+
+  function approveReadyOpenings() {
+    applyOpeningSuggestions(openingSuggestions);
+  }
+
+  function removeOpening(openingId: string) {
+    const target = (p.scene.openings ?? []).find(
+      (opening) => opening.id === openingId,
+    );
+    if (!target) return;
+    const next: Project = {
+      ...p,
+      scene: {
+        ...p.scene,
+        openings: (p.scene.openings ?? []).filter(
+          (opening) => opening.id !== openingId,
+        ),
+      },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      setMessage(`${target.kind} opening removed.`);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Opening removal failed.",
+      );
+    }
+  }
+
   const field = (
     label: string,
     value: number,
@@ -2034,6 +2203,7 @@ export default function Studio() {
           files={files}
           audits={sourceAudits}
           analysis={smartAnalysis}
+          openingSuggestions={openingSuggestions}
           busy={busy || sourceAuditBusy}
           onProjectMeta={(change) => edit({ ...p, ...change })}
           onImportFiles={(selectedFiles) =>
@@ -2053,6 +2223,8 @@ export default function Studio() {
             }
           }}
           onApplyArchitecturalCandidates={applyArchitecturalCandidates}
+          onApproveOpening={approveOpeningSuggestion}
+          onApproveReadyOpenings={approveReadyOpenings}
           onOpenEditor={() => {
             setWorkspace("editor");
             setEditorFocus(true);
@@ -3552,6 +3724,46 @@ export default function Studio() {
                     ? ` · ${room.polygon.length} corners`
                     : ""}
                 </p>
+                <section className="room-opening-list" aria-label="Approved room openings">
+                  <div className="section-label">APPROVED OPENINGS</div>
+                  {(p.scene.openings ?? []).filter((opening) =>
+                    opening.roomIds.includes(room.id),
+                  ).length ? (
+                    (p.scene.openings ?? [])
+                      .filter((opening) => opening.roomIds.includes(room.id))
+                      .map((opening) => (
+                        <div key={opening.id}>
+                          <span>
+                            <b>{opening.kind.toUpperCase()}</b>
+                            <small>
+                              {opening.width.toFixed(2)} ×{" "}
+                              {opening.height.toFixed(2)} m
+                              {opening.kind === "window" &&
+                              opening.sillHeight !== undefined
+                                ? ` · sill ${opening.sillHeight.toFixed(2)} m`
+                                : ""}
+                            </small>
+                          </span>
+                          <span>
+                            {opening.roomIds.length === 2
+                              ? "Shared wall"
+                              : "Exterior / single-room wall"}
+                          </span>
+                          <button
+                            type="button"
+                            className="danger"
+                            onClick={() => removeOpening(opening.id)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))
+                  ) : (
+                    <small>
+                      No approved door/window associations for this room.
+                    </small>
+                  )}
+                </section>
                 <label>
                   Model mesh binding
                   <input readOnly value={room.mesh ?? "Not bound"} />
@@ -3574,6 +3786,9 @@ export default function Studio() {
                         rooms: p.scene.rooms.filter((r) => r.id !== room.id),
                         furniture: p.scene.furniture.filter(
                           (f) => f.roomId !== room.id,
+                        ),
+                        openings: (p.scene.openings ?? []).filter(
+                          (opening) => !opening.roomIds.includes(room.id),
                         ),
                       },
                     });
