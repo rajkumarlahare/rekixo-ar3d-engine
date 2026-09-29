@@ -1828,24 +1828,25 @@ export default function Studio() {
         )
           ? associatedRooms[0].unit
           : undefined;
-      tagByKey.set(suggestion.key, {
+      const reviewedTag: ModelNodeTag = {
         ...current,
         floorId: suggestion.floorId,
-        ...(suggestion.roomIds.length === 1
-          ? {
-              roomId: suggestion.roomIds[0],
-              unit: associatedRooms[0]?.unit,
-            }
-          : {
-              roomId: undefined,
-              ...(sharedUnit ? { unit: sharedUnit } : {}),
-            }),
         assignment: "manual",
         confidence: 1,
         semantic: suggestion.kind,
         semanticAssignment: "manual",
         semanticConfidence: 1,
-      });
+      };
+      if (suggestion.roomIds.length === 1) {
+        reviewedTag.roomId = suggestion.roomIds[0];
+        if (associatedRooms[0]?.unit) reviewedTag.unit = associatedRooms[0].unit;
+        else delete reviewedTag.unit;
+      } else {
+        delete reviewedTag.roomId;
+        if (sharedUnit) reviewedTag.unit = sharedUnit;
+        else delete reviewedTag.unit;
+      }
+      tagByKey.set(suggestion.key, reviewedTag);
       approved += 1;
     }
 
