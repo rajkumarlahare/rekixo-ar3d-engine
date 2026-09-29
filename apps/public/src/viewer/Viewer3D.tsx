@@ -26,6 +26,7 @@ import {
   walkStartPosition,
   type WalkDirection,
 } from "./walkthrough";
+import WalkGraphPanel from "./WalkGraphPanel";
 import { createArchitecturalSiteEnvironment } from "./siteEnvironment";
 import {
   applyModelProfileExterior,
@@ -1351,49 +1352,6 @@ export function Viewer3D({
   const activeGraphRoom =
     walkthrough?.rooms.find((room) => room.id === activeRoom) ??
     walkthrough?.rooms[0];
-  const graphConnections =
-    walkthrough && activeGraphRoom
-      ? publicWalkConnections(walkthrough, activeGraphRoom.id)
-      : [];
-  const connectedRoomIds = new Set(
-    graphConnections.map((connection) => connection.toRoomId),
-  );
-  const graphDestinations =
-    walkthrough && activeGraphRoom
-      ? graphConnections.flatMap((connection) => {
-          const destination = walkthrough.rooms.find(
-            (room) => room.id === connection.toRoomId,
-          );
-          return destination
-            ? [{ ...connection, room: destination }]
-            : [];
-        })
-      : [];
-  const graphFloorRooms =
-    walkthrough && activeGraphRoom
-      ? walkthrough.rooms.filter(
-          (room) => room.floorId === activeGraphRoom.floorId,
-        )
-      : [];
-  const mapPoints = graphFloorRooms.flatMap((room) => room.boundary);
-  const mapPadding =
-    walkthrough && mapPoints.length
-      ? 0.45 / Math.max(walkthrough.metresPerUnit, 0.0001)
-      : 0.5;
-  const mapMinX = mapPoints.length
-    ? Math.min(...mapPoints.map((point) => point[0])) - mapPadding
-    : -1;
-  const mapMaxX = mapPoints.length
-    ? Math.max(...mapPoints.map((point) => point[0])) + mapPadding
-    : 1;
-  const mapMinZ = mapPoints.length
-    ? Math.min(...mapPoints.map((point) => point[1])) - mapPadding
-    : -1;
-  const mapMaxZ = mapPoints.length
-    ? Math.max(...mapPoints.map((point) => point[1])) + mapPadding
-    : 1;
-  const mapWidth = Math.max(mapMaxX - mapMinX, 0.1);
-  const mapHeight = Math.max(mapMaxZ - mapMinZ, 0.1);
 
   return (
     <div className="viewer-shell" ref={hostRef}>
@@ -1402,100 +1360,12 @@ export function Viewer3D({
         <button type="button" onClick={() => void toggleFullscreen()}>{isFullscreen ? "Exit full screen" : "Full screen"}</button>
       </div>}
       {walkMode && walkthrough && activeGraphRoom && (
-        <aside className="viewer-walk-graph" aria-label="Reviewed room navigation">
-          <div className="viewer-walk-graph__head">
-            <span>REVIEWED ROOM GRAPH</span>
-            <strong>{activeGraphRoom.unit} · {activeGraphRoom.name}</strong>
-            <small>
-              {walkNotice ||
-                `${graphDestinations.length} reviewed door connection${graphDestinations.length === 1 ? "" : "s"}`}
-            </small>
-          </div>
-          <svg
-            className="viewer-walk-map"
-            viewBox={`${mapMinX} ${-mapMaxZ} ${mapWidth} ${mapHeight}`}
-            preserveAspectRatio="xMidYMid meet"
-            role="img"
-            aria-label="Current floor room mini-map"
-          >
-            {graphFloorRooms.map((room) => {
-              const current = room.id === activeGraphRoom.id;
-              const connected = connectedRoomIds.has(room.id);
-              const points = room.boundary
-                .map(([x, z]) => `${x},${-z}`)
-                .join(" ");
-              return (
-                <polygon
-                  key={room.id}
-                  points={points}
-                  className={
-                    current
-                      ? "viewer-walk-map__room viewer-walk-map__room--current"
-                      : connected
-                        ? "viewer-walk-map__room viewer-walk-map__room--connected"
-                        : "viewer-walk-map__room"
-                  }
-                  tabIndex={connected ? 0 : undefined}
-                  role={connected ? "button" : undefined}
-                  aria-label={
-                    connected
-                      ? `Enter ${room.unit} ${room.name}`
-                      : `${room.unit} ${room.name}`
-                  }
-                  onClick={() => {
-                    if (connected) enterRoomRef.current?.(room.id);
-                  }}
-                  onKeyDown={(event) => {
-                    if (
-                      connected &&
-                      (event.key === "Enter" || event.key === " ")
-                    ) {
-                      event.preventDefault();
-                      enterRoomRef.current?.(room.id);
-                    }
-                  }}
-                >
-                  <title>{room.unit} · {room.name}</title>
-                </polygon>
-              );
-            })}
-            {walkthrough.doors
-              .filter(
-                (door) =>
-                  door.floorId === activeGraphRoom.floorId &&
-                  door.roomIds.some((id) => id === activeGraphRoom.id),
-              )
-              .map((door) => (
-                <circle
-                  key={door.id}
-                  cx={door.x}
-                  cy={-door.z}
-                  r={0.12 / Math.max(walkthrough.metresPerUnit, 0.0001)}
-                  className="viewer-walk-map__door"
-                >
-                  <title>Reviewed door</title>
-                </circle>
-              ))}
-          </svg>
-          <div className="viewer-walk-destinations">
-            <span>CONNECTED ROOMS</span>
-            {graphDestinations.length ? (
-              graphDestinations.map(({ openingId, room }) => (
-                <button
-                  type="button"
-                  key={openingId}
-                  onClick={() => enterRoomRef.current?.(room.id)}
-                >
-                  <span>{room.unit}</span>
-                  <strong>{room.name}</strong>
-                  <small>via reviewed door</small>
-                </button>
-              ))
-            ) : (
-              <small>No reviewed shared door connects this room.</small>
-            )}
-          </div>
-        </aside>
+        <WalkGraphPanel
+          walkthrough={walkthrough}
+          activeRoom={activeGraphRoom}
+          notice={walkNotice}
+          onEnterRoom={(roomId) => enterRoomRef.current?.(roomId)}
+        />
       )}
       {experienceMode === "interior" && mode === "model" && (
         <div className="viewer-room-toolbar">
