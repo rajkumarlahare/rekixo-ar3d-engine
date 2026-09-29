@@ -1682,6 +1682,43 @@ export default function SceneCanvas(props: Props) {
         }
       }
     }
+
+    for (const opening of props.scene.openings ?? []) {
+      if (!opening.reviewed) continue;
+      if (
+        props.isolateFloorId &&
+        opening.floorId !== props.isolateFloorId
+      )
+        continue;
+      if (
+        props.view === "walk" &&
+        !opening.roomIds.includes(props.roomId)
+      )
+        continue;
+      const material = new T.MeshStandardMaterial({
+        color: opening.kind === "door" ? 0xd0a45d : 0x72b9d6,
+        transparent: true,
+        opacity:
+          props.roomMapEnabled && props.view === "building" ? 0.78 : 0.58,
+        depthWrite: false,
+        roughness: 0.45,
+        metalness: opening.kind === "window" ? 0.08 : 0,
+      });
+      const marker = new T.Mesh(
+        new T.BoxGeometry(
+          Math.max(0.08, opening.width),
+          Math.max(0.08, opening.height),
+          0.09,
+        ),
+        material,
+      );
+      marker.name = `Opening · ${opening.kind}`;
+      marker.position.set(opening.x, opening.y, opening.z);
+      marker.rotation.y = T.MathUtils.degToRad(opening.rotationY);
+      marker.renderOrder = 24;
+      marker.userData.openingId = opening.id;
+      r.rooms.add(marker);
+    }
   }, [
     props.scene,
     props.selected,
