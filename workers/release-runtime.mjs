@@ -270,6 +270,160 @@ export async function activeReleaseState(env, slug) {
   };
 }
 
+function publicWalkthroughFromStudio(manifest) {
+  const scene = manifest.studio?.project?.scene;
+  if (!scene || !Array.isArray(scene.rooms) || !scene.rooms.length)
+    return undefined;
+
+  const scale =
+    typeof scene.scale === "number" &&
+    Number.isFinite(scene.scale) &&
+    scene.scale > 0
+      ? scene.scale
+      : 1;
+  const transform =
+    scene.modelTransform && typeof scene.modelTransform === "object"
+      ? scene.modelTransform
+      : {};
+  const tx = Number.isFinite(transform.x) ? Number(transform.x) : 0;
+  const ty = Number.isFinite(transform.y) ? Number(transform.y) : 0;
+  const tz = Number.isFinite(transform.z) ? Number(transform.z) : 0;
+  const rotationY = Number.isFinite(transform.rotationY)
+    ? Number(transform.rotationY)
+    : 0;
+  const angle = (rotationY * Math.PI) / 180;
+  const cosine = Math.cos(angle);
+  const sine = Math.sin(angle);
+
+  const toModelXZ = (x, z) => {
+    const dx = (Number(x) - tx) / scale;
+    const dz = (Number(z) - tz) / scale;
+    return [
+      dx * cosine - dz * sine,
+      dx * sine + dz * cosine,
+    ];
+  };
+  const toModelY = (y) => (Number(y) - ty) / scale;
+  const floorById = new Map(
+    (Array.isArray(scene.floors) ? scene.floors : [])
+      .filter(
+        (floor) =>
+          floor &&
+          typeof floor.id === "string" &&
+          typeof floor.elevation === "number" &&
+          Number.isFinite(floor.elevation),
+      )
+      .map((floor) => [floor.id, floor]),
+  );
+
+  const rooms = [];
+  const roomIds = new Set();
+  for (const room of scene.rooms) {
+    if (
+      !room ||
+      typeof room.id !== "string" ||
+      typeof room.floorId !== "string" ||
+      typeof room.name !== "string" ||
+      typeof room.unit !== "string"
+    )
+      continue;
+    const floor = floorById.get(room.floorId);
+    if (!floor) continue;
+
+    let boundary;
+    if (
+      Array.isArray(room.polygon) &&
+      room.polygon.length >= 3 &&
+      room.polygon.every(
+        (point) =>
+          Array.isArray(point) &&
+          point.length === 2 &&
+          point.every((value) => typeof value === "number" && Number.isFinite(value)),
+      )
+    ) {
+      boundary = room.polygon.map(([x, z]) => toModelXZ(x, z));
+    } else if (
+      [room.x, room.z, room.width, room.depth].every(
+        (value) => typeof value === "number" && Number.isFinite(value),
+      ) &&
+      room.width > 0 &&
+      room.depth > 0
+    ) {
+      boundary = [
+        [room.x - room.width / 2, room.z - room.depth / 2],
+        [room.x + room.width / 2, room.z - room.depth / 2],
+        [room.x + room.width / 2, room.z + room.depth / 2],
+        [room.x - room.width / 2, room.z + room.depth / 2],
+      ].map(([x, z]) => toModelXZ(x, z));
+    } else {
+      continue;
+    }
+
+    const height =
+      typeof room.height === "number" &&
+      Number.isFinite(room.height) &&
+      room.height > 0
+        ? room.height / scale
+        : 2.8 / scale;
+    rooms.push({
+      id: room.id,
+      floorId: room.floorId,
+      name: room.name,
+      unit: room.unit,
+      elevation: toModelY(floor.elevation),
+      height,
+      boundary,
+    });
+    roomIds.add(room.id);
+  }
+  if (!rooms.length) return undefined;
+
+  const doors = [];
+  for (const opening of Array.isArray(scene.openings) ? scene.openings : []) {
+    if (
+      !opening ||
+      opening.reviewed !== true ||
+      opening.kind !== "door" ||
+      !Array.isArray(opening.roomIds) ||
+      opening.roomIds.length !== 2 ||
+      opening.roomIds[0] === opening.roomIds[1] ||
+      !opening.roomIds.every((roomId) => roomIds.has(roomId)) ||
+      typeof opening.floorId !== "string" ||
+      ![opening.x, opening.y, opening.z, opening.width, opening.height, opening.rotationY].every(
+        (value) => typeof value === "number" && Number.isFinite(value),
+      ) ||
+      opening.width <= 0 ||
+      opening.height <= 0
+    )
+      continue;
+    const [x, z] = toModelXZ(opening.x, opening.z);
+    const tangentX = Math.cos((opening.rotationY * Math.PI) / 180);
+    const tangentZ = -Math.sin((opening.rotationY * Math.PI) / 180);
+    const localTangentX = tangentX * cosine - tangentZ * sine;
+    const localTangentZ = tangentX * sine + tangentZ * cosine;
+    const localRotationY =
+      (Math.atan2(-localTangentZ, localTangentX) * 180) / Math.PI;
+    doors.push({
+      id: opening.id,
+      floorId: opening.floorId,
+      roomIds: [opening.roomIds[0], opening.roomIds[1]],
+      x,
+      y: toModelY(opening.y),
+      z,
+      width: opening.width / scale,
+      height: opening.height / scale,
+      rotationY: localRotationY,
+    });
+  }
+
+  return {
+    version: 1,
+    metresPerUnit: scale,
+    rooms,
+    doors,
+  };
+}
+
 function publicExperience(manifest, manifestSha256) {
   const release = manifest.release;
   const frozen = manifest.experience;
@@ -284,6 +438,7 @@ function publicExperience(manifest, manifestSha256) {
     : undefined;
   if (model) delete model.releaseAssetId;
 
+  const walkthrough = publicWalkthroughFromStudio(manifest);
   return {
     project: manifest.project,
     scene: frozen.scenes[0],
@@ -291,6 +446,7 @@ function publicExperience(manifest, manifestSha256) {
     camera: frozen.camera,
     model,
     mediaBaseUrl: `${RELEASE_BASE}/${encodeURIComponent(release.id)}/media`,
+    ...(walkthrough ? { walkthrough } : {}),
     release: {
       id: release.id,
       version: release.version,
