@@ -822,7 +822,6 @@ export function snapshot(p: Project, name: string): Project {
     ],
   };
 }
-// Walking is deliberately room-bounded in this release; no inferred door links.
 export function canWalk(scene: Scene, room: Room, x: number, z: number) {
   const margin = 0.18;
   if (!roomContainsPoint(room, x, z, margin)) return false;
@@ -840,4 +839,147 @@ export function canWalk(scene: Scene, room: Room, x: number, z: number) {
         Math.abs(lz) < c.depth / 2 + margin
       );
     });
+}
+
+export interface WalkDoorConnection {
+  openingId: string;
+  fromRoomId: string;
+  toRoomId: string;
+}
+
+export interface WalkStepResult {
+  roomId: string;
+  x: number;
+  z: number;
+  openingId?: string;
+}
+
+export function reviewedDoorConnections(
+  scene: Scene,
+  roomId?: string,
+): WalkDoorConnection[] {
+  const rows: WalkDoorConnection[] = [];
+  for (const opening of scene.openings ?? []) {
+    if (
+      !opening.reviewed ||
+      opening.kind !== "door" ||
+      opening.roomIds.length !== 2
+    )
+      continue;
+    const [left, right] = opening.roomIds;
+    if (!roomId || roomId === left)
+      rows.push({
+        openingId: opening.id,
+        fromRoomId: left,
+        toRoomId: right,
+      });
+    if (!roomId || roomId === right)
+      rows.push({
+        openingId: opening.id,
+        fromRoomId: right,
+        toRoomId: left,
+      });
+  }
+  return rows;
+}
+
+function doorLandingPoint(
+  scene: Scene,
+  room: Room,
+  opening: Opening,
+  normalSign: 1 | -1,
+) {
+  const angle = (opening.rotationY * Math.PI) / 180;
+  const normalX = Math.sin(angle) * normalSign;
+  const normalZ = Math.cos(angle) * normalSign;
+  for (const distance of [0.24, 0.3, 0.38, 0.48, 0.62]) {
+    const x = opening.x + normalX * distance;
+    const z = opening.z + normalZ * distance;
+    if (canWalk(scene, room, x, z))
+      return { x, z, normalX, normalZ };
+  }
+  return undefined;
+}
+
+export function resolveReviewedDoorWalkStep(
+  scene: Scene,
+  room: Room,
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number,
+): WalkStepResult {
+  if (canWalk(scene, room, toX, toZ))
+    return { roomId: room.id, x: toX, z: toZ };
+
+  const moveX = toX - fromX;
+  const moveZ = toZ - fromZ;
+  const moveLength = Math.hypot(moveX, moveZ);
+  if (moveLength < 0.00001)
+    return { roomId: room.id, x: fromX, z: fromZ };
+
+  const doors = (scene.openings ?? []).filter(
+    (opening) =>
+      opening.reviewed &&
+      opening.kind === "door" &&
+      opening.roomIds.length === 2 &&
+      opening.floorId === room.floorId &&
+      opening.roomIds.includes(room.id),
+  );
+
+  for (const opening of doors) {
+    const distanceFromDoor = Math.hypot(
+      fromX - opening.x,
+      fromZ - opening.z,
+    );
+    const activation = Math.max(0.5, opening.width / 2 + 0.32);
+    if (distanceFromDoor > activation) continue;
+
+    const destinationRoomId = opening.roomIds.find(
+      (roomId) => roomId !== room.id,
+    );
+    const destination = scene.rooms.find(
+      (candidate) =>
+        candidate.id === destinationRoomId &&
+        candidate.floorId === room.floorId,
+    );
+    if (!destination) continue;
+
+    for (const sign of [1, -1] as const) {
+      const destinationLanding = doorLandingPoint(
+        scene,
+        destination,
+        opening,
+        sign,
+      );
+      const sourceLanding = doorLandingPoint(
+        scene,
+        room,
+        opening,
+        sign === 1 ? -1 : 1,
+      );
+      if (!destinationLanding || !sourceLanding) continue;
+
+      const towardDestination =
+        (moveX * destinationLanding.normalX +
+          moveZ * destinationLanding.normalZ) /
+        moveLength;
+      if (towardDestination < 0.1) continue;
+
+      const sourceSideDistance = Math.hypot(
+        fromX - sourceLanding.x,
+        fromZ - sourceLanding.z,
+      );
+      if (sourceSideDistance > Math.max(activation + 0.28, 0.9)) continue;
+
+      return {
+        roomId: destination.id,
+        x: destinationLanding.x,
+        z: destinationLanding.z,
+        openingId: opening.id,
+      };
+    }
+  }
+
+  return { roomId: room.id, x: fromX, z: fromZ };
 }
