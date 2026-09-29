@@ -239,14 +239,17 @@ test("public release strips private authoring references from Studio snapshot", 
     "workers/release-publish.mjs",
     "utf8",
   );
-  assert.match(publisher, /function publicStudioSnapshot\(draft\)/);
-  assert.match(publisher, /scene\.referenceLayers = \[\]/);
-  assert.match(publisher, /delete safe\.sourceAssetId/);
-  assert.match(
-    publisher,
-    /project\.assets = \(project\.assets \|\| \[\]\)\.filter/,
+  const sanitizer = fs.readFileSync(
+    "workers/studio-draft-validation.mjs",
+    "utf8",
   );
+  assert.match(publisher, /publicStudioSnapshot/);
   assert.match(publisher, /studio: \{ project: publicStudioProject \}/);
+  assert.match(sanitizer, /export function publicStudioSnapshot\(draft\)/);
+  assert.match(sanitizer, /referenceLayers: \[\]/);
+  assert.match(sanitizer, /modelNodeTags: \[\]/);
+  assert.match(sanitizer, /releases: \[\]/);
+  assert.doesNotMatch(sanitizer, /\.\.\.structuredClone\(draft\)/);
 });
 
 test("public runtime prefers active immutable release and refuses corrupt release fallback", () => {
