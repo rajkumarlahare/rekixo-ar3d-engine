@@ -283,3 +283,98 @@ test("release publish and rollback mutations stay behind Engine Admin auth and s
   assert.match(admin, /buildAndActivateRelease/);
   assert.match(admin, /activateExistingRelease/);
 });
+
+
+test("public immutable experience exposes only reviewed two-room door graph in model coordinates", () => {
+  const manifest = baseManifest();
+  manifest.studio.project.scene = {
+    scale: 2,
+    modelTransform: { x: 10, y: 4, z: -6, rotationY: 0 },
+    floors: [{ id: "floor_1", name: "Floor 1", elevation: 4 }],
+    rooms: [
+      {
+        id: "room_left",
+        floorId: "floor_1",
+        name: "Living",
+        unit: "101",
+        x: 8,
+        z: -6,
+        width: 4,
+        depth: 4,
+        height: 2.8,
+      },
+      {
+        id: "room_right",
+        floorId: "floor_1",
+        name: "Bedroom",
+        unit: "101",
+        x: 12,
+        z: -6,
+        width: 4,
+        depth: 4,
+        height: 2.8,
+      },
+    ],
+    openings: [
+      {
+        id: "door_reviewed",
+        floorId: "floor_1",
+        kind: "door",
+        roomIds: ["room_left", "room_right"],
+        x: 10,
+        y: 6.1,
+        z: -6,
+        width: 0.9,
+        height: 2.1,
+        rotationY: -90,
+        reviewed: true,
+      },
+      {
+        id: "door_unreviewed",
+        floorId: "floor_1",
+        kind: "door",
+        roomIds: ["room_left", "room_right"],
+        x: 10,
+        y: 6.1,
+        z: -5,
+        width: 0.9,
+        height: 2.1,
+        rotationY: -90,
+        reviewed: false,
+      },
+      {
+        id: "window_reviewed",
+        floorId: "floor_1",
+        kind: "window",
+        roomIds: ["room_left", "room_right"],
+        x: 10,
+        y: 6,
+        z: -4,
+        width: 1.2,
+        height: 1.2,
+        rotationY: -90,
+        reviewed: true,
+      },
+    ],
+  };
+
+  const experience = runtime.experienceFromActiveReleaseState({
+    state: "ok",
+    manifest,
+    manifestSha256: "b".repeat(64),
+  });
+
+  assert.equal(experience.walkthrough.version, 1);
+  assert.equal(experience.walkthrough.metresPerUnit, 2);
+  assert.equal(experience.walkthrough.rooms.length, 2);
+  assert.equal(experience.walkthrough.doors.length, 1);
+  assert.equal(experience.walkthrough.doors[0].id, "door_reviewed");
+  assert.deepEqual(experience.walkthrough.doors[0].roomIds, [
+    "room_left",
+    "room_right",
+  ]);
+  assert.equal(experience.walkthrough.doors[0].x, 0);
+  assert.equal(experience.walkthrough.doors[0].z, 0);
+  assert.equal(experience.walkthrough.doors[0].width, 0.45);
+  assert.equal(experience.walkthrough.rooms[0].elevation, 0);
+});
