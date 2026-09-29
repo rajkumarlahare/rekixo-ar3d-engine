@@ -129,14 +129,23 @@ export function classifySmartSource(
 }
 
 function disposeObject(root: T.Object3D) {
+  const materials = new Set<T.Material>();
+  const textures = new Set<T.Texture>();
   root.traverse((node) => {
     if (!(node instanceof T.Mesh)) return;
     node.geometry?.dispose();
-    const materials = Array.isArray(node.material)
+    const nodeMaterials = Array.isArray(node.material)
       ? node.material
       : [node.material];
-    for (const material of materials) material?.dispose();
+    for (const material of nodeMaterials)
+      if (material) materials.add(material);
   });
+  for (const material of materials) {
+    for (const value of Object.values(material))
+      if (value instanceof T.Texture) textures.add(value);
+    material.dispose();
+  }
+  for (const texture of textures) texture.dispose();
 }
 
 async function parseModel(asset: Asset) {
