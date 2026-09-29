@@ -12,7 +12,15 @@ const compile = (file) =>
   }).outputText;
 const url = (text) =>
   "data:text/javascript;base64," + Buffer.from(text).toString("base64");
-const domainUrl = url(compile("apps/admin/src/studio/domain.ts"));
+const slugPolicyUrl = url(
+  fs.readFileSync("shared/project-slug-policy.js", "utf8"),
+);
+const domainUrl = url(
+  compile("apps/admin/src/studio/domain.ts").replace(
+    /(["'])\.\.\/\.\.\/\.\.\/\.\.\/shared\/project-slug-policy\.js\1/,
+    JSON.stringify(slugPolicyUrl),
+  ),
+);
 const storageUrl = url(
   compile("apps/admin/src/studio/storage.ts").replace(
     '"./domain"',
