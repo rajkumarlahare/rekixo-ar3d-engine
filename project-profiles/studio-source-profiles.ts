@@ -1,4 +1,34 @@
 import jyotiSourcePack from "./jyoti-paradise/source-pack.json";
+import jyotiInteriorScene from "./jyoti-paradise/interior-scene-v2.json";
+
+const jyotiUnitById = new Map(
+  jyotiInteriorScene.units.map((unit) => [
+    unit.id,
+    unit.id.includes("101")
+      ? "101"
+      : unit.id.includes("102")
+        ? "102"
+        : unit.id.includes("103")
+          ? "103"
+          : "Common",
+  ]),
+);
+
+const jyotiRoomSheetTemplate = jyotiInteriorScene.rooms
+  .filter((room) => room.boundary.kind === "rectangle")
+  .map((room) => ({
+    key: room.id,
+    floor: "Typical residential floor",
+    unit: jyotiUnitById.get(room.unitId) ?? room.unitId,
+    name: room.name
+      .replace(/\s+\d+(?:\.\d+)?\s*[x×]\s*\d+(?:\.\d+)?\s*$/i, "")
+      .replace(/\s+\d+(?:\.\d+)?\s*$/i, "")
+      .trim(),
+    width: room.boundary.size[0],
+    depth: room.boundary.size[1],
+    height: room.ceilingHeightM,
+    sourceNote: room.evidence.sourceNote,
+  }));
 
 export const studioSourceProfiles = [
   {
@@ -8,6 +38,7 @@ export const studioSourceProfiles = [
     location: "Hingna, Nagpur",
     minMatches: 2,
     requireAnyOf: ["primaryModel", "floorPlan"],
+    roomSheetTemplate: jyotiRoomSheetTemplate,
     alignment: {
       slotKey: "floorPlan",
       page: 2,
