@@ -1598,3 +1598,27 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+.builder-source-lock-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.builder-source-lock-actions button {
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .builder-source-lock-actions {
+    justify-content: stretch;
+  }
+
+  .builder-source-lock-actions button {
+    flex: 1 1 auto;
+  }
+}

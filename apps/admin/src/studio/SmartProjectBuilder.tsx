@@ -46,6 +46,7 @@ export default function SmartProjectBuilder({
   onOpenEditor,
   onOpenSources,
   onAutoSetup,
+  onStartAlignment,
   quickSetup,
 }: {
   project: Project;
@@ -69,6 +70,7 @@ export default function SmartProjectBuilder({
   onOpenEditor: () => void;
   onOpenSources: () => void;
   onAutoSetup: () => void;
+  onStartAlignment: () => void;
   quickSetup: QuickSourceSetup;
 }) {
   const input = useRef<HTMLInputElement>(null);
@@ -283,16 +285,25 @@ export default function SmartProjectBuilder({
                     Exact SHA-256 source matches · {quickSetup.matchedCount}/{quickSetup.requiredCount}
                   </small>
                 </div>
-                <button
-                  type="button"
-                  className="primary"
-                  disabled={busy || quickSetupApplied}
-                  onClick={onAutoSetup}
-                >
-                  {quickSetupApplied
-                    ? "Auto setup applied"
-                    : `Auto setup ${quickSetup.name ?? "project"}`}
-                </button>
+                <div className="builder-source-lock-actions">
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={busy || quickSetupApplied}
+                    onClick={onAutoSetup}
+                  >
+                    {quickSetupApplied
+                      ? "Auto setup applied"
+                      : `Auto setup ${quickSetup.name ?? "project"}`}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy || !quickSetupApplied || !quickSetup.alignment}
+                    onClick={onStartAlignment}
+                  >
+                    Align floor plan →
+                  </button>
+                </div>
               </div>
               <div className="builder-source-lock-grid">
                 {quickSetup.slots.map((slot) => (
