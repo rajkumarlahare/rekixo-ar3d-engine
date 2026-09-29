@@ -223,6 +223,8 @@ export async function importPublished(slug: string) {
   copy.assets = copy.assets.map((key) => remap.get(key)!);
   for (const scene of [copy.scene, ...copy.releases.map((release) => release.scene)]) {
     if (scene.modelId) scene.modelId = remap.get(scene.modelId);
+    if (scene.publishModelId)
+      scene.publishModelId = remap.get(scene.publishModelId);
     scene.rooms = scene.rooms.map((room) => ({
       ...room,
       ...(room.sourceAssetId
