@@ -47,6 +47,14 @@ jobs:
       - name: Verify generalized Engine
         run: npm test
 
+      - name: Install browser E2E runner
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.1
+          npx playwright install --with-deps chromium
+
+      - name: Run browser E2E smoke
+        run: npx playwright test --config playwright.config.ts
+
       - name: Require Cloudflare deployment secret
         shell: bash
         run: |

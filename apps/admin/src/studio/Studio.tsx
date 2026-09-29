@@ -47,6 +47,7 @@ import StudioOverview from "./StudioOverview";
 import SmartProjectBuilder from "./SmartProjectBuilder";
 import RoomNavigationPanel from "./RoomNavigationPanel";
 import ModelNodeInspector from "./ModelNodeInspector";
+import { useStudioCloudState } from "./useStudioCloudState";
 import StudioSources from "./StudioSources";
 import StudioEvidence from "./StudioEvidence";
 import StudioPublish from "./StudioPublish";
@@ -130,64 +131,23 @@ export default function Studio() {
   const [sourceAuditBusy, setSourceAuditBusy] = useState(false);
   const [smartAnalysis, setSmartAnalysis] = useState<SmartProjectAnalysis>();
   const [manifestText, setManifestText] = useState("");
-  const [cloudSession, setCloudSession] = useState<cloud.CloudSession>();
-  const [cloudProjects, setCloudProjects] = useState<cloud.CloudProjectSummary[]>([]);
   const [projectSearch, setProjectSearch] = useState("");
-  const [cloudSearch, setCloudSearch] = useState("");
-  const [cloudFilter, setCloudFilter] = useState<"active" | "archived">("active");
-  const [cloudReleases, setCloudReleases] = useState<cloud.CloudReleaseSummary[]>([]);
   const [published, setPublished] = useState<PublishedCatalogEntry[]>([]);
   const [workspace, setWorkspace] = useState<
     "builder" | "overview" | "editor" | "sources" | "evidence" | "publish"
   >("builder");
-  useEffect(() => {
-    let active = true;
-    void cloud
-      .session()
-      .then((next) => {
-        if (!active) return;
-        setCloudSession(next);
-        if (next.authenticated)
-          return cloud.projects("", "active", 50, 0).then((result) => {
-            if (active) setCloudProjects(result.projects);
-          });
-      })
-      .catch(() => {
-        if (active)
-          setCloudSession({
-            configured: false,
-            databaseReady: false,
-            authenticated: false,
-          });
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!cloudSession?.authenticated) return;
-    let active = true;
-    const timer = window.setTimeout(() => {
-      void cloud
-        .projects(cloudSearch, cloudFilter, 50, 0)
-        .then((result) => {
-          if (active) setCloudProjects(result.projects);
-        })
-        .catch((reason: unknown) => {
-          if (active)
-            setError(
-              reason instanceof Error
-                ? reason.message
-                : "Cloud projects could not be loaded.",
-            );
-        });
-    }, 220);
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-    };
-  }, [cloudSearch, cloudFilter, cloudSession?.authenticated]);
+  const {
+    cloudSession,
+    cloudProjects,
+    cloudSearch,
+    setCloudSearch,
+    cloudFilter,
+    setCloudFilter,
+    cloudReleases,
+    refreshCloudProjects,
+    refreshCloudReleases,
+    markCloudSignedOut,
+  } = useStudioCloudState(project, setError);
 
   useEffect(() => {
     let active = true;
@@ -320,34 +280,6 @@ export default function Studio() {
       setSelectedMaterial(modelMaterials[0].name);
   }, [modelMaterials, selectedMaterial]);
   useEffect(() => {
-    if (!cloudSession?.authenticated || !project?.cloud) {
-      setCloudReleases([]);
-      return;
-    }
-    let active = true;
-    void cloud
-      .releases(projectSlug(project))
-      .then((result) => {
-        if (active) setCloudReleases(result.releases);
-      })
-      .catch((reason: unknown) => {
-        if (active)
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "Release history could not be loaded.",
-          );
-      });
-    return () => {
-      active = false;
-    };
-  }, [
-    cloudSession?.authenticated,
-    project?.id,
-    project?.cloud?.revision,
-  ]);
-
-  useEffect(() => {
     const guard = (e: BeforeUnloadEvent) => {
       if (dirty) {
         e.preventDefault();
@@ -396,22 +328,6 @@ export default function Studio() {
       return;
     }
     open(p);
-  }
-
-  async function refreshCloudProjects() {
-    if (!cloudSession?.authenticated) return;
-    const result = await cloud.projects(cloudSearch, cloudFilter, 50, 0);
-    setCloudProjects(result.projects);
-  }
-
-  async function refreshCloudReleases(current?: Project) {
-    const target = current ?? project;
-    if (!cloudSession?.authenticated || !target?.cloud) {
-      setCloudReleases([]);
-      return;
-    }
-    const result = await cloud.releases(projectSlug(target));
-    setCloudReleases(result.releases);
   }
 
   async function refreshPublishedCatalog() {
@@ -2467,12 +2383,7 @@ export default function Studio() {
                     onClick={() =>
                       task(async () => {
                         await cloud.logout();
-                        setCloudSession({
-                          configured: true,
-                          databaseReady: true,
-                          authenticated: false,
-                        });
-                        setCloudProjects([]);
+                        markCloudSignedOut();
                         setMessage("Engine cloud session signed out. Local drafts remain available.");
                       })
                     }

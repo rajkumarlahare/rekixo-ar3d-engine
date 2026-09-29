@@ -1,0 +1,136 @@
+import { expect, test } from "@playwright/test";
+
+const json = (body: unknown) => ({
+  status: 200,
+  contentType: "application/json",
+  body: JSON.stringify(body),
+});
+
+async function isolateCloud(page: import("@playwright/test").Page) {
+  await page.route("**/3Dprojects/api/cloud/session", (route) =>
+    route.fulfill(
+      json({
+        configured: true,
+        databaseReady: true,
+        authenticated: false,
+      }),
+    ),
+  );
+  await page.route("**/3Dprojects/api/releases", (route) =>
+    route.fulfill(json({ releases: [] })),
+  );
+  await page.route("**/3Dprojects/published/catalog.json", (route) =>
+    route.fulfill(json([])),
+  );
+}
+
+function fourFloorGltf() {
+  const positions = Buffer.alloc(4 * 3 * 4);
+  const values = [
+    -2, 0, -2,
+     2, 0, -2,
+    -2, 0.1, 2,
+     2, 0.1, 2,
+  ];
+  values.forEach((value, index) => positions.writeFloatLE(value, index * 4));
+  return JSON.stringify({
+    asset: { version: "2.0", generator: "Rekixo browser E2E" },
+    buffers: [
+      {
+        byteLength: positions.length,
+        uri: `data:application/octet-stream;base64,${positions.toString("base64")}`,
+      },
+    ],
+    bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: positions.length }],
+    accessors: [
+      {
+        bufferView: 0,
+        componentType: 5126,
+        count: 4,
+        type: "VEC3",
+        min: [-2, 0, -2],
+        max: [2, 0.1, 2],
+      },
+    ],
+    meshes: [
+      {
+        name: "Floor slab",
+        primitives: [{ attributes: { POSITION: 0 }, mode: 5 }],
+      },
+    ],
+    nodes: [
+      { name: "Ground Floor", mesh: 0, translation: [0, 0, 0] },
+      { name: "First Floor", mesh: 0, translation: [0, 3, 0] },
+      { name: "Second Floor", mesh: 0, translation: [0, 6, 0] },
+      { name: "Third Floor", mesh: 0, translation: [0, 9, 0] },
+    ],
+    scenes: [{ nodes: [0, 1, 2, 3] }],
+    scene: 0,
+  });
+}
+
+test.beforeEach(async ({ page }) => {
+  await isolateCloud(page);
+  await page.goto("/3Dprojects/studio");
+  await expect(page.getByLabel("Smart 3D project builder")).toBeVisible();
+});
+
+test("local Studio creates, analyzes and survives a browser reload", async ({
+  page,
+}) => {
+  const title = page.getByLabel("Project title");
+  await expect(title).toHaveValue("Untitled project");
+  await title.fill("Browser E2E Tower");
+
+  const sourceInput = page
+    .locator(".smart-builder input[type=file]")
+    .first();
+  await sourceInput.setInputFiles({
+    name: "four-floor.glb",
+    mimeType: "model/gltf-binary",
+    buffer: Buffer.from(fourFloorGltf()),
+  });
+
+  await expect(page.getByLabel("Active 3D model")).toContainText(
+    "four-floor.glb",
+  );
+  const analyze = page.getByRole("button", { name: "Analyze project" });
+  await expect(analyze).toBeEnabled();
+  await analyze.click();
+
+  await expect(page.getByRole("status")).toContainText(
+    "Smart analysis complete",
+  );
+  await expect(page.getByText("Selected for analysis")).toBeVisible();
+  await expect(page.getByText("Detected floor levels")).toBeVisible();
+
+  const build = page.getByRole("button", { name: "Build smart draft" });
+  await expect(build).toBeEnabled();
+  await build.click();
+
+  await page.getByRole("button", { name: "Save local" }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "Saved in the local offline cache",
+  );
+
+  await page.reload();
+  await expect(page.getByLabel("Project title")).toHaveValue(
+    "Browser E2E Tower",
+  );
+  await expect(page.getByLabel("Active 3D model")).toContainText(
+    "four-floor.glb",
+  );
+});
+
+test("unsaved project guard blocks destructive project switching", async ({
+  page,
+}) => {
+  await page.getByLabel("Project title").fill("Unsaved E2E Change");
+  await page.getByRole("button", { name: "+ New project" }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Save your changes before creating a project.",
+  );
+  await expect(page.getByLabel("Project title")).toHaveValue(
+    "Unsaved E2E Change",
+  );
+});
