@@ -25,6 +25,7 @@ import {
   type Furniture,
   type Kind,
   type MaterialOverride,
+  type ModelNodeSemantic,
   type ModelNodeTag,
   type ModelTransform,
   type Project,
@@ -879,6 +880,47 @@ export default function Studio() {
       },
     });
   }
+  function clearModelNodeSemantic() {
+    if (!selectedModelNode) return;
+    const previous = p.scene.modelNodeTags ?? [];
+    const current = previous.find(
+      (entry) =>
+        entry.nodeName === selectedModelNode.name &&
+        entry.occurrence === selectedModelNode.occurrence,
+    );
+    if (!current) return;
+    const next = { ...current };
+    delete next.semantic;
+    delete next.semanticAssignment;
+    delete next.semanticConfidence;
+    const keep =
+      Boolean(next.floorId) ||
+      Boolean(next.unit) ||
+      Boolean(next.roomId) ||
+      Boolean(next.assignment) ||
+      next.confidence !== undefined;
+    edit({
+      ...p,
+      scene: {
+        ...p.scene,
+        modelNodeTags: keep
+          ? previous.map((entry) =>
+              entry.nodeName === selectedModelNode.name &&
+              entry.occurrence === selectedModelNode.occurrence
+                ? next
+                : entry,
+            )
+          : previous.filter(
+              (entry) =>
+                !(
+                  entry.nodeName === selectedModelNode.name &&
+                  entry.occurrence === selectedModelNode.occurrence
+                ),
+            ),
+      },
+    });
+  }
+
   function clearModelNodeTag() {
     if (!selectedModelNode) return;
     edit({
@@ -3201,16 +3243,15 @@ export default function Studio() {
                       Architectural label
                       <select
                         value={selectedModelNodeTag?.semantic ?? ""}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          if (!value) {
+                            clearModelNodeSemantic();
+                            return;
+                          }
                           patchModelNodeTag({
-                            semantic: event.target.value as
-                              | "wall"
-                              | "door"
-                              | "window"
-                              | "opening"
-                              | "ignore"
-                              | "",
-                          })
+                            semantic: value as ModelNodeSemantic,
+                          });
                         }
                       >
                         <option value="">Unassigned</option>
