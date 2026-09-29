@@ -546,7 +546,15 @@ export default function SceneCanvas(props: Props) {
         { view } = latest.current;
       keys.clear();
       if (view === "walk" && r) {
-        if (canWalk(latest.current.scene, r, camera.position.x, camera.position.z)) {
+        if (
+          Math.abs(camera.position.y - (y + 1.6)) <= 0.45 &&
+          canWalk(
+            latest.current.scene,
+            r,
+            camera.position.x,
+            camera.position.z,
+          )
+        ) {
           const connections = reviewedDoorConnections(
             latest.current.scene,
             r.id,
