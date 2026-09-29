@@ -45,22 +45,27 @@ Use Node 22.13 or newer, run `npm install` at the repository root, then
 
 ## Storage and isolation
 
-Drafts, source files and review versions live in IndexedDB on the current browser
-origin. Clearing browser site data removes them. A different port, browser or
-device has separate storage. Keep exported backups outside browser storage.
-Export captures the current draft, including unsaved scene edits.
+IndexedDB remains the browser cache/offline workspace. Authenticated Engine
+projects can also save revision-checked cloud drafts and project-scoped assets to
+the isolated Engine D1/R2 resources. A cloud revision conflict fails closed and
+must be reloaded before another save; editing a draft never mutates the active
+customer release.
 
 Project IDs and asset IDs are regenerated on backup import, so importing cannot
-overwrite the source project. Saving uses a single IndexedDB transaction for
-project and uploaded files. Each individual file is limited to 100 MB and an
-import package to 256 MB. Large models and base64 packages need substantial RAM;
-use optimized self-contained GLBs for practical browser work.
+overwrite the source project. Local saves use one IndexedDB transaction for the
+project and uploaded files. Individual Studio assets are limited to **64 MB** so a
+file accepted locally is also eligible for the current Engine Cloud upload path;
+an import package is limited to 256 MB. Large production models should be
+optimized/self-contained GLBs rather than relying on the browser cache as an
+archive.
 
-Review versions are **local snapshots, not live publications or customer links**.
-Scene Manifest V2 is also metadata only; it does not upload assets or publish a
-customer release. No production write endpoint, platform database, Super Admin
-screen or platform authentication flow is changed. The old project registry
-remains available. See [Scene Manifest V2](SCENE-MANIFEST-V2.md).
+Review versions are authoring snapshots. **Publish release** creates a separate,
+immutable release manifest with frozen model/Studio assets and an atomic active
+release pointer; rollback activates an earlier complete release. The public
+Studio snapshot is allowlisted and excludes operator brief/reference layers,
+source-evidence IDs, model-node review metadata and unreviewed openings. Scene
+Manifest V2 remains the metadata interchange contract. The sibling Platform
+database, Super Admin and production resources remain isolated.
 
 ## Model and measurement boundaries
 
@@ -70,18 +75,24 @@ must be checked against a known drawing dimension. Arbitrary source models do
 not receive Jyoti-specific facade modifications; that profile is gated by the
 recovered source provenance.
 
-The initial furniture catalog uses simple sized primitives. Rooms are manual
-rectangular proxies, with cutaway inspection and room-bounded walking. They do
-not certify wall thicknesses, as-built accuracy, stairs or door-connected routes.
-DWG, SKB and D5 inputs are retained as references; CAD/BIM conversion and semantic
-room extraction are not implemented in this Studio milestone.
+The initial furniture catalog still uses simple sized primitives. Rooms can be
+rectangular or mouse-drawn polygons; reviewed shared doors can connect room
+walkthroughs. Smart floor/wall/door/window detection is **suggestion-first**:
+uncertain geometry stays in review and copied designs lose project-specific
+evidence, mesh bindings and reviewed-opening approval before reuse. These tools
+do not certify wall thicknesses, as-built accuracy or hidden geometry.
+
+ASCII DXF can provide named-layer hints; binary DWG, SKB/SKP and D5/DRS remain
+source evidence unless converted/recovered by a compatible authoring pipeline.
+The Studio must not invent CAD/BIM semantics merely because a source file exists.
 
 ## Next engine milestones
 
-Authenticated Engine sessions and per-project authorization must precede cloud
-draft storage, R2 uploads and public version publication. Later work can add
-irregular room polygons, door connections, stairs/navigation meshes, richer
-furniture assets, catalog management and customer material alternatives. See
+The current priority is hardening rather than adding another large feature:
+split the Studio/Canvas/Viewer monoliths behind stable controllers, add browser
+E2E coverage for create → analyze → map → save → publish → walk, move heavy source
+analysis off the UI thread, render reviewed wall openings as real visual gaps,
+and introduce content-addressed/compressed production assets. See
 [the product roadmap](ENGINE-PRODUCT-ROADMAP.md).
 
 ## Validation
