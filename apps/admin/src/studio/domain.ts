@@ -119,7 +119,10 @@ export interface Scene {
   rooms: Room[];
   furniture: Furniture[];
   openings?: Opening[];
+  /** Source/authoring model used for analysis, mesh tags and Studio editing. */
   modelId?: string;
+  /** Web-safe model frozen into customer releases. Falls back to modelId. */
+  publishModelId?: string;
   scale: number;
   appearance?: SceneAppearance;
   materialOverrides?: MaterialOverride[];
@@ -790,6 +793,8 @@ export function validateProject(p: Project): void {
   for (const s of [p.scene, ...p.releases.map((r) => r.scene)]) {
     if (s.modelId && !p.assets.includes(s.modelId))
       throw Error("Model asset is missing.");
+    if (s.publishModelId && !p.assets.includes(s.publishModelId))
+      throw Error("Publish model asset is missing.");
     for (const layer of s.referenceLayers ?? [])
       if (!p.assets.includes(layer.assetId))
         throw Error("Reference layer asset is missing.");
