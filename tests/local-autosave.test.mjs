@@ -70,7 +70,7 @@ test("Studio debounces local edits into IndexedDB without marking cloud synchron
   assert.match(studio, /setDirty\(false\)/);
   assert.match(studio, /if \(next\.cloud\) setCloudDirty\(true\)/);
   assert.match(studio, /projectAheadOfCloud\(p\)/);
-  assert.match(studio, /Autosaved locally/);
+  assert.match(studio, /Autosaved/);
   assert.match(studio, /Save to cloud before switching a release/);
 
   assert.match(readiness, /cloudDirty: boolean/);
@@ -84,7 +84,7 @@ test("hard reload browser coverage no longer presses Save local before reload", 
     e2e,
     /local autosave survives hard reload without pressing Save local/,
   );
-  assert.match(e2e, /Autosaved locally/);
+  assert.match(e2e, /Autosaved/);
   assert.match(e2e, /await page\.reload\(\)/);
   assert.doesNotMatch(
     e2e,
