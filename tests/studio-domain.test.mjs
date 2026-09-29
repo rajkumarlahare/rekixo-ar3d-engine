@@ -273,3 +273,56 @@ test("source mesh architectural semantics validate provenance and confidence", (
   p.scene.modelNodeTags[0].semanticConfidence = 2;
   assert.throws(() => validateProject(p), /model node floor\/unit tag/i);
 });
+
+
+test("reviewed openings must reference rooms on the same floor", () => {
+  const p = fixture();
+  p.scene.openings = [
+    {
+      id: "opening-1",
+      floorId: p.scene.floors[0].id,
+      kind: "door",
+      roomIds: ["living"],
+      x: 8,
+      y: 1.05,
+      z: -5,
+      width: 0.9,
+      height: 2.1,
+      rotationY: 90,
+      reviewed: true,
+      sourceNodeName: "Door_Main",
+      sourceOccurrence: 1,
+      confidence: 0.91,
+    },
+  ];
+  assert.doesNotThrow(() => validateProject(p));
+
+  p.scene.openings[0].roomIds = ["missing-room"];
+  assert.throws(() => validateProject(p), /reviewed wall opening/i);
+});
+
+test("opening source provenance validates occurrence and confidence", () => {
+  const p = fixture();
+  p.scene.openings = [
+    {
+      id: "opening-1",
+      floorId: p.scene.floors[0].id,
+      kind: "window",
+      roomIds: ["living"],
+      x: 8,
+      y: 1.6,
+      z: -5,
+      width: 1.2,
+      height: 1.2,
+      sillHeight: 1,
+      rotationY: 0,
+      reviewed: true,
+      sourceNodeName: "Window_01",
+      sourceOccurrence: 1,
+      confidence: 0.9,
+    },
+  ];
+  assert.doesNotThrow(() => validateProject(p));
+  p.scene.openings[0].sourceOccurrence = 0;
+  assert.throws(() => validateProject(p), /reviewed wall opening/i);
+});
