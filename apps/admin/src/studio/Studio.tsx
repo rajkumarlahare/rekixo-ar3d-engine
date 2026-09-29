@@ -91,6 +91,10 @@ import {
   applyBatchRepeatPlan,
   buildBatchRepeatPreview,
 } from "./unitRepeat";
+import {
+  projectAheadOfCloud,
+  withLocalSaveTimestamp,
+} from "./localDraftState";
 import "./studio.css";
 import "./studio-operations.css";
 import "./studio-superadmin-theme.css";
@@ -117,6 +121,10 @@ export default function Studio() {
     [message, setMessage] = useState(""),
     [error, setError] = useState(""),
     [dirty, setDirty] = useState(false),
+    [cloudDirty, setCloudDirty] = useState(false),
+    [localSaveState, setLocalSaveState] = useState<
+      "saved" | "saving" | "error"
+    >("saved"),
     [review, setReview] = useState(""),
     [backup, setBackup] = useState<{ url: string; name: string }>(),
     [mesh, setMesh] = useState("");
@@ -187,7 +195,8 @@ export default function Studio() {
     };
   }, []);
   const undo = useRef<Project[]>([]),
-    redo = useRef<Project[]>([]);
+    redo = useRef<Project[]>([]),
+    localEditSerial = useRef(0);
   const modelInput = useRef<HTMLInputElement>(null),
     referenceInput = useRef<HTMLInputElement>(null),
     importInput = useRef<HTMLInputElement>(null);
@@ -227,6 +236,7 @@ export default function Studio() {
     setRoomSheetIssues([]);
     setSelectedRoomSheetKey("");
     setCameraOrientation("perspective");
+    localEditSerial.current += 1;
     setProject(p);
     setRoomId(p.scene.rooms[0]?.id ?? "");
     setSelected(p.scene.rooms[0]?.id ?? "");
@@ -238,6 +248,8 @@ export default function Studio() {
     );
     setView(p.scene.modelId ? "building" : "rooms");
     setDirty(false);
+    setCloudDirty(projectAheadOfCloud(p));
+    setLocalSaveState("saved");
     undo.current = [];
     redo.current = [];
     setError("");
@@ -368,14 +380,58 @@ export default function Studio() {
     window.addEventListener("beforeunload", guard);
     return () => window.removeEventListener("beforeunload", guard);
   }, [dirty]);
+
+  useEffect(() => {
+    if (!project || !dirty || review) return;
+    const serial = localEditSerial.current;
+    const projectId = project.id;
+    const timer = window.setTimeout(() => {
+      const next = withLocalSaveTimestamp(project);
+      setLocalSaveState("saving");
+      void storage
+        .save(next)
+        .then(() => {
+          if (serial !== localEditSerial.current) return;
+          setProject((current) =>
+            current?.id === projectId
+              ? { ...current, updated: next.updated }
+              : current,
+          );
+          setDirty(false);
+          setLocalSaveState("saved");
+          setList((current) =>
+            current
+              .map((entry) =>
+                entry.id === projectId
+                  ? { ...next, updated: next.updated }
+                  : entry,
+              )
+              .sort((left, right) =>
+                right.updated.localeCompare(left.updated),
+              ),
+          );
+        })
+        .catch(() => {
+          if (serial !== localEditSerial.current) return;
+          setLocalSaveState("error");
+          setError(
+            "Local autosave failed. Use Save local before reloading or closing this page.",
+          );
+        });
+    }, 650);
+    return () => window.clearTimeout(timer);
+  }, [project, dirty, review]);
   function edit(next: Project) {
     if (!project) return;
     setBackup(undefined);
     undo.current.push(project);
     if (undo.current.length > 40) undo.current.shift();
     redo.current = [];
+    localEditSerial.current += 1;
     setProject(next);
     setDirty(true);
+    if (next.cloud) setCloudDirty(true);
+    setLocalSaveState("saving");
     setMessage("");
     setError("");
   }
@@ -391,10 +447,13 @@ export default function Studio() {
     }
   }
   async function persist(p: Project, assets: Asset[] = []) {
-    const next = { ...p, updated: new Date().toISOString() };
+    const next = withLocalSaveTimestamp(p);
     await storage.save(next, assets);
+    localEditSerial.current += 1;
     setProject(next);
     setDirty(false);
+    setCloudDirty(projectAheadOfCloud(next));
+    setLocalSaveState("saved");
     await refresh();
     setMessage(
       "Saved in the local offline cache. Use Save to cloud for the shared Engine draft.",
@@ -480,8 +539,11 @@ export default function Studio() {
       throw Error("Sign in to Engine Admin before saving a cloud draft.");
     const next = await cloud.syncProject(p, files);
     await storage.save(next);
+    localEditSerial.current += 1;
     setProject(next);
     setDirty(false);
+    setCloudDirty(false);
+    setLocalSaveState("saved");
     await Promise.all([
       refresh(),
       refreshCloudProjects(),
@@ -497,7 +559,7 @@ export default function Studio() {
     const gate = buildStudioReadiness(
       p,
       files,
-      dirty,
+      cloudDirty,
       cloudSession,
       cloudReleases,
     );
@@ -524,8 +586,8 @@ export default function Studio() {
   async function activatePublishedRelease(releaseId: string, version: number) {
     if (!cloudSession?.authenticated)
       throw Error("Sign in to Engine Admin before changing the active release.");
-    if (dirty)
-      throw Error("Save or discard local draft changes before switching a release.");
+    if (cloudDirty)
+      throw Error("Save the current local draft to cloud before switching a release.");
     await cloud.activateRelease(projectSlug(p), releaseId);
     await Promise.all([
       refreshCloudReleases(p),
@@ -554,8 +616,11 @@ export default function Studio() {
       p = from.current.pop();
     if (p) {
       to.current.push(project);
+      localEditSerial.current += 1;
       setProject(p);
       setDirty(true);
+      if (p.cloud) setCloudDirty(true);
+      setLocalSaveState("saving");
       setReview("");
     }
   }
@@ -615,7 +680,7 @@ export default function Studio() {
     readiness = buildStudioReadiness(
       p,
       files,
-      dirty,
+      cloudDirty,
       cloudSession,
       cloudReleases,
     ),
@@ -2381,10 +2446,14 @@ export default function Studio() {
           />
           <span>
             {dirty
-              ? "Unsaved changes"
-              : p.cloud
-                ? `Cloud r${p.cloud.revision} · local cache`
-                : "Local workspace"}{" "}
+              ? "Saving locally…"
+              : localSaveState === "error"
+                ? "Local autosave failed"
+                : cloudDirty
+                  ? `Saved locally · cloud r${p.cloud?.revision ?? "—"} update pending`
+                  : p.cloud
+                    ? `Cloud r${p.cloud.revision} · local autosave`
+                    : "Local autosave"}{" "}
             · {p.scene.rooms.length} rooms
           </span>
         </div>
@@ -2489,7 +2558,7 @@ export default function Studio() {
                 <button
                   disabled={
                     busy ||
-                    dirty ||
+                    cloudDirty ||
                     Boolean(review) ||
                     !readiness.publishable
                   }
@@ -2610,9 +2679,21 @@ export default function Studio() {
         YOUR DESIGN WORKSPACE{" "}
         <span>
           {cloudSession?.authenticated
-            ? "Local cache + authenticated Engine cloud drafts. Publish creates an immutable release; later draft edits do not change the live release."
-            : "Local/offline cache is available. Cloud writes stay locked behind the dedicated Engine Admin session."}
+            ? "Edits autosave to this browser. Engine cloud stays explicit; Publish creates an immutable release."
+            : "Edits autosave to this browser. Cloud writes stay locked behind the dedicated Engine Admin session."}
         </span>
+        <strong
+          className={`storage-autosave storage-autosave--${localSaveState}`}
+          role="status"
+        >
+          {localSaveState === "saving"
+            ? "Autosaving…"
+            : localSaveState === "error"
+              ? "Autosave failed"
+              : dirty
+                ? "Autosave queued"
+                : "Autosaved locally"}
+        </strong>
         <button disabled={busy} onClick={() => importInput.current?.click()}>
           Import backup
         </button>
@@ -2713,7 +2794,7 @@ export default function Studio() {
           releases={cloudReleases}
           published={publishedCurrent}
           busy={busy}
-          dirty={dirty}
+          dirty={cloudDirty}
           onSaveLocal={() => void task(async () => { await persist(p); })}
           onSaveCloud={() => void task(syncCloudProject)}
           onPublish={() => void task(publishCurrentRelease)}
@@ -2864,7 +2945,7 @@ export default function Studio() {
                           ) : (
                             <button
                               type="button"
-                              disabled={busy || dirty || Boolean(review)}
+                              disabled={busy || cloudDirty || Boolean(review)}
                               onClick={() => {
                                 if (
                                   !window.confirm(
