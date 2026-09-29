@@ -98,6 +98,13 @@ interface Props {
     floorId: string;
     snap: boolean;
   };
+  roomStamp?: {
+    enabled: boolean;
+    floorId: string;
+    snap: boolean;
+    width: number;
+    depth: number;
+  };
   roomPolygonDraw?: {
     enabled: boolean;
     floorId: string;
@@ -616,6 +623,7 @@ export default function SceneCanvas(props: Props) {
       | { x: number; y: number; ox: number; oy: number; id: number }
       | undefined;
     let roomDrawStart: T.Vector3 | undefined;
+    let roomStampCenter: T.Vector3 | undefined;
     let vertexDrag:
       | {
           roomId: string;
@@ -680,13 +688,16 @@ export default function SceneCanvas(props: Props) {
       excludeRoomId?: string,
     ) => {
       const rectangle = latest.current.roomDraw;
+      const stamp = latest.current.roomStamp;
       const polygon = latest.current.roomPolygonDraw;
       const edit = latest.current.roomPolygonEdit;
       const config = rectangle?.enabled
         ? rectangle
-        : polygon?.enabled
-          ? polygon
-          : edit?.enabled
+        : stamp?.enabled
+          ? stamp
+          : polygon?.enabled
+            ? polygon
+            : edit?.enabled
             ? {
                 enabled: true,
                 floorId:
@@ -796,6 +807,30 @@ export default function SceneCanvas(props: Props) {
       }
       if (
         e.button === 0 &&
+        latest.current.roomStamp?.enabled &&
+        latest.current.view === "building"
+      ) {
+        const center = roomPlanePoint(e);
+        const stamp = latest.current.roomStamp;
+        if (center && stamp) {
+          roomStampCenter = center;
+          roomDraft.position.set(center.x, center.y, center.z);
+          roomDraft.scale.set(stamp.width, 1, stamp.depth);
+          roomDraft.visible = true;
+          controls.enabled = false;
+          renderer.domElement.setPointerCapture(e.pointerId);
+          point = {
+            x: e.clientX,
+            y: e.clientY,
+            ox: e.clientX,
+            oy: e.clientY,
+            id: e.pointerId,
+          };
+          return;
+        }
+      }
+      if (
+        e.button === 0 &&
         latest.current.roomDraw?.enabled &&
         latest.current.view === "building"
       ) {
@@ -840,6 +875,17 @@ export default function SceneCanvas(props: Props) {
       if (latest.current.roomPolygonDraw?.enabled && point) {
         const hover = roomPlanePoint(e);
         if (hover) redrawPolygonDraft(hover);
+        return;
+      }
+      if (roomStampCenter && latest.current.roomStamp?.enabled) {
+        const center = roomPlanePoint(e);
+        const stamp = latest.current.roomStamp;
+        if (center && stamp) {
+          roomStampCenter = center;
+          roomDraft.position.set(center.x, center.y, center.z);
+          roomDraft.scale.set(stamp.width, 1, stamp.depth);
+          roomDraft.visible = true;
+        }
         return;
       }
       if (roomDrawStart && latest.current.roomDraw?.enabled) {
@@ -902,6 +948,28 @@ export default function SceneCanvas(props: Props) {
             ? `${polygonDraftPoints.length} corner${polygonDraftPoints.length === 1 ? "" : "s"} · add at least 3`
             : `${polygonDraftPoints.length} corners · click first corner or press Enter to finish`,
         );
+        return;
+      }
+      if (roomStampCenter) {
+        const saved = roomStampCenter;
+        const center = roomPlanePoint(e) ?? saved;
+        const stamp = latest.current.roomStamp;
+        roomStampCenter = undefined;
+        roomDraft.visible = false;
+        controls.enabled = latest.current.view !== "walk";
+        point = undefined;
+        try {
+          renderer.domElement.releasePointerCapture(e.pointerId);
+        } catch {}
+        if (stamp) {
+          setStatus("");
+          latest.current.onRoomDraw?.({
+            x: Number(center.x.toFixed(3)),
+            z: Number(center.z.toFixed(3)),
+            width: Number(stamp.width.toFixed(3)),
+            depth: Number(stamp.depth.toFixed(3)),
+          });
+        }
         return;
       }
       if (roomDrawStart) {
@@ -1711,7 +1779,9 @@ export default function SceneCanvas(props: Props) {
   return (
     <div
       className={
-        props.roomDraw?.enabled || props.roomPolygonDraw?.enabled
+        props.roomDraw?.enabled ||
+        props.roomStamp?.enabled ||
+        props.roomPolygonDraw?.enabled
           ? "canvas-wrap room-draw-active"
           : "canvas-wrap"
       }
@@ -1720,6 +1790,11 @@ export default function SceneCanvas(props: Props) {
       {status && (
         <div className="canvas-status" role="status">
           {status}
+        </div>
+      )}
+      {props.roomStamp?.enabled && (
+        <div className="room-draw-hint">
+          Click or tap once to place the exact room-sheet size · drag later to fine-tune
         </div>
       )}
       {props.roomDraw?.enabled && (
