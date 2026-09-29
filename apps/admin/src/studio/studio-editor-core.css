@@ -2543,3 +2543,63 @@
     display: none;
   }
 }
+
+
+/* Phase 2 room-tree and inspector declutter */
+.studio--focus-editor .editor-project-tools {
+  display: none;
+}
+
+.room-object-details {
+  margin: 2px 0 4px 12px;
+  border-left: 1px solid #24344a;
+  padding-left: 7px;
+}
+
+.room-object-details > summary {
+  min-height: 27px;
+  display: flex;
+  align-items: center;
+  padding: 3px 6px;
+  color: #6f8098;
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 800;
+  list-style: none;
+  user-select: none;
+}
+
+.room-object-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.room-object-details > summary::before {
+  content: "›";
+  margin-right: 5px;
+  font-size: 12px;
+  transition: transform .15s ease;
+}
+
+.room-object-details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.room-object-details > summary:focus-visible {
+  outline: 2px solid #8d84ff;
+  outline-offset: 2px;
+}
+
+.room-object-details .outliner-object {
+  padding-left: 8px !important;
+}
+
+.editor-room-evidence,
+.editor-room-source-binding,
+.editor-room-actions {
+  margin-top: 8px;
+}
+
+.editor-room-actions > button {
+  width: 100%;
+  margin-top: 6px;
+}
