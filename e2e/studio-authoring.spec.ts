@@ -91,7 +91,7 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
     buffer: Buffer.from(fourFloorGltf()),
   });
 
-  await expect(page.getByLabel("Active 3D model")).toContainText(
+  await expect(page.getByLabel("Authoring / source 3D model")).toContainText(
     "four-floor.glb",
   );
   const analyze = page.getByRole("button", { name: "Analyze project" });
@@ -118,7 +118,7 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
   await expect(page.getByLabel("Project title")).toHaveValue(
     "Browser E2E Tower",
   );
-  await expect(page.getByLabel("Active 3D model")).toContainText(
+  await expect(page.getByLabel("Authoring / source 3D model")).toContainText(
     "four-floor.glb",
   );
 });
