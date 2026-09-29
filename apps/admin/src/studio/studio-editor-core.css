@@ -2711,7 +2711,7 @@
 
 .editor-core--alignment .canvas-wrap {
   flex: 1 1 auto;
-  min-height: clamp(360px, 58vh, 760px);
+  min-height: clamp(280px, 52vh, 650px);
 }
 
 .editor-core--alignment .canvas-status {
@@ -2724,9 +2724,10 @@
 }
 
 .editor-core--alignment .reference-workspace {
-  flex: 0 0 210px;
-  min-height: 180px;
-  max-height: 230px;
+  flex: 0 0 clamp(150px, 24vh, 220px);
+  min-height: 140px;
+  max-height: 220px;
+  overflow: hidden;
   border-top-color: #27374e;
   box-shadow: 0 -10px 28px rgba(0, 0, 0, .18);
 }
