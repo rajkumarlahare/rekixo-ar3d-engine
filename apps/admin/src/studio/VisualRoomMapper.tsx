@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { roomArea, type Room, type Scene } from "./domain";
+import type { RoomSheetRow } from "./roomSheet";
 
 export type RoomMapAction =
   | "idle"
+  | "stamp"
   | "create"
   | "polygon"
   | "reshape"
@@ -24,6 +26,11 @@ export default function VisualRoomMapper({
   onSnap,
   onClone,
   onMirror,
+  roomSheetRows,
+  mappedRoomSheetKeys,
+  selectedRoomSheetKey,
+  roomSheetIssues,
+  onRoomSheetSelect,
   onRepeatUnit,
   onClose,
 }: {
@@ -42,10 +49,22 @@ export default function VisualRoomMapper({
   onSnap: (value: boolean) => void;
   onClone: () => void;
   onMirror: (axis: "x" | "z") => void;
+  roomSheetRows: RoomSheetRow[];
+  mappedRoomSheetKeys: Set<string>;
+  selectedRoomSheetKey: string;
+  roomSheetIssues: string[];
+  onRoomSheetSelect: (row: RoomSheetRow) => void;
   onRepeatUnit: (targetFloorId: string, targetUnit: string) => void;
   onClose: () => void;
 }) {
   const floorRooms = scene.rooms.filter((room) => room.floorId === floorId);
+  const unmappedRows = roomSheetRows.filter(
+    (row) => !mappedRoomSheetKeys.has(row.key),
+  );
+  const selectedSheetRow = roomSheetRows.find(
+    (row) => row.key === selectedRoomSheetKey,
+  );
+  const mappedSheetCount = roomSheetRows.length - unmappedRows.length;
   const unitRooms = floorRooms.filter((room) => room.unit === unit.trim());
   const area = unitRooms.reduce((sum, room) => sum + roomArea(room), 0);
   const orderedFloors = useMemo(
@@ -101,6 +120,77 @@ export default function VisualRoomMapper({
       </header>
 
       <div className="room-mapper-body">
+        <section className="room-sheet-queue" aria-label="Unmapped rooms">
+          <div className="room-sheet-queue-head">
+            <div>
+              <small>ROOM SHEET → VISUAL PLACEMENT</small>
+              <b>Unmapped Rooms</b>
+              <span>
+                {roomSheetRows.length
+                  ? `${unmappedRows.length} left · ${mappedSheetCount} mapped`
+                  : "Attach CSV/TSV for a reusable room queue"}
+              </span>
+            </div>
+            {selectedSheetRow && (
+              <div className="room-sheet-selected">
+                <strong>{selectedSheetRow.unit} · {selectedSheetRow.name}</strong>
+                <small>
+                  {selectedSheetRow.width.toFixed(2)} × {selectedSheetRow.depth.toFixed(2)} m
+                  {selectedSheetRow.height
+                    ? ` · H ${selectedSheetRow.height.toFixed(2)} m`
+                    : ""}
+                </small>
+                <em>Click/tap once on the plan to place exact size</em>
+              </div>
+            )}
+          </div>
+          {unmappedRows.length > 0 ? (
+            <div className="room-sheet-queue-list">
+              {unmappedRows.map((row) => (
+                <button
+                  type="button"
+                  key={row.key}
+                  className={
+                    row.key === selectedRoomSheetKey
+                      ? "room-sheet-row active"
+                      : "room-sheet-row"
+                  }
+                  disabled={disabled}
+                  onClick={() => onRoomSheetSelect(row)}
+                  title={row.sourceNote}
+                >
+                  <span>
+                    <b>{row.unit}</b>
+                    <strong>{row.name}</strong>
+                  </span>
+                  <small>
+                    {row.width.toFixed(2)} × {row.depth.toFixed(2)} m
+                    {row.floorLabel ? ` · ${row.floorLabel}` : ""}
+                  </small>
+                  <i>{row.origin === "csv" ? "CSV" : "PROJECT"}</i>
+                </button>
+              ))}
+            </div>
+          ) : roomSheetRows.length ? (
+            <div className="room-sheet-complete">
+              ✓ Room sheet complete — all {roomSheetRows.length} rows are mapped.
+            </div>
+          ) : (
+            <div className="room-sheet-empty">
+              CSV columns: Floor (optional), Unit/Flat, Room, Width + Depth
+              or Size. Metres, cm, mm and feet/inches are accepted.
+            </div>
+          )}
+          {roomSheetIssues.length > 0 && (
+            <details className="room-sheet-issues">
+              <summary>{roomSheetIssues.length} room-sheet row warning{roomSheetIssues.length === 1 ? "" : "s"}</summary>
+              {roomSheetIssues.slice(0, 12).map((issue) => (
+                <small key={issue}>{issue}</small>
+              ))}
+            </details>
+          )}
+        </section>
+
         <div className="room-mapper-fields">
           <label>
             Floor
@@ -147,6 +237,15 @@ export default function VisualRoomMapper({
         </div>
 
         <div className="room-mapper-tools">
+          <button
+            type="button"
+            className={action === "stamp" ? "active primary" : ""}
+            disabled={disabled || !selectedSheetRow || !floorId}
+            onClick={() => onAction(action === "stamp" ? "idle" : "stamp")}
+            title="Place the selected room at its exact room-sheet size"
+          >
+            ◎ Place exact room
+          </button>
           <button
             type="button"
             className={action === "create" ? "active primary" : ""}
@@ -250,7 +349,13 @@ export default function VisualRoomMapper({
         </div>
 
         <div className="room-mapper-help">
-          {action === "create" ? (
+          {action === "stamp" && selectedSheetRow ? (
+            <b>
+              {selectedSheetRow.unit} · {selectedSheetRow.name} is ready at{" "}
+              {selectedSheetRow.width.toFixed(2)} × {selectedSheetRow.depth.toFixed(2)} m.
+              Plan पर सिर्फ click/tap करें; size Rekixo रखेगा.
+            </b>
+          ) : action === "create" ? (
             <b>
               Viewport पर click-drag करें. Width, depth, centre और area Rekixo
               खुद calculate करेगा.
