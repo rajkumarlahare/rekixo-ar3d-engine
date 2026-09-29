@@ -170,6 +170,19 @@ export function applyFloorSkeleton(
       continue;
     }
 
+    if (level.kind === "ground") {
+      const ground = floors.find(
+        (floor) => floor.name.trim().toLowerCase() === "ground",
+      );
+      if (ground) {
+        if (Math.abs(ground.elevation - target) > 0.0005) {
+          ground.elevation = target;
+          updated += 1;
+        }
+        continue;
+      }
+    }
+
     const existing = findFloor(floors, scene, profileId, level);
     if (existing) continue;
 
