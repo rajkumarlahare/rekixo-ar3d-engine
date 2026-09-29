@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { roomArea, type Room, type Scene } from "./domain";
 import type { RoomSheetRow } from "./roomSheet";
+import type { BatchRepeatPreview } from "./unitRepeat";
 
 export type RoomMapAction =
   | "idle"
@@ -32,6 +33,8 @@ export default function VisualRoomMapper({
   roomSheetIssues,
   onRoomSheetSelect,
   onPrepareSuggestedLayout,
+  batchRepeatPreview,
+  onGenerateBatchRepeat,
   onRepeatUnit,
   onClose,
 }: {
@@ -56,6 +59,8 @@ export default function VisualRoomMapper({
   roomSheetIssues: string[];
   onRoomSheetSelect: (row: RoomSheetRow) => void;
   onPrepareSuggestedLayout: (floorId: string) => void;
+  batchRepeatPreview?: BatchRepeatPreview;
+  onGenerateBatchRepeat: () => void;
   onRepeatUnit: (targetFloorId: string, targetUnit: string) => void;
   onClose: () => void;
 }) {
@@ -413,56 +418,116 @@ export default function VisualRoomMapper({
           )}
         </div>
 
-        {orderedFloors.length > 1 && unitRooms.length > 0 && (
-          <div className="room-mapper-repeat">
-            <div>
-              <small>REPEAT UNIT LAYOUT</small>
-              <b>Mapped unit को दूसरे floor पर copy करें</b>
-            </div>
-            <label>
-              Target floor
-              <select
-                value={repeatFloorId}
-                disabled={disabled}
-                onChange={(event) => {
-                  const target = event.target.value;
-                  setRepeatFloorId(target);
-                  setRepeatUnit(suggestUnit(unit, target));
-                }}
+        {batchRepeatPreview?.rows.length ? (
+          <section
+            className="room-mapper-batch-repeat"
+            aria-label="Repeated floor preview"
+          >
+            <div className="room-mapper-batch-head">
+              <div>
+                <small>REPEAT TYPICAL FLOOR · PREVIEW FIRST</small>
+                <b>{batchRepeatPreview.label ?? "Profile repeat plan"}</b>
+                <span>
+                  {batchRepeatPreview.readyTargets} ready ·{" "}
+                  {batchRepeatPreview.existingTargets} existing ·{" "}
+                  {batchRepeatPreview.blockedTargets} review
+                </span>
+              </div>
+              <button
+                type="button"
+                className="primary"
+                disabled={disabled || batchRepeatPreview.readyTargets === 0}
+                onClick={onGenerateBatchRepeat}
               >
-                {orderedFloors
-                  .filter((floor) => floor.id !== floorId)
-                  .map((floor) => (
-                    <option key={floor.id} value={floor.id}>
-                      {floor.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label>
-              Target unit
-              <input
-                value={repeatUnit}
-                disabled={disabled}
-                onChange={(event) => setRepeatUnit(event.target.value)}
-              />
-            </label>
-            <button
-              type="button"
-              disabled={
-                disabled ||
-                !repeatFloorId ||
-                !repeatUnit.trim() ||
-                repeatFloorId === floorId
-              }
-              onClick={() => onRepeatUnit(repeatFloorId, repeatUnit.trim())}
-            >
-              Repeat layout
-            </button>
-            <small>
-              Unit number is only a suggestion. Click Repeat only after checking it.
-            </small>
-          </div>
+                Generate {batchRepeatPreview.readyTargets} unit
+                {batchRepeatPreview.readyTargets === 1 ? "" : "s"} ·{" "}
+                {batchRepeatPreview.roomsToCreate} rooms
+              </button>
+            </div>
+            {batchRepeatPreview.note && (
+              <p className="room-mapper-batch-note">
+                {batchRepeatPreview.note}
+              </p>
+            )}
+            <div className="room-mapper-batch-grid">
+              {batchRepeatPreview.rows.map((row) => (
+                <div
+                  key={row.key}
+                  className={`room-mapper-batch-row ${row.status}`}
+                  title={row.reason}
+                >
+                  <span>
+                    <b>{row.sourceUnit}</b>
+                    <i>→</i>
+                    <strong>{row.targetUnit}</strong>
+                  </span>
+                  <small>{row.targetFloorName ?? "Missing target floor"}</small>
+                  <em>
+                    {row.status === "ready"
+                      ? `READY · ${row.sourceRoomCount} rooms`
+                      : row.status === "existing"
+                        ? "SKIP · EXISTING"
+                        : "REVIEW"}
+                  </em>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {orderedFloors.length > 1 && unitRooms.length > 0 && (
+          <details className="room-mapper-repeat-fallback">
+            <summary>Manual single-unit repeat fallback</summary>
+            <div className="room-mapper-repeat">
+              <div>
+                <small>MANUAL REPEAT</small>
+                <b>एक mapped unit को चुने हुए floor पर copy करें</b>
+              </div>
+              <label>
+                Target floor
+                <select
+                  value={repeatFloorId}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    const target = event.target.value;
+                    setRepeatFloorId(target);
+                    setRepeatUnit(suggestUnit(unit, target));
+                  }}
+                >
+                  {orderedFloors
+                    .filter((floor) => floor.id !== floorId)
+                    .map((floor) => (
+                      <option key={floor.id} value={floor.id}>
+                        {floor.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label>
+                Target unit
+                <input
+                  value={repeatUnit}
+                  disabled={disabled}
+                  onChange={(event) => setRepeatUnit(event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={
+                  disabled ||
+                  !repeatFloorId ||
+                  !repeatUnit.trim() ||
+                  repeatFloorId === floorId
+                }
+                onClick={() => onRepeatUnit(repeatFloorId, repeatUnit.trim())}
+              >
+                Repeat layout
+              </button>
+              <small>
+                Fallback only. Existing target floor/unit is never overwritten.
+              </small>
+            </div>
+          </details>
         )}
       </div>
     </section>
