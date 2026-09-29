@@ -67,7 +67,7 @@ const SLOT_DEFINITIONS: Array<{
 ];
 
 const sourceById = new Map(
-  jyotiSourcePack.sources.map((source) => [source.id, source]),
+  jyotiSourcePack.sources.map((source) => [source.id, source] as const),
 );
 
 function assetForSource(files: Asset[], sourceId: string) {
