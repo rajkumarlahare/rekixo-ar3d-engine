@@ -98,7 +98,7 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
   await expect(analyze).toBeEnabled();
   await analyze.click();
 
-  await expect(page.getByRole("status")).toContainText(
+  await expect(page.locator(".studio-feedback")).toContainText(
     "Smart analysis complete",
   );
   await expect(page.getByText("Selected for analysis")).toBeVisible();
