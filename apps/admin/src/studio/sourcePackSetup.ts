@@ -4,6 +4,7 @@ import {
   type FloorSkeletonLevel,
 } from "./floorSkeleton";
 import type { RoomSheetTemplateRow } from "./roomSheet";
+import type { BatchRepeatPlan } from "./unitRepeat";
 
 export type QuickSourceSlotKey =
   | "primaryModel"
@@ -40,6 +41,7 @@ export interface QuickSourceSetup {
   location?: string;
   alignment?: QuickAlignmentPreset;
   floorSkeleton?: readonly FloorSkeletonLevel[];
+  repeatPlan?: BatchRepeatPlan;
   roomSheetTemplate?: readonly RoomSheetTemplateRow[];
   slots: QuickSourceSlot[];
   matchedCount: number;
@@ -57,6 +59,7 @@ interface SourceProfileDefinition {
   requireAnyOf?: readonly QuickSourceSlotKey[];
   alignment?: QuickAlignmentPreset;
   floorSkeleton?: readonly FloorSkeletonLevel[];
+  repeatPlan?: BatchRepeatPlan;
   roomSheetTemplate?: readonly RoomSheetTemplateRow[];
   sources: ReadonlyArray<{
     key: QuickSourceSlotKey;
@@ -123,6 +126,7 @@ function detectProfile(
     location: profile.location,
     alignment: profile.alignment,
     floorSkeleton: profile.floorSkeleton,
+    repeatPlan: profile.repeatPlan,
     roomSheetTemplate: profile.roomSheetTemplate,
     slots,
     matchedCount,
