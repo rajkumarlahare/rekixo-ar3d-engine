@@ -363,8 +363,10 @@ export async function buildAndActivateRelease(
     for (const scene of experience.scenes)
       collectMediaKeys(scene.settings, currentProject.slug, mediaKeys);
 
+    const explicitStudioPublishModelId =
+      cloudDraft?.draft?.scene?.publishModelId;
     let frozenModel;
-    if (experience.model) {
+    if (experience.model && !explicitStudioPublishModelId) {
       assertProjectAssetKey(
         currentProject.slug,
         experience.model.sourceKey,
@@ -470,10 +472,15 @@ export async function buildAndActivateRelease(
       }
     }
 
-    if (!frozenModel && cloudDraft?.draft?.scene?.modelId) {
-      const studioModel = studioById.get(cloudDraft.draft.scene.modelId);
+    const studioReleaseModelId =
+      cloudDraft?.draft?.scene?.publishModelId ??
+      cloudDraft?.draft?.scene?.modelId;
+    if (!frozenModel && studioReleaseModelId) {
+      const studioModel = studioById.get(studioReleaseModelId);
       if (!studioModel)
-        throw Error("Studio model asset metadata is missing.");
+        throw Error("Studio release model asset metadata is missing.");
+      if (!/\.glb$/i.test(String(studioModel.name || "")))
+        throw Error("Studio customer release model must be a self-contained GLB.");
       assertDraftAssetKey(
         currentProject.slug,
         studioModel.id,
