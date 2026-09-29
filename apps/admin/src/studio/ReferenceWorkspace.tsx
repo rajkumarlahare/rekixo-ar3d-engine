@@ -92,6 +92,8 @@ export default function ReferenceWorkspace({
   const [points, setPoints] = useState<Point[]>([]);
   const [knownDistance, setKnownDistance] = useState("1");
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
+  const [previewZoom, setPreviewZoom] = useState(1);
+  const [previewExpanded, setPreviewExpanded] = useState(false);
   const [pdfPage, setPdfPage] = useState(quickSetup?.alignment?.page ?? 1);
   const [preparingPdf, setPreparingPdf] = useState(false);
   const [pdfError, setPdfError] = useState("");
@@ -118,6 +120,8 @@ export default function ReferenceWorkspace({
   useEffect(() => {
     setPoints([]);
     setNaturalSize({ width: 0, height: 0 });
+    setPreviewZoom(1);
+    setPreviewExpanded(false);
     setPdfError("");
   }, [selectedAssetId]);
 
@@ -125,6 +129,17 @@ export default function ReferenceWorkspace({
     if (quickSetup?.alignment?.page)
       setPdfPage(quickSetup.alignment.page);
   }, [quickSetup?.alignment?.page]);
+
+  useEffect(() => {
+    if (!previewExpanded) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setPreviewExpanded(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [previewExpanded]);
 
   const asset = candidates.find((candidate) => candidate.id === selectedAssetId);
   const layer = layers.find((candidate) => candidate.assetId === selectedAssetId);
@@ -338,31 +353,88 @@ export default function ReferenceWorkspace({
           {!asset ? (
             <div className="reference-empty">Select a plan/reference source.</div>
           ) : kind === "image" ? (
-            <div className="reference-image-stage">
-              <img
-                ref={imageRef}
-                src={objectUrl}
-                alt={asset.name}
-                onLoad={(event) =>
-                  setNaturalSize({
-                    width: event.currentTarget.naturalWidth,
-                    height: event.currentTarget.naturalHeight,
-                  })
-                }
-                onClick={clickImage}
-              />
-              {points.map((point, index) => (
-                <span
-                  className="reference-calibration-point"
-                  key={`${point.x}:${point.y}:${index}`}
+            <div
+              className={
+                previewExpanded
+                  ? "reference-image-viewer reference-image-viewer--expanded"
+                  : "reference-image-viewer"
+              }
+            >
+              <div className="reference-image-tools" role="group" aria-label="Plan preview zoom">
+                <span>Plan preview</span>
+                <button
+                  type="button"
+                  aria-label="Zoom out plan"
+                  disabled={previewZoom <= 0.5}
+                  onClick={() =>
+                    setPreviewZoom((value) => Math.max(0.5, value - 0.25))
+                  }
+                >
+                  −
+                </button>
+                <b>{Math.round(previewZoom * 100)}%</b>
+                <button
+                  type="button"
+                  aria-label="Zoom in plan"
+                  disabled={previewZoom >= 3}
+                  onClick={() =>
+                    setPreviewZoom((value) => Math.min(3, value + 0.25))
+                  }
+                >
+                  +
+                </button>
+                <button type="button" onClick={() => setPreviewZoom(1)}>
+                  100%
+                </button>
+                <button
+                  type="button"
+                  className="reference-expand-action"
+                  onClick={() => setPreviewExpanded((value) => !value)}
+                >
+                  {previewExpanded ? "Close large view" : "Large view"}
+                </button>
+              </div>
+              {previewExpanded && (
+                <div className="reference-image-hint">
+                  Click A and B on a known dimension · Esc closes large view
+                </div>
+              )}
+              <div className="reference-image-scroll">
+                <div
+                  className="reference-image-stage"
                   style={{
-                    left: `${(point.x / Math.max(naturalSize.width, 1)) * 100}%`,
-                    top: `${(point.y / Math.max(naturalSize.height, 1)) * 100}%`,
+                    width: naturalSize.width
+                      ? `${Math.max(1, naturalSize.width * previewZoom)}px`
+                      : undefined,
                   }}
                 >
-                  {index === 0 ? "A" : "B"}
-                </span>
-              ))}
+                  <img
+                    ref={imageRef}
+                    src={objectUrl}
+                    alt={asset.name}
+                    draggable={false}
+                    onLoad={(event) =>
+                      setNaturalSize({
+                        width: event.currentTarget.naturalWidth,
+                        height: event.currentTarget.naturalHeight,
+                      })
+                    }
+                    onClick={clickImage}
+                  />
+                  {points.map((point, index) => (
+                    <span
+                      className="reference-calibration-point"
+                      key={`${point.x}:${point.y}:${index}`}
+                      style={{
+                        left: `${(point.x / Math.max(naturalSize.width, 1)) * 100}%`,
+                        top: `${(point.y / Math.max(naturalSize.height, 1)) * 100}%`,
+                      }}
+                    >
+                      {index === 0 ? "A" : "B"}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : kind === "pdf" ? (
             <div className="reference-pdf-stage">
