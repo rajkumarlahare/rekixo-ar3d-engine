@@ -84,11 +84,15 @@ export default function SmartProjectBuilder({
         quickSetup.floorSkeleton,
       )
     : undefined;
+  const quickSetupAuthoringModelReady =
+    !quickSetup.primaryModelId ||
+    project.scene.modelId === quickSetup.primaryModelId ||
+    (Boolean(quickSetup.publishModelId) &&
+      project.scene.modelId === quickSetup.publishModelId);
   const quickSetupApplied =
     Boolean(quickSetup.profile) &&
     project.slug === quickSetup.slug &&
-    (!quickSetup.primaryModelId ||
-      project.scene.modelId === quickSetup.primaryModelId) &&
+    quickSetupAuthoringModelReady &&
     (!quickSetup.publishModel ||
       (Boolean(quickSetup.publishModelId) &&
         project.scene.publishModelId === quickSetup.publishModelId)) &&
@@ -401,12 +405,13 @@ export default function SmartProjectBuilder({
           )}
           {audits.some(
             (audit) =>
+              audit.assetId === project.scene.modelId &&
               audit.externalTextureFiles.length >
-              audit.matchedTextureFiles.length,
+                audit.matchedTextureFiles.length,
           ) && (
             <div className="builder-inline-warning">
-              FBX external textures incomplete हैं. Geometry analysis safe रहेगा,
-              लेकिन final visual quality के लिए missing texture files या
+              Selected FBX external textures incomplete हैं. Geometry analysis safe
+              रहेगा, लेकिन final visual quality के लिए missing texture files या
               self-contained GLB चाहिए.
             </div>
           )}

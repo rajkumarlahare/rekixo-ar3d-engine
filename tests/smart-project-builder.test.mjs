@@ -69,3 +69,20 @@ test("CAD intake does not pretend binary DWG is semantically parsed", () => {
   assert.match(analyzer, /no CAD semantics were guessed/);
   assert.match(analyzer, /code === "8"/);
 });
+
+
+test("verified publish GLB can remain the authoring model for alignment", () => {
+  const builder = read("apps/admin/src/studio/SmartProjectBuilder.tsx");
+
+  assert.match(builder, /quickSetupAuthoringModelReady/);
+  assert.match(builder, /project\.scene\.modelId === quickSetup\.primaryModelId/);
+  assert.match(builder, /project\.scene\.modelId === quickSetup\.publishModelId/);
+  assert.match(builder, /disabled=\{busy \|\| !quickSetupApplied \|\| !quickSetup\.alignment\}/);
+});
+
+test("FBX texture warning follows the selected authoring model only", () => {
+  const builder = read("apps/admin/src/studio/SmartProjectBuilder.tsx");
+
+  assert.match(builder, /audit\.assetId === project\.scene\.modelId/);
+  assert.match(builder, /Selected FBX external textures incomplete/);
+});
