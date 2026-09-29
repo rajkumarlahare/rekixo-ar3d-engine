@@ -96,6 +96,74 @@ function assertCamera(value: unknown) {
     throw Error("Invalid camera payload.");
 }
 
+function assertWalkthrough(value: unknown) {
+  if (!isObject(value) || value.version !== 1)
+    throw Error("Invalid walkthrough graph.");
+  if (
+    !finiteNumber(value.metresPerUnit) ||
+    Number(value.metresPerUnit) <= 0 ||
+    Number(value.metresPerUnit) > 10000 ||
+    !Array.isArray(value.rooms) ||
+    value.rooms.length > 25000 ||
+    !Array.isArray(value.doors) ||
+    value.doors.length > 50000
+  )
+    throw Error("Invalid walkthrough graph.");
+
+  const roomIds = new Set<string>();
+  for (const room of value.rooms) {
+    if (
+      !isObject(room) ||
+      !id(room.id) ||
+      !id(room.floorId) ||
+      !text(room.name, 300) ||
+      !text(room.unit, 300) ||
+      !finiteNumber(room.elevation) ||
+      !finiteNumber(room.height) ||
+      Number(room.height) <= 0 ||
+      !Array.isArray(room.boundary) ||
+      room.boundary.length < 3 ||
+      room.boundary.length > 64 ||
+      room.boundary.some(
+        (point) =>
+          !Array.isArray(point) ||
+          point.length !== 2 ||
+          point.some((number) => !finiteNumber(number)),
+      ) ||
+      roomIds.has(String(room.id))
+    )
+      throw Error("Invalid walkthrough room.");
+    roomIds.add(String(room.id));
+  }
+
+  const doorIds = new Set<string>();
+  for (const door of value.doors) {
+    if (
+      !isObject(door) ||
+      !id(door.id) ||
+      !id(door.floorId) ||
+      !Array.isArray(door.roomIds) ||
+      door.roomIds.length !== 2 ||
+      door.roomIds.some(
+        (roomId) =>
+          !id(roomId) || !roomIds.has(String(roomId)),
+      ) ||
+      door.roomIds[0] === door.roomIds[1] ||
+      !finiteNumber(door.x) ||
+      !finiteNumber(door.y) ||
+      !finiteNumber(door.z) ||
+      !finiteNumber(door.width) ||
+      Number(door.width) <= 0 ||
+      !finiteNumber(door.height) ||
+      Number(door.height) <= 0 ||
+      !finiteNumber(door.rotationY) ||
+      doorIds.has(String(door.id))
+    )
+      throw Error("Invalid walkthrough door.");
+    doorIds.add(String(door.id));
+  }
+}
+
 export function assertPublic3DExperiencePayload(value: unknown): void {
   if (!isObject(value))
     throw Error("3D experience response is not an object.");
@@ -108,6 +176,7 @@ export function assertPublic3DExperiencePayload(value: unknown): void {
   }
   if (value.camera !== undefined) assertCamera(value.camera);
   if (value.model !== undefined) assertModel(value.model);
+  if (value.walkthrough !== undefined) assertWalkthrough(value.walkthrough);
   if (
     value.mediaBaseUrl !== undefined &&
     (typeof value.mediaBaseUrl !== "string" ||
