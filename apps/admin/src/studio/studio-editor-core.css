@@ -1339,3 +1339,197 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Step 2: guided mouse/touch plan alignment */
+.reference-quickbar {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  overflow-x: auto;
+  border-bottom: 1px solid #202c41;
+  background: #091321;
+}
+
+.reference-quickbar > span {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid #293950;
+  border-radius: 999px;
+  color: #8190a6;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.reference-quickbar > span b {
+  width: 19px;
+  height: 19px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #17243a;
+  color: #a9b6ca;
+  font-size: 9px;
+}
+
+.reference-quickbar > span.ready,
+.reference-quickbar > span.active {
+  border-color: #315f50;
+  color: #9ed8c0;
+}
+
+.reference-quickbar > span.ready b,
+.reference-quickbar > span.active b {
+  background: #174a3a;
+  color: #6de0ae;
+}
+
+.reference-quickbar button {
+  min-height: 32px;
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border-color: #2b3b52;
+  background: #0f1a2c;
+  color: #b8c4d5;
+  font-size: 9px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.reference-quickbar button.active {
+  border-color: #6e65ff;
+  background: rgba(110, 101, 255, .18);
+  color: #eeeaff;
+}
+
+.reference-snap {
+  min-height: 32px;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px !important;
+  margin: 0 !important;
+  padding: 0 8px;
+  border: 1px solid #293950;
+  border-radius: 8px;
+  color: #93a2b8 !important;
+  white-space: nowrap;
+}
+
+.reference-snap input {
+  width: auto !important;
+  margin: 0;
+  accent-color: #8d84ff;
+}
+
+.reference-pdf-stage {
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.reference-pdf-action {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  padding: 8px;
+  border: 1px solid #26364d;
+  border-radius: 9px;
+  background: #091321;
+}
+
+.reference-pdf-action label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #8e9db3;
+  font-size: 9px;
+}
+
+.reference-pdf-action input {
+  width: 66px;
+  min-height: 32px;
+}
+
+.reference-pdf-action button {
+  min-height: 32px;
+}
+
+.reference-pdf-action small {
+  color: #73839a;
+  font-size: 9px;
+}
+
+.reference-pdf-action small.error {
+  width: 100%;
+  color: #f39aa6;
+}
+
+.reference-opacity > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.reference-opacity input[type="range"] {
+  width: 100%;
+  accent-color: #8d84ff;
+}
+
+.reference-advanced {
+  margin-top: 10px;
+  border: 1px solid #27364c;
+  border-radius: 9px;
+  background: #091321;
+}
+
+.reference-advanced summary {
+  padding: 9px 10px;
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 850;
+  user-select: none;
+}
+
+.reference-advanced[open] {
+  padding: 0 9px 9px;
+}
+
+.reference-advanced[open] summary {
+  margin: 0 -9px 8px;
+  border-bottom: 1px solid #25344a;
+}
+
+.reference-advanced button {
+  width: 100%;
+  margin-top: 6px;
+}
+
+@media (max-width: 760px) {
+  .reference-quickbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
+  .reference-quickbar > span,
+  .reference-quickbar button,
+  .reference-snap {
+    flex: 1 1 auto;
+  }
+
+  .reference-pdf-stage {
+    min-height: 360px;
+  }
+}
