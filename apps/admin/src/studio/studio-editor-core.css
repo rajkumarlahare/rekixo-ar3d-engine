@@ -1223,3 +1223,58 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+.room-opening-list {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+  padding: 9px;
+  border: 1px solid #27364c;
+  border-radius: 8px;
+  background: #091321;
+}
+
+.room-opening-list > .section-label {
+  margin-bottom: 2px;
+}
+
+.room-opening-list > div:not(.section-label) {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 8px;
+  border: 1px solid #2a394f;
+  border-radius: 7px;
+  background: #0d1727;
+}
+
+.room-opening-list > div > span:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.room-opening-list b {
+  color: #e7edf6;
+  font-size: 9px;
+}
+
+.room-opening-list small,
+.room-opening-list > div > span:nth-child(2) {
+  color: #7f8fa6;
+  font-size: 8px;
+}
+
+.room-opening-list button {
+  min-height: 29px;
+  padding: 4px 8px;
+}
+
+@media (max-width: 620px) {
+  .room-opening-list > div:not(.section-label) {
+    grid-template-columns: 1fr;
+  }
+}
