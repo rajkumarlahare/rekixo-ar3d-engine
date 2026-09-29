@@ -1249,9 +1249,8 @@ export default function Studio() {
       id: id(),
       name:
         sheetRow?.name ??
-        roomMapName.trim() ||
-        `Room ${p.scene.rooms.length + 1}`,
-      unit: sheetRow?.unit ?? roomMapUnit.trim() || "Unit",
+        (roomMapName.trim() || `Room ${p.scene.rooms.length + 1}`),
+      unit: sheetRow?.unit ?? (roomMapUnit.trim() || "Unit"),
       floorId,
       x: bounds.x,
       z: bounds.z,
