@@ -116,7 +116,7 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
   await expect(page.getByLabel("Exposure")).toHaveValue("1.08");
 
   await page.getByRole("button", { name: "Exit full screen" }).click();
-  await expect(page.getByText("Autosaved")).toBeVisible();
+  await expect(page.getByText("Autosaved", { exact: true })).toBeVisible();
 
   await page.reload();
   await page.getByRole("button", { name: "Setup" }).click();
@@ -144,12 +144,12 @@ test("local autosave survives hard reload without pressing Save local", async ({
   await expect(page.getByRole("button", { name: "+ New project" })).toBeDisabled();
   await expect(page.getByLabel("Selected local project")).toBeDisabled();
 
-  await expect(page.getByText("Autosaved")).toBeVisible();
+  await expect(page.getByText("Autosaved", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "+ New project" })).toBeEnabled();
 
   await page.reload();
   await expect(page.getByLabel("Project title")).toHaveValue(
     "Autosaved E2E Change",
   );
-  await expect(page.getByText("Autosaved")).toBeVisible();
+  await expect(page.getByText("Autosaved", { exact: true })).toBeVisible();
 });
