@@ -1100,6 +1100,11 @@ export default function Studio() {
     });
   }
 
+  function nudgeAlignment(change: Partial<ModelTransform>) {
+    if (review || busy) return;
+    patchModelTransform(change);
+  }
+
   function startVisualAlignment() {
     setWorkspace("editor");
     setEditorFocus(false);
@@ -3474,6 +3479,21 @@ export default function Studio() {
               />
               Snap
             </label>
+            {transformMode === "translate" ? (
+              <div className="alignment-fine-controls" role="group" aria-label="Fine move">
+                <small>Fine move 10 cm</small>
+                <button type="button" aria-label="Move model left 10 centimetres" onClick={() => nudgeAlignment({ x: modelTransform.x - 0.1 })}>←</button>
+                <button type="button" aria-label="Move model forward 10 centimetres" onClick={() => nudgeAlignment({ z: modelTransform.z - 0.1 })}>↑</button>
+                <button type="button" aria-label="Move model backward 10 centimetres" onClick={() => nudgeAlignment({ z: modelTransform.z + 0.1 })}>↓</button>
+                <button type="button" aria-label="Move model right 10 centimetres" onClick={() => nudgeAlignment({ x: modelTransform.x + 0.1 })}>→</button>
+              </div>
+            ) : (
+              <div className="alignment-fine-controls" role="group" aria-label="Fine rotate">
+                <small>Fine rotate 1°</small>
+                <button type="button" aria-label="Rotate model left 1 degree" onClick={() => nudgeAlignment({ rotationY: modelTransform.rotationY - 1 })}>↺</button>
+                <button type="button" aria-label="Rotate model right 1 degree" onClick={() => nudgeAlignment({ rotationY: modelTransform.rotationY + 1 })}>↻</button>
+              </div>
+            )}
             <span className="editor-toolbar-spacer" />
             <button
               type="button"
@@ -3791,6 +3811,7 @@ export default function Studio() {
             transformMode={transformMode}
             transformEnabled={!review && !busy}
             modelTransformEnabled={showReferenceWorkspace}
+            alignmentMode={showReferenceWorkspace}
             roomMapEnabled={showRoomMapper}
             roomDraw={{
               enabled:
