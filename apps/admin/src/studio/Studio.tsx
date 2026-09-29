@@ -643,7 +643,8 @@ export default function Studio() {
         return (
           node.name.toLowerCase().includes(query) ||
           floorName.toLowerCase().includes(query) ||
-          (tag?.unit ?? "").toLowerCase().includes(query)
+          (tag?.unit ?? "").toLowerCase().includes(query) ||
+          (tag?.semantic ?? "").toLowerCase().includes(query)
         );
       })
       .slice(0, 120),
@@ -803,11 +804,23 @@ export default function Studio() {
         nodeName: selectedModelNode.name,
         occurrence: selectedModelNode.occurrence,
       };
+    const structuralChange =
+      change.floorId !== undefined ||
+      change.unit !== undefined ||
+      change.roomId !== undefined;
+    const semanticChange = change.semantic !== undefined;
     const nextTag: ModelNodeTag = {
       ...current,
       ...change,
-      assignment: "manual",
-      confidence: 1,
+      ...(structuralChange
+        ? { assignment: "manual" as const, confidence: 1 }
+        : {}),
+      ...(semanticChange
+        ? {
+            semanticAssignment: "manual" as const,
+            semanticConfidence: 1,
+          }
+        : {}),
     };
     if (change.floorId !== undefined) {
       if (!change.floorId) {
@@ -843,6 +856,11 @@ export default function Studio() {
         nextTag.floorId = boundRoom.floorId;
         nextTag.unit = boundRoom.unit;
       }
+    }
+    if (change.semantic !== undefined && !change.semantic) {
+      delete nextTag.semantic;
+      delete nextTag.semanticAssignment;
+      delete nextTag.semanticConfidence;
     }
     edit({
       ...p,
@@ -1594,6 +1612,57 @@ export default function Studio() {
       `Smart draft built · ${floors.length} floors · ${autoTags.length} meshes auto-tagged. Ambiguous/multi-floor meshes remain unassigned for visual review.`,
     );
   }
+  function applyArchitecturalCandidates() {
+    if (!smartAnalysis?.architecturalCandidates.length) return;
+    const threshold = 0.82;
+    const previous = p.scene.modelNodeTags ?? [];
+    const byKey = new Map(
+      previous.map((tag) => [
+        `${tag.nodeName}\u0000${tag.occurrence}`,
+        { ...tag },
+      ]),
+    );
+    let applied = 0;
+    let preservedManual = 0;
+    for (const candidate of smartAnalysis.architecturalCandidates) {
+      if (candidate.confidence < threshold) continue;
+      const key = `${candidate.nodeName}\u0000${candidate.occurrence}`;
+      const current = byKey.get(key) ?? {
+        nodeName: candidate.nodeName,
+        occurrence: candidate.occurrence,
+      };
+      if (current.semanticAssignment === "manual") {
+        preservedManual += 1;
+        continue;
+      }
+      byKey.set(key, {
+        ...current,
+        semantic: candidate.kind,
+        semanticAssignment: "auto",
+        semanticConfidence: candidate.confidence,
+      });
+      applied += 1;
+    }
+    if (!applied) {
+      setMessage(
+        preservedManual
+          ? "No auto labels changed; existing manual architectural labels were preserved."
+          : "No high-confidence architectural candidates are ready to apply.",
+      );
+      return;
+    }
+    edit({
+      ...p,
+      scene: {
+        ...p.scene,
+        modelNodeTags: [...byKey.values()],
+      },
+    });
+    setMessage(
+      `${applied} high-confidence wall/door/window source labels applied${preservedManual ? ` · ${preservedManual} manual labels preserved` : ""}. Review them visually before treating them as architecture.`,
+    );
+  }
+
   const field = (
     label: string,
     value: number,
@@ -1906,6 +1975,7 @@ export default function Studio() {
               );
             }
           }}
+          onApplyArchitecturalCandidates={applyArchitecturalCandidates}
           onOpenEditor={() => {
             setWorkspace("editor");
             setEditorFocus(true);
@@ -2350,9 +2420,12 @@ export default function Studio() {
                                 (entry) => entry.id === tag.floorId,
                               )?.name
                             : undefined;
+                          const semantic = tag?.semantic
+                            ? tag.semantic.toUpperCase()
+                            : "";
                           return floorName
-                            ? `${floorName}${tag?.unit ? ` · ${tag.unit}` : ""}`
-                            : `${node.type} · y ${node.centreY.toFixed(2)}`;
+                            ? `${semantic ? `${semantic} · ` : ""}${floorName}${tag?.unit ? ` · ${tag.unit}` : ""}`
+                            : `${semantic ? `${semantic} · ` : ""}${node.type} · y ${node.centreY.toFixed(2)}`;
                         })()}
                       </small>
                     </button>
@@ -3103,6 +3176,51 @@ export default function Studio() {
                         Source Y {selectedModelNode.centreY.toFixed(3)}
                       </span>
                     </div>
+                    <div className="semantic-tag-status">
+                      <span>
+                        Architecture{" "}
+                        <b>
+                          {selectedModelNodeTag?.semantic
+                            ? selectedModelNodeTag.semantic.toUpperCase()
+                            : "UNASSIGNED"}
+                        </b>
+                      </span>
+                      <span>
+                        {selectedModelNodeTag?.semanticAssignment === "auto"
+                          ? `Auto ${Math.round(
+                              (selectedModelNodeTag.semanticConfidence ?? 0) *
+                                100,
+                            )}%`
+                          : selectedModelNodeTag?.semanticAssignment ===
+                              "manual"
+                            ? "Reviewed manually"
+                            : "Needs review"}
+                      </span>
+                    </div>
+                    <label>
+                      Architectural label
+                      <select
+                        value={selectedModelNodeTag?.semantic ?? ""}
+                        onChange={(event) =>
+                          patchModelNodeTag({
+                            semantic: event.target.value as
+                              | "wall"
+                              | "door"
+                              | "window"
+                              | "opening"
+                              | "ignore"
+                              | "",
+                          })
+                        }
+                      >
+                        <option value="">Unassigned</option>
+                        <option value="wall">Wall</option>
+                        <option value="door">Door</option>
+                        <option value="window">Window</option>
+                        <option value="opening">Other opening</option>
+                        <option value="ignore">Ignore candidate</option>
+                      </select>
+                    </label>
                     <label>
                       Floor tag
                       <select
