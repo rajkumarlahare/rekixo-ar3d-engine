@@ -221,6 +221,16 @@ function publicStudioSnapshot(draft) {
         delete safe.sourceAssetId;
         return safe;
       });
+    if (Array.isArray(scene.openings))
+      scene.openings = scene.openings
+        .filter((opening) => opening && opening.reviewed === true)
+        .map((opening) => {
+          const safe = { ...opening };
+          delete safe.sourceNodeName;
+          delete safe.sourceOccurrence;
+          delete safe.confidence;
+          return safe;
+        });
   }
   return project;
 }
