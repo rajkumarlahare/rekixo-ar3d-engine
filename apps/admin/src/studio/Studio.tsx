@@ -2882,35 +2882,6 @@ export default function Studio() {
           >
             + Reference drawing or image
           </button>
-          {local &&
-            projectSlug(p) === "jyoti-paradise" &&
-            !p.scene.modelId && (
-            <button
-              className="wide subtle"
-              disabled={busy || Boolean(review)}
-              onClick={() =>
-                task(async () => {
-                  const response = await fetch(
-                    "/studio-assets/jyoti-source-preserved.glb",
-                  );
-                  if (!response.ok)
-                    throw Error(
-                      "Local Jyoti model unavailable. Use Import model.",
-                    );
-                  await upload(
-                    new File(
-                      [await response.blob()],
-                      "jyoti-source-preserved.glb",
-                      { type: "model/gltf-binary" },
-                    ),
-                    true,
-                  );
-                })
-              }
-            >
-              Load local Jyoti model
-            </button>
-          )}
           <div className="asset-list">
             {files.map((f) => (
               <button
