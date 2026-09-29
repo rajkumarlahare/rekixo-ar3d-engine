@@ -64,6 +64,8 @@ import {
 import {
   applyQuickSourceSetup,
   detectQuickSourceSetup,
+  emptyQuickSourceSetup,
+  type QuickSourceSetup,
 } from "./sourcePackSetup";
 import "./studio.css";
 import "./studio-operations.css";
@@ -134,6 +136,8 @@ export default function Studio() {
   const [sourceAudits, setSourceAudits] = useState<FbxSourceAudit[]>([]);
   const [sourceAuditBusy, setSourceAuditBusy] = useState(false);
   const [smartAnalysis, setSmartAnalysis] = useState<SmartProjectAnalysis>();
+  const [quickSourceSetup, setQuickSourceSetup] =
+    useState<QuickSourceSetup>(emptyQuickSourceSetup());
   const [manifestText, setManifestText] = useState("");
   const [projectSearch, setProjectSearch] = useState("");
   const [published, setPublished] = useState<PublishedCatalogEntry[]>([]);
@@ -251,6 +255,20 @@ export default function Studio() {
       active = false;
     };
   }, [project?.id, project?.assets]);
+  useEffect(() => {
+    let active = true;
+    void detectQuickSourceSetup(files)
+      .then((setup) => {
+        if (active) setQuickSourceSetup(setup);
+      })
+      .catch(() => {
+        if (active) setQuickSourceSetup(emptyQuickSourceSetup());
+      });
+    return () => {
+      active = false;
+    };
+  }, [files]);
+
   useEffect(() => {
     let active = true;
     const fbxFiles = files.filter((file) => /\.fbx$/i.test(file.name));
@@ -1435,7 +1453,7 @@ export default function Studio() {
     });
     const duplicateCount = incoming.length - assets.length;
     const combinedFiles = [...files, ...assets];
-    const quickSetup = detectQuickSourceSetup(combinedFiles);
+    const quickSetup = await detectQuickSourceSetup(combinedFiles);
     const existing = new Set(p.assets);
     const nextAssetIds = [
       ...p.assets,
@@ -1477,8 +1495,8 @@ export default function Studio() {
     undo.current = [];
     redo.current = [];
     const sourceLock =
-      quickSetup.profile === "jyoti-paradise"
-        ? ` · Jyoti source lock ${quickSetup.matchedCount}/${quickSetup.requiredCount} detected`
+      quickSetup.profile
+        ? ` · ${quickSetup.name ?? "project"} source lock ${quickSetup.matchedCount}/${quickSetup.requiredCount} detected`
         : "";
     const skipped = duplicateCount
       ? ` · ${duplicateCount} duplicate checksum${duplicateCount === 1 ? "" : "s"} skipped`
@@ -1488,17 +1506,17 @@ export default function Studio() {
     );
   }
 
-  async function autoSetupJyotiSourcePack() {
-    const setup = detectQuickSourceSetup(files);
-    if (setup.profile !== "jyoti-paradise")
-      throw Error("Attach at least two verified Jyoti Paradise source files before auto setup.");
-    const slug = setup.slug ?? "jyoti-paradise";
+  async function autoSetupDetectedSourcePack() {
+    const setup = await detectQuickSourceSetup(files);
+    if (!setup.profile || !setup.slug)
+      throw Error("Attach enough verified project source files before auto setup.");
+    const slug = setup.slug;
     const owner = list.find(
       (entry) => entry.id !== p.id && projectSlug(entry) === slug,
     );
     if (owner)
       throw Error(
-        "Jyoti Paradise already exists in this browser workspace. Open that project instead of creating a duplicate.",
+        `${setup.name ?? "This project"} already exists in this browser workspace. Open that project instead of creating a duplicate.`,
       );
     const next = applyQuickSourceSetup(p, setup);
     validateProject(next);
@@ -1509,7 +1527,7 @@ export default function Studio() {
     setMesh("");
     setView("building");
     setMessage(
-      `Jyoti Paradise source lock applied · ${setup.matchedCount}/${setup.requiredCount} canonical sources recognized · primary FBX selected · project identity and Hingna/Nagpur context ready.`,
+      `${setup.name ?? "Project"} source lock applied · ${setup.matchedCount}/${setup.requiredCount} canonical sources recognized · primary model selected · project identity/context ready.`,
     );
   }
 
@@ -2200,7 +2218,8 @@ export default function Studio() {
             setEditorFocus(true);
           }}
           onOpenSources={() => setWorkspace("sources")}
-          onAutoSetup={() => void task(autoSetupJyotiSourcePack)}
+          onAutoSetup={() => void task(autoSetupDetectedSourcePack)}
+          quickSetup={quickSourceSetup}
         />
       )}
       {workspace === "overview" && (
