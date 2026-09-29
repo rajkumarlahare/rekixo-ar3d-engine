@@ -131,7 +131,7 @@ export default function Studio() {
   const [transformMode, setTransformMode] = useState<TransformMode>("translate");
   const [transformSnap, setTransformSnap] = useState(true);
   const [focusRequest, setFocusRequest] = useState(0);
-  const [editorFocus, setEditorFocus] = useState(true);
+  const [editorFocus, setEditorFocus] = useState(false);
   const [showLeftPanel, setShowLeftPanel] = useState(true);
   const [showRightPanel, setShowRightPanel] = useState(true);
   const [showAssetShelf, setShowAssetShelf] = useState(true);
@@ -242,6 +242,7 @@ export default function Studio() {
     setSelected(p.scene.rooms[0]?.id ?? "");
     setReview("");
     setWorkspace("builder");
+    setEditorFocus(false);
     setView(p.scene.modelId ? "building" : "rooms");
     setDirty(false);
     setCloudDirty(projectAheadOfCloud(p));
@@ -620,8 +621,14 @@ export default function Studio() {
     }
   }
   useEffect(() => {
-    if (workspace !== "editor" || review || busy) return;
+    if (workspace !== "editor") return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && editorFocus) {
+        event.preventDefault();
+        setEditorFocus(false);
+        return;
+      }
+      if (review || busy) return;
       const target = event.target as HTMLElement | null;
       if (
         target &&
@@ -652,7 +659,7 @@ export default function Studio() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [workspace, review, busy, project]);
+  }, [workspace, review, busy, project, editorFocus]);
   const openingSuggestions = useMemo(
     () =>
       project && smartAnalysis
@@ -1095,7 +1102,7 @@ export default function Studio() {
 
   function startVisualAlignment() {
     setWorkspace("editor");
-    setEditorFocus(true);
+    setEditorFocus(false);
     setShowReferenceWorkspace(true);
     setShowRoomMapper(false);
     setRoomMapAction("idle");
@@ -2466,7 +2473,7 @@ export default function Studio() {
                 onClick={() => {
                   setWorkspace(key);
                   if (key === "editor") {
-                    setEditorFocus(true);
+                    setEditorFocus(false);
                     if (p.scene.modelId) setView("building");
                   }
                 }}
@@ -2732,7 +2739,7 @@ export default function Studio() {
           onApproveReadyOpenings={approveReadyOpenings}
           onOpenEditor={() => {
             setWorkspace("editor");
-            setEditorFocus(true);
+            setEditorFocus(false);
             if (p.scene.modelId) setView("building");
           }}
           onOpenSources={() => setWorkspace("sources")}
@@ -2749,7 +2756,7 @@ export default function Studio() {
           unitCount={unitCount}
           onOpenEditor={() => {
             setWorkspace("editor");
-            setEditorFocus(true);
+            setEditorFocus(false);
             if (p.scene.modelId) setView("building");
           }}
           onOpenSources={() => setWorkspace("sources")}
@@ -2778,7 +2785,7 @@ export default function Studio() {
             setReview("");
             setView("rooms");
             setWorkspace("editor");
-            setEditorFocus(true);
+            setEditorFocus(false);
           }}
         />
       )}
@@ -3647,6 +3654,16 @@ export default function Studio() {
             >
               Focus <kbd>F</kbd>
             </button>
+            {editorFocus && (
+              <button
+                type="button"
+                className="editor-fullscreen-exit"
+                title="Exit full screen (Esc)"
+                onClick={() => setEditorFocus(false)}
+              >
+                Exit full screen <kbd>Esc</kbd>
+              </button>
+            )}
           </nav>
           {showReferenceWorkspace && (
             <div className="editor-context-bar" role="group" aria-label="Plan alignment mode">
