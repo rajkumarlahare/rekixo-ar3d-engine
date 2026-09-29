@@ -114,6 +114,7 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
   );
 
   await page.reload();
+  await page.getByRole("button", { name: "Project Builder" }).click();
   await expect(page.getByLabel("Project title")).toHaveValue(
     "Browser E2E Tower",
   );
