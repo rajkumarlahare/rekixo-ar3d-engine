@@ -49,8 +49,17 @@ test("cloud draft identity and asset ownership shape are strict", () => {
     id: project.id,
     slug: project.slug,
     name: "Garden Heights",
+    updated: "2026-09-29T00:00:00.000Z",
     assets: ["asset_12345678"],
-    scene: { modelId: "asset_12345678" },
+    releases: [],
+    scene: {
+      modelId: "asset_12345678",
+      scale: 1,
+      floors: [{ id: "floor_ground", name: "Ground", elevation: 0 }],
+      rooms: [],
+      furniture: [],
+      openings: [],
+    },
   };
   assert.deepEqual(validateCloudDraft(draft, project), ["asset_12345678"]);
 
@@ -61,7 +70,11 @@ test("cloud draft identity and asset ownership shape are strict", () => {
   assert.throws(
     () =>
       validateCloudDraft(
-        { ...draft, assets: [], scene: { modelId: "asset_12345678" } },
+        {
+          ...draft,
+          assets: [],
+          scene: { ...draft.scene, modelId: "asset_12345678" },
+        },
         project,
       ),
     /model asset is missing/,
