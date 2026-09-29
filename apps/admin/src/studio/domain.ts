@@ -1,3 +1,5 @@
+import { validProjectSlug as validSharedProjectSlug } from "../../../../shared/project-slug-policy.js";
+
 export type Kind = "sofa" | "bed" | "table" | "wardrobe" | "plant";
 export interface Floor {
   id: string;
@@ -395,12 +397,7 @@ export function projectSlug(p: Project) {
   );
 }
 export function validStudioSlug(slug: string) {
-  return (
-    slug.length >= 2 &&
-    slug.length <= 80 &&
-    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) &&
-    !["studio", "api", "assets", "login", "showcase", "published"].includes(slug)
-  );
+  return validSharedProjectSlug(slug);
 }
 export function duplicateFloor(p: Project, floorId: string): Project {
   const next = structuredClone(p);
