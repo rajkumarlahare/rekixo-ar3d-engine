@@ -52,7 +52,7 @@ export function studioAssetKind(file: Asset) {
 export function buildStudioReadiness(
   project: Project,
   files: Asset[],
-  dirty: boolean,
+  cloudDirty: boolean,
   session: CloudSession | undefined,
   releases: CloudReleaseSummary[],
 ): StudioReadiness {
@@ -216,12 +216,13 @@ export function buildStudioReadiness(
       title: "Cloud draft not created",
       detail: "Save to cloud once before creating an immutable release.",
     });
-  } else if (dirty) {
+  } else if (cloudDirty) {
     items.push({
       id: "draft",
       severity: "blocker",
-      title: "Unsaved draft changes",
-      detail: "Save the current draft before publishing so the release has an exact revision.",
+      title: "Local draft is newer than cloud",
+      detail:
+        "Your work is autosaved in this browser. Save to cloud before publishing so the immutable release pins the exact latest revision.",
     });
   } else {
     items.push({
