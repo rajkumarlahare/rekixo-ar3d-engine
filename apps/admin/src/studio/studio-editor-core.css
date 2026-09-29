@@ -2209,3 +2209,337 @@
     max-height: 220px;
   }
 }
+
+
+/* Phase 2 simplified operator editor */
+.editor-toolbar--simple {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 54px;
+  overflow: visible;
+  padding: 8px 10px;
+}
+
+.editor-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid #24344a;
+  border-radius: 10px;
+  background: #091321;
+}
+
+.editor-mode-switch > button {
+  min-height: 34px;
+  padding-inline: 11px;
+  border: 0;
+  background: transparent;
+}
+
+.editor-tool-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.editor-tool-menu > summary {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid #27344a;
+  border-radius: 9px;
+  background: #0e1728;
+  color: #b9c4d5;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  list-style: none;
+  user-select: none;
+}
+
+.editor-tool-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.editor-tool-menu > summary:hover,
+.editor-tool-menu[open] > summary {
+  border-color: #4a5b78;
+  background: #132138;
+  color: #eef3fb;
+}
+
+.editor-tool-menu > summary:focus-visible {
+  outline: 2px solid #8d84ff;
+  outline-offset: 2px;
+}
+
+.editor-tool-popover {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  z-index: 40;
+  min-width: 188px;
+  display: grid;
+  gap: 5px;
+  padding: 7px;
+  border: 1px solid #30415b;
+  border-radius: 10px;
+  background: #08111f;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .42);
+}
+
+.editor-floor-menu .editor-tool-popover {
+  min-width: 220px;
+}
+
+.editor-tool-popover > button {
+  width: 100%;
+  min-height: 36px;
+  justify-content: space-between;
+  text-align: left;
+}
+
+.editor-tool-popover > label {
+  display: grid;
+  gap: 5px;
+  color: #8d9bb0;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.editor-tool-popover select {
+  width: 100%;
+  min-height: 36px;
+}
+
+.editor-menu-divider {
+  height: 1px;
+  margin: 2px 0;
+  background: #24344a;
+}
+
+.editor-focus-action {
+  margin-left: auto;
+  min-height: 36px;
+  padding-inline: 13px;
+}
+
+.editor-context-bar {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #304361;
+  background: #0a1628;
+  color: #9aaac0;
+}
+
+.editor-context-bar strong {
+  color: #e8e5ff;
+  font-size: 10px;
+}
+
+.editor-context-bar span {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+}
+
+.editor-context-bar button {
+  min-height: 32px;
+  flex: 0 0 auto;
+}
+
+.editor-sidebar-details,
+.editor-inspector-details,
+.look-fine-tune {
+  margin: 0 0 9px;
+  border: 1px solid #25354b;
+  border-radius: 9px;
+  background: #091321;
+}
+
+.editor-sidebar-details > summary,
+.editor-inspector-details > summary,
+.look-fine-tune > summary {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  padding: 7px 9px;
+  color: #95a4ba;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 850;
+  list-style: none;
+  user-select: none;
+}
+
+.editor-sidebar-details > summary::-webkit-details-marker,
+.editor-inspector-details > summary::-webkit-details-marker,
+.look-fine-tune > summary::-webkit-details-marker {
+  display: none;
+}
+
+.editor-sidebar-details > summary::after,
+.editor-inspector-details > summary::after,
+.look-fine-tune > summary::after {
+  content: "›";
+  margin-left: auto;
+  color: #687991;
+  font-size: 15px;
+  transform: rotate(90deg);
+  transition: transform .15s ease;
+}
+
+.editor-sidebar-details[open] > summary::after,
+.editor-inspector-details[open] > summary::after,
+.look-fine-tune[open] > summary::after {
+  transform: rotate(-90deg);
+}
+
+.editor-sidebar-details > summary:focus-visible,
+.editor-inspector-details > summary:focus-visible,
+.look-fine-tune > summary:focus-visible {
+  outline: 2px solid #8d84ff;
+  outline-offset: 2px;
+}
+
+.editor-sidebar-details[open],
+.editor-inspector-details[open],
+.look-fine-tune[open] {
+  padding: 0 8px 8px;
+}
+
+.editor-sidebar-details[open] > summary,
+.editor-inspector-details[open] > summary,
+.look-fine-tune[open] > summary {
+  margin: 0 -8px 8px;
+  border-bottom: 1px solid #25354b;
+}
+
+.editor-advanced-model .editor-source-health {
+  margin-bottom: 2px;
+}
+
+.editor-source-files .section-label {
+  margin-top: 0;
+}
+
+.editor-source-files .asset-list {
+  max-height: 180px;
+}
+
+.editor-context-advanced {
+  margin-top: 7px;
+}
+
+.editor-materials.editor-inspector-details {
+  display: block;
+  padding-top: 0;
+  border-top: 1px solid #25354b;
+}
+
+.editor-materials.editor-inspector-details[open] {
+  padding: 0 8px 8px;
+}
+
+.look-fine-tune {
+  margin-top: 8px;
+}
+
+.look-fine-tune .check:first-of-type {
+  margin-top: 0;
+}
+
+.editor-review-history .review-row {
+  margin-top: 5px;
+}
+
+@media (max-width: 980px) {
+  .editor-toolbar--simple {
+    gap: 5px;
+  }
+
+  .editor-mode-switch > button,
+  .editor-tool-menu > summary,
+  .editor-focus-action {
+    padding-inline: 9px;
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 760px) {
+  .editor-toolbar--simple {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 7px;
+  }
+
+  .editor-mode-switch {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .editor-mode-switch > button {
+    min-width: 0;
+  }
+
+  .editor-tool-menu {
+    flex: 1 1 0;
+  }
+
+  .editor-tool-menu > summary {
+    width: 100%;
+    padding-inline: 8px;
+  }
+
+  .editor-focus-action {
+    flex: 1 1 0;
+    margin-left: 0;
+  }
+
+  .editor-tool-popover {
+    left: 0;
+    right: auto;
+    width: min(230px, calc(100vw - 18px));
+  }
+
+  .editor-floor-menu .editor-tool-popover {
+    left: auto;
+    right: 0;
+  }
+
+  .editor-context-bar {
+    flex-wrap: wrap;
+  }
+
+  .editor-context-bar span {
+    order: 4;
+    width: 100%;
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 430px) {
+  .editor-tool-menu > summary,
+  .editor-focus-action {
+    font-size: 9px;
+  }
+
+  .editor-toolbar kbd {
+    display: none;
+  }
+}
