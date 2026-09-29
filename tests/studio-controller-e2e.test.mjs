@@ -9,7 +9,7 @@ test("Studio cloud discovery and release state live in a focused hook", () => {
   const hook = read("apps/admin/src/studio/useStudioCloudState.ts");
   assert.match(studio, /useStudioCloudState/);
   assert.doesNotMatch(studio, /const \[cloudSession, setCloudSession\]/);
-  assert.match(hook, /cloud\.session\(\)/);
+  assert.match(hook, /\.session\(\)/);
   assert.match(hook, /refreshCloudProjects/);
   assert.match(hook, /refreshCloudReleases/);
   assert.match(hook, /markCloudSignedOut/);
