@@ -1,9 +1,28 @@
 const origin = 'https://admin.rekixo.com';
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function get(path, kind) {
-  const res = await fetch(new URL(path, origin), { signal: AbortSignal.timeout(30000) });
-  if (!res.ok || !res.headers.get('content-type')?.includes(kind))
-    throw Error(`Design Admin verification failed: ${path} ${res.status}`);
-  return res.text();
+  let diagnostic = "";
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    const url = new URL(path, origin);
+    url.searchParams.set("_rekixo_verify", `${Date.now()}-${attempt}`);
+    try {
+      const res = await fetch(url, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+        signal: AbortSignal.timeout(30000),
+      });
+      const type = res.headers.get("content-type") || "";
+      if (res.ok && type.includes(kind)) return res.text();
+      diagnostic = `HTTP ${res.status}, content-type ${type || "(missing)"}`;
+    } catch (error) {
+      diagnostic = error instanceof Error ? error.message : String(error);
+    }
+    if (attempt < 5) await sleep(3000);
+  }
+  throw Error(
+    `Design Admin verification failed after propagation retries: ${path} (${diagnostic})`,
+  );
 }
 const html = await get('/3Dprojects/studio', 'text/html');
 const entry = html.match(/src="(\/3Dprojects\/assets\/[^" ]+\.js)"/);
