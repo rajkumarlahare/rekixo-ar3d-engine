@@ -122,15 +122,16 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
   );
 });
 
-test("unsaved project guard blocks destructive project switching", async ({
+test("unsaved project state disables destructive project switching", async ({
   page,
 }) => {
   await page.getByLabel("Project title").fill("Unsaved E2E Change");
-  await page.getByRole("button", { name: "+ New project" }).click();
-  await expect(page.getByRole("alert")).toContainText(
-    "Save your changes before creating a project.",
-  );
+  await expect(page.getByRole("button", { name: "+ New project" })).toBeDisabled();
+  await expect(page.getByLabel("Selected local project")).toBeDisabled();
   await expect(page.getByLabel("Project title")).toHaveValue(
     "Unsaved E2E Change",
   );
+
+  await page.getByRole("button", { name: "Save local" }).click();
+  await expect(page.getByRole("button", { name: "+ New project" })).toBeEnabled();
 });
