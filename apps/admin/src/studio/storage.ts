@@ -69,9 +69,11 @@ export async function save(p: Project, files: Asset[] = []) {
     tx.onerror = () => reject(tx.error);
   });
 }
+export const MAX_STUDIO_ASSET_BYTES = 64 * 1024 * 1024;
+
 export async function makeAsset(file: File, projectId: string): Promise<Asset> {
-  if (file.size > 100 * 1024 * 1024)
-    throw Error("Use a model/reference smaller than 100 MB.");
+  if (file.size > MAX_STUDIO_ASSET_BYTES)
+    throw Error("Use a model/reference smaller than 64 MB so it can sync to Engine Cloud.");
   const bytes = await file.arrayBuffer();
   const hash = Array.from(
     new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
