@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import type { Asset, Project } from "./domain";
 import type { FbxSourceAudit } from "./sourceAudit";
 import type { SmartProjectAnalysis, SmartSourceRole } from "./projectAnalyzer";
+import type { OpeningSuggestion } from "./openingAssociator";
 
 const ROLE_LABEL: Record<SmartSourceRole, string> = {
   model: "3D model",
@@ -31,6 +32,7 @@ export default function SmartProjectBuilder({
   files,
   audits,
   analysis,
+  openingSuggestions,
   busy,
   onProjectMeta,
   onImportFiles,
@@ -38,6 +40,8 @@ export default function SmartProjectBuilder({
   onSelectModel,
   onBuildDraft,
   onApplyArchitecturalCandidates,
+  onApproveOpening,
+  onApproveReadyOpenings,
   onOpenEditor,
   onOpenSources,
 }: {
@@ -45,6 +49,7 @@ export default function SmartProjectBuilder({
   files: Asset[];
   audits: FbxSourceAudit[];
   analysis?: SmartProjectAnalysis;
+  openingSuggestions: OpeningSuggestion[];
   busy: boolean;
   onProjectMeta: (
     change: Partial<
@@ -56,6 +61,8 @@ export default function SmartProjectBuilder({
   onSelectModel: (assetId: string) => void;
   onBuildDraft: () => void;
   onApplyArchitecturalCandidates: () => void;
+  onApproveOpening: (suggestion: OpeningSuggestion) => void;
+  onApproveReadyOpenings: () => void;
   onOpenEditor: () => void;
   onOpenSources: () => void;
 }) {
@@ -78,6 +85,35 @@ export default function SmartProjectBuilder({
       review: rows.filter((row) => row.confidence < 0.82).length,
     };
   }, [analysis]);
+  const approvedOpeningKeys = useMemo(
+    () =>
+      new Set(
+        (project.scene.openings ?? [])
+          .filter(
+            (opening) =>
+              opening.sourceNodeName && opening.sourceOccurrence !== undefined,
+          )
+          .map(
+            (opening) =>
+              `${opening.sourceNodeName}\u0000${opening.sourceOccurrence}`,
+          ),
+      ),
+    [project.scene.openings],
+  );
+  const openingCounts = useMemo(
+    () => ({
+      ready: openingSuggestions.filter(
+        (suggestion) =>
+          suggestion.ready && !approvedOpeningKeys.has(suggestion.key),
+      ).length,
+      review: openingSuggestions.filter((suggestion) => !suggestion.ready)
+        .length,
+      approved: openingSuggestions.filter((suggestion) =>
+        approvedOpeningKeys.has(suggestion.key),
+      ).length,
+    }),
+    [openingSuggestions, approvedOpeningKeys],
+  );
 
   function takeFiles(list: FileList | File[]) {
     const next = Array.from(list);
@@ -431,6 +467,101 @@ export default function SmartProjectBuilder({
                         <strong>{audit.layerHints.length} layer hints</strong>
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {openingSuggestions.length > 0 && (
+              <div className="builder-opening-review">
+                <div className="builder-architecture-head">
+                  <div>
+                    <b>Door / window wall association</b>
+                    <small>
+                      Detected opening को nearest mapped room wall से match किया
+                      गया है. Approve करने तक कोई opening architectural truth नहीं
+                      मानी जाती.
+                    </small>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy || openingCounts.ready === 0}
+                    onClick={onApproveReadyOpenings}
+                  >
+                    Approve {openingCounts.ready} ready openings
+                  </button>
+                </div>
+                <div className="builder-architecture-stats">
+                  <span>
+                    Ready <b>{openingCounts.ready}</b>
+                  </span>
+                  <span>
+                    Review <b>{openingCounts.review}</b>
+                  </span>
+                  <span>
+                    Approved <b>{openingCounts.approved}</b>
+                  </span>
+                </div>
+                <div className="builder-opening-list">
+                  {openingSuggestions.slice(0, 18).map((suggestion) => {
+                    const approved = approvedOpeningKeys.has(suggestion.key);
+                    const roomNames = suggestion.roomIds
+                      .map((roomId) => {
+                        const room = project.scene.rooms.find(
+                          (entry) => entry.id === roomId,
+                        );
+                        return room ? `${room.unit} · ${room.name}` : roomId;
+                      })
+                      .join(" ↔ ");
+                    return (
+                      <div key={suggestion.key}>
+                        <span
+                          className={`candidate-kind candidate-kind--${suggestion.kind}`}
+                        >
+                          {suggestion.kind}
+                        </span>
+                        <span>
+                          <b>{suggestion.sourceNodeName}</b>
+                          <small>
+                            {roomNames || "No mapped wall association"} ·{" "}
+                            {suggestion.wallDistance < 999
+                              ? `${suggestion.wallDistance.toFixed(2)} m from wall`
+                              : "wall review"}
+                          </small>
+                        </span>
+                        <span>
+                          <b>
+                            {suggestion.width.toFixed(2)} ×{" "}
+                            {suggestion.height.toFixed(2)} m
+                          </b>
+                          <small>
+                            confidence {Math.round(suggestion.confidence * 100)}%
+                          </small>
+                        </span>
+                        {approved ? (
+                          <strong className="opening-approved">Approved</strong>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={busy || !suggestion.ready}
+                            title={
+                              suggestion.ready
+                                ? "Approve this wall opening"
+                                : suggestion.reasons.join(" · ")
+                            }
+                            onClick={() => onApproveOpening(suggestion)}
+                          >
+                            {suggestion.ready ? "Approve" : "Needs review"}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {!project.scene.rooms.length && (
+                  <div className="builder-inline-warning">
+                    Door/window wall association के लिए पहले Visual Room Mapper
+                    में rooms map करें, फिर Analyze Project दोबारा चलाएँ.
                   </div>
                 )}
               </div>
