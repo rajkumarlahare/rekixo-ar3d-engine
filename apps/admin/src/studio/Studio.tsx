@@ -66,6 +66,7 @@ import {
   applyQuickSourceSetup,
   detectQuickSourceSetup,
   emptyQuickSourceSetup,
+  prepareQuickPublishModel,
   type QuickSourceSetup,
 } from "./sourcePackSetup";
 import { floorSkeletonStatus } from "./floorSkeleton";
@@ -1864,7 +1865,7 @@ export default function Studio() {
   }
 
   async function autoSetupDetectedSourcePack() {
-    const setup = await detectQuickSourceSetup(files);
+    let setup = await detectQuickSourceSetup(files);
     if (!setup.profile || !setup.slug)
       throw Error("Attach enough verified project source files before auto setup.");
     const slug = setup.slug;
@@ -1875,9 +1876,22 @@ export default function Studio() {
       throw Error(
         `${setup.name ?? "This project"} already exists in this browser workspace. Open that project instead of creating a duplicate.`,
       );
+
+    const prepared = await prepareQuickPublishModel(
+      setup,
+      files,
+      p.id,
+    );
+    setup = prepared.setup;
     const next = applyQuickSourceSetup(p, setup);
     validateProject(next);
-    await persist(next);
+    await persist(next, prepared.asset ? [prepared.asset] : []);
+    if (prepared.asset)
+      setFiles((current) => [
+        ...current.filter((asset) => asset.id !== prepared.asset!.id),
+        prepared.asset!,
+      ]);
+
     const floors = floorSkeletonStatus(
       next.scene,
       setup.profile,
@@ -1897,7 +1911,7 @@ export default function Studio() {
     setMesh("");
     setView("building");
     setMessage(
-      `${setup.name ?? "Project"} source lock applied · ${setup.matchedCount}/${setup.requiredCount} canonical sources recognized · primary model selected${setup.floorSkeleton?.length ? ` · ${floors.matched}/${floors.total} model-derived source levels ready` : ""} · project context ready.`,
+      `${setup.name ?? "Project"} source lock applied · ${setup.matchedCount}/${setup.requiredCount} canonical sources recognized · source authoring model selected${setup.publishModelId ? " · verified web GLB attached for publish" : ""}${setup.floorSkeleton?.length ? ` · ${floors.matched}/${floors.total} model-derived source levels ready` : ""} · project context ready.`,
     );
   }
 
