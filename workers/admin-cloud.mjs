@@ -4,6 +4,7 @@ import {
   listProjectReleases,
 } from "./release-publish.mjs";
 import { assertDraftAssetKey } from "./storage-boundary.mjs";
+import { validateStudioDraft } from "./studio-draft-validation.mjs";
 const BASE_PATH = "/3Dprojects";
 const CLOUD_PATH = `${BASE_PATH}/api/cloud`;
 const COOKIE = "rekixo_3d_admin";
@@ -464,31 +465,10 @@ export function cloudAssetKey(slug, assetId) {
 }
 
 export function validateCloudDraft(draft, project) {
-  if (!draft || typeof draft !== "object" || Array.isArray(draft))
-    throw Error("Cloud draft must be an object.");
-  if (draft.schema !== 1)
-    throw Error("Unsupported Studio draft schema.");
-  if (draft.id !== project.id || draft.slug !== project.slug)
-    throw Error("Cloud draft project identity mismatch.");
-  if (!safeText(draft.name, 200))
-    throw Error("Cloud draft project name is invalid.");
-  if (!Array.isArray(draft.assets) || draft.assets.length > 100)
-    throw Error("Cloud draft asset list is invalid.");
-  if (
-    new Set(draft.assets).size !== draft.assets.length ||
-    draft.assets.some((id) => !validAssetId(id))
-  )
+  const assetIds = validateStudioDraft(draft, project);
+  if (assetIds.some((assetId) => !validAssetId(assetId)))
     throw Error("Cloud draft contains invalid asset IDs.");
-  if (!draft.scene || typeof draft.scene !== "object" || Array.isArray(draft.scene))
-    throw Error("Cloud draft scene is invalid.");
-  if (
-    draft.scene.modelId !== undefined &&
-    !draft.assets.includes(draft.scene.modelId)
-  )
-    throw Error("Cloud draft model asset is missing.");
-  if (draft.location !== undefined && String(draft.location).length > 180)
-    throw Error("Cloud draft location is too long.");
-  return draft.assets;
+  return assetIds;
 }
 
 async function assertAssetsOwned(env, projectId, assetIds) {
