@@ -32,7 +32,7 @@ test("Smart analyzer keeps ambiguous geometry in review instead of inventing sem
   assert.match(analyzer, /confidence >= 0\.78/);
 
   const studio = read("apps/admin/src/studio/Studio.tsx");
-  assert.match(studio, /assignment\.confidence >= 0\.62/);
+  assert.match(studio, /assignment\.confidence < 0\.62/);
   assert.match(studio, /Ambiguous\/multi-floor meshes remain unassigned/);
 });
 
