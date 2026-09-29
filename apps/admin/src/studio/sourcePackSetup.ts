@@ -1,4 +1,5 @@
 import type { Asset, Project } from "./domain";
+import type { RoomSheetTemplateRow } from "./roomSheet";
 
 export type QuickSourceSlotKey =
   | "primaryModel"
@@ -34,6 +35,7 @@ export interface QuickSourceSetup {
   slug?: string;
   location?: string;
   alignment?: QuickAlignmentPreset;
+  roomSheetTemplate?: readonly RoomSheetTemplateRow[];
   slots: QuickSourceSlot[];
   matchedCount: number;
   requiredCount: number;
@@ -49,6 +51,7 @@ interface SourceProfileDefinition {
   minMatches?: number;
   requireAnyOf?: readonly QuickSourceSlotKey[];
   alignment?: QuickAlignmentPreset;
+  roomSheetTemplate?: readonly RoomSheetTemplateRow[];
   sources: ReadonlyArray<{
     key: QuickSourceSlotKey;
     label: string;
@@ -113,6 +116,7 @@ function detectProfile(
     slug: profile.slug,
     location: profile.location,
     alignment: profile.alignment,
+    roomSheetTemplate: profile.roomSheetTemplate,
     slots,
     matchedCount,
     requiredCount: slots.length,
