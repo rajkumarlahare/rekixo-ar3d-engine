@@ -287,9 +287,17 @@ async function writeAudit(env, actor, action, projectId = null, targetId = null,
     .run();
 }
 
-async function rateKey(request, email) {
+async function rateKey(request, accountEmail) {
   const ip = String(request.headers.get("cf-connecting-ip") || "unknown").slice(0, 96);
-  return digestHex(`engine-admin:${ip}:${email}`);
+  return digestHex(`engine-admin:${ip}:${accountEmail}`);
+}
+
+async function pruneLoginAttempts(env, now) {
+  await env.DB.prepare(
+    "DELETE FROM engine_admin_login_attempts WHERE updated_at<?",
+  )
+    .bind(now - 24 * 60 * 60 * 1000)
+    .run();
 }
 
 async function loginBlocked(env, key, now) {
@@ -354,8 +362,9 @@ async function login(request, env) {
   const email = String(body.email || "").trim().toLowerCase();
   const password = String(body.password || "");
   const cfg = config(env);
-  const key = await rateKey(request, email);
   const now = Date.now();
+  await pruneLoginAttempts(env, now);
+  const key = await rateKey(request, cfg.email);
 
   if (await loginBlocked(env, key, now))
     return json(
@@ -374,9 +383,9 @@ async function login(request, env) {
   }
 
   await env.DB.prepare(
-    "DELETE FROM engine_admin_login_attempts WHERE attempt_key=? OR updated_at<?",
+    "DELETE FROM engine_admin_login_attempts WHERE attempt_key=?",
   )
-    .bind(key, now - 24 * 60 * 60 * 1000)
+    .bind(key)
     .run();
 
   const security = await env.DB.prepare(
