@@ -1477,3 +1477,124 @@
     white-space: normal;
   }
 }
+
+
+/* Project Builder quick source lock */
+.builder-source-lock {
+  margin-top: 12px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  border: 1px solid #bdd8ce;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #f5fbf8, #eef7f4);
+}
+
+.builder-source-lock-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.builder-source-lock-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.builder-source-lock-head strong {
+  color: #203d35;
+  font-size: 16px;
+}
+
+.builder-source-lock-head small,
+.builder-source-lock p {
+  color: #6e837b;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.builder-source-lock-head button {
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+.builder-source-lock-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.builder-source-lock-grid > div {
+  min-width: 0;
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  padding: 8px 9px;
+  border: 1px solid #d6e2de;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.builder-source-lock-grid > div > span:first-child {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.builder-source-lock-grid .ready > span:first-child {
+  background: #dff3e9;
+  color: #13745c;
+}
+
+.builder-source-lock-grid .missing > span:first-child {
+  background: #edf0f1;
+  color: #87969a;
+}
+
+.builder-source-lock-grid > div > span:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.builder-source-lock-grid b {
+  color: #314b44;
+  font-size: 10px;
+}
+
+.builder-source-lock-grid small {
+  overflow: hidden;
+  color: #7b8e88;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.builder-source-lock p {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .builder-source-lock-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .builder-source-lock-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .builder-source-lock-grid {
+    grid-template-columns: 1fr;
+  }
+}
