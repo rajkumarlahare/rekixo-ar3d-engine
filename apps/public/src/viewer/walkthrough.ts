@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { PublicWalkthroughGraph, PublicWalkthroughRoom } from "@rekixo/3d-contracts";
 import {
   floorEyeElevation,
   floorGeometryFor,
@@ -101,4 +102,225 @@ export function walkDelta(
   if (direction === "back") return forward.multiplyScalar(-distance);
   if (direction === "left") return right.multiplyScalar(-distance);
   return right.multiplyScalar(distance);
+}
+
+
+function pointSegmentDistance(
+  x: number,
+  z: number,
+  left: readonly [number, number],
+  right: readonly [number, number],
+) {
+  const dx = right[0] - left[0];
+  const dz = right[1] - left[1];
+  const lengthSquared = dx * dx + dz * dz;
+  const t =
+    lengthSquared > 0
+      ? THREE.MathUtils.clamp(
+          ((x - left[0]) * dx + (z - left[1]) * dz) / lengthSquared,
+          0,
+          1,
+        )
+      : 0;
+  const px = left[0] + t * dx;
+  const pz = left[1] + t * dz;
+  return Math.hypot(x - px, z - pz);
+}
+
+export function publicRoomContains(
+  room: PublicWalkthroughRoom,
+  x: number,
+  z: number,
+  margin = 0,
+) {
+  const points = room.boundary;
+  let inside = false;
+  for (
+    let index = 0, previous = points.length - 1;
+    index < points.length;
+    previous = index++
+  ) {
+    const left = points[index];
+    const right = points[previous];
+    const crosses =
+      (left[1] > z) !== (right[1] > z) &&
+      x <
+        ((right[0] - left[0]) * (z - left[1])) /
+          (right[1] - left[1]) +
+          left[0];
+    if (crosses) inside = !inside;
+  }
+  if (!inside) return false;
+  if (margin <= 0) return true;
+  for (let index = 0; index < points.length; index += 1) {
+    if (
+      pointSegmentDistance(
+        x,
+        z,
+        points[index],
+        points[(index + 1) % points.length],
+      ) < margin
+    )
+      return false;
+  }
+  return true;
+}
+
+export function publicRoomCenter(room: PublicWalkthroughRoom) {
+  const minX = Math.min(...room.boundary.map((point) => point[0]));
+  const maxX = Math.max(...room.boundary.map((point) => point[0]));
+  const minZ = Math.min(...room.boundary.map((point) => point[1]));
+  const maxZ = Math.max(...room.boundary.map((point) => point[1]));
+  const center = { x: (minX + maxX) / 2, z: (minZ + maxZ) / 2 };
+  if (publicRoomContains(room, center.x, center.z)) return center;
+  const average = {
+    x:
+      room.boundary.reduce((sum, point) => sum + point[0], 0) /
+      room.boundary.length,
+    z:
+      room.boundary.reduce((sum, point) => sum + point[1], 0) /
+      room.boundary.length,
+  };
+  return average;
+}
+
+export function publicWalkConnections(
+  graph: PublicWalkthroughGraph,
+  roomId: string,
+) {
+  return graph.doors.flatMap((door) => {
+    if (!door.roomIds.includes(roomId)) return [];
+    const toRoomId = door.roomIds.find((id) => id !== roomId);
+    return toRoomId
+      ? [{ openingId: door.id, fromRoomId: roomId, toRoomId }]
+      : [];
+  });
+}
+
+function publicDoorLanding(
+  graph: PublicWalkthroughGraph,
+  room: PublicWalkthroughRoom,
+  door: PublicWalkthroughGraph["doors"][number],
+  normalSign: 1 | -1,
+) {
+  const angle = THREE.MathUtils.degToRad(door.rotationY);
+  const normalX = Math.sin(angle) * normalSign;
+  const normalZ = Math.cos(angle) * normalSign;
+  const unit = Math.max(graph.metresPerUnit, 0.0001);
+  for (const metres of [0.24, 0.3, 0.38, 0.48, 0.62]) {
+    const distance = metres / unit;
+    const x = door.x + normalX * distance;
+    const z = door.z + normalZ * distance;
+    if (publicRoomContains(room, x, z, 0.12 / unit))
+      return { x, z, normalX, normalZ };
+  }
+  return undefined;
+}
+
+export interface PublicWalkStepResult {
+  roomId: string;
+  x: number;
+  z: number;
+  openingId?: string;
+}
+
+export function resolvePublicWalkStep(
+  graph: PublicWalkthroughGraph,
+  room: PublicWalkthroughRoom,
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number,
+): PublicWalkStepResult {
+  const unit = Math.max(graph.metresPerUnit, 0.0001);
+  const wallMargin = 0.18 / unit;
+  if (publicRoomContains(room, toX, toZ, wallMargin))
+    return { roomId: room.id, x: toX, z: toZ };
+
+  const moveX = toX - fromX;
+  const moveZ = toZ - fromZ;
+  const moveLength = Math.hypot(moveX, moveZ);
+  if (moveLength < 0.000001)
+    return { roomId: room.id, x: fromX, z: fromZ };
+
+  for (const door of graph.doors) {
+    if (
+      door.roomIds.length !== 2 ||
+      !door.roomIds.includes(room.id) ||
+      door.floorId !== room.floorId
+    )
+      continue;
+
+    const activation = Math.max(0.5, door.width / 2 + 0.32 / unit);
+    if (Math.hypot(fromX - door.x, fromZ - door.z) > activation) continue;
+
+    const destinationId = door.roomIds.find((id) => id !== room.id);
+    const destination = graph.rooms.find(
+      (candidate) =>
+        candidate.id === destinationId &&
+        candidate.floorId === room.floorId,
+    );
+    if (!destination) continue;
+
+    for (const sign of [1, -1] as const) {
+      const destinationLanding = publicDoorLanding(
+        graph,
+        destination,
+        door,
+        sign,
+      );
+      const sourceLanding = publicDoorLanding(
+        graph,
+        room,
+        door,
+        sign === 1 ? -1 : 1,
+      );
+      if (!destinationLanding || !sourceLanding) continue;
+      const towardDestination =
+        (moveX * destinationLanding.normalX +
+          moveZ * destinationLanding.normalZ) /
+        moveLength;
+      if (towardDestination < 0.1) continue;
+      if (
+        Math.hypot(
+          fromX - sourceLanding.x,
+          fromZ - sourceLanding.z,
+        ) > Math.max(activation + 0.28 / unit, 0.9 / unit)
+      )
+        continue;
+      return {
+        roomId: destination.id,
+        x: destinationLanding.x,
+        z: destinationLanding.z,
+        openingId: door.id,
+      };
+    }
+  }
+
+  return { roomId: room.id, x: fromX, z: fromZ };
+}
+
+export function publicWalkStart(
+  graph: PublicWalkthroughGraph,
+  room: PublicWalkthroughRoom,
+) {
+  const center = publicRoomCenter(room);
+  if (publicRoomContains(room, center.x, center.z, 0.18 / graph.metresPerUnit))
+    return center;
+  for (const point of room.boundary) {
+    const candidate = {
+      x: (point[0] + center.x) / 2,
+      z: (point[1] + center.z) / 2,
+    };
+    if (
+      publicRoomContains(
+        room,
+        candidate.x,
+        candidate.z,
+        0.18 / graph.metresPerUnit,
+      )
+    )
+      return candidate;
+  }
+  return center;
 }
