@@ -30,3 +30,175 @@
   .twin-shell--interior .twin-title-card { display: none; }
   .viewer-walk-controls { bottom: 60px; }
 }
+
+
+.viewer-walk-graph {
+  position: absolute;
+  z-index: 24;
+  left: 92px;
+  bottom: 88px;
+  width: min(360px, calc(100% - 118px));
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  color: #f4f7fb;
+  background: #0d1724ee;
+  border: 1px solid #ffffff2e;
+  border-radius: 14px;
+  box-shadow: 0 16px 44px #00000045;
+  pointer-events: auto;
+  backdrop-filter: blur(12px);
+}
+
+.viewer-walk-graph__head {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.viewer-walk-graph__head > span,
+.viewer-walk-destinations > span {
+  color: #79d8ad;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.viewer-walk-graph__head strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.viewer-walk-graph__head small,
+.viewer-walk-destinations > small {
+  color: #91a0b4;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.viewer-walk-map {
+  width: 100%;
+  height: 158px;
+  display: block;
+  overflow: visible;
+  border: 1px solid #ffffff1f;
+  border-radius: 10px;
+  background: #07101b;
+}
+
+.viewer-walk-map__room {
+  fill: #1b2a3a;
+  stroke: #64758a;
+  stroke-width: .045;
+  vector-effect: non-scaling-stroke;
+  transition: fill .16s ease, stroke .16s ease, opacity .16s ease;
+}
+
+.viewer-walk-map__room--connected {
+  fill: #163a31;
+  stroke: #55c994;
+  cursor: pointer;
+}
+
+.viewer-walk-map__room--connected:hover,
+.viewer-walk-map__room--connected:focus {
+  fill: #205344;
+  stroke: #9be0c0;
+  outline: none;
+}
+
+.viewer-walk-map__room--current {
+  fill: #4b4680;
+  stroke: #b5afff;
+}
+
+.viewer-walk-map__door {
+  fill: #f2c978;
+  stroke: #fff4d4;
+  stroke-width: .035;
+  vector-effect: non-scaling-stroke;
+}
+
+.viewer-walk-destinations {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.viewer-walk-destinations > span,
+.viewer-walk-destinations > small {
+  grid-column: 1 / -1;
+}
+
+.viewer-walk-destinations button {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  padding: 8px 9px;
+  text-align: left;
+  color: #eef5f1;
+  background: #12241f;
+  border: 1px solid #2e5c4b;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.viewer-walk-destinations button:hover,
+.viewer-walk-destinations button:focus-visible {
+  background: #183229;
+  border-color: #55c994;
+}
+
+.viewer-walk-destinations button span {
+  color: #79a896;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.viewer-walk-destinations button strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.viewer-walk-destinations button small {
+  color: #728f82;
+  font-size: 8px;
+}
+
+@media (max-width: 760px) {
+  .viewer-walk-graph {
+    left: 74px;
+    right: 10px;
+    bottom: max(154px, calc(env(safe-area-inset-bottom) + 136px));
+    width: auto;
+    max-height: 44vh;
+    overflow: auto;
+    padding: 9px;
+  }
+
+  .viewer-walk-map {
+    height: 120px;
+  }
+
+  .viewer-walk-destinations {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-height: 500px) {
+  .viewer-walk-graph {
+    left: 72px;
+    bottom: 58px;
+    width: min(300px, calc(100% - 90px));
+    max-height: 56vh;
+    overflow: auto;
+  }
+
+  .viewer-walk-map {
+    height: 90px;
+  }
+}
