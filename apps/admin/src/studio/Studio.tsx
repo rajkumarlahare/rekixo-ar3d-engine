@@ -178,6 +178,8 @@ export default function Studio() {
     setList(entries.sort((a, b) => b.updated.localeCompare(a.updated)));
   }
   function open(p: Project) {
+    setFiles([]);
+    setQuickSourceSetup(emptyQuickSourceSetup());
     setManifestText("");
     setBackup(undefined);
     setMessage("");
