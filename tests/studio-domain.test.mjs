@@ -250,3 +250,26 @@ test("polygon room bounding rectangle must stay synchronized with its corners", 
   p.scene.rooms[0].width += 1;
   assert.throws(() => validateProject(p));
 });
+
+
+test("source mesh architectural semantics validate provenance and confidence", () => {
+  const p = fixture();
+  p.scene.modelNodeTags = [
+    {
+      nodeName: "Door_Main",
+      occurrence: 1,
+      floorId: p.scene.floors[0].id,
+      semantic: "door",
+      semanticAssignment: "auto",
+      semanticConfidence: 0.91,
+    },
+  ];
+  assert.doesNotThrow(() => validateProject(p));
+
+  p.scene.modelNodeTags[0].semantic = "stair";
+  assert.throws(() => validateProject(p), /model node floor\/unit tag/i);
+
+  p.scene.modelNodeTags[0].semantic = "door";
+  p.scene.modelNodeTags[0].semanticConfidence = 2;
+  assert.throws(() => validateProject(p), /model node floor\/unit tag/i);
+});
