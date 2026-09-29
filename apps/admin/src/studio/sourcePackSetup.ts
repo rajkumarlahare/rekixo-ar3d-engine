@@ -16,11 +16,24 @@ export interface QuickSourceSlot {
   exact: boolean;
 }
 
+export interface QuickAlignmentPreset {
+  slotKey: QuickSourceSlotKey;
+  page?: number;
+  crop?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  label?: string;
+}
+
 export interface QuickSourceSetup {
   profile?: string;
   name?: string;
   slug?: string;
   location?: string;
+  alignment?: QuickAlignmentPreset;
   slots: QuickSourceSlot[];
   matchedCount: number;
   requiredCount: number;
@@ -35,6 +48,7 @@ interface SourceProfileDefinition {
   location?: string;
   minMatches?: number;
   requireAnyOf?: readonly QuickSourceSlotKey[];
+  alignment?: QuickAlignmentPreset;
   sources: ReadonlyArray<{
     key: QuickSourceSlotKey;
     label: string;
@@ -98,6 +112,7 @@ function detectProfile(
     name: profile.name,
     slug: profile.slug,
     location: profile.location,
+    alignment: profile.alignment,
     slots,
     matchedCount,
     requiredCount: slots.length,
