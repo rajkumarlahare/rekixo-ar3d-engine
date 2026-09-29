@@ -194,6 +194,11 @@ function validateScene(scene, assetIds) {
 
   if (scene.modelId !== undefined && !assetIds.has(scene.modelId))
     throw Error("Studio scene model asset is missing.");
+  if (
+    scene.publishModelId !== undefined &&
+    !assetIds.has(scene.publishModelId)
+  )
+    throw Error("Studio scene publish model asset is missing.");
 
   for (const floor of scene.floors)
     if (!text(floor.name) || !number(floor.elevation, -500, 2000))
@@ -498,9 +503,14 @@ function publicOpening(opening) {
 
 export function publicStudioSnapshot(draft) {
   const scene = draft.scene;
+  const requestedModelId =
+    typeof scene?.publishModelId === "string"
+      ? scene.publishModelId
+      : scene?.modelId;
   const modelId =
-    typeof scene?.modelId === "string" && draft.assets.includes(scene.modelId)
-      ? scene.modelId
+    typeof requestedModelId === "string" &&
+    draft.assets.includes(requestedModelId)
+      ? requestedModelId
       : undefined;
 
   return {

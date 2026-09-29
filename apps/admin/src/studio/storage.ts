@@ -160,6 +160,8 @@ export async function importPackage(file: File): Promise<Project> {
   p.assets = p.assets.map((k) => remap.get(k)!);
   for (const s of [p.scene, ...p.releases.map((r) => r.scene)]) {
     if (s.modelId) s.modelId = remap.get(s.modelId);
+    if (s.publishModelId)
+      s.publishModelId = remap.get(s.publishModelId);
     s.referenceLayers = (s.referenceLayers ?? []).map((layer) => ({
       ...layer,
       assetId: remap.get(layer.assetId)!,
@@ -215,6 +217,8 @@ export async function duplicateProject(source: Project): Promise<Project> {
   }
   p.assets = files.map((f) => f.id);
   if (p.scene.modelId) p.scene.modelId = remap.get(p.scene.modelId);
+  if (p.scene.publishModelId)
+    p.scene.publishModelId = remap.get(p.scene.publishModelId);
   p.scene.referenceLayers = (p.scene.referenceLayers ?? []).map((layer) => ({
     ...layer,
     assetId: remap.get(layer.assetId)!,
