@@ -116,10 +116,7 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
   await expect(page.getByLabel("Exposure")).toHaveValue("1.08");
 
   await page.getByRole("button", { name: "Exit full screen" }).click();
-  await page.getByRole("button", { name: "Save local" }).click();
-  await expect(page.getByRole("status")).toContainText(
-    "Saved in the local offline cache",
-  );
+  await expect(page.getByText("Autosaved locally")).toBeVisible();
 
   await page.reload();
   await page.getByRole("button", { name: "Project Builder" }).click();
@@ -138,16 +135,19 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
   );
 });
 
-test("unsaved project state disables destructive project switching", async ({
+test("local autosave survives hard reload without pressing Save local", async ({
   page,
 }) => {
-  await page.getByLabel("Project title").fill("Unsaved E2E Change");
+  await page.getByLabel("Project title").fill("Autosaved E2E Change");
   await expect(page.getByRole("button", { name: "+ New project" })).toBeDisabled();
   await expect(page.getByLabel("Selected local project")).toBeDisabled();
-  await expect(page.getByLabel("Project title")).toHaveValue(
-    "Unsaved E2E Change",
-  );
 
-  await page.getByRole("button", { name: "Save local" }).click();
+  await expect(page.getByText("Autosaved locally")).toBeVisible();
   await expect(page.getByRole("button", { name: "+ New project" })).toBeEnabled();
+
+  await page.reload();
+  await expect(page.getByLabel("Project title")).toHaveValue(
+    "Autosaved E2E Change",
+  );
+  await expect(page.getByText("Autosaved locally")).toBeVisible();
 });

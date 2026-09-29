@@ -32,7 +32,7 @@ test("publish readiness is an explicit gate rather than a cosmetic status", () =
   assert.match(studio, /!readiness\.publishable/);
   assert.match(readiness, /Engine Admin cloud session required/);
   assert.match(readiness, /Cloud draft not created/);
-  assert.match(readiness, /Unsaved draft changes/);
+  assert.match(readiness, /Local draft is newer than cloud/);
   assert.match(readiness, /Web publish model must be self-contained GLB/);
   assert.match(readiness, /Source model retained for authoring/);
   assert.match(readiness, /No publishable 3D content/);

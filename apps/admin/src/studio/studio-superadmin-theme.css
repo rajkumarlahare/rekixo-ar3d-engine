@@ -118,6 +118,36 @@
   color: var(--rkx-muted);
 }
 
+.storage-autosave {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 7px;
+  border: 1px solid #2f435c;
+  border-radius: 999px;
+  background: #0d192a;
+  color: #93a6bd;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.storage-autosave--saved {
+  border-color: #285943;
+  color: #78d8aa;
+}
+
+.storage-autosave--saving {
+  border-color: #5d542f;
+  color: #dcc979;
+}
+
+.storage-autosave--error {
+  border-color: #6f3442;
+  color: #ff9fad;
+}
+
 .studio-layout {
   background: var(--rkx-bg);
 }
