@@ -681,17 +681,12 @@ export default function Studio() {
       ),
     ).length,
     walkConnections = room
-      ? reviewedDoorConnections(scene, room.id)
-          .map((connection) => ({
-            ...connection,
-            room: scene.rooms.find(
-              (candidate) => candidate.id === connection.toRoomId,
-            ),
-          }))
-          .filter(
-            (connection): connection is typeof connection & { room: Room } =>
-              Boolean(connection.room),
-          )
+      ? reviewedDoorConnections(scene, room.id).flatMap((connection) => {
+          const targetRoom = scene.rooms.find(
+            (candidate) => candidate.id === connection.toRoomId,
+          );
+          return targetRoom ? [{ ...connection, room: targetRoom }] : [];
+        })
       : [],
     appearance = p.scene.appearance ?? DEFAULT_APPEARANCE,
     materialOverride = p.scene.materialOverrides?.find(
