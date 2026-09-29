@@ -191,6 +191,56 @@ test("active release state verifies manifest checksum before exposing it", async
   assert.match(corrupt.reason, /checksum mismatch/);
 });
 
+test("public corrupt-release errors hide internal diagnostics and expose a request ID", async () => {
+  const manifest = baseManifest();
+  const row = {
+    project_id: manifest.project.id,
+    slug: manifest.project.slug,
+    name: manifest.project.name,
+    status: "published",
+    active_release_id: manifest.release.id,
+    release_version: manifest.release.version,
+    manifest_json: JSON.stringify(manifest),
+    manifest_sha256: "0".repeat(64),
+    release_created_at: manifest.release.createdAt,
+  };
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    const response = await runtime.handleReleaseReadRequest(
+      new Request(
+        "https://ar3dstudio.in/3Dprojects/api/releases/projects/garden-heights",
+      ),
+      { DB: dbForActiveRelease(row) },
+    );
+    assert.equal(response.status, 500);
+    const body = await response.json();
+    assert.equal(body.error, "Active release is unavailable.");
+    assert.equal(typeof body.requestId, "string");
+    assert.ok(body.requestId.length >= 16);
+    assert.equal(Object.hasOwn(body, "diagnostic"), false);
+  } finally {
+    console.error = originalError;
+  }
+});
+
+test("public release runtime logs diagnostics server-side instead of returning them", () => {
+  const releaseRuntime = fs.readFileSync("workers/release-runtime.mjs", "utf8");
+  const publicWorker = fs.readFileSync("workers/public.mjs", "utf8");
+  assert.match(releaseRuntime, /function serverError\(error, diagnostic\)/);
+  assert.match(publicWorker, /function serverError\(error, diagnostic\)/);
+  assert.match(releaseRuntime, /console\.error\(/);
+  assert.match(publicWorker, /console\.error\(/);
+  assert.doesNotMatch(
+    releaseRuntime,
+    /return json\([\s\S]{0,220}diagnostic:/,
+  );
+  assert.doesNotMatch(
+    publicWorker,
+    /return json\([\s\S]{0,220}diagnostic:/,
+  );
+});
+
 test("release migration creates immutable release and activation tables", () => {
   const migration = fs.readFileSync(
     "database/migrations/0021_immutable_release_v1.sql",

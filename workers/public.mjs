@@ -27,6 +27,12 @@ function json(value, init = {}) {
   return new Response(JSON.stringify(value), { ...init, headers });
 }
 
+function serverError(error, diagnostic) {
+  const requestId = crypto.randomUUID();
+  console.error(`[rekixo-public:${requestId}] ${error}`, diagnostic);
+  return json({ error, requestId }, { status: 500 });
+}
+
 function parseJsonValue(value, label) {
   if (typeof value !== "string")
     throw Error(`${label} is missing.`);
@@ -245,13 +251,9 @@ async function serveModel(env, modelId, request) {
   try {
     assertProjectAssetKey(model.slug, model.asset_key, "models");
   } catch (error) {
-    return json(
-      {
-        error: "Model storage ownership is corrupted.",
-        diagnostic:
-          error instanceof Error ? error.message : "Invalid model storage key.",
-      },
-      { status: 500 },
+    return serverError(
+      "Model asset is unavailable.",
+      error instanceof Error ? error.message : "Invalid model storage key.",
     );
   }
 
@@ -261,10 +263,7 @@ async function serveModel(env, modelId, request) {
     expectedSize: model.byte_size ?? undefined,
   });
   if (served.corruption)
-    return json(
-      { error: "Model storage is corrupted.", diagnostic: served.corruption },
-      { status: 500 },
-    );
+    return serverError("Model asset is unavailable.", served.corruption);
   if (served.missing)
     return json({ error: "Model asset is not available." }, { status: 404 });
   return served.response;
@@ -317,13 +316,9 @@ async function serveProjectMedia(env, slug, fileName, request) {
   try {
     assertProjectAssetKey(slug, key, "media");
   } catch (error) {
-    return json(
-      {
-        error: "Media storage ownership is corrupted.",
-        diagnostic:
-          error instanceof Error ? error.message : "Invalid media storage key.",
-      },
-      { status: 500 },
+    return serverError(
+      "Media asset is unavailable.",
+      error instanceof Error ? error.message : "Invalid media storage key.",
     );
   }
   const mimeType = mediaType(fileName);
@@ -333,10 +328,7 @@ async function serveProjectMedia(env, slug, fileName, request) {
     allowRange: mimeType === "video/mp4",
   });
   if (served.corruption)
-    return json(
-      { error: "Media storage is corrupted.", diagnostic: served.corruption },
-      { status: 500 },
-    );
+    return serverError("Media asset is unavailable.", served.corruption);
   if (served.missing)
     return json({ error: "Media asset is not available." }, { status: 404 });
   return served.response;
@@ -383,15 +375,11 @@ export default {
       try {
         experience = await getProjectExperience(env, slug);
       } catch (error) {
-        return json(
-          {
-            error: "Published 3D project data is corrupted.",
-            diagnostic:
-              error instanceof Error
-                ? error.message
-                : "Unknown project data corruption.",
-          },
-          { status: 500 },
+        return serverError(
+          "Published 3D project data is unavailable.",
+          error instanceof Error
+            ? error.message
+            : "Unknown project data corruption.",
         );
       }
       if (!experience) {
@@ -401,12 +389,9 @@ export default {
         );
       }
       if (experience.__releaseCorrupt) {
-        return json(
-          {
-            error: "The active immutable release is corrupted.",
-            diagnostic: experience.diagnostic,
-          },
-          { status: 500 },
+        return serverError(
+          "Published 3D project data is unavailable.",
+          experience.diagnostic,
         );
       }
       return json(experience);

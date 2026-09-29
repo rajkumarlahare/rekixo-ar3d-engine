@@ -149,7 +149,8 @@ test("runtime DB JSON corruption is surfaced instead of silently defaulted", () 
   assert.doesNotMatch(publicWorker, /function parseJson\(value, fallback\)/);
   assert.match(admin, /contains malformed JSON/);
   assert.match(publicWorker, /contains malformed JSON/);
-  assert.match(publicWorker, /Published 3D project data is corrupted/);
+  assert.match(publicWorker, /Published 3D project data is unavailable/);
+  assert.match(publicWorker, /serverError/);
   assert.match(admin, /3D project status data is corrupted/);
 });
 

@@ -134,6 +134,18 @@ test("Engine Admin mutations require an exact same origin", () => {
   );
 });
 
+test("login throttling is bounded to the configured owner account and prunes stale rows", () => {
+  const worker = fs.readFileSync("workers/admin-cloud.mjs", "utf8");
+  assert.match(worker, /const key = await rateKey\(request, cfg\.email\)/);
+  assert.doesNotMatch(worker, /rateKey\(request, email\)/);
+  assert.match(worker, /await pruneLoginAttempts\(env, now\);/);
+  assert.match(
+    worker,
+    /DELETE FROM engine_admin_login_attempts WHERE updated_at<\?/,
+  );
+  assert.match(worker, /password\.length >= 12/);
+});
+
 test("admin-infra deployment applies Engine D1/R2 without deploying Public Worker", () => {
   const workflow = fs.readFileSync(
     ".github/workflows/deploy-cloudflare.yml",
