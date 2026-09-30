@@ -565,14 +565,34 @@ function releaseAssetKind(pathKind) {
   return "";
 }
 
+function withPublicModelCors(response) {
+  const headers = new Headers(response.headers);
+  headers.set("access-control-allow-origin", "*");
+  headers.set("access-control-allow-methods", "GET,HEAD,OPTIONS");
+  headers.set("access-control-allow-headers", "Range");
+  headers.set(
+    "access-control-expose-headers",
+    "Accept-Ranges,Content-Range,Content-Length,ETag,X-Rekixo-SHA256",
+  );
+  headers.set("cross-origin-resource-policy", "cross-origin");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export async function serveReleaseAsset(env, releaseId, pathKind, logicalId, request) {
-  if (request.method !== "GET" && request.method !== "HEAD")
-    return json({ error: "Method not allowed." }, { status: 405 });
   if (!validToken(releaseId) || !validToken(logicalId, 500))
     return json({ error: "Invalid release asset route." }, { status: 400 });
   const kind = releaseAssetKind(pathKind);
   if (!kind)
     return json({ error: "Unknown release asset kind." }, { status: 404 });
+
+  if (request.method === "OPTIONS" && kind === "model")
+    return withPublicModelCors(new Response(null, { status: 204 }));
+  if (request.method !== "GET" && request.method !== "HEAD")
+    return json({ error: "Method not allowed." }, { status: 405 });
   if (!(await releaseSchemaReady(env)))
     return json({ error: "Release runtime is not installed." }, { status: 404 });
 
@@ -636,7 +656,9 @@ export async function serveReleaseAsset(env, releaseId, pathKind, logicalId, req
       "Immutable release asset is unavailable.",
       "Immutable release asset is missing from storage.",
     );
-  return served.response;
+  return kind === "model"
+    ? withPublicModelCors(served.response)
+    : served.response;
 }
 
 export async function handleReleaseReadRequest(
