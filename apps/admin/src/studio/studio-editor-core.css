@@ -3418,3 +3418,15 @@
     width: 100%;
   }
 }
+
+
+/* Interior room focus: keep the operator on one room by default. */
+.editor-toolbar--simple > button[aria-pressed] {
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .editor-toolbar--simple > button[aria-pressed] {
+    order: 2;
+  }
+}

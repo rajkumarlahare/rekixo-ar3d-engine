@@ -146,6 +146,7 @@ export default function Studio() {
   const [showLeftPanel, setShowLeftPanel] = useState(true);
   const [showRightPanel, setShowRightPanel] = useState(true);
   const [showAssetShelf, setShowAssetShelf] = useState(true);
+  const [interiorFloorOverview, setInteriorFloorOverview] = useState(false);
   const [showReferenceWorkspace, setShowReferenceWorkspace] = useState(false);
   const [showRoomMapper, setShowRoomMapper] = useState(false);
   const [showFloorReview, setShowFloorReview] = useState(false);
@@ -256,6 +257,7 @@ export default function Studio() {
     setReview("");
     setWorkspace("builder");
     setEditorFocus(false);
+    setInteriorFloorOverview(false);
     setView(p.scene.modelId ? "building" : "rooms");
     setDirty(false);
     setCloudDirty(projectAheadOfCloud(p));
@@ -3828,6 +3830,7 @@ export default function Studio() {
                   disabled={v === "walk" && !room}
                   onClick={() => {
                     setView(v);
+                    if (v === "rooms") setInteriorFloorOverview(false);
                     if (v === "walk") setCameraOrientation("perspective");
                   }}
                 >
@@ -3835,6 +3838,19 @@ export default function Studio() {
                 </button>
               ))}
             </div>
+
+            {view === "rooms" && room && (
+              <button
+                type="button"
+                className={interiorFloorOverview ? "" : "active"}
+                aria-pressed={!interiorFloorOverview}
+                onClick={() =>
+                  setInteriorFloorOverview((value) => !value)
+                }
+              >
+                {interiorFloorOverview ? "Focus room" : "Show floor"}
+              </button>
+            )}
 
             <details className="editor-tool-menu">
               <summary>View <span aria-hidden="true">▾</span></summary>
@@ -4194,6 +4210,11 @@ export default function Studio() {
             focusRequest={focusRequest}
             cameraOrientation={cameraOrientation}
             showReferenceLayers={showReferenceWorkspace}
+            soloRoomId={
+              view === "rooms" && !interiorFloorOverview
+                ? roomId || undefined
+                : undefined
+            }
             isolateFloorId={isolateFloorId || undefined}
             sectionCut={{
               enabled: sectionCutEnabled,

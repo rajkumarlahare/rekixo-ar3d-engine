@@ -91,6 +91,7 @@ interface Props {
   onModelMaterials?: (materials: ModelMaterialSummary[]) => void;
   cameraOrientation?: "perspective" | "top";
   showReferenceLayers?: boolean;
+  soloRoomId?: string;
   modelTransformEnabled?: boolean;
   alignmentMode?: boolean;
   autoAlignRequest?: number;
@@ -1546,6 +1547,12 @@ export default function SceneCanvas(props: Props) {
     r.controls.enabled = props.view !== "walk";
     for (const room of props.scene.rooms) {
       if (props.view === "walk" && room.id !== props.roomId) continue;
+      if (
+        props.view === "rooms" &&
+        props.soloRoomId &&
+        room.id !== props.soloRoomId
+      )
+        continue;
       const root = new T.Group();
       root.userData.selectId = room.id;
       root.position.set(
@@ -1597,6 +1604,12 @@ export default function SceneCanvas(props: Props) {
       )
         continue;
       if (
+        props.view === "rooms" &&
+        props.soloRoomId &&
+        !opening.roomIds.includes(props.soloRoomId)
+      )
+        continue;
+      if (
         props.view === "walk" &&
         !opening.roomIds.includes(props.roomId)
       )
@@ -1632,6 +1645,7 @@ export default function SceneCanvas(props: Props) {
     props.roomId,
     props.isolateFloorId,
     props.roomMapEnabled,
+    props.soloRoomId,
   ]);
   useEffect(() => {
     const runtime = api.current;
@@ -1823,6 +1837,10 @@ export default function SceneCanvas(props: Props) {
 
   useEffect(() => {
     if (props.alignmentMode) return;
+    if (props.view === "rooms" && props.soloRoomId) {
+      api.current?.focusSelected();
+      return;
+    }
     api.current?.focus();
   }, [
     props.roomId,
@@ -1835,6 +1853,7 @@ export default function SceneCanvas(props: Props) {
     props.scene.modelTransform?.z,
     props.scene.modelTransform?.rotationY,
     props.alignmentMode,
+    props.soloRoomId,
   ]);
 
   useEffect(() => {
