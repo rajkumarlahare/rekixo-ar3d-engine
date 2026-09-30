@@ -79,6 +79,6 @@ test("selected floor can prepare profile rooms without manual mapping", () => {
   assert.match(studio, /Prepare\{" "\}/);
   assert.match(studio, /setRoomMapFloorId\(next\)/);
   assert.match(studio, /if \(room\?\.floorId !== next\)/);
-  assert.match(studio, /setSelected\("")/);
-  assert.match(studio, /setRoomId\("")/);
+  assert.ok(studio.includes('setSelected("");'));
+  assert.ok(studio.includes('setRoomId("");'));
 });
