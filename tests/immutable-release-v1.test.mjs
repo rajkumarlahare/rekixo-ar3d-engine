@@ -171,7 +171,7 @@ test("active release state verifies manifest checksum before exposing it", async
   assert.equal(experience.release.version, 3);
   assert.match(
     experience.model.url,
-    /\/api\/releases\/release_12345678\/models\/model_main\/content\?v=3$/,
+    /\/api\/releases\/release_12345678\/models\/model_main\/model\.glb\?v=3$/,
   );
   assert.equal(
     experience.mediaBaseUrl,
