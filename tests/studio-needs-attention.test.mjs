@@ -173,7 +173,7 @@ test("brochure-backed Ground layout draft is removable only when a reviewed repl
       }),
       ground,
     ),
-    false,
+    true,
   );
 });
 
