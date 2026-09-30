@@ -74,7 +74,7 @@ test("alignment mode prioritizes the canvas and removes editor-side clutter", ()
 
   assert.match(studio, /editor-core--alignment/);
   assert.match(studio, /aria-label="Plan alignment tools"/);
-  assert.match(studio, /Drag the building over the reference plan/);
+  assert.match(studio, /Auto position first · fine-tune only if needed/);
   assert.match(studio, /\bTop view\b/);
   assert.match(studio, /Move <kbd>W<\/kbd>/);
   assert.match(studio, /Rotate <kbd>E<\/kbd>/);
@@ -137,4 +137,24 @@ test("alignment mode offers fine nudge controls and identifies the faded plan", 
   assert.match(canvas, /BLUE FADED = REFERENCE PLAN/);
   assert.match(canvas, /Math\.min\(layer\.opacity, 0\.34\)/);
   assert.match(css, /\.alignment-canvas-legend/);
+});
+
+
+test("alignment offers one-click auto positioning before manual fine tuning", () => {
+  const studio = read("apps/admin/src/studio/Studio.tsx");
+  const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+  const css = read("apps/admin/src/studio/studio-editor-core.css");
+
+  assert.match(studio, /const \[autoAlignRequest, setAutoAlignRequest\] = useState\(0\)/);
+  assert.match(studio, /Auto position/);
+  assert.match(studio, /setAutoAlignRequest\(\(value\) => value \+ 1\)/);
+  assert.match(studio, /autoAlignRequest=\{autoAlignRequest\}/);
+
+  assert.match(canvas, /autoAlignRequest\?: number/);
+  assert.match(canvas, /floor-tagged building meshes/);
+  assert.match(canvas, /runtime\.model\.rotation\.y = 0/);
+  assert.match(canvas, /referenceCentre\.x - modelCentre\.x/);
+  assert.match(canvas, /referenceCentre\.z - modelCentre\.z/);
+  assert.match(canvas, /rotationY: 0/);
+  assert.match(css, /\.alignment-auto-position/);
 });
