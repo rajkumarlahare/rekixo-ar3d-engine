@@ -187,3 +187,16 @@ test("Engine Admin login failures return a safe diagnostic stage instead of Work
   assert.match(worker, /stage = "password-verify"/);
   assert.match(worker, /stage = "record-failure"/);
 });
+
+
+test("Engine Admin PBKDF2 stays within the Cloudflare workerd limit", () => {
+  const worker = fs.readFileSync("workers/admin-cloud.mjs", "utf8");
+  const generator = fs.readFileSync(
+    "scripts/generate-engine-admin-secrets.mjs",
+    "utf8",
+  );
+  assert.match(worker, /PASSWORD_PBKDF2_ITERATIONS = 100000/);
+  assert.match(generator, /PASSWORD_PBKDF2_ITERATIONS = 100000/);
+  assert.doesNotMatch(worker, /iterations:\s*210000/);
+  assert.doesNotMatch(generator, /pbkdf2Sync\([^\n]+210000/);
+});
