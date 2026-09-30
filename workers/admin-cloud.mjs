@@ -340,72 +340,99 @@ async function recordLoginFailure(env, key, now) {
 }
 
 async function login(request, env) {
-  if (request.method !== "POST")
-    return json({ error: "Method not allowed." }, { status: 405 });
-  if (!sameOrigin(request))
-    return json({ error: "Invalid request origin." }, { status: 403 });
-  if (!authConfigured(env))
+  let stage = "request";
+  try {
+    if (request.method !== "POST")
+      return json({ error: "Method not allowed." }, { status: 405 });
+    stage = "origin";
+    if (!sameOrigin(request))
+      return json({ error: "Invalid request origin." }, { status: 403 });
+    stage = "config";
+    if (!authConfigured(env))
+      return json(
+        {
+          error:
+            "Engine Admin authentication is not configured. Provision the dedicated Engine Admin secrets first.",
+        },
+        { status: 503 },
+      );
+    stage = "schema";
+    if (!(await schemaReady(env)))
+      return json(
+        { error: "Engine Admin cloud schema is not installed." },
+        { status: 503 },
+      );
+
+    stage = "parse";
+    const body = await request.json().catch(() => ({}));
+    const email = String(body.email || "").trim().toLowerCase();
+    const password = String(body.password || "");
+    const cfg = config(env);
+    const now = Date.now();
+
+    stage = "prune-rate-limit";
+    await pruneLoginAttempts(env, now);
+    stage = "rate-key";
+    const key = await rateKey(request, cfg.email);
+    stage = "rate-check";
+    if (await loginBlocked(env, key, now))
+      return json(
+        { error: "Too many sign-in attempts. Try again later." },
+        { status: 429 },
+      );
+
+    stage = "password-verify";
+    const valid =
+      email === cfg.email &&
+      password.length >= 12 &&
+      (await verifyPassword(password, cfg.passwordSalt, cfg.passwordHash));
+
+    if (!valid) {
+      stage = "record-failure";
+      await recordLoginFailure(env, key, now);
+      return json({ error: "Invalid email or password." }, { status: 401 });
+    }
+
+    stage = "clear-rate-limit";
+    await env.DB.prepare(
+      "DELETE FROM engine_admin_login_attempts WHERE attempt_key=?",
+    )
+      .bind(key)
+      .run();
+
+    stage = "security-read";
+    const security = await env.DB.prepare(
+      "SELECT session_version AS sessionVersion FROM engine_admin_security WHERE id='owner' LIMIT 1",
+    ).first();
+    stage = "session-sign";
+    const session = {
+      role: "owner",
+      email: cfg.email,
+      sessionVersion: Number(security?.sessionVersion || 1),
+      exp: now + SESSION_MS,
+    };
+    const bodyBytes = encoder.encode(JSON.stringify(session));
+    const encodedBody = base64Url(bodyBytes);
+    const token = `${encodedBody}.${await signSession(encodedBody, cfg.sessionSecret)}`;
+    return json(
+      { ok: true, user: { email: cfg.email }, expiresAt: session.exp },
+      { headers: { "Set-Cookie": sessionCookie(token) } },
+    );
+  } catch (error) {
+    console.error("Engine Admin login request failed", {
+      stage,
+      name: error instanceof Error ? error.name : "UnknownError",
+      message: error instanceof Error ? error.message : String(error),
+    });
     return json(
       {
-        error:
-          "Engine Admin authentication is not configured. Provision the dedicated Engine Admin secrets first.",
+        error: "Engine Admin sign-in temporarily unavailable.",
+        diagnostic: `login-stage:${stage}`,
       },
       { status: 503 },
     );
-  if (!(await schemaReady(env)))
-    return json(
-      { error: "Engine Admin cloud schema is not installed." },
-      { status: 503 },
-    );
-
-  const body = await request.json().catch(() => ({}));
-  const email = String(body.email || "").trim().toLowerCase();
-  const password = String(body.password || "");
-  const cfg = config(env);
-  const now = Date.now();
-  await pruneLoginAttempts(env, now);
-  const key = await rateKey(request, cfg.email);
-
-  if (await loginBlocked(env, key, now))
-    return json(
-      { error: "Too many sign-in attempts. Try again later." },
-      { status: 429 },
-    );
-
-  const valid =
-    email === cfg.email &&
-    password.length >= 12 &&
-    (await verifyPassword(password, cfg.passwordSalt, cfg.passwordHash));
-
-  if (!valid) {
-    await recordLoginFailure(env, key, now);
-    return json({ error: "Invalid email or password." }, { status: 401 });
   }
-
-  await env.DB.prepare(
-    "DELETE FROM engine_admin_login_attempts WHERE attempt_key=?",
-  )
-    .bind(key)
-    .run();
-
-  const security = await env.DB.prepare(
-    "SELECT session_version AS sessionVersion FROM engine_admin_security WHERE id='owner' LIMIT 1",
-  ).first();
-  const session = {
-    role: "owner",
-    email: cfg.email,
-    sessionVersion: Number(security?.sessionVersion || 1),
-    exp: now + SESSION_MS,
-  };
-  const bodyBytes = encoder.encode(JSON.stringify(session));
-  const encodedBody = base64Url(bodyBytes);
-  const token = `${encodedBody}.${await signSession(encodedBody, cfg.sessionSecret)}`;
-  return json(
-    { ok: true, user: { email: cfg.email }, expiresAt: session.exp },
-    { headers: { "Set-Cookie": sessionCookie(token) } },
-  );
 }
-
 async function logout(request, env) {
   if (request.method !== "POST")
     return json({ error: "Method not allowed." }, { status: 405 });
