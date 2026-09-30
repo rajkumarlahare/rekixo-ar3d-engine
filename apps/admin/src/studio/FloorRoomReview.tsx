@@ -1,17 +1,19 @@
 import { roomBoundaryPoints, type Room, type Scene } from "./domain";
-import type { BatchRepeatPreview } from "./unitRepeat";
+import { isBatchRepeatedRoom, type BatchRepeatPreview } from "./unitRepeat";
 
 const COLORS = ["#68bce8", "#e8b26b", "#a699e5", "#75c9a8"];
 
 /** A review of saved geometry, never an alternative architectural model. */
 export default function FloorRoomReview({ scene, floorId, unit, selectedId, disabled,
-  repeat, onUnit, onSelect, onReview, onReviewUnit, onCorrect, onRepeat, onClose,
+  repeat, onUnit, onSelect, onReview, onReviewUnit, onReviewGeneratedFloor,
+  onCorrect, onRepeat, onClose,
 }: {
   scene: Scene; floorId: string; unit: string; selectedId: string; disabled: boolean;
   repeat: BatchRepeatPreview;
   onUnit: (unit: string) => void; onSelect: (room: Room) => void;
   onReview: (room: Room, accepted: boolean) => void;
   onReviewUnit: (unit: string, accepted: boolean) => void;
+  onReviewGeneratedFloor: (floorId: string) => void;
   onCorrect: () => void; onRepeat: () => void; onClose: () => void;
 }) {
   const rooms = scene.rooms.filter((room) => room.floorId === floorId);
@@ -19,6 +21,8 @@ export default function FloorRoomReview({ scene, floorId, unit, selectedId, disa
   const activeUnit = units.includes(unit) ? unit : units[0];
   const visible = rooms.filter((room) => room.unit === activeUnit);
   const selected = visible.find((room) => room.id === selectedId);
+  const generatedOnFloor = rooms.filter(isBatchRepeatedRoom);
+  const generatedAccepted = generatedOnFloor.filter((room) => room.verified).length;
   const points = rooms.flatMap(roomBoundaryPoints);
   if (!points.length) return null;
   const minX = Math.min(...points.map(([x]) => x)) - 1;
@@ -53,6 +57,19 @@ export default function FloorRoomReview({ scene, floorId, unit, selectedId, disa
         Accept whole unit
       </button>
     </div>
+    {generatedOnFloor.length > 0 && (
+      <div className="floor-review-generated-action">
+        <span>
+          <strong>Generated floor review</strong>
+          <small>{generatedAccepted}/{generatedOnFloor.length} repeated rooms accepted</small>
+        </span>
+        <button type="button" className="primary"
+          disabled={disabled || generatedAccepted === generatedOnFloor.length}
+          onClick={() => onReviewGeneratedFloor(floorId)}>
+          Accept generated floor
+        </button>
+      </div>
+    )}
     <div className="floor-review-rooms" aria-label="Rooms to review">
       {visible.map((room) => <button type="button" key={room.id} aria-pressed={room.id === selectedId}
         onClick={() => onSelect(room)}><span>{room.name}</span><small>{room.verified ? "Accepted" : "Needs review"}</small></button>)}
