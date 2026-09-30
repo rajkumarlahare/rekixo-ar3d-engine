@@ -42,6 +42,10 @@ export interface TrustedPublishModel {
   url: string;
 }
 
+export interface ProfileInteriorAutomation {
+  enabled: boolean;
+}
+
 export interface QuickSourceSetup {
   profile?: string;
   name?: string;
@@ -53,6 +57,7 @@ export interface QuickSourceSetup {
   publishModel?: TrustedPublishModel;
   publishModelId?: string;
   roomSheetTemplate?: readonly RoomSheetTemplateRow[];
+  interiorAutomation?: ProfileInteriorAutomation;
   slots: QuickSourceSlot[];
   matchedCount: number;
   requiredCount: number;
@@ -72,6 +77,7 @@ interface SourceProfileDefinition {
   repeatPlan?: BatchRepeatPlan;
   publishModel?: TrustedPublishModel;
   roomSheetTemplate?: readonly RoomSheetTemplateRow[];
+  interiorAutomation?: ProfileInteriorAutomation;
   sources: ReadonlyArray<{
     key: QuickSourceSlotKey;
     label: string;
@@ -149,6 +155,7 @@ function detectProfile(
     publishModel: profile.publishModel,
     publishModelId,
     roomSheetTemplate: profile.roomSheetTemplate,
+    interiorAutomation: profile.interiorAutomation,
     slots,
     matchedCount,
     requiredCount: slots.length,

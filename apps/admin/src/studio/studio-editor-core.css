@@ -3372,3 +3372,49 @@
     justify-self: start;
   }
 }
+
+
+/* Interior automation: one primary action, manual shelf remains secondary */
+.interior-auto-action {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: min(520px, 100%);
+  padding: 10px 12px;
+  border: 1px solid #2d6658;
+  border-radius: 10px;
+  background: rgba(33, 117, 91, .13);
+}
+
+.interior-auto-action > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.interior-auto-action small {
+  color: #9eafa9;
+  max-width: 520px;
+}
+
+.interior-auto-action > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.interior-auto-complete {
+  color: #9fe0c6;
+}
+
+@media (max-width: 760px) {
+  .interior-auto-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .interior-auto-action > button {
+    width: 100%;
+  }
+}
