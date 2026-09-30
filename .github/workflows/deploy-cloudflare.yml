@@ -155,7 +155,7 @@ jobs:
             --request POST \
             --header 'Origin: https://admin.rekixo.com' \
             --header 'Content-Type: application/json' \
-            --data '{"email":"invalid@example.invalid","password":"definitely-wrong-password"}' \
+            --data '{"email":"engine-admin@rekixo.com","password":"definitely-wrong-password"}' \
             "$LOGIN_URL" || true)"
           if [ "$STATUS" != "401" ]; then
             echo "::error::Engine Admin invalid-login boundary returned HTTP $STATUS"
