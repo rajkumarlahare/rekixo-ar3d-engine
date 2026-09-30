@@ -106,6 +106,24 @@ test("Studio exports a project-neutral Scene Manifest V2 hierarchy", () => {
   assert.equal(manifest.rooms[0].meshBindings[0].strategy, "source-node-name");
   assert.equal(manifest.assets.find((a) => a.id === "asset-model").role, "model");
   assert.equal(manifest.assets.find((a) => a.id === "asset-plan").role, "reference");
+  assert.equal(manifest.surfaces.length, 6);
+  assert.deepEqual(
+    manifest.surfaces.map((surface) => surface.id),
+    [
+      "surface:room-living-a1:floor",
+      "surface:room-living-a1:ceiling",
+      "surface:room-living-a1:wall:0",
+      "surface:room-living-a1:wall:1",
+      "surface:room-living-a1:wall:2",
+      "surface:room-living-a1:wall:3",
+    ],
+  );
+  assert.equal(manifest.catalogItems.length, 5);
+  assert.deepEqual(
+    manifest.catalogItems.find((item) => item.id === "sofa").dimensionsM,
+    [2.1, 0.8, 0.85],
+  );
+  assert.equal(manifest.catalogItems.find((item) => item.id === "sofa").source, "procedural");
 });
 
 test("V1 editor coordinates map to explicit world furniture transforms", () => {
@@ -177,6 +195,10 @@ test("Studio adapter exports authored polygon rooms without flattening them", ()
     kind: "polygon",
     points: p.scene.rooms[0].polygon,
   });
+  assert.equal(
+    manifest.surfaces.filter((surface) => surface.roomId === p.scene.rooms[0].id).length,
+    p.scene.rooms[0].polygon.length + 2,
+  );
   assertSceneManifestV2(manifest);
 });
 
@@ -270,4 +292,54 @@ test("unreviewed Studio opening drafts do not publish into Scene Manifest V2", (
   ];
   const manifest = buildSceneManifestV2(p, files);
   assert.equal(manifest.openings.length, 0);
+});
+
+
+test("semantic surfaces validate room edges and PBR material references", () => {
+  const { p, files } = fixture();
+  const manifest = buildSceneManifestV2(p, files);
+  manifest.assets.push({
+    id: "texture-oak",
+    name: "oak-basecolor.ktx2",
+    mimeType: "image/ktx2",
+    byteSize: 256,
+    sha256: "c".repeat(64),
+    role: "texture",
+  });
+  manifest.materials.push({
+    id: "material-oak",
+    name: "Oak",
+    baseColor: "#b58a63",
+    roughness: 0.58,
+    metalness: 0,
+    baseColorTextureAssetId: "texture-oak",
+    uvScale: [1.5, 1.5],
+  });
+  manifest.surfaces[0].finish = { materialId: "material-oak" };
+  assert.doesNotThrow(() => assertSceneManifestV2(manifest));
+
+  const wall = manifest.surfaces.find((surface) => surface.kind === "wall");
+  wall.edgeIndex = 99;
+  assert.throws(
+    () => assertSceneManifestV2(manifest),
+    /Invalid wall surface edge/,
+  );
+});
+
+test("catalog items become the authoritative furniture key when present", () => {
+  const { p, files } = fixture();
+  const manifest = buildSceneManifestV2(p, files);
+  manifest.furniture[0].catalogKey = "missing-catalog-item";
+  assert.throws(
+    () => assertSceneManifestV2(manifest),
+    /Invalid scene furniture/,
+  );
+});
+
+test("older Scene Manifest V2 documents remain valid without interior foundation fields", () => {
+  const { p, files } = fixture();
+  const manifest = buildSceneManifestV2(p, files);
+  delete manifest.surfaces;
+  delete manifest.catalogItems;
+  assert.doesNotThrow(() => assertSceneManifestV2(manifest));
 });

@@ -2,10 +2,13 @@ import {
   SCENE_MANIFEST_FORMAT,
   SCENE_MANIFEST_VERSION,
   assertSceneManifestV2,
+  type SceneCatalogItemV2,
   type SceneManifestV2,
+  type SceneSurfaceV2,
   type SceneUnitV2,
 } from "@rekixo/3d-contracts";
 import {
+  catalog,
   projectSlug,
   type Asset,
   type Project,
@@ -23,6 +26,56 @@ function stableHash(value: string) {
 
 function unitKey(room: Room) {
   return `${room.floorId}\u0000${room.unit.trim()}`;
+}
+
+function roomBoundary(room: Room): Array<[number, number]> {
+  if (room.polygon?.length)
+    return room.polygon.map(([x, z]) => [x, z] as [number, number]);
+  return [
+    [room.x - room.width / 2, room.z - room.depth / 2],
+    [room.x + room.width / 2, room.z - room.depth / 2],
+    [room.x + room.width / 2, room.z + room.depth / 2],
+    [room.x - room.width / 2, room.z + room.depth / 2],
+  ];
+}
+
+function roomSemanticSurfaces(room: Room): SceneSurfaceV2[] {
+  const edges = roomBoundary(room);
+  return [
+    {
+      id: `surface:${room.id}:floor`,
+      roomId: room.id,
+      kind: "floor",
+      finish: { color: room.color },
+    },
+    {
+      id: `surface:${room.id}:ceiling`,
+      roomId: room.id,
+      kind: "ceiling",
+    },
+    ...edges.map(
+      (_, edgeIndex): SceneSurfaceV2 => ({
+        id: `surface:${room.id}:wall:${edgeIndex}`,
+        roomId: room.id,
+        kind: "wall",
+        edgeIndex,
+      }),
+    ),
+  ];
+}
+
+function legacyCatalogItems(): SceneCatalogItemV2[] {
+  return Object.entries(catalog).map(([key, item]) => ({
+    id: key,
+    name: item.name,
+    category: key,
+    source: "procedural",
+    dimensionsM: [item.width, item.height, item.depth],
+    anchor: "floor-center",
+    collisionFootprintM: [item.width, item.depth],
+    styleTags: ["legacy-procedural"],
+    materialSlots: ["primary"],
+  }));
 }
 
 export function buildSceneManifestV2(
@@ -170,6 +223,8 @@ export function buildSceneManifestV2(
           : [],
       finish: { color: room.color },
     })),
+    surfaces: project.scene.rooms.flatMap(roomSemanticSurfaces),
+    catalogItems: legacyCatalogItems(),
     openings: (project.scene.openings ?? [])
       .filter((opening) => opening.reviewed)
       .map((opening) => ({

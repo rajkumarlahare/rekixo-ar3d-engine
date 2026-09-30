@@ -23,7 +23,10 @@ Every manifest declares:
 - semantic or source-node mesh bindings
 - openings for doors/windows/connections
 - furniture instances with full transforms
-- materials and camera presets
+- optional semantic room surfaces (`floor` / `ceiling` / boundary-indexed `wall`)
+- optional furniture catalog items with real dimensions and collision footprints
+- PBR-ready materials with texture asset references, roughness/metalness and UV controls
+- camera presets
 
 The contract deliberately supports more than the current Studio UI. The current
 editor still authors one default site/building, rectangular rooms, no explicit
@@ -44,7 +47,11 @@ into V2. The conversion is deterministic:
 - the imported building model becomes a `shell` model;
 - non-model files are exported as reference assets;
 - furniture positions become explicit world-space transforms;
-- openings, materials and cameras stay empty until they are actually authored.
+- every legacy room exports deterministic semantic floor/ceiling/wall targets;
+- the existing five-item procedural furniture shelf exports as catalog metadata, so
+  furniture keys have an explicit catalog contract before real GLB assets are added;
+- openings export only after review, while materials and cameras stay empty until
+  they are actually authored.
 
 This bridge lets future viewers and cloud services adopt V2 without first
 rewriting the whole local editor.
@@ -60,6 +67,9 @@ The shared contract validator rejects:
 - reviewed measurements that have no source evidence;
 - mesh bindings to unknown models;
 - furniture, camera or opening references to unknown rooms;
+- invalid semantic surface room/edge/material references;
+- invalid furniture catalog entries or catalog keys when a catalog is present;
+- PBR texture references that do not point to `texture` assets;
 - invalid hashes, transforms, colours and excessive collection sizes.
 
 A source node name is explicitly a legacy binding strategy. Re-import-safe
@@ -71,11 +81,15 @@ No D1 schema or R2 object is changed by this phase. Existing Jyoti production
 migrations, published JSON and browser backup packages remain valid. The V2
 manifest is a new export contract only.
 
-The next persistence phase can store V2 drafts/releases directly and add stable
-semantic model IDs, multi-building authoring, doors/windows, polygons, materials
-and cameras without changing the manifest version for already-supported fields.
-Breaking semantic changes require a future contract version rather than silent
-reinterpretation.
+The next persistence phase can store V2 drafts/releases directly and move the
+Studio from its narrow V1 authoring model toward this manifest as the canonical
+scene source. Semantic surfaces and catalog items are optional additive V2 fields,
+so older V2 releases remain readable. Real furniture GLBs can later replace a
+procedural catalog item by using `source: "asset"` and a manifest asset with
+role `catalog`; no furniture-instance schema change is required.
+
+Breaking semantic changes still require a future contract version rather than
+silent reinterpretation.
 
 
 ## Source evidence linkage
