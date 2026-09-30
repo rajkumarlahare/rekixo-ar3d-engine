@@ -1953,7 +1953,7 @@ export default function SceneCanvas(props: Props) {
       {props.view === "walk" && (
         <div className="walk-pad">
           <span>
-            Drag to look · WASD inside room · reviewed doors connect rooms; use room navigation when door evidence is unavailable
+            Drag to look · WASD inside room · reviewed shared doors connect rooms · use room navigation when door evidence is unavailable
           </span>
           {[
             ["w", "↑"],
