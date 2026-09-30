@@ -596,6 +596,7 @@ test("Geo derivative runtime exposes only active release sidecars with matching 
   const metadata = {
     format: "rekixo-geo-model-derivative",
     version: 1,
+    pipeline: "core-map-v2",
     projectSlug: slug,
     releaseId,
     sourceModelId: modelId,
