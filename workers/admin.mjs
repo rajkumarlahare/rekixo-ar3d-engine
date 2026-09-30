@@ -95,7 +95,7 @@ async function listProjects(env) {
   }));
 }
 
-async function getIntegrationProject(env, slug) {
+export async function getIntegrationProject(env, slug) {
   const project = await env.DB.prepare(
     `SELECT p.id, p.slug, p.name, p.location, p.status, p.cover_asset_key,
             COUNT(DISTINCT CASE WHEN s.enabled = 1 THEN s.id END) AS enabled_scene_count,
