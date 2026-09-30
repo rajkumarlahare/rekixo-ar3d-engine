@@ -609,10 +609,19 @@ async function readGeoDerivativeMetadata(
     releaseId,
     logicalId,
   );
-  const [object, metadataObject] = await Promise.all([
-    env.MODEL_ASSETS.head(modelKey),
-    env.MODEL_ASSETS.get(metadataKey),
-  ]);
+  let object;
+  let metadataObject;
+  try {
+    [object, metadataObject] = await Promise.all([
+      env.MODEL_ASSETS.head(modelKey),
+      env.MODEL_ASSETS.get(metadataKey),
+    ]);
+  } catch {
+    // Geo derivatives are an optional rendering optimization. Storage/network
+    // failures must fall back to the immutable source model instead of making
+    // the project or integration contract unavailable.
+    return null;
+  }
   if (!object || !metadataObject?.body) return null;
 
   let metadata;
