@@ -3985,6 +3985,17 @@ export default function Studio() {
                   if (next) { setRoomId(next.id); setSelected(next.id); }
                 }
               }}
+              onReviewUnit={(unit, accepted) => {
+                if (review || busy) return;
+                edit({ ...p, scene: { ...p.scene, rooms: p.scene.rooms.map((candidate) =>
+                  candidate.floorId === isolateFloorId && candidate.unit === unit
+                    ? { ...candidate, verified: accepted }
+                    : candidate) } });
+                const first = scene.rooms.find((candidate) =>
+                  candidate.floorId === isolateFloorId && candidate.unit === unit);
+                setRoomId(first?.id ?? "");
+                setSelected(first?.id ?? "");
+              }}
               onCorrect={() => {
                 setShowFloorReview(false); setShowRoomMapper(true);
                 setRoomMapFloorId(isolateFloorId); setRoomMapAction("idle");
