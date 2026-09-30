@@ -4559,6 +4559,18 @@ export default function Studio() {
               setSelectedModelNodeKey(node.key);
               setSelected("");
             }}
+            onSurfaceSelect={(surface) => {
+              setRoomId(surface.roomId);
+              setSelected(surface.roomId);
+              setSelectedSurface({
+                roomId: surface.roomId,
+                kind: surface.kind,
+                ...(surface.kind === "wall"
+                  ? { edgeIndex: surface.edgeIndex }
+                  : {}),
+              });
+              setShowRightPanel(true);
+            }}
             onTransformCommit={commitCanvasTransform}
             onRoomDraw={commitMappedRoom}
             onRoomPolygonDraw={commitMappedPolygon}
@@ -4950,15 +4962,165 @@ export default function Studio() {
                     {field("Centre Z (m)", room.z, (z) => patchRoom({ z }))}
                   </div>
                 </details>
-                <label>
-                  Floor finish
-                  <input
-                    aria-label="Floor finish"
-                    type="color"
-                    value={room.color}
-                    onChange={(e) => patchRoom({ color: e.target.value })}
-                  />
-                </label>
+                <section
+                  className="editor-room-materials"
+                  aria-label="Interior surface materials"
+                >
+                  <div className="section-label">INTERIOR FINISHES</div>
+                  <small>
+                    Click a floor or wall in the 3D room, or choose a surface
+                    below. Ceiling finish is visible in Walk mode.
+                  </small>
+                  <div
+                    className="surface-target-grid"
+                    role="group"
+                    aria-label="Room surfaces"
+                  >
+                    <button
+                      type="button"
+                      className={surfaceSelection.kind === "floor" ? "active" : ""}
+                      aria-pressed={surfaceSelection.kind === "floor"}
+                      onClick={() =>
+                        setSelectedSurface({
+                          roomId: room.id,
+                          kind: "floor",
+                        })
+                      }
+                    >
+                      Floor
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        surfaceSelection.kind === "ceiling" ? "active" : ""
+                      }
+                      aria-pressed={surfaceSelection.kind === "ceiling"}
+                      onClick={() =>
+                        setSelectedSurface({
+                          roomId: room.id,
+                          kind: "ceiling",
+                        })
+                      }
+                    >
+                      Ceiling
+                    </button>
+                    {Array.from({ length: surfaceEdgeCount }, (_, edgeIndex) => (
+                      <button
+                        type="button"
+                        key={edgeIndex}
+                        className={
+                          surfaceSelection.kind === "wall" &&
+                          surfaceSelection.edgeIndex === edgeIndex
+                            ? "active"
+                            : ""
+                        }
+                        aria-pressed={
+                          surfaceSelection.kind === "wall" &&
+                          surfaceSelection.edgeIndex === edgeIndex
+                        }
+                        onClick={() =>
+                          setSelectedSurface({
+                            roomId: room.id,
+                            kind: "wall",
+                            edgeIndex,
+                          })
+                        }
+                      >
+                        Wall {edgeIndex + 1}
+                      </button>
+                    ))}
+                  </div>
+                  {activeSurfaceFinish && (
+                    <>
+                      <div className="surface-material-head">
+                        <b>
+                          {surfaceDisplayName(
+                            surfaceSelection.kind,
+                            surfaceSelection.edgeIndex,
+                          )}
+                        </b>
+                        <small>
+                          {authoredSurfaceFinish
+                            ? "Authored finish"
+                            : "Room default · choose a preset or fine-tune"}
+                        </small>
+                      </div>
+                      <div
+                        className="surface-preset-grid"
+                        role="group"
+                        aria-label="Surface material presets"
+                      >
+                        {SURFACE_MATERIAL_PRESETS.map((preset) => (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            className={
+                              activeSurfaceFinish.presetId === preset.id
+                                ? "surface-preset active"
+                                : "surface-preset"
+                            }
+                            aria-pressed={
+                              activeSurfaceFinish.presetId === preset.id
+                            }
+                            title={preset.detail}
+                            onClick={() => applySurfacePreset(preset.id)}
+                          >
+                            <span
+                              className="surface-preset-swatch"
+                              style={{ background: preset.color }}
+                              aria-hidden="true"
+                            />
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                      <label>
+                        Base color
+                        <input
+                          aria-label="Surface base color"
+                          type="color"
+                          value={activeSurfaceFinish.color}
+                          onChange={(event) =>
+                            patchSurfaceFinish({ color: event.target.value })
+                          }
+                        />
+                      </label>
+                      {field(
+                        "Surface roughness",
+                        activeSurfaceFinish.roughness,
+                        (roughness) => patchSurfaceFinish({ roughness }),
+                        0.05,
+                      )}
+                      {field(
+                        "Surface metalness",
+                        activeSurfaceFinish.metalness,
+                        (metalness) => patchSurfaceFinish({ metalness }),
+                        0.05,
+                      )}
+                      <div className="surface-material-actions">
+                        {surfaceSelection.kind === "wall" && (
+                          <button
+                            type="button"
+                            onClick={applySelectedFinishToAllWalls}
+                          >
+                            Apply to all walls
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          disabled={!authoredSurfaceFinish}
+                          onClick={resetSurfaceFinish}
+                        >
+                          Reset surface
+                        </button>
+                      </div>
+                      <small>
+                        These edits change the authored room surface only; source
+                        model bytes and reviewed room dimensions stay unchanged.
+                      </small>
+                    </>
+                  )}
+                </section>
                 <details className="advanced-properties editor-room-evidence">
                   <summary>Source & verification</summary>
                 <label>
