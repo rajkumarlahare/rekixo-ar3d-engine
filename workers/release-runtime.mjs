@@ -618,7 +618,12 @@ export async function serveReleaseAsset(env, releaseId, pathKind, logicalId, req
       cacheControl: "public, max-age=31536000, immutable",
       expectedSize: Number(row.byte_size),
       sha256: row.sha256 || undefined,
-      allowRange: kind === "media" && mimeType === "video/mp4",
+      // GLB renderers (including Google Maps 3D) may probe or stream models
+      // with byte-range requests. Immutable model objects are safe to range
+      // because size/hash identity is pinned by the release manifest.
+      allowRange:
+        kind === "model" ||
+        (kind === "media" && mimeType === "video/mp4"),
     },
   );
   if (served.corruption)
