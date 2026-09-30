@@ -1,6 +1,7 @@
 import {
   activeReleaseState,
   experienceFromActiveReleaseState,
+  geoModelDerivativeForActiveRelease,
   handleReleaseReadRequest,
 } from "./release-runtime.mjs";
 import { engineAdminReadAccess, handleCloudAdminRequest } from "./admin-cloud.mjs";
@@ -115,12 +116,14 @@ export async function getIntegrationProject(env, slug) {
   // while keeping the legacy model registry path intact for existing projects.
   let immutableModel;
   let immutableRelease;
+  let geoModel;
   if (project.status === "published") {
     const releaseState = await activeReleaseState(env, slug);
     if (releaseState.state === "ok") {
       const experience = experienceFromActiveReleaseState(releaseState);
       immutableModel = experience?.model;
       immutableRelease = experience?.release;
+      geoModel = await geoModelDerivativeForActiveRelease(env, releaseState);
     }
   }
 
@@ -150,6 +153,7 @@ export async function getIntegrationProject(env, slug) {
     enabledSceneCount: Number(project.enabled_scene_count || 0),
     activeModelAvailable,
     ...(immutableModel ? { model: immutableModel } : {}),
+    ...(geoModel ? { geoModel } : {}),
     ...(immutableRelease ? { release: immutableRelease } : {}),
   };
 }

@@ -582,6 +582,195 @@ function withPublicModelCors(response) {
   });
 }
 
+function geoDerivativeKeys(slug, releaseId, logicalId) {
+  if (
+    !validProjectSlug(slug) ||
+    !validToken(releaseId) ||
+    !validToken(logicalId, 500)
+  )
+    throw Error("Invalid Geo derivative identity.");
+  const base =
+    `projects/${slug}/releases/${releaseId}/geo-models/${logicalId}`;
+  return {
+    modelKey: `${base}/model.glb`,
+    metadataKey: `${base}/metadata.json`,
+  };
+}
+
+async function readGeoDerivativeMetadata(
+  env,
+  slug,
+  releaseId,
+  logicalId,
+  sourceSha256,
+) {
+  const { modelKey, metadataKey } = geoDerivativeKeys(
+    slug,
+    releaseId,
+    logicalId,
+  );
+  let object;
+  let metadataObject;
+  try {
+    // Probe sequentially so a missing/failed optional derivative cannot leave
+    // a second R2 promise rejecting after the caller has already fallen back.
+    object = await env.MODEL_ASSETS.head(modelKey);
+    if (!object) return null;
+    metadataObject = await env.MODEL_ASSETS.get(metadataKey);
+  } catch {
+    // Geo derivatives are an optional rendering optimization. Storage/network
+    // failures must fall back to the immutable source model instead of making
+    // the project or integration contract unavailable.
+    return null;
+  }
+  if (!object || !metadataObject?.body) return null;
+
+  let metadata;
+  try {
+    metadata = JSON.parse(await metadataObject.text());
+  } catch {
+    return null;
+  }
+  if (
+    metadata?.format !== "rekixo-geo-model-derivative" ||
+    metadata?.version !== 1 ||
+    metadata.projectSlug !== slug ||
+    metadata.releaseId !== releaseId ||
+    metadata.sourceModelId !== logicalId ||
+    !Number.isSafeInteger(metadata.geoByteSize) ||
+    metadata.geoByteSize !== object.size ||
+    typeof metadata.geoSha256 !== "string" ||
+    !/^[a-f0-9]{64}$/.test(metadata.geoSha256) ||
+    (sourceSha256 &&
+      metadata.sourceSha256 &&
+      metadata.sourceSha256 !== sourceSha256) ||
+    !Array.isArray(metadata.extensionsRequired) ||
+    metadata.extensionsRequired.length !== 0 ||
+    !Array.isArray(metadata.extensionsUsed) ||
+    metadata.extensionsUsed.length !== 0
+  )
+    return null;
+
+  return { metadata, modelKey };
+}
+
+export async function geoModelDerivativeForActiveRelease(env, state) {
+  if (state?.state !== "ok") return undefined;
+  const model = state.manifest?.experience?.model;
+  if (!model?.id || !model.releaseAssetId) return undefined;
+  const sourceAsset = state.manifest.assets.find(
+    (asset) =>
+      asset.id === model.releaseAssetId &&
+      asset.kind === "model" &&
+      asset.logicalId === model.id,
+  );
+  if (!sourceAsset) return undefined;
+
+  const derivative = await readGeoDerivativeMetadata(
+    env,
+    state.manifest.project.slug,
+    state.manifest.release.id,
+    model.id,
+    sourceAsset.sha256,
+  );
+  if (!derivative) return undefined;
+
+  return {
+    id: model.id,
+    projectId: model.projectId,
+    name: `${model.name} · Geo optimized`,
+    version: Number(model.version || 1),
+    mimeType: "model/gltf-binary",
+    byteSize: derivative.metadata.geoByteSize,
+    available: true,
+    variant: "geo-optimized",
+    sourceModelId: model.id,
+    sourceSha256: derivative.metadata.sourceSha256,
+    sha256: derivative.metadata.geoSha256,
+    url:
+      `${RELEASE_BASE}/${encodeURIComponent(
+        state.manifest.release.id,
+      )}/geo-models/${encodeURIComponent(model.id)}/model.glb?v=${encodeURIComponent(
+        String(state.manifest.release.version),
+      )}`,
+  };
+}
+
+async function serveGeoModelDerivative(
+  env,
+  releaseId,
+  logicalId,
+  request,
+) {
+  if (!validToken(releaseId) || !validToken(logicalId, 500))
+    return json({ error: "Invalid Geo derivative route." }, { status: 400 });
+  if (request.method === "OPTIONS")
+    return withPublicModelCors(new Response(null, { status: 204 }));
+  if (request.method !== "GET" && request.method !== "HEAD")
+    return json({ error: "Method not allowed." }, { status: 405 });
+  if (!(await releaseSchemaReady(env)))
+    return json({ error: "Release runtime is not installed." }, { status: 404 });
+
+  const row = await env.DB.prepare(
+    `SELECT a.r2_key,a.sha256,p.status,p.slug
+       FROM release_assets_3d a
+       JOIN releases_3d r ON r.id=a.release_id AND r.project_id=a.project_id
+       JOIN projects_3d p
+         ON p.id=r.project_id
+        AND p.active_release_id=r.id
+      WHERE a.release_id=? AND a.kind='model' AND a.logical_id=?
+      LIMIT 1`,
+  ).bind(releaseId, logicalId).first();
+
+  if (!row || row.status !== "published")
+    return json({ error: "Geo derivative not found." }, { status: 404 });
+
+  try {
+    assertReleaseAssetKey(
+      row.slug,
+      releaseId,
+      "model",
+      logicalId,
+      row.r2_key,
+    );
+  } catch (error) {
+    return serverError(
+      "Geo derivative is unavailable.",
+      error instanceof Error
+        ? error.message
+        : "Invalid immutable release storage key.",
+    );
+  }
+
+  const derivative = await readGeoDerivativeMetadata(
+    env,
+    row.slug,
+    releaseId,
+    logicalId,
+    row.sha256,
+  );
+  if (!derivative)
+    return json({ error: "Geo derivative not found." }, { status: 404 });
+
+  const served = await serveR2Object(
+    env.MODEL_ASSETS,
+    derivative.modelKey,
+    request,
+    {
+      mimeType: "model/gltf-binary",
+      cacheControl: "public, max-age=31536000, immutable",
+      expectedSize: derivative.metadata.geoByteSize,
+      sha256: derivative.metadata.geoSha256,
+      allowRange: true,
+    },
+  );
+  if (served.corruption)
+    return serverError("Geo derivative is unavailable.", served.corruption);
+  if (served.missing)
+    return json({ error: "Geo derivative not found." }, { status: 404 });
+  return withPublicModelCors(served.response);
+}
+
 export async function serveReleaseAsset(env, releaseId, pathKind, logicalId, request) {
   if (!validToken(releaseId) || !validToken(logicalId, 500))
     return json({ error: "Invalid release asset route." }, { status: 400 });
@@ -693,6 +882,19 @@ export async function handleReleaseReadRequest(
     }
     return json({ error: "Unknown release project route." }, { status: 404 });
   }
+
+  if (
+    parts.length === 4 &&
+    parts[1] === "geo-models" &&
+    parts[2] &&
+    parts[3] === "model.glb"
+  )
+    return serveGeoModelDerivative(
+      env,
+      parts[0],
+      parts[2],
+      request,
+    );
 
   if (
     parts.length === 4 &&
