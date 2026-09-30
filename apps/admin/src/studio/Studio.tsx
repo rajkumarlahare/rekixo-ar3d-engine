@@ -3862,7 +3862,7 @@ export default function Studio() {
             snap={transformSnap}
             focusRequest={focusRequest}
             cameraOrientation={cameraOrientation}
-            showReferenceLayers
+            showReferenceLayers={showReferenceWorkspace}
             isolateFloorId={isolateFloorId || undefined}
             sectionCut={{
               enabled: sectionCutEnabled,
