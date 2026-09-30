@@ -648,6 +648,7 @@ export function assertSceneManifestV2(
           : 0;
     if (surface.kind === "wall") {
       if (
+        typeof surface.edgeIndex !== "number" ||
         !Number.isInteger(surface.edgeIndex) ||
         !isNumber(surface.edgeIndex, 0, Math.max(edgeCount - 1, 0))
       )
