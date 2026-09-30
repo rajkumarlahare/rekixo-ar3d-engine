@@ -98,6 +98,10 @@ import {
   isBatchRepeatedRoom,
 } from "./unitRepeat";
 import {
+  buildRepeatedDemoInterior,
+  buildTypicalFloorDemoInterior,
+} from "./demoInterior";
+import {
   projectAheadOfCloud,
   withLocalSaveTimestamp,
 } from "./localDraftState";
@@ -732,6 +736,43 @@ export default function Studio() {
       quickSourceSetup.floorSkeleton,
       quickSourceSetup.repeatPlan,
     ),
+    jyotiDemoInteriorEnabled =
+      quickSourceSetup.profile === "jyoti-paradise" && Boolean(typicalFloorId),
+    typicalDemoInteriorPreview =
+      jyotiDemoInteriorEnabled && typicalFloorId
+        ? (() => {
+            let previewIndex = 0;
+            return buildTypicalFloorDemoInterior(
+              p.scene,
+              typicalFloorId,
+              () => `preview-typical-${previewIndex++}`,
+            );
+          })()
+        : { furniture: p.scene.furniture, created: [], skippedRooms: [] },
+    typicalFloorRoomIds = new Set(
+      typicalFloorId
+        ? p.scene.rooms
+            .filter((entry) => entry.floorId === typicalFloorId)
+            .map((entry) => entry.id)
+        : [],
+    ),
+    typicalFloorFurnitureCount = p.scene.furniture.filter((entry) =>
+      typicalFloorRoomIds.has(entry.roomId),
+    ).length,
+    repeatDemoInteriorPreview =
+      jyotiDemoInteriorEnabled &&
+      typicalFloorId &&
+      typicalDemoInteriorPreview.created.length === 0 &&
+      typicalFloorFurnitureCount > 0
+        ? (() => {
+            let previewIndex = 0;
+            return buildRepeatedDemoInterior(
+              p.scene,
+              batchRepeatPreview.rows,
+              () => `preview-repeat-${previewIndex++}`,
+            );
+          })()
+        : { furniture: p.scene.furniture, created: [], skippedRooms: [] },
     approvedOpeningKeys = new Set(
       (p.scene.openings ?? [])
         .filter(
@@ -889,6 +930,72 @@ export default function Studio() {
       },
     });
   }
+  function prepareTypicalDemoInterior() {
+    if (!jyotiDemoInteriorEnabled || !typicalFloorId) {
+      setError("Jyoti typical floor is not ready for demo interior automation.");
+      return;
+    }
+    const result = buildTypicalFloorDemoInterior(p.scene, typicalFloorId, id);
+    if (!result.created.length) {
+      setMessage("Typical-floor demo interior is already prepared.");
+      return;
+    }
+    const next: Project = {
+      ...p,
+      scene: { ...p.scene, furniture: result.furniture },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      setMessage(
+        `${result.created.length} demo furniture item${result.created.length === 1 ? "" : "s"} prepared on Floor 1. Existing furniture was preserved; unsupported rooms were left unchanged.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Demo interior could not be prepared safely.",
+      );
+    }
+  }
+
+  function repeatDemoInteriorToUpperFloors() {
+    if (
+      !jyotiDemoInteriorEnabled ||
+      !typicalFloorId ||
+      typicalDemoInteriorPreview.created.length > 0
+    ) {
+      setError("Prepare and review the Floor 1 demo interior before repeating it.");
+      return;
+    }
+    const result = buildRepeatedDemoInterior(
+      p.scene,
+      batchRepeatPreview.rows,
+      id,
+    );
+    if (!result.created.length) {
+      setMessage("Repeated-floor demo interior is already up to date.");
+      return;
+    }
+    const next: Project = {
+      ...p,
+      scene: { ...p.scene, furniture: result.furniture },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      setMessage(
+        `${result.created.length} furniture item${result.created.length === 1 ? "" : "s"} repeated to reviewed upper-floor rooms. Existing target furniture was preserved.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Upper-floor demo interior could not be repeated safely.",
+      );
+    }
+  }
+
   function patchAppearance(change: Partial<SceneAppearance>) {
     edit({
       ...p,
@@ -4259,6 +4366,54 @@ export default function Studio() {
                     : "Select a room to furnish"}
               </small>
             </div>
+            {jyotiDemoInteriorEnabled &&
+              isolateFloorId === typicalFloorId &&
+              !review && (
+                <div className="interior-auto-action" role="group" aria-label="Jyoti demo interior automation">
+                  {typicalDemoInteriorPreview.created.length > 0 ? (
+                    <>
+                      <span>
+                        <b>Demo interior</b>
+                        <small>
+                          Fill reviewed living, bedroom, dining and balcony rooms without replacing existing furniture.
+                        </small>
+                      </span>
+                      <button
+                        type="button"
+                        className="primary"
+                        disabled={busy}
+                        onClick={prepareTypicalDemoInterior}
+                      >
+                        Prepare demo interior
+                      </button>
+                    </>
+                  ) : repeatDemoInteriorPreview.created.length > 0 ? (
+                    <>
+                      <span>
+                        <b>Floor 1 interior ready</b>
+                        <small>
+                          Copy the reviewed typical-unit furniture to matching reviewed upper-floor rooms.
+                        </small>
+                      </span>
+                      <button
+                        type="button"
+                        className="primary"
+                        disabled={busy}
+                        onClick={repeatDemoInteriorToUpperFloors}
+                      >
+                        Repeat interior to upper floors
+                      </button>
+                    </>
+                  ) : (
+                    <span className="interior-auto-complete">
+                      <b>Demo interior ready ✓</b>
+                      <small>
+                        Typical and matching repeated floors are furnished. Manual edits remain available below.
+                      </small>
+                    </span>
+                  )}
+                </div>
+              )}
             {Object.entries(catalog).map(([kind, c]) => (
               <button
                 key={kind}
