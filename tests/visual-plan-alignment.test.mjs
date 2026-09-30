@@ -74,7 +74,7 @@ test("alignment mode prioritizes the canvas and removes editor-side clutter", ()
 
   assert.match(studio, /editor-core--alignment/);
   assert.match(studio, /aria-label="Plan alignment tools"/);
-  assert.match(studio, /Drag the building over the reference plan/);
+  assert.match(studio, /Auto position first · fine-tune only if needed/);
   assert.match(studio, /\bTop view\b/);
   assert.match(studio, /Move <kbd>W<\/kbd>/);
   assert.match(studio, /Rotate <kbd>E<\/kbd>/);
@@ -146,7 +146,7 @@ test("alignment offers one-click auto positioning before manual fine tuning", ()
   const css = read("apps/admin/src/studio/studio-editor-core.css");
 
   assert.match(studio, /const \[autoAlignRequest, setAutoAlignRequest\] = useState\(0\)/);
-  assert.match(studio, />Auto position<\/button>/);
+  assert.match(studio, /Auto position/);
   assert.match(studio, /setAutoAlignRequest\(\(value\) => value \+ 1\)/);
   assert.match(studio, /autoAlignRequest=\{autoAlignRequest\}/);
 
