@@ -618,6 +618,58 @@ export default function Studio() {
     );
   }
 
+  async function adoptCurrentIntoExistingCloudProject() {
+    if (!cloudSession?.authenticated)
+      throw Error("Sign in to Engine Admin before adopting a cloud identity.");
+    const current = project;
+    if (!current) throw Error("No local project is selected.");
+    const slug = projectSlug(current);
+    const target = cloudProjects.find((entry) => entry.slug === slug);
+    if (!target)
+      throw Error(
+        "No matching Engine Cloud project is loaded. Refresh cloud projects first.",
+      );
+    if (target.id === current.id) {
+      setMessage("This local project already uses the Engine Cloud identity.");
+      return;
+    }
+    if (target.draftRevision) {
+      throw Error(
+        `Engine Cloud already has draft revision ${target.draftRevision}. Open the cloud project first instead of replacing it.`,
+      );
+    }
+    if (
+      !window.confirm(
+        `Attach this local design to the existing Engine Cloud project "${target.name}"? A .rekixo backup will download first. Existing public releases are not changed.`,
+      )
+    )
+      return;
+
+    const backupBlob = await storage.exportPackage(current);
+    download(
+      backupBlob,
+      `${projectSlug(current)}-before-cloud-adoption.rekixo.json`,
+    );
+
+    const adopted = await storage.adoptExistingCloudIdentity(
+      current,
+      files,
+      {
+        id: target.id,
+        slug: target.slug,
+        name: target.name,
+        location: target.location,
+      },
+    );
+    await refresh();
+    open(adopted.project);
+    setMessage(
+      adopted.backupProjects.length
+        ? `Local design attached to Engine Cloud identity. Backup downloaded, and ${adopted.backupProjects.length} conflicting local cache copy was preserved as a local backup. Cloud/public data is still unchanged; use Save latest to cloud when ready.`
+        : "Local design attached to Engine Cloud identity. Backup downloaded. Cloud/public data is still unchanged; use Save latest to cloud when ready.",
+    );
+  }
+
   async function syncCloudProject() {
     if (!cloudSession?.authenticated)
       throw Error("Sign in to Engine Admin before saving a cloud draft.");
@@ -783,6 +835,9 @@ export default function Studio() {
       cloudReleases,
     ),
     publishedCurrent = published.some(
+      (entry) => entry.slug === projectSlug(p),
+    ),
+    matchingCloudProject = cloudProjects.find(
       (entry) => entry.slug === projectSlug(p),
     ),
     visibleLocalProjects = list.filter((entry) => {
@@ -2956,6 +3011,40 @@ export default function Studio() {
                       ))}
                     </select>
                   </label>
+                  {matchingCloudProject &&
+                  matchingCloudProject.id !== p.id ? (
+                    <div className="studio-cloud-identity-notice">
+                      <small>
+                        Existing cloud identity found: {matchingCloudProject.name}
+                        {matchingCloudProject.draftRevision
+                          ? ` · cloud r${matchingCloudProject.draftRevision}`
+                          : " · no cloud draft yet"}
+                      </small>
+                      {matchingCloudProject.draftRevision ? (
+                        <button
+                          type="button"
+                          disabled={busy || dirty}
+                          onClick={() =>
+                            task(() =>
+                              openCloudProject(matchingCloudProject.slug),
+                            )
+                          }
+                        >
+                          Open existing cloud draft
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={busy || Boolean(review)}
+                          onClick={() =>
+                            task(adoptCurrentIntoExistingCloudProject)
+                          }
+                        >
+                          Attach current local design to cloud identity
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
                   <button
                     type="button"
                     disabled={busy || Boolean(review)}
