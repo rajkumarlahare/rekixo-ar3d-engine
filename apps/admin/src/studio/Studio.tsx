@@ -38,6 +38,7 @@ import {
 } from "./domain";
 import * as storage from "./storage";
 import * as cloud from "./cloud";
+import { rebindLocalProjectToEmptyCloud } from "./cloudIdentity";
 import {
   importPublished,
   loadPublished,
@@ -561,11 +562,16 @@ export default function Studio() {
       throw Error("Save your local changes before opening a cloud project.");
     try {
       const downloaded = await cloud.downloadProject(slug);
-      await storage.save(downloaded.project, downloaded.files);
+      const cached = await storage.cacheCloudProject(
+        downloaded.project,
+        downloaded.files,
+      );
       await refresh();
       open(downloaded.project);
       setMessage(
-        "Cloud draft downloaded and cached locally for offline editing.",
+        cached.backup
+          ? `Cloud draft opened. The previous local copy was preserved as "${cached.backup.name}".`
+          : "Cloud draft downloaded and cached locally for offline editing.",
       );
       return;
     } catch (reason) {
@@ -596,11 +602,16 @@ export default function Studio() {
         ...asset,
         projectId: summary.id,
       }));
-      await storage.save(projectFromPublished, ownedFiles);
+      const cached = await storage.cacheCloudProject(
+        projectFromPublished,
+        ownedFiles,
+      );
       await refresh();
       open(projectFromPublished);
       setMessage(
-        "This Engine project had no cloud draft. Studio was seeded from its read-only published design; Save to cloud will create revision 1 without changing the live public project.",
+        cached.backup
+          ? `Published Engine design opened under the correct cloud identity. Your previous local copy was preserved as "${cached.backup.name}". Save to cloud will create revision 1 without changing the live public project.`
+          : "This Engine project had no cloud draft. Studio was seeded from its read-only published design; Save to cloud will create revision 1 without changing the live public project.",
       );
       return;
     }
@@ -610,21 +621,52 @@ export default function Studio() {
     blank.slug = summary.slug;
     blank.location = summary.location ?? "";
     blank.updated = new Date().toISOString();
-    await storage.save(blank);
+    const cached = await storage.cacheCloudProject(blank);
     await refresh();
     open(blank);
     setMessage(
-      "This Engine project had no Studio draft, so an empty local authoring draft was created. Save to cloud will create revision 1; existing live models/scenes remain untouched.",
+      cached.backup
+        ? `Cloud identity opened with an empty draft. Your previous local copy was preserved as "${cached.backup.name}".`
+        : "This Engine project had no Studio draft, so an empty local authoring draft was created. Save to cloud will create revision 1; existing live models/scenes remain untouched.",
     );
   }
 
   async function syncCloudProject() {
     if (!cloudSession?.authenticated)
       throw Error("Sign in to Engine Admin before saving a cloud draft.");
-    const next = await cloud.syncProject(p, files);
-    await storage.save(next);
+
+    const slug = projectSlug(p);
+    const cloudMatch = cloudProjects.find((entry) => entry.slug === slug);
+    let sourceProject = p;
+    let sourceFiles = files;
+    let adoptedExistingIdentity = false;
+
+    if (cloudMatch && cloudMatch.id !== p.id) {
+      if (cloudMatch.draftRevision !== undefined)
+        throw Error(
+          "This slug already has a cloud draft. Open that cloud project first so a newer shared draft is never overwritten.",
+        );
+      if (
+        !window.confirm(
+          `The Engine registry already owns "${cloudMatch.name}" (${cloudMatch.slug}) but it has no Studio draft. Attach this current local design to that existing cloud identity? Your current local copy will be preserved as a local backup.`,
+        )
+      )
+        return;
+      const rebound = rebindLocalProjectToEmptyCloud(
+        p,
+        files,
+        cloudMatch,
+      );
+      sourceProject = rebound.project;
+      sourceFiles = rebound.files;
+      adoptedExistingIdentity = true;
+    }
+
+    const next = await cloud.syncProject(sourceProject, sourceFiles);
+    const cached = await storage.cacheCloudProject(next, sourceFiles);
     localEditSerial.current += 1;
     setProject(next);
+    setFiles(sourceFiles);
     setDirty(false);
     setCloudDirty(false);
     setLocalSaveState("saved");
@@ -634,7 +676,9 @@ export default function Studio() {
       refreshCloudReleases(next),
     ]);
     setMessage(
-      `Cloud draft saved · revision ${next.cloud?.revision ?? "—"} · local cache updated. Publishing remains a separate immutable step.`,
+      adoptedExistingIdentity
+        ? `Existing Engine cloud identity adopted safely · cloud revision ${next.cloud?.revision ?? "—"} · previous local copy preserved${cached.backup ? ` as "${cached.backup.name}"` : ""}. Publishing remains a separate immutable step.`
+        : `Cloud draft saved · revision ${next.cloud?.revision ?? "—"} · local cache updated. Publishing remains a separate immutable step.`,
     );
   }
   async function publishCurrentRelease() {
