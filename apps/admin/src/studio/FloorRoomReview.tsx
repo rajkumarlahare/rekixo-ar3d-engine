@@ -44,8 +44,8 @@ export default function FloorRoomReview({ scene, floorId, unit, selectedId, disa
     </svg>
     <div className="floor-review-unit-action">
       <span>
-        <strong>Unit ${activeUnit}</strong>
-        <small>${visible.filter((room) => room.verified).length}/${visible.length} rooms accepted</small>
+        <strong>Unit {activeUnit}</strong>
+        <small>{visible.filter((room) => room.verified).length}/{visible.length} rooms accepted</small>
       </span>
       <button type="button" className="primary"
         disabled={disabled || !visible.length || visible.every((room) => room.verified)}
