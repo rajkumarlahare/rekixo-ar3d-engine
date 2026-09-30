@@ -92,6 +92,36 @@ export interface MaterialOverride {
   emissive?: string;
   emissiveIntensity?: number;
 }
+
+export type SurfaceKind = "floor" | "ceiling" | "wall";
+export type SurfaceMaterialPresetId =
+  | "paint"
+  | "wood"
+  | "marble"
+  | "tile"
+  | "concrete"
+  | "custom";
+
+export interface SurfaceFinish {
+  roomId: string;
+  kind: SurfaceKind;
+  /** Boundary edge index; required only for wall finishes. */
+  edgeIndex?: number;
+  presetId: SurfaceMaterialPresetId;
+  color: string;
+  roughness: number;
+  metalness: number;
+}
+
+export function surfaceFinishKey(
+  roomId: string,
+  kind: SurfaceKind,
+  edgeIndex?: number,
+) {
+  return kind === "wall"
+    ? `${roomId}\u0000wall\u0000${edgeIndex ?? -1}`
+    : `${roomId}\u0000${kind}`;
+}
 export interface ModelTransform {
   x: number;
   y: number;
@@ -139,6 +169,8 @@ export interface Scene {
   scale: number;
   appearance?: SceneAppearance;
   materialOverrides?: MaterialOverride[];
+  /** Authored room finish overrides keyed by semantic floor/ceiling/wall surface. */
+  surfaceFinishes?: SurfaceFinish[];
   modelTransform?: ModelTransform;
   referenceLayers?: ReferenceLayer[];
   modelNodeTags?: ModelNodeTag[];
@@ -447,6 +479,15 @@ export function duplicateFloor(p: Project, floorId: string): Project {
       .filter((f) => remap.has(f.roomId))
       .map((f) => ({ ...f, id: id(), roomId: remap.get(f.roomId)! })),
   );
+  next.scene.surfaceFinishes = [
+    ...(next.scene.surfaceFinishes ?? []),
+    ...(p.scene.surfaceFinishes ?? [])
+      .filter((finish) => remap.has(finish.roomId))
+      .map((finish) => ({
+        ...finish,
+        roomId: remap.get(finish.roomId)!,
+      })),
+  ];
   validateProject(next);
   return next;
 }
@@ -465,6 +506,7 @@ export function newProject(name: string): Project {
       scale: 1,
       appearance: { ...DEFAULT_SCENE_APPEARANCE },
       materialOverrides: [],
+      surfaceFinishes: [],
       modelTransform: { x: 0, y: 0, z: 0, rotationY: 0 },
       referenceLayers: [],
       modelNodeTags: [],
@@ -496,6 +538,8 @@ export function validateScene(s: Scene): void {
     s.furniture.length > 2000 ||
     (s.openings !== undefined &&
       (!Array.isArray(s.openings) || s.openings.length > 5000)) ||
+    (s.surfaceFinishes !== undefined &&
+      (!Array.isArray(s.surfaceFinishes) || s.surfaceFinishes.length > 40000)) ||
     !number(s.scale, 0.0001, 10000)
   )
     throw Error("Invalid scene or scene limits exceeded.");
@@ -541,6 +585,41 @@ export function validateScene(s: Scene): void {
           !number(material.emissiveIntensity, 0, 20))
       )
         throw Error("Invalid material override values.");
+    }
+  }
+  if (s.surfaceFinishes !== undefined) {
+    const finishKeys = new Set<string>();
+    for (const finish of s.surfaceFinishes) {
+      const room = s.rooms.find((candidate) => candidate.id === finish.roomId);
+      const key = surfaceFinishKey(
+        finish.roomId,
+        finish.kind,
+        finish.edgeIndex,
+      );
+      if (
+        !room ||
+        !["floor", "ceiling", "wall"].includes(finish.kind) ||
+        !["paint", "wood", "marble", "tile", "concrete", "custom"].includes(
+          finish.presetId,
+        ) ||
+        !color(finish.color) ||
+        !number(finish.roughness, 0, 1) ||
+        !number(finish.metalness, 0, 1) ||
+        finishKeys.has(key)
+      )
+        throw Error("Invalid room surface finish.");
+      if (finish.kind === "wall") {
+        const edgeCount = roomBoundaryPoints(room).length;
+        if (
+          !Number.isInteger(finish.edgeIndex) ||
+          (finish.edgeIndex ?? -1) < 0 ||
+          (finish.edgeIndex ?? -1) >= edgeCount
+        )
+          throw Error("Invalid room wall finish edge.");
+      } else if (finish.edgeIndex !== undefined) {
+        throw Error("Only wall finishes may define an edge index.");
+      }
+      finishKeys.add(key);
     }
   }
   if (
