@@ -5,12 +5,13 @@ const COLORS = ["#68bce8", "#e8b26b", "#a699e5", "#75c9a8"];
 
 /** A review of saved geometry, never an alternative architectural model. */
 export default function FloorRoomReview({ scene, floorId, unit, selectedId, disabled,
-  repeat, onUnit, onSelect, onReview, onCorrect, onRepeat, onClose,
+  repeat, onUnit, onSelect, onReview, onReviewUnit, onCorrect, onRepeat, onClose,
 }: {
   scene: Scene; floorId: string; unit: string; selectedId: string; disabled: boolean;
   repeat: BatchRepeatPreview;
   onUnit: (unit: string) => void; onSelect: (room: Room) => void;
   onReview: (room: Room, accepted: boolean) => void;
+  onReviewUnit: (unit: string, accepted: boolean) => void;
   onCorrect: () => void; onRepeat: () => void; onClose: () => void;
 }) {
   const rooms = scene.rooms.filter((room) => room.floorId === floorId);
@@ -41,6 +42,17 @@ export default function FloorRoomReview({ scene, floorId, unit, selectedId, disa
         <text x={room.x} y={room.z} textAnchor="middle" fontSize={0.32} fill="currentColor">{room.name}</text>
       </g>)}
     </svg>
+    <div className="floor-review-unit-action">
+      <span>
+        <strong>Unit ${activeUnit}</strong>
+        <small>${visible.filter((room) => room.verified).length}/${visible.length} rooms accepted</small>
+      </span>
+      <button type="button" className="primary"
+        disabled={disabled || !visible.length || visible.every((room) => room.verified)}
+        onClick={() => onReviewUnit(activeUnit, true)}>
+        Accept whole unit
+      </button>
+    </div>
     <div className="floor-review-rooms" aria-label="Rooms to review">
       {visible.map((room) => <button type="button" key={room.id} aria-pressed={room.id === selectedId}
         onClick={() => onSelect(room)}><span>{room.name}</span><small>{room.verified ? "Accepted" : "Needs review"}</small></button>)}
