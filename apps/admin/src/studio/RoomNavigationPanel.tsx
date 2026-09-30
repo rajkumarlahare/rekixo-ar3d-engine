@@ -1,5 +1,6 @@
 import {
   reviewedDoorConnections,
+  verifiedRoomNavigationTargets,
   type Room,
   type Scene,
 } from "./domain";
@@ -25,6 +26,10 @@ export default function RoomNavigationPanel({
       return target ? [{ ...connection, room: target }] : [];
     },
   );
+  const fallbackTargets =
+    connections.length === 0
+      ? verifiedRoomNavigationTargets(scene, room.id)
+      : [];
   const openings = (scene.openings ?? []).filter((opening) =>
     opening.roomIds.includes(room.id),
   );
@@ -53,9 +58,39 @@ export default function RoomNavigationPanel({
               </button>
             </div>
           ))
+        ) : fallbackTargets.length ? (
+          <div className="walkthrough-demo-fallback">
+            <span>
+              <b>Demo room navigation</b>
+              <small>
+                No reviewed door geometry is available. Jumping changes only the
+                active reviewed room and does not claim a physical doorway.
+              </small>
+            </span>
+            <select
+              aria-label="Jump to reviewed room"
+              defaultValue=""
+              onChange={(event) => {
+                const target = fallbackTargets.find(
+                  (candidate) => candidate.id === event.currentTarget.value,
+                );
+                if (target) onWalkRoom(target);
+                event.currentTarget.value = "";
+              }}
+            >
+              <option value="" disabled>
+                Choose room…
+              </option>
+              {fallbackTargets.map((target) => (
+                <option key={target.id} value={target.id}>
+                  {target.name}
+                </option>
+              ))}
+            </select>
+          </div>
         ) : (
           <small>
-            No reviewed shared doors connect this room to another mapped room.
+            No reviewed shared doors or same-unit reviewed rooms are available.
           </small>
         )}
       </section>
