@@ -217,3 +217,16 @@ test("visual mapper exposes Unmapped Rooms and exact one-click placement", () =>
   assert.match(canvas, /width: Number\(stamp\.width\.toFixed\(3\)\)/);
   assert.match(canvas, /Click or tap once to place the exact room-sheet size/);
 });
+
+
+test("whole-unit review keeps the fast path while individual correction remains available", () => {
+  const review = read("apps/admin/src/studio/FloorRoomReview.tsx");
+  const studio = read("apps/admin/src/studio/Studio.tsx");
+
+  assert.match(review, /Accept whole unit/);
+  assert.match(review, /onReviewUnit\(activeUnit, true\)/);
+  assert.match(review, /Needs correction/);
+  assert.match(studio, /onReviewUnit=\{\(unit, accepted\) =>/);
+  assert.match(studio, /candidate\.floorId === isolateFloorId && candidate\.unit === unit/);
+  assert.match(studio, /verified: accepted/);
+});
