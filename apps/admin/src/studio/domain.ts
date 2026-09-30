@@ -893,6 +893,33 @@ export function reviewedDoorConnections(
   return rows;
 }
 
+export function verifiedRoomNavigationTargets(
+  scene: Scene,
+  roomId: string,
+  limit = 8,
+): Room[] {
+  const source = scene.rooms.find((room) => room.id === roomId);
+  if (!source?.verified || limit <= 0) return [];
+  const unit = source.unit.trim().toLowerCase();
+  if (!unit || unit === "common") return [];
+
+  return scene.rooms
+    .filter(
+      (room) =>
+        room.id !== source.id &&
+        room.verified &&
+        room.floorId === source.floorId &&
+        room.unit.trim().toLowerCase() === unit,
+    )
+    .sort(
+      (left, right) =>
+        Math.hypot(left.x - source.x, left.z - source.z) -
+          Math.hypot(right.x - source.x, right.z - source.z) ||
+        left.name.localeCompare(right.name),
+    )
+    .slice(0, limit);
+}
+
 function doorLandingPoint(
   scene: Scene,
   room: Room,
