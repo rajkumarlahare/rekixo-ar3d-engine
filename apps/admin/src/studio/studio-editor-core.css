@@ -3157,3 +3157,23 @@
     justify-content: center;
   }
 }
+
+
+/* One-click alignment assist */
+.alignment-auto-position {
+  min-width: 112px;
+  border-color: #4fc49b !important;
+  background: #1f8f6b !important;
+  color: #f5fffb !important;
+}
+
+.alignment-auto-position:hover:not(:disabled) {
+  background: #237d61 !important;
+  border-color: #74d8b5 !important;
+}
+
+@media (max-width: 760px) {
+  .alignment-auto-position {
+    flex: 1 1 100%;
+  }
+}
