@@ -48,6 +48,7 @@ export default function VisualRoomMapper({
   onReviewOpenings,
   onRepeatUnit,
   onClose,
+  canPrepare = true,
 }: {
   scene: Scene;
   floorId: string;
@@ -77,6 +78,7 @@ export default function VisualRoomMapper({
   onReviewOpenings: () => void;
   onRepeatUnit: (targetFloorId: string, targetUnit: string) => void;
   onClose: () => void;
+  canPrepare?: boolean;
 }) {
   const floorRooms = scene.rooms.filter((room) => room.floorId === floorId);
   const unmappedRows = roomSheetRows.filter(
@@ -173,7 +175,7 @@ export default function VisualRoomMapper({
               </div>
             )}
           </div>
-          {suggestedRows.length > 0 && (
+          {canPrepare && suggestedRows.length > 0 && (
             <div className="room-sheet-suggested-action">
               <span>
                 <strong>{suggestedRows.length} reconstructed placements ready</strong>

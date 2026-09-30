@@ -24,7 +24,7 @@ test("generic runtime has no first-project or Jyoti identity fallback", () => {
     ...walk("workers"),
   ].filter((file) => {
     if (!/\.(?:ts|tsx|js|mjs)$/.test(file)) return false;
-    const normalized = file.replaceAll("\\\\", "/");
+    const normalized = file.split(path.sep).join("/");
     // Project/profile bundles are positive-match, lazy-loaded modules. Tenant
     // identity may exist there; it must not exist in the generic entry/runtime.
     if (normalized.endsWith("/src/viewer/projectExperience.ts")) return false;

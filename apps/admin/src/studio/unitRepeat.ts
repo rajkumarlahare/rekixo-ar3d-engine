@@ -128,6 +128,9 @@ export function buildBatchRepeatPreview(
       ) {
         status = "blocked";
         reason = `Source unit has ${sourceRooms.length}/${series.expectedRoomCount} expected rooms; finish review first.`;
+      } else if (sourceRooms.some((room) => !room.verified)) {
+        status = "blocked";
+        reason = "Accept each source room after visual review before repeating this unit.";
       }
 
       rows.push({

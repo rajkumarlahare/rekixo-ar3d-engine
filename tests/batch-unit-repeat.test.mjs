@@ -92,6 +92,21 @@ function scene(rooms) {
   };
 }
 
+test("unreviewed source rooms block generation and never alter existing rooms", () => {
+  const original = scene([room("r1", "f1", "101", "Living"),
+    { ...room("r2", "f1", "101", "Bedroom"), verified: false }]);
+  const before = structuredClone(original);
+  const result = repeat.applyBatchRepeatPlan(original, "demo", skeleton, plan);
+  assert.equal(result.generatedTargets, 0);
+  assert.equal(result.blockedTargets, 2);
+  assert.match(result.rows[0].reason, /Accept each source room/);
+  assert.deepEqual(original, before);
+  original.rooms[1].verified = true;
+  const accepted = repeat.applyBatchRepeatPlan(original, "demo", skeleton, plan);
+  assert.equal(accepted.generatedTargets, 2);
+  assert.ok(accepted.createdRooms.every((entry) => !entry.verified));
+});
+
 test("batch repeat preview blocks incomplete source units", () => {
   const preview = repeat.buildBatchRepeatPreview(
     scene([room("r1", "f1", "101", "Living")]),
