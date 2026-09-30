@@ -140,6 +140,12 @@ export interface PlatformEngineProjectContract {
    * may ignore these fields and older projects remain valid without them.
    */
   model?: Model3D;
+  geoModel?: Model3D & {
+    variant: "geo-optimized";
+    sourceModelId: string;
+    sourceSha256?: string;
+    sha256?: string;
+  };
   release?: {
     id: string;
     version: number;
