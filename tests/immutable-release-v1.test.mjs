@@ -529,6 +529,54 @@ test("immutable GLB release assets support byte-range streaming", async () => {
   assert.equal(response.headers.get("accept-ranges"), "bytes");
   assert.equal(response.headers.get("content-range"), "bytes 0-3/1024");
   assert.equal(response.headers.get("content-length"), "4");
+  assert.equal(response.headers.get("access-control-allow-origin"), "*");
+  assert.equal(
+    response.headers.get("cross-origin-resource-policy"),
+    "cross-origin",
+  );
+  assert.match(
+    response.headers.get("access-control-expose-headers") || "",
+    /Content-Range/,
+  );
   assert.deepEqual(requestedRange, { offset: 0, length: 4 });
   assert.equal(Buffer.from(await response.arrayBuffer()).toString("ascii"), "glTF");
+});
+
+test("immutable GLB release assets answer browser CORS preflight without touching storage", async () => {
+  const response = await runtime.serveReleaseAsset(
+    {
+      DB: {
+        prepare() {
+          throw new Error("CORS preflight must not query D1.");
+        },
+      },
+      MODEL_ASSETS: {
+        async head() {
+          throw new Error("CORS preflight must not touch R2.");
+        },
+      },
+    },
+    "release_12345678",
+    "models",
+    "model_main",
+    new Request(
+      "https://ar3dstudio.in/3Dprojects/api/releases/release_12345678/models/model_main/content",
+      {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://admin.rekixo.com",
+          "Access-Control-Request-Method": "GET",
+          "Access-Control-Request-Headers": "range",
+        },
+      },
+    ),
+  );
+
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("access-control-allow-origin"), "*");
+  assert.equal(
+    response.headers.get("access-control-allow-methods"),
+    "GET,HEAD,OPTIONS",
+  );
+  assert.equal(response.headers.get("access-control-allow-headers"), "Range");
 });
