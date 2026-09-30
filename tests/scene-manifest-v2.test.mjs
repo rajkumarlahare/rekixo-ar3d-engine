@@ -126,6 +126,53 @@ test("Studio exports a project-neutral Scene Manifest V2 hierarchy", () => {
   assert.equal(manifest.catalogItems.find((item) => item.id === "sofa").source, "procedural");
 });
 
+
+
+test("Studio adapter exports authored room finishes as reusable V2 materials", () => {
+  const { p, files } = fixture();
+  p.scene.surfaceFinishes = [
+    {
+      roomId: "room-living-a1",
+      kind: "floor",
+      presetId: "wood",
+      color: "#a97952",
+      roughness: 0.58,
+      metalness: 0,
+    },
+    {
+      roomId: "room-living-a1",
+      kind: "wall",
+      edgeIndex: 0,
+      presetId: "paint",
+      color: "#f2eee7",
+      roughness: 0.88,
+      metalness: 0,
+    },
+  ];
+  const manifest = buildSceneManifestV2(p, files);
+  assertSceneManifestV2(manifest);
+
+  assert.equal(manifest.materials.length, 2);
+  const floor = manifest.surfaces.find(
+    (surface) => surface.id === "surface:room-living-a1:floor",
+  );
+  const wall = manifest.surfaces.find(
+    (surface) => surface.id === "surface:room-living-a1:wall:0",
+  );
+  assert.ok(floor.finish.materialId);
+  assert.ok(wall.finish.materialId);
+  assert.equal(
+    manifest.materials.find((material) => material.id === floor.finish.materialId)
+      .baseColor,
+    "#a97952",
+  );
+  assert.equal(
+    manifest.materials.find((material) => material.id === wall.finish.materialId)
+      .roughness,
+    0.88,
+  );
+});
+
 test("V1 editor coordinates map to explicit world furniture transforms", () => {
   const { p, files } = fixture();
   p.scene.floors[0].elevation = 3.2;
