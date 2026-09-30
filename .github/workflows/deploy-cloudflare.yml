@@ -136,6 +136,53 @@ jobs:
       - name: Prepare published designs and verify model checksums
         run: node scripts/prepare-published-designs.mjs
 
+      - name: Build and upload Geo model derivatives
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.deployment_scope == 'engine-all') ||
+          (github.event_name == 'push' && steps.public_runtime.outputs.changed == 'true')
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/rekixo-geo-models"
+          mkdir -p "$ROOT"
+          mapfile -t GEO_PROJECTS < <(
+            node -e '
+              const fs = require("fs");
+              const cfg = JSON.parse(fs.readFileSync("project-profiles/geo-model-derivatives.json", "utf8"));
+              if (cfg.format !== "rekixo-geo-model-derivative-registry" || cfg.version !== 1 || !Array.isArray(cfg.projects)) {
+                throw new Error("Invalid Geo derivative registry.");
+              }
+              for (const slug of cfg.projects) {
+                if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error("Invalid Geo derivative project slug: " + slug);
+                console.log(slug);
+              }
+            '
+          )
+
+          for SLUG in "${GEO_PROJECTS[@]}"; do
+            OUT="$ROOT/$SLUG"
+            mkdir -p "$OUT"
+            echo "Building Geo derivative for $SLUG"
+            node scripts/build-geo-model-derivative.mjs "$SLUG" "$OUT"
+
+            GEO_KEY="$(node -e 'const m=require(process.argv[1]); process.stdout.write(m.r2Key)' "$OUT/metadata.json")"
+            META_KEY="$(node -e 'const m=require(process.argv[1]); process.stdout.write(m.metadataR2Key)' "$OUT/metadata.json")"
+            GEO_SHA="$(node -e 'const m=require(process.argv[1]); process.stdout.write(m.geoSha256)' "$OUT/metadata.json")"
+
+            npx --yes wrangler@4 r2 object put "rekixo-3d-assets/$GEO_KEY"               --remote               --force               --file "$OUT/model.glb"               --content-type "model/gltf-binary"               --cache-control "public,max-age=31536000,immutable"
+
+            npx --yes wrangler@4 r2 object put "rekixo-3d-assets/$META_KEY"               --remote               --force               --file "$OUT/metadata.json"               --content-type "application/json"               --cache-control "public,max-age=31536000,immutable"
+
+            npx --yes wrangler@4 r2 object get "rekixo-3d-assets/$GEO_KEY"               --remote               --file "$OUT/verify.glb"
+            ACTUAL_SHA="$(sha256sum "$OUT/verify.glb" | awk '{print $1}')"
+            if [ "$ACTUAL_SHA" != "$GEO_SHA" ]; then
+              echo "::error::Uploaded Geo derivative checksum mismatch for $SLUG"
+              exit 1
+            fi
+            test "$(head -c 4 "$OUT/verify.glb")" = "glTF"
+            echo "Geo derivative uploaded and verified for $SLUG"
+          done
+
       - name: Deploy isolated 3D Admin Worker
         # Static publication assets are isolated from the existing D1/R2 project registry.
         # Preparation above must succeed before deploying this Worker.
