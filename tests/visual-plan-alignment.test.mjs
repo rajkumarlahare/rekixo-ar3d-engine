@@ -138,3 +138,23 @@ test("alignment mode offers fine nudge controls and identifies the faded plan", 
   assert.match(canvas, /Math\.min\(layer\.opacity, 0\.34\)/);
   assert.match(css, /\.alignment-canvas-legend/);
 });
+
+
+test("alignment offers one-click auto positioning before manual fine tuning", () => {
+  const studio = read("apps/admin/src/studio/Studio.tsx");
+  const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+  const css = read("apps/admin/src/studio/studio-editor-core.css");
+
+  assert.match(studio, /const \[autoAlignRequest, setAutoAlignRequest\] = useState\(0\)/);
+  assert.match(studio, />Auto position<\/button>/);
+  assert.match(studio, /setAutoAlignRequest\(\(value\) => value \+ 1\)/);
+  assert.match(studio, /autoAlignRequest=\{autoAlignRequest\}/);
+
+  assert.match(canvas, /autoAlignRequest\?: number/);
+  assert.match(canvas, /floor-tagged building meshes/);
+  assert.match(canvas, /runtime\.model\.rotation\.y = 0/);
+  assert.match(canvas, /referenceCentre\.x - modelCentre\.x/);
+  assert.match(canvas, /referenceCentre\.z - modelCentre\.z/);
+  assert.match(canvas, /rotationY: 0/);
+  assert.match(css, /\.alignment-auto-position/);
+});
