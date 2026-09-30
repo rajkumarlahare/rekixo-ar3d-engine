@@ -45,24 +45,25 @@ export function isRemovableUnsourcedDraft(scene: Scene, room: Room) {
   if (
     room.sourceAssetId ||
     room.sourcePackSourceId ||
-    room.sourceClaimIds?.length ||
-    room.mesh
+    room.sourceClaimIds?.length
   )
     return false;
 
   const source = room.source.trim().toLowerCase();
-  const draftOnly =
-    !source ||
-    source.startsWith("visual room mapper draft") ||
-    source.startsWith("visual room mapper polygon draft") ||
-    source.includes("layout draft");
-  if (draftOnly) return true;
-
   const supersededBrochureDraft =
     room.name.toLowerCase().includes("layout draft") &&
     source.includes("brochure page 2 living dimensions") &&
     source.includes("placement is a draft") &&
     hasReviewedReplacement(scene, room);
+  if (supersededBrochureDraft) return true;
 
-  return supersededBrochureDraft;
+  if (room.mesh) return false;
+
+  const draftOnly =
+    !source ||
+    source.startsWith("visual room mapper draft") ||
+    source.startsWith("visual room mapper polygon draft") ||
+    source.includes("layout draft");
+
+  return draftOnly;
 }

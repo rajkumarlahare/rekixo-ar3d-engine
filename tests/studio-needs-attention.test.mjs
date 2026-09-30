@@ -176,3 +176,48 @@ test("brochure-backed Ground layout draft is removable only when a reviewed repl
     false,
   );
 });
+
+
+test("mesh-bound superseded brochure draft may be removed while generic mesh drafts stay protected", () => {
+  const floors = [
+    { id: "ground", name: "Ground", elevation: 0 },
+    { id: "floor-1", name: "Floor 1", elevation: 3.048 },
+  ];
+  const ground = room({
+    mesh: "LegacyMesh",
+    source:
+      "Brochure page 2 living dimensions. Studio placement is a draft and needs alignment with the source material.",
+  });
+  const replacement = room({
+    id: "living-101",
+    name: "Living",
+    floorId: "floor-1",
+    unit: "101",
+    height: 2.75,
+    verified: true,
+    sourcePackSourceId: "jyoti-source-brochure",
+  });
+
+  assert.equal(
+    draftModule.isRemovableUnsourcedDraft(
+      scene({ floors, rooms: [ground, replacement] }),
+      ground,
+    ),
+    true,
+  );
+
+  assert.equal(
+    draftModule.isRemovableUnsourcedDraft(
+      scene({ rooms: [room({ mesh: "SomeMesh" })] }),
+      room({ mesh: "SomeMesh" }),
+    ),
+    false,
+  );
+});
+
+test("legacy room cleanup preserves model tags while clearing the removed room binding", () => {
+  const studio = fs.readFileSync("apps/admin/src/studio/Studio.tsx", "utf8");
+  assert.match(studio, /modelNodeTags: \(p\.scene\.modelNodeTags \?\? \[\]\)\.map/);
+  assert.match(studio, /if \(tag\.roomId !== key\) return tag/);
+  assert.match(studio, /delete preserved\.roomId/);
+});
