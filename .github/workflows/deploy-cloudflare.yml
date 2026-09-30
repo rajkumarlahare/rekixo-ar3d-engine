@@ -115,6 +115,34 @@ jobs:
           deploy
           --config wrangler.admin.jsonc
 
+      - name: Verify Engine Admin cloud readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          SESSION_URL="https://admin.rekixo.com/3Dprojects/api/cloud/session"
+          BODY="$(mktemp)"
+          STATUS="$(curl --location --silent --show-error --output "$BODY" --write-out '%{http_code}' "$SESSION_URL" || true)"
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Engine Admin session endpoint returned HTTP $STATUS"
+            head -c 1000 "$BODY" || true
+            exit 1
+          fi
+          node - "$BODY" <<'NODE'
+          const fs = require("fs");
+          const path = process.argv[2];
+          const payload = JSON.parse(fs.readFileSync(path, "utf8"));
+          if (payload.configured !== true) {
+            console.error("::error::Engine Admin secrets are not active on rekixo-3d-admin.");
+            process.exit(1);
+          }
+          if (payload.databaseReady !== true) {
+            console.error("::error::Engine Admin cloud schema is not ready on rekixo-3d-admin.");
+            process.exit(1);
+          }
+          console.log("Engine Admin secrets and cloud schema are active.");
+          NODE
+          rm -f "$BODY"
+
       - name: Deploy isolated 3D Public Worker
         # Manual engine-all always deploys Public. Normal main pushes deploy
         # Public only when public runtime code/dependencies changed.
