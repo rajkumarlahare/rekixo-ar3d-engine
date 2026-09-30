@@ -109,6 +109,42 @@ export interface SceneOpeningV2 {
   sillHeightM?: number;
 }
 
+export type SceneSurfaceKindV2 = "floor" | "ceiling" | "wall";
+
+export interface SceneSurfaceV2 {
+  id: string;
+  roomId: string;
+  kind: SceneSurfaceKindV2;
+  /**
+   * Wall index into the room boundary edges. Required only for wall surfaces.
+   * Floor and ceiling surfaces inherit the full room boundary.
+   */
+  edgeIndex?: number;
+  finish?: {
+    color?: string;
+    materialId?: string;
+  };
+}
+
+export interface SceneCatalogItemV2 {
+  /** Stable key referenced by furniture.catalogKey. */
+  id: string;
+  name: string;
+  category: string;
+  source: "procedural" | "asset";
+  /** R2/manifest asset for a web-ready GLB catalog item. */
+  assetId?: string;
+  /** Width, height, depth in metres. */
+  dimensionsM: [number, number, number];
+  /** Placement origin used by the editor/runtime. */
+  anchor: "floor-center";
+  /** Conservative width/depth collision envelope in metres. */
+  collisionFootprintM: [number, number];
+  styleTags: string[];
+  materialSlots: string[];
+  thumbnailAssetId?: string;
+}
+
 export interface SceneFurnitureV2 {
   id: string;
   roomId: string;
@@ -124,6 +160,19 @@ export interface SceneMaterialV2 {
   id: string;
   name: string;
   baseColor?: string;
+  roughness?: number;
+  metalness?: number;
+  opacity?: number;
+  emissive?: string;
+  emissiveIntensity?: number;
+  baseColorTextureAssetId?: string;
+  normalTextureAssetId?: string;
+  roughnessTextureAssetId?: string;
+  metalnessTextureAssetId?: string;
+  aoTextureAssetId?: string;
+  emissiveTextureAssetId?: string;
+  uvScale?: [number, number];
+  uvRotationRad?: number;
 }
 
 export interface SceneCameraV2 {
@@ -156,6 +205,12 @@ export interface SceneManifestV2 {
   floors: SceneFloorV2[];
   units: SceneUnitV2[];
   rooms: SceneRoomV2[];
+  /**
+   * Optional additive interior-authoring entities. Older V2 manifests may omit
+   * these fields and remain valid.
+   */
+  surfaces?: SceneSurfaceV2[];
+  catalogItems?: SceneCatalogItemV2[];
   openings: SceneOpeningV2[];
   furniture: SceneFurnitureV2[];
   materials: SceneMaterialV2[];
@@ -170,6 +225,8 @@ const MAX = {
   floors: 1000,
   units: 10000,
   rooms: 25000,
+  surfaces: 150000,
+  catalogItems: 10000,
   openings: 50000,
   furniture: 100000,
   materials: 10000,
@@ -206,6 +263,17 @@ function requireArray(
   key: keyof typeof MAX,
 ): unknown[] {
   const value = root[key];
+  if (!Array.isArray(value) || value.length > MAX[key] || !hasUniqueIds(value))
+    throw Error(`Invalid scene manifest ${key}.`);
+  return value;
+}
+
+function optionalArray(
+  root: Record<string, unknown>,
+  key: keyof typeof MAX,
+): unknown[] {
+  const value = root[key];
+  if (value === undefined) return [];
   if (!Array.isArray(value) || value.length > MAX[key] || !hasUniqueIds(value))
     throw Error(`Invalid scene manifest ${key}.`);
   return value;
@@ -369,6 +437,8 @@ export function assertSceneManifestV2(
   const floors = requireArray(value, "floors");
   const units = requireArray(value, "units");
   const rooms = requireArray(value, "rooms");
+  const surfaces = optionalArray(value, "surfaces");
+  const catalogItems = optionalArray(value, "catalogItems");
   const openings = requireArray(value, "openings");
   const furniture = requireArray(value, "furniture");
   const materials = requireArray(value, "materials");
@@ -403,6 +473,7 @@ export function assertSceneManifestV2(
     ]),
   );
   const materialIds = idSet(materials);
+  const catalogItemIds = idSet(catalogItems);
 
   for (const item of assets) {
     const a = item as Record<string, unknown>;
@@ -559,6 +630,81 @@ export function assertSceneManifestV2(
     }
   }
 
+  for (const item of surfaces) {
+    const surface = item as Record<string, unknown>;
+    const room = roomById.get(surface.roomId as string);
+    if (
+      !room ||
+      !["floor", "ceiling", "wall"].includes(surface.kind as string)
+    )
+      throw Error("Invalid scene surface.");
+
+    const boundary = room.boundary as Record<string, unknown>;
+    const edgeCount =
+      boundary.kind === "rectangle"
+        ? 4
+        : Array.isArray(boundary.points)
+          ? boundary.points.length
+          : 0;
+    if (surface.kind === "wall") {
+      if (
+        !Number.isInteger(surface.edgeIndex) ||
+        !isNumber(surface.edgeIndex, 0, Math.max(edgeCount - 1, 0))
+      )
+        throw Error("Invalid wall surface edge.");
+    } else if (surface.edgeIndex !== undefined) {
+      throw Error("Only wall surfaces may define an edge index.");
+    }
+
+    if (surface.finish !== undefined) {
+      if (!isObject(surface.finish)) throw Error("Invalid surface finish.");
+      const finish = surface.finish as Record<string, unknown>;
+      if (finish.color !== undefined && !isColor(finish.color))
+        throw Error("Invalid surface finish color.");
+      if (
+        finish.materialId !== undefined &&
+        !materialIds.has(finish.materialId as string)
+      )
+        throw Error("Invalid surface material.");
+    }
+  }
+
+  for (const item of catalogItems) {
+    const catalogItem = item as Record<string, unknown>;
+    const asset =
+      catalogItem.assetId === undefined
+        ? undefined
+        : assetById.get(catalogItem.assetId as string);
+    const thumbnail =
+      catalogItem.thumbnailAssetId === undefined
+        ? undefined
+        : assetById.get(catalogItem.thumbnailAssetId as string);
+    const styleTags = catalogItem.styleTags;
+    const materialSlots = catalogItem.materialSlots;
+    if (
+      !isText(catalogItem.name, 300) ||
+      !isText(catalogItem.category, 160) ||
+      !["procedural", "asset"].includes(catalogItem.source as string) ||
+      !isVector(catalogItem.dimensionsM, 3, 0.01, 1000) ||
+      catalogItem.anchor !== "floor-center" ||
+      !isVector(catalogItem.collisionFootprintM, 2, 0.01, 1000) ||
+      !Array.isArray(styleTags) ||
+      styleTags.length > 50 ||
+      new Set(styleTags as unknown[]).size !== styleTags.length ||
+      styleTags.some((tag) => !isText(tag, 100)) ||
+      !Array.isArray(materialSlots) ||
+      materialSlots.length > 50 ||
+      new Set(materialSlots as unknown[]).size !== materialSlots.length ||
+      materialSlots.some((slot) => !isText(slot, 100)) ||
+      (catalogItem.source === "asset" &&
+        (!asset || asset.role !== "catalog")) ||
+      (catalogItem.source === "procedural" &&
+        catalogItem.assetId !== undefined) ||
+      (catalogItem.thumbnailAssetId !== undefined && !thumbnail)
+    )
+      throw Error("Invalid scene catalog item.");
+  }
+
   for (const item of openings) {
     const opening = item as Record<string, unknown>;
     const openingRooms = Array.isArray(opening.roomIds)
@@ -586,7 +732,8 @@ export function assertSceneManifestV2(
     const instance = item as Record<string, unknown>;
     if (
       !roomIds.has(instance.roomId as string) ||
-      !isText(instance.catalogKey, 300)
+      !isText(instance.catalogKey, 300) ||
+      (catalogItems.length > 0 && !catalogItemIds.has(instance.catalogKey as string))
     )
       throw Error("Invalid scene furniture.");
     validateTransform(instance.transform);
@@ -605,9 +752,35 @@ export function assertSceneManifestV2(
 
   for (const item of materials) {
     const material = item as Record<string, unknown>;
+    const textureFields = [
+      "baseColorTextureAssetId",
+      "normalTextureAssetId",
+      "roughnessTextureAssetId",
+      "metalnessTextureAssetId",
+      "aoTextureAssetId",
+      "emissiveTextureAssetId",
+    ] as const;
+    const invalidTexture = textureFields.some((field) => {
+      if (material[field] === undefined) return false;
+      const textureAsset = assetById.get(material[field] as string);
+      return !textureAsset || textureAsset.role !== "texture";
+    });
     if (
       !isText(material.name, 300) ||
-      (material.baseColor !== undefined && !isColor(material.baseColor))
+      (material.baseColor !== undefined && !isColor(material.baseColor)) ||
+      (material.roughness !== undefined &&
+        !isNumber(material.roughness, 0, 1)) ||
+      (material.metalness !== undefined &&
+        !isNumber(material.metalness, 0, 1)) ||
+      (material.opacity !== undefined && !isNumber(material.opacity, 0, 1)) ||
+      (material.emissive !== undefined && !isColor(material.emissive)) ||
+      (material.emissiveIntensity !== undefined &&
+        !isNumber(material.emissiveIntensity, 0, 1000)) ||
+      (material.uvScale !== undefined &&
+        !isVector(material.uvScale, 2, 0.000001, 1e6)) ||
+      (material.uvRotationRad !== undefined &&
+        !isNumber(material.uvRotationRad, -Math.PI * 100, Math.PI * 100)) ||
+      invalidTexture
     )
       throw Error("Invalid scene material.");
   }
