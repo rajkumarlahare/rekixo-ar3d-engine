@@ -29,6 +29,7 @@ import {
   type Room,
   type RoomPoint,
   type Scene as SceneData,
+  type SurfaceKind,
 } from "./domain";
 
 export type View = "building" | "rooms" | "walk";
@@ -80,6 +81,11 @@ interface Props {
   onSelect: (id: string) => void;
   onMesh: (name: string) => void;
   onModelNodeSelect?: (node: ModelNodeSummary) => void;
+  onSurfaceSelect?: (surface: {
+    roomId: string;
+    kind: SurfaceKind;
+    edgeIndex?: number;
+  }) => void;
   selectedMesh?: string;
   selectedMeshKey?: string;
   transformMode?: TransformMode;
@@ -1076,6 +1082,26 @@ export default function SceneCanvas(props: Props) {
           }
         }
         if (latest.current.view !== "building") {
+          const surfaceKind = hit.object.userData.surfaceKind as
+            | SurfaceKind
+            | undefined;
+          const surfaceRoomId = hit.object.userData.surfaceRoomId as
+            | string
+            | undefined;
+          if (surfaceKind && surfaceRoomId) {
+            latest.current.onSurfaceSelect?.({
+              roomId: surfaceRoomId,
+              kind: surfaceKind,
+              ...(surfaceKind === "wall" &&
+              Number.isInteger(hit.object.userData.surfaceEdgeIndex)
+                ? {
+                    edgeIndex: Number(
+                      hit.object.userData.surfaceEdgeIndex,
+                    ),
+                  }
+                : {}),
+            });
+          }
           let n: T.Object3D | null = hit.object;
           while (n && !n.userData.selectId) n = n.parent;
           if (n) latest.current.onSelect(n.userData.selectId);
@@ -1608,6 +1634,8 @@ export default function SceneCanvas(props: Props) {
         Boolean(props.roomMapEnabled && props.view === "building"),
         room.id === props.selected,
         focusedInterior,
+        props.scene,
+        props.view === "walk",
       );
       if (
         room.id === props.selected &&
