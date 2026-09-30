@@ -8,8 +8,16 @@ if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
 if (password.length < 12)
   throw new Error("Set ENGINE_ADMIN_PASSWORD to a dedicated 12+ character password.");
 
+// Must match workers/admin-cloud.mjs. Cloudflare workerd caps PBKDF2 at 100,000.
+const PASSWORD_PBKDF2_ITERATIONS = 100000;
 const salt = randomBytes(16);
-const hash = pbkdf2Sync(password, salt, 210000, 32, "sha256");
+const hash = pbkdf2Sync(
+  password,
+  salt,
+  PASSWORD_PBKDF2_ITERATIONS,
+  32,
+  "sha256",
+);
 const sessionSecret = randomBytes(48).toString("base64");
 
 process.stdout.write(
