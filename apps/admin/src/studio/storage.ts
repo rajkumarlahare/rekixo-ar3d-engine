@@ -71,6 +71,141 @@ export async function save(p: Project, files: Asset[] = []) {
 }
 export const MAX_STUDIO_ASSET_BYTES = 64 * 1024 * 1024;
 
+export interface CloudIdentityTarget {
+  id: string;
+  slug: string;
+  name: string;
+  location?: string;
+}
+
+/**
+ * Re-keys the currently selected local draft onto an existing Engine Cloud
+ * project identity without touching Engine Cloud or any active release.
+ *
+ * If the target identity is already cached locally, that cache is preserved
+ * as an explicitly renamed local backup before the selected draft takes over
+ * the canonical cloud identity. The IndexedDB transaction is atomic.
+ */
+export async function adoptExistingCloudIdentity(
+  source: Project,
+  files: Asset[],
+  target: CloudIdentityTarget,
+) {
+  validateProject(source);
+  if (!/^[A-Za-z0-9_-]{8,120}$/.test(target.id))
+    throw Error("Invalid cloud project identity.");
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(target.slug))
+    throw Error("Invalid cloud project slug.");
+  if (!target.name.trim())
+    throw Error("Cloud project name is required.");
+
+  const fileById = new Map(files.map((file) => [file.id, file]));
+  for (const assetId of source.assets) {
+    const file = fileById.get(assetId) ?? (await asset(assetId));
+    if (!file || file.projectId !== source.id)
+      throw Error(
+        "Current local project is missing an owned asset; cloud adoption stopped.",
+      );
+  }
+
+  const database = await db();
+  const existingProjects = await read<Project[]>("projects");
+  const existingAssets = await read<Asset[]>("assets");
+  const conflicts = existingProjects.filter(
+    (candidate) =>
+      candidate.id !== source.id &&
+      (candidate.id === target.id || projectSlug(candidate) === target.slug),
+  );
+
+  const occupiedSlugs = new Set(
+    existingProjects
+      .filter(
+        (candidate) =>
+          candidate.id !== source.id &&
+          !conflicts.some((conflict) => conflict.id === candidate.id),
+      )
+      .map(projectSlug),
+  );
+  occupiedSlugs.add(target.slug);
+
+  const backupProjects: Project[] = [];
+  const backupAssetOwnerByOriginalOwner = new Map<string, string>();
+  for (const conflict of conflicts) {
+    let backupId = conflict.id;
+    if (backupId === target.id) backupId = id();
+    let backupSlug = `${slugFromName(conflict.name)}-local-backup-${backupId
+      .slice(0, 8)
+      .toLowerCase()}`;
+    let suffix = 2;
+    while (occupiedSlugs.has(backupSlug)) {
+      backupSlug = `${slugFromName(conflict.name)}-local-backup-${backupId
+        .slice(0, 8)
+        .toLowerCase()}-${suffix++}`;
+    }
+    occupiedSlugs.add(backupSlug);
+    const backup: Project = {
+      ...structuredClone(conflict),
+      id: backupId,
+      slug: backupSlug,
+      name: `${conflict.name} (local backup)`,
+      updated: new Date().toISOString(),
+    };
+    delete backup.cloud;
+    validateProject(backup);
+    backupProjects.push(backup);
+    backupAssetOwnerByOriginalOwner.set(conflict.id, backupId);
+  }
+
+  const adopted: Project = {
+    ...structuredClone(source),
+    id: target.id,
+    slug: target.slug,
+    name: target.name.trim(),
+    location: target.location ?? source.location ?? "",
+    updated: new Date().toISOString(),
+  };
+  delete adopted.cloud;
+  validateProject(adopted);
+
+  return new Promise<{
+    project: Project;
+    backupProjects: Project[];
+  }>((resolve, reject) => {
+    const tx = database.transaction(["projects", "assets"], "readwrite");
+    const projectStore = tx.objectStore("projects");
+    const assetStore = tx.objectStore("assets");
+
+    projectStore.delete(source.id);
+    for (const conflict of conflicts) projectStore.delete(conflict.id);
+    for (const backup of backupProjects) projectStore.put(backup);
+    projectStore.put(adopted);
+
+    for (const stored of existingAssets) {
+      if (stored.projectId === source.id) {
+        assetStore.put({ ...stored, projectId: target.id });
+        continue;
+      }
+      const backupOwner = backupAssetOwnerByOriginalOwner.get(stored.projectId);
+      if (backupOwner) assetStore.put({ ...stored, projectId: backupOwner });
+    }
+
+    for (const file of files) {
+      if (file.projectId === source.id)
+        assetStore.put({ ...file, projectId: target.id });
+    }
+
+    tx.oncomplete = () =>
+      resolve({
+        project: adopted,
+        backupProjects,
+      });
+    tx.onerror = () =>
+      reject(tx.error || Error("Cloud identity adoption failed."));
+    tx.onabort = () =>
+      reject(tx.error || Error("Cloud identity adoption was rolled back."));
+  });
+}
+
 export async function makeAsset(file: File, projectId: string): Promise<Asset> {
   if (file.size > MAX_STUDIO_ASSET_BYTES)
     throw Error("Use a model/reference smaller than 64 MB so it can sync to Engine Cloud.");
