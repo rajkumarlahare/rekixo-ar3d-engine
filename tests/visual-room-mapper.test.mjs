@@ -67,3 +67,18 @@ test("polygon mapper snaps to existing room walls and exports polygon callbacks"
   assert.match(studio, /generateBatchRepeatedUnits/);
   assert.match(studio, /applyBatchRepeatPlan/);
 });
+
+
+test("selected floor can prepare profile rooms without manual mapping", () => {
+  const studio = read("apps/admin/src/studio/Studio.tsx");
+
+  assert.match(studio, /function prepareSuggestedTypicalFloor\([\s\S]*openMapper = true/);
+  assert.match(studio, /setShowRoomMapper\(openMapper\)/);
+  assert.match(studio, /editor-prepare-floor-action/);
+  assert.match(studio, /prepareSuggestedTypicalFloor\(isolateFloorId, false\)/);
+  assert.match(studio, /Prepare\{" "\}/);
+  assert.match(studio, /setRoomMapFloorId\(next\)/);
+  assert.match(studio, /if \(room\?\.floorId !== next\)/);
+  assert.ok(studio.includes('setSelected("");'));
+  assert.ok(studio.includes('setRoomId("");'));
+});
