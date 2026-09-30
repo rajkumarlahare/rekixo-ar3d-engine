@@ -93,6 +93,7 @@ interface Props {
   showReferenceLayers?: boolean;
   modelTransformEnabled?: boolean;
   alignmentMode?: boolean;
+  autoAlignRequest?: number;
   roomMapEnabled?: boolean;
   roomDraw?: {
     enabled: boolean;
@@ -1769,6 +1770,68 @@ export default function SceneCanvas(props: Props) {
     props.roomPolygonEdit?.roomId,
     props.scene.rooms,
   ]);
+
+  useEffect(() => {
+    if (!props.alignmentMode || !props.autoAlignRequest) return;
+    const runtime = api.current;
+    if (!runtime) return;
+
+    const referenceRoot = [...runtime.references.children].reverse().find(
+      (child) => child.visible,
+    );
+    if (!referenceRoot) {
+      setStatus("Calibrate and show a reference plan first.");
+      return;
+    }
+
+    runtime.model.rotation.y = 0;
+    runtime.model.updateWorldMatrix(true, true);
+    referenceRoot.updateWorldMatrix(true, true);
+
+    const tagged = new Map(
+      (props.scene.modelNodeTags ?? [])
+        .filter((tag) => Boolean(tag.floorId) && tag.semantic !== "ignore")
+        .map((tag) => [`${tag.nodeName}::${tag.occurrence}`, tag]),
+    );
+    const buildingBox = new T.Box3();
+    let taggedMeshCount = 0;
+    runtime.model.traverse((node) => {
+      if (!(node instanceof T.Mesh)) return;
+      const key = `${node.userData.studioNodeName ?? node.name}::${node.userData.studioNodeOccurrence ?? 1}`;
+      if (!tagged.has(key)) return;
+      buildingBox.expandByObject(node);
+      taggedMeshCount += 1;
+    });
+    const modelBox =
+      taggedMeshCount > 0 && !buildingBox.isEmpty()
+        ? buildingBox
+        : new T.Box3().setFromObject(runtime.model);
+    const referenceBox = new T.Box3().setFromObject(referenceRoot);
+    if (modelBox.isEmpty() || referenceBox.isEmpty()) {
+      setStatus("Auto position could not measure the model/reference bounds.");
+      return;
+    }
+
+    const modelCentre = modelBox.getCenter(new T.Vector3());
+    const referenceCentre = referenceBox.getCenter(new T.Vector3());
+    runtime.model.position.x += referenceCentre.x - modelCentre.x;
+    runtime.model.position.z += referenceCentre.z - modelCentre.z;
+    runtime.model.updateWorldMatrix(true, true);
+
+    props.onTransformCommit?.({
+      kind: "model",
+      x: runtime.model.position.x,
+      y: runtime.model.position.y,
+      z: runtime.model.position.z,
+      rotationY: 0,
+    });
+    runtime.focus();
+    setStatus(
+      taggedMeshCount
+        ? `Auto positioned using ${taggedMeshCount} floor-tagged building meshes. Fine-tune only if needed.`
+        : "Auto positioned using the model bounds. Fine-tune only if needed.",
+    );
+  }, [props.autoAlignRequest]);
 
   useEffect(() => {
     if (props.focusRequest === undefined) return;
