@@ -4,14 +4,6 @@
   "compatibility_date": "2026-09-16",
   "main": "./workers/admin.mjs",
   "workers_dev": false,
-  "secrets": {
-    "required": [
-      "ENGINE_ADMIN_EMAIL",
-      "ENGINE_ADMIN_PASSWORD_SALT",
-      "ENGINE_ADMIN_PASSWORD_HASH",
-      "ENGINE_ADMIN_SESSION_SECRET"
-    ]
-  },
   "routes": [
     {
       "pattern": "admin.rekixo.com/3Dprojects",

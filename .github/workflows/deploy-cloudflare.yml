@@ -103,6 +103,36 @@ jobs:
             npx --yes wrangler@4 r2 bucket create rekixo-3d-assets
           fi
 
+      - name: Verify remote Engine Admin secret names
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$(mktemp)"
+          npx --yes wrangler@4 secret list --config wrangler.admin.jsonc --format json > "$OUT"
+          node - "$OUT" <<'NODE'
+          const fs = require("fs");
+          const path = process.argv[2];
+          const payload = JSON.parse(fs.readFileSync(path, "utf8"));
+          const names = new Set(
+            (Array.isArray(payload) ? payload : payload?.secrets || [])
+              .map((item) => typeof item === "string" ? item : item?.name)
+              .filter(Boolean)
+          );
+          const required = [
+            "ENGINE_ADMIN_EMAIL",
+            "ENGINE_ADMIN_PASSWORD_SALT",
+            "ENGINE_ADMIN_PASSWORD_HASH",
+            "ENGINE_ADMIN_SESSION_SECRET",
+          ];
+          const missing = required.filter((name) => !names.has(name));
+          if (missing.length) {
+            console.error("::error::Missing remote Engine Admin secrets: " + missing.join(", "));
+            process.exit(1);
+          }
+          console.log("Remote Engine Admin secret names are present.");
+          NODE
+          rm -f "$OUT"
+
       - name: Prepare published designs and verify model checksums
         run: node scripts/prepare-published-designs.mjs
 
@@ -114,6 +144,27 @@ jobs:
           npx --yes wrangler@4
           deploy
           --config wrangler.admin.jsonc
+
+      - name: Verify Engine Admin invalid-login boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOGIN_URL="https://admin.rekixo.com/3Dprojects/api/cloud/login"
+          BODY="$(mktemp)"
+          STATUS="$(curl --silent --show-error --output "$BODY" --write-out '%{http_code}' \
+            --request POST \
+            --header 'Origin: https://admin.rekixo.com' \
+            --header 'Content-Type: application/json' \
+            --data '{"email":"engine-admin@rekixo.com","password":"definitely-wrong-password"}' \
+            "$LOGIN_URL" || true)"
+          if [ "$STATUS" != "401" ]; then
+            echo "::error::Engine Admin invalid-login boundary returned HTTP $STATUS"
+            head -c 1200 "$BODY" || true
+            exit 1
+          fi
+          grep -Fq 'Invalid email or password.' "$BODY"
+          rm -f "$BODY"
+          echo "Engine Admin invalid-login boundary verified."
 
       - name: Verify Engine Admin cloud readiness
         shell: bash
