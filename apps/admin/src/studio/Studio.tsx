@@ -631,6 +631,52 @@ export default function Studio() {
     );
   }
 
+  async function adoptCurrentBackupToEmptyCloud(
+    target: (typeof cloudProjects)[number],
+  ) {
+    if (!cloudSession?.authenticated)
+      throw Error("Sign in to Engine Admin before attaching a local backup.");
+    if (target.draftRevision !== undefined)
+      throw Error(
+        "This Engine Cloud project already has a draft. Open that draft instead of replacing it.",
+      );
+    if (
+      !window.confirm(
+        `Use this preserved local project (${p.scene.rooms.length} rooms) as the first cloud draft for "${target.name}"? A downloadable .rekixo backup will be prepared first. The active public release will not change until you explicitly publish.`,
+      )
+    )
+      return;
+
+    const backupBlob = await storage.exportPackage(p);
+    download(
+      backupBlob,
+      `${projectSlug(p)}-before-cloud-attach.rekixo.json`,
+    );
+
+    const rebound = rebindLocalProjectToEmptyCloud(
+      p,
+      files,
+      target,
+      { allowExplicitTarget: true },
+    );
+    const next = await cloud.syncProject(rebound.project, rebound.files);
+    await storage.cacheCloudProject(next, rebound.files);
+    localEditSerial.current += 1;
+    setProject(next);
+    setFiles(rebound.files);
+    setDirty(false);
+    setCloudDirty(false);
+    setLocalSaveState("saved");
+    await Promise.all([
+      refresh(),
+      refreshCloudProjects(),
+      refreshCloudReleases(next),
+    ]);
+    setMessage(
+      `Preserved local design attached to "${target.name}" safely · cloud revision ${next.cloud?.revision ?? "—"} · ${next.scene.rooms.length} rooms retained. The active public release is unchanged until Publish.`,
+    );
+  }
+
   async function syncCloudProject() {
     if (!cloudSession?.authenticated)
       throw Error("Sign in to Engine Admin before saving a cloud draft.");
@@ -829,6 +875,18 @@ export default function Studio() {
     publishedCurrent = published.some(
       (entry) => entry.slug === projectSlug(p),
     ),
+    localBackupBaseName = p.name
+      .replace(/\s*\(local backup\)\s*$/i, "")
+      .trim(),
+    backupCloudTarget = !p.cloud && /\(local backup\)\s*$/i.test(p.name)
+      ? cloudProjects.find(
+          (entry) =>
+            entry.draftRevision === undefined &&
+            (entry.name.trim().toLowerCase() ===
+              localBackupBaseName.toLowerCase() ||
+              projectSlug(p).startsWith(`${entry.slug}-local-backup-`)),
+        )
+      : undefined,
     visibleLocalProjects = list.filter((entry) => {
       const query = projectSearch.trim().toLowerCase();
       return (
@@ -3000,9 +3058,38 @@ export default function Studio() {
                       ))}
                     </select>
                   </label>
+                  {backupCloudTarget ? (
+                    <div className="studio-cloud-identity-notice">
+                      <small>
+                        Preserved local backup detected · {p.scene.rooms.length} rooms.
+                        Existing cloud identity "{backupCloudTarget.name}" has no
+                        shared Studio draft yet.
+                      </small>
+                      <button
+                        type="button"
+                        disabled={busy || dirty || Boolean(review)}
+                        onClick={() =>
+                          task(() =>
+                            adoptCurrentBackupToEmptyCloud(backupCloudTarget),
+                          )
+                        }
+                      >
+                        Use this backup for {backupCloudTarget.name} cloud
+                      </button>
+                    </div>
+                  ) : null}
                   <button
                     type="button"
-                    disabled={busy || Boolean(review)}
+                    disabled={
+                      busy ||
+                      Boolean(review) ||
+                      Boolean(backupCloudTarget)
+                    }
+                    title={
+                      backupCloudTarget
+                        ? "Use the explicit backup-to-cloud action above so this preserved design cannot create a second cloud project."
+                        : undefined
+                    }
                     onClick={() => task(syncCloudProject)}
                   >
                     Save latest to cloud
