@@ -2,11 +2,19 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { NodeIO } from "@gltf-transform/core";
+import {
+  center,
+  dedup,
+  join,
+  palette,
+  prune,
+  simplify,
+  weld,
+} from "@gltf-transform/functions";
+import { MeshoptSimplifier } from "meshoptimizer";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-
-const CLI = ["--yes", "@gltf-transform/cli@4.5.1"];
 
 function fail(message) {
   throw new Error(message);
@@ -30,13 +38,6 @@ function parseGlbJson(buffer) {
   );
 }
 
-function runTransform(args) {
-  execFileSync("npx", [...CLI, ...args], {
-    stdio: "inherit",
-    env: process.env,
-  });
-}
-
 function parseGlb(loader, buffer) {
   return new Promise((resolve, reject) => {
     loader.parse(
@@ -57,7 +58,7 @@ async function geometryStats(buffer) {
   const scene = gltf.scene;
   scene.updateMatrixWorld(true);
   const bounds = new THREE.Box3().setFromObject(scene);
-  const center = bounds.getCenter(new THREE.Vector3());
+  const centerPoint = bounds.getCenter(new THREE.Vector3());
   const size = bounds.getSize(new THREE.Vector3());
   let meshes = 0;
   let vertices = 0;
@@ -75,7 +76,7 @@ async function geometryStats(buffer) {
     bounds: {
       min: bounds.min.toArray(),
       max: bounds.max.toArray(),
-      center: center.toArray(),
+      center: centerPoint.toArray(),
       size: size.toArray(),
     },
     meshes,
@@ -99,6 +100,52 @@ async function fetchBytes(url) {
   return Buffer.from(await response.arrayBuffer());
 }
 
+async function buildCandidate(sourcePath, outputPath, ratio, error) {
+  const io = new NodeIO();
+  const document = await io.read(sourcePath);
+
+  // Architectural/CAD exports often carry split vertex normals that prevent
+  // meshoptimizer from collapsing geometry. For the map-only derivative we can
+  // omit them: glTF normals are optional and the renderer can derive hard
+  // surface normals. The immutable source GLB remains untouched.
+  for (const mesh of document.getRoot().listMeshes()) {
+    for (const primitive of mesh.listPrimitives()) {
+      primitive.getAttribute("NORMAL")?.dispose();
+      primitive.getAttribute("TANGENT")?.dispose();
+    }
+  }
+
+  await MeshoptSimplifier.ready;
+  await document.transform(
+    center({ pivot: "below" }),
+    weld(),
+    dedup(),
+    palette({ min: 2 }),
+    prune({
+      keepAttributes: false,
+      keepIndices: false,
+      keepLeaves: false,
+      keepSolidTextures: false,
+    }),
+    join({ keepNamed: false, keepMeshes: false }),
+    simplify({
+      simplifier: MeshoptSimplifier,
+      ratio,
+      error,
+      lockBorder: false,
+    }),
+    prune({
+      keepAttributes: false,
+      keepIndices: false,
+      keepLeaves: false,
+      keepSolidTextures: false,
+    }),
+  );
+
+  await io.write(outputPath, document);
+  return fs.readFileSync(outputPath);
+}
+
 const slug = String(process.argv[2] || "").trim().toLowerCase();
 const outputDir = path.resolve(process.argv[3] || "");
 if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))
@@ -107,7 +154,8 @@ if (!outputDir) fail("Output directory is required.");
 
 fs.mkdirSync(outputDir, { recursive: true });
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "rekixo-geo-model-"));
-const projectUrl = `https://ar3dstudio.in/3Dprojects/api/projects/${encodeURIComponent(slug)}`;
+const projectUrl =
+  `https://ar3dstudio.in/3Dprojects/api/projects/${encodeURIComponent(slug)}`;
 const payload = await fetchJson(projectUrl);
 const model = payload?.model;
 const release = payload?.release;
@@ -131,53 +179,78 @@ if ((sourceJson.extensionsRequired || []).length)
   fail("Source GLB requires unsupported glTF extensions.");
 
 const sourcePath = path.join(workDir, "source.glb");
-const centeredPath = path.join(workDir, "centered.glb");
-const weldedPath = path.join(workDir, "welded.glb");
-const dedupPath = path.join(workDir, "dedup.glb");
-const prunedPath = path.join(workDir, "pruned.glb");
-const joinedPath = path.join(workDir, "joined.glb");
 fs.writeFileSync(sourcePath, sourceBytes);
 
-// Keep the derivative core-glTF-only: center and simplify geometry without
-// adding Draco/Meshopt/KTX2/instancing extensions, because Google Maps 3D's
-// Model3DElement supports .glb core PBR but does not guarantee arbitrary
-// extension support.
-runTransform(["center", sourcePath, centeredPath, "--pivot", "below"]);
-runTransform(["weld", centeredPath, weldedPath]);
-runTransform(["dedup", weldedPath, dedupPath]);
-runTransform(["prune", dedupPath, prunedPath]);
-runTransform(["join", prunedPath, joinedPath]);
-
+// Prefer a small core-GLB with few draw calls. Google recommends keeping
+// complex map models around 5 MB when possible; 8 MB is our hard deployment
+// ceiling so an optimization regression cannot silently ship a huge model.
 const attempts = [
-  { ratio: 0.35, error: 0.003 },
-  { ratio: 0.25, error: 0.005 },
-  { ratio: 0.18, error: 0.0075 },
-  { ratio: 0.12, error: 0.01 },
-  { ratio: 0.08, error: 0.015 },
+  { ratio: 0.45, error: 0.006 },
+  { ratio: 0.32, error: 0.01 },
+  { ratio: 0.22, error: 0.015 },
+  { ratio: 0.14, error: 0.02 },
+  { ratio: 0.09, error: 0.03 },
 ];
+
 let chosen = null;
 for (const attempt of attempts) {
-  const candidate = path.join(
+  const candidatePath = path.join(
     workDir,
     `geo-${String(attempt.ratio).replace(".", "_")}.glb`,
   );
-  runTransform([
-    "simplify",
-    joinedPath,
-    candidate,
-    "--ratio",
-    String(attempt.ratio),
-    "--error",
-    String(attempt.error),
-    "--lock-border",
-    "true",
-  ]);
-  const bytes = fs.readFileSync(candidate);
-  chosen = { ...attempt, path: candidate, bytes };
-  if (bytes.byteLength <= 4_800_000) break;
+  const bytes = await buildCandidate(
+    sourcePath,
+    candidatePath,
+    attempt.ratio,
+    attempt.error,
+  );
+  const json = parseGlbJson(bytes);
+  const extensionsUsed = json.extensionsUsed || [];
+  const extensionsRequired = json.extensionsRequired || [];
+  if (extensionsUsed.length || extensionsRequired.length) {
+    console.log(
+      "REKIXO_GEO_CANDIDATE_REJECTED",
+      JSON.stringify({
+        ratio: attempt.ratio,
+        byteSize: bytes.byteLength,
+        extensionsUsed,
+        extensionsRequired,
+      }),
+    );
+    continue;
+  }
+
+  const stats = await geometryStats(bytes);
+  const candidate = { ...attempt, path: candidatePath, bytes, stats };
+  console.log(
+    "REKIXO_GEO_CANDIDATE",
+    JSON.stringify({
+      ratio: attempt.ratio,
+      error: attempt.error,
+      byteSize: bytes.byteLength,
+      meshes: stats.meshes,
+      vertices: stats.vertices,
+      triangles: stats.triangles,
+      bounds: stats.bounds,
+    }),
+  );
+
+  if (
+    !chosen ||
+    candidate.bytes.byteLength < chosen.bytes.byteLength ||
+    (candidate.bytes.byteLength === chosen.bytes.byteLength &&
+      candidate.stats.meshes < chosen.stats.meshes)
+  )
+    chosen = candidate;
+
+  if (bytes.byteLength <= 4_800_000 && stats.meshes <= 120) {
+    chosen = candidate;
+    break;
+  }
 }
 
 if (!chosen) fail("Geo derivative was not generated.");
+
 const geoJson = parseGlbJson(chosen.bytes);
 const required = geoJson.extensionsRequired || [];
 const used = geoJson.extensionsUsed || [];
@@ -186,16 +259,20 @@ if (required.length || used.length)
     `Geo derivative must remain core glTF without extensions. used=${used.join(",")} required=${required.join(",")}`,
   );
 
-const stats = await geometryStats(chosen.bytes);
+const stats = chosen.stats;
 const [cx, , cz] = stats.bounds.center;
 const minY = stats.bounds.min[1];
 if (Math.abs(cx) > 0.05 || Math.abs(cz) > 0.05 || Math.abs(minY) > 0.05)
   fail(
     `Geo derivative origin is not base-centered: center=${stats.bounds.center.join(",")} minY=${minY}`,
   );
-if (chosen.bytes.byteLength > 6_000_000)
+if (chosen.bytes.byteLength > 8_000_000)
   fail(
     `Geo derivative is still too large for reliable map rendering: ${chosen.bytes.byteLength} bytes`,
+  );
+if (stats.meshes > 180)
+  fail(
+    `Geo derivative still has too many rendered meshes: ${stats.meshes}`,
   );
 
 const releaseId = String(release.id);
@@ -209,7 +286,7 @@ fs.writeFileSync(modelOut, chosen.bytes);
 const metadata = {
   format: "rekixo-geo-model-derivative",
   version: 1,
-  generator: "@gltf-transform/cli@4.5.1",
+  generator: "@gltf-transform/*@4.5.1",
   projectId: project.id,
   projectSlug: slug,
   releaseId,
