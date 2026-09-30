@@ -14,6 +14,20 @@ const slug = (value: unknown) =>
 const finiteNumber = (value: unknown) =>
   typeof value === "number" && Number.isFinite(value);
 
+function engineRuntimeUrl(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return false;
+  if (value.startsWith("/3Dprojects/")) return true;
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.pathname.startsWith("/3Dprojects/")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function assertProject(value: unknown) {
   if (!isObject(value))
     throw Error("Invalid project payload.");
@@ -46,9 +60,7 @@ function assertModel(value: unknown) {
     (value.sourceFilename !== undefined &&
       (typeof value.sourceFilename !== "string" ||
         value.sourceFilename.length > 1000)) ||
-    (value.url !== undefined &&
-      (typeof value.url !== "string" ||
-        !value.url.startsWith("/3Dprojects/")))
+    (value.url !== undefined && !engineRuntimeUrl(value.url))
   )
     throw Error("Invalid model payload.");
 }
