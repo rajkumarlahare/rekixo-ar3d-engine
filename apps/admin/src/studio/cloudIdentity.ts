@@ -10,9 +10,10 @@ export function rebindLocalProjectToEmptyCloud(
   project: Project,
   files: Asset[],
   cloudProject: CloudProjectSummary,
+  options: { allowExplicitTarget?: boolean } = {},
 ) {
   const slug = projectSlug(project);
-  if (slug !== cloudProject.slug)
+  if (slug !== cloudProject.slug && !options.allowExplicitTarget)
     throw Error("Local and cloud project slugs do not match.");
   if (cloudProject.draftRevision !== undefined)
     throw Error(

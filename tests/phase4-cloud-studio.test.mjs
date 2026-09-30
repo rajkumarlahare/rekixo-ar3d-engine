@@ -200,3 +200,26 @@ test("Engine Admin PBKDF2 stays within the Cloudflare workerd limit", () => {
   assert.doesNotMatch(worker, /iterations:\s*210000/);
   assert.doesNotMatch(generator, /pbkdf2Sync\([^\n]+210000/);
 });
+
+
+test("preserved local backups can explicitly adopt an empty Engine Cloud identity", () => {
+  const studio = fs.readFileSync("apps/admin/src/studio/Studio.tsx", "utf8");
+  const identity = fs.readFileSync(
+    "apps/admin/src/studio/cloudIdentity.ts",
+    "utf8",
+  );
+
+  assert.match(studio, /Use this backup for/);
+  assert.match(studio, /Preserved local backup detected/);
+  assert.match(studio, /before-cloud-attach\.rekixo\.json/);
+  assert.match(
+    studio,
+    /The active public release will not change until you explicitly publish/,
+  );
+  assert.match(studio, /Boolean\(backupCloudTarget\)/);
+  assert.match(identity, /allowExplicitTarget\?: boolean/);
+  assert.match(
+    identity,
+    /slug !== cloudProject\.slug && !options\.allowExplicitTarget/,
+  );
+});
