@@ -52,7 +52,10 @@ import ModelNodeInspector from "./ModelNodeInspector";
 import { useStudioCloudState } from "./useStudioCloudState";
 import StudioSources from "./StudioSources";
 import StudioEvidence from "./StudioEvidence";
-import { isRemovableUnsourcedDraft } from "./reviewDrafts";
+import {
+  findSupersedingReviewedRoom,
+  isRemovableUnsourcedDraft,
+} from "./reviewDrafts";
 import StudioPublish from "./StudioPublish";
 import { buildStudioReadiness } from "./readiness";
 import { auditFbxSources, type FbxSourceAudit } from "./sourceAudit";
@@ -684,6 +687,13 @@ export default function Studio() {
     release = p.releases.find((r) => r.id === review),
     scene = release?.scene ?? p.scene,
     room = scene.rooms.find((r) => r.id === roomId),
+    supersedingRoom = room ? findSupersedingReviewedRoom(scene, room) : undefined,
+    legacyDraftFurnitureBlocked = Boolean(
+      room &&
+        !room.verified &&
+        supersedingRoom &&
+        isRemovableUnsourcedDraft(scene, room),
+    ),
     item = scene.furniture.find((f) => f.id === selected),
     floor = scene.floors.find((f) => f.id === room?.floorId),
     readiness = buildStudioReadiness(
@@ -2922,11 +2932,20 @@ export default function Studio() {
               )
             )
               return;
+            const replacement = findSupersedingReviewedRoom(
+              p.scene,
+              target,
+            );
             const next: Project = {
               ...p,
               scene: {
                 ...p.scene,
                 rooms: p.scene.rooms.filter((entry) => entry.id !== key),
+                furniture: p.scene.furniture.map((item) =>
+                  item.roomId === key && replacement
+                    ? { ...item, roomId: replacement.id }
+                    : item,
+                ),
                 modelNodeTags: (p.scene.modelNodeTags ?? []).map((tag) => {
                   if (tag.roomId !== key) return tag;
                   const preserved = { ...tag };
@@ -2940,7 +2959,11 @@ export default function Studio() {
               edit(next);
               if (roomId === key) setRoomId("");
               if (selected === key) setSelected("");
-              setMessage("Unsourced draft removed. Reviewed/source-backed rooms were left untouched.");
+              setMessage(
+                replacement
+                  ? "Superseded draft removed. Linked furniture moved to the reviewed replacement room; model evidence was preserved."
+                  : "Unsourced draft removed. Reviewed/source-backed rooms were left untouched.",
+              );
             } catch (reason) {
               setError(
                 reason instanceof Error
@@ -4230,14 +4253,21 @@ export default function Studio() {
                 {review
                   ? release?.name
                   : room
-                    ? `Place in ${room.name}`
+                    ? legacyDraftFurnitureBlocked
+                      ? "Remove/review this superseded draft before furnishing"
+                      : `Place in ${room.name}`
                     : "Select a room to furnish"}
               </small>
             </div>
             {Object.entries(catalog).map(([kind, c]) => (
               <button
                 key={kind}
-                disabled={!room || Boolean(review) || busy}
+                disabled={
+                  !room ||
+                  legacyDraftFurnitureBlocked ||
+                  Boolean(review) ||
+                  busy
+                }
                 onClick={() => {
                   if (!room) return;
                   const f: Furniture = {
