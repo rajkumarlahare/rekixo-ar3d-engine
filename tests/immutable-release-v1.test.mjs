@@ -580,3 +580,129 @@ test("immutable GLB release assets answer browser CORS preflight without touchin
   );
   assert.equal(response.headers.get("access-control-allow-headers"), "Range");
 });
+
+test("Geo derivative runtime exposes only active release sidecars with matching metadata", async () => {
+  const releaseId = "release_geo_12345678";
+  const modelId = "model_geo_main";
+  const slug = "garden-heights";
+  const sourceKey =
+    `projects/${slug}/releases/${releaseId}/models/${modelId}`;
+  const geoKey =
+    `projects/${slug}/releases/${releaseId}/geo-models/${modelId}/model.glb`;
+  const metaKey =
+    `projects/${slug}/releases/${releaseId}/geo-models/${modelId}/metadata.json`;
+  const sourceSha = "a".repeat(64);
+  const geoSha = "b".repeat(64);
+  const metadata = {
+    format: "rekixo-geo-model-derivative",
+    version: 1,
+    projectSlug: slug,
+    releaseId,
+    sourceModelId: modelId,
+    sourceSha256: sourceSha,
+    geoSha256: geoSha,
+    geoByteSize: 4,
+    extensionsUsed: [],
+    extensionsRequired: [],
+  };
+
+  const DB = {
+    prepare(sql) {
+      return {
+        bind() {
+          return this;
+        },
+        async first() {
+          if (sql.includes("sqlite_master")) return { total: 3 };
+          if (sql.includes("pragma_table_info")) return { total: 1 };
+          if (sql.includes("FROM release_assets_3d")) {
+            return {
+              r2_key: sourceKey,
+              sha256: sourceSha,
+              status: "published",
+              slug,
+            };
+          }
+          throw new Error("Unexpected first SQL: " + sql);
+        },
+      };
+    },
+  };
+
+  const MODEL_ASSETS = {
+    async head(key) {
+      if (key === geoKey)
+        return {
+          size: 4,
+          httpEtag: '"geo-etag"',
+          writeHttpMetadata() {},
+        };
+      return null;
+    },
+    async get(key, options) {
+      if (key === metaKey)
+        return {
+          body: new TextEncoder().encode(JSON.stringify(metadata)),
+          async text() {
+            return JSON.stringify(metadata);
+          },
+        };
+      if (key === geoKey) {
+        assert.deepEqual(options?.range, { offset: 0, length: 4 });
+        return { body: new TextEncoder().encode("glTF") };
+      }
+      return null;
+    },
+  };
+
+  const response = await runtime.handleReleaseReadRequest(
+    new Request(
+      `https://ar3dstudio.in/3Dprojects/api/releases/${releaseId}/geo-models/${modelId}/model.glb`,
+      { headers: { Range: "bytes=0-3" } },
+    ),
+    { DB, MODEL_ASSETS },
+  );
+
+  assert.equal(response.status, 206);
+  assert.equal(response.headers.get("content-range"), "bytes 0-3/4");
+  assert.equal(response.headers.get("x-rekixo-sha256"), geoSha);
+  assert.equal(response.headers.get("access-control-allow-origin"), "*");
+  assert.equal(Buffer.from(await response.arrayBuffer()).toString("ascii"), "glTF");
+});
+
+test("Geo derivative contract is omitted when derivative metadata is missing or stale", async () => {
+  const manifest = baseManifest();
+  const manifestJson = JSON.stringify(manifest);
+  const hash = await sha256(manifestJson);
+  const state = await runtime.activeReleaseState(
+    {
+      DB: dbForActiveRelease({
+        project_id: manifest.project.id,
+        slug: manifest.project.slug,
+        name: manifest.project.name,
+        status: "published",
+        active_release_id: manifest.release.id,
+        release_version: manifest.release.version,
+        manifest_json: manifestJson,
+        manifest_sha256: hash,
+        release_created_at: manifest.release.createdAt,
+      }),
+    },
+    manifest.project.slug,
+  );
+  const geo = await runtime.geoModelDerivativeForActiveRelease(
+    {
+      MODEL_ASSETS: {
+        async head() {
+          return null;
+        },
+        async get() {
+          return null;
+        },
+      },
+    },
+    state,
+  );
+  assert.equal(geo, undefined);
+});
+
