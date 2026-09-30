@@ -193,6 +193,31 @@ export function buildStudioReadiness(
     });
   }
 
+  const openings = project.scene.openings ?? [];
+  const reviewedOpenings = openings.filter((opening) => opening.reviewed);
+  const reviewedConnections = reviewedOpenings.filter(
+    (opening) => opening.kind === "door" && opening.roomIds.length >= 2,
+  );
+  if (project.scene.rooms.length > 0 && reviewedConnections.length === 0) {
+    items.push({
+      id: "walkthrough-openings",
+      severity: "warning",
+      title: openings.length
+        ? "Walkthrough openings still need review"
+        : "No source-backed walkthrough openings",
+      detail: openings.length
+        ? `${openings.length - reviewedOpenings.length} opening draft${openings.length - reviewedOpenings.length === 1 ? "" : "s"} remain unresolved; room-to-room walkthrough only uses reviewed shared doors.`
+        : "The current Jyoti/source model did not yield a trustworthy reviewed shared door. Walkthrough connectivity stays disabled rather than inventing architectural openings.",
+    });
+  } else if (reviewedConnections.length > 0) {
+    items.push({
+      id: "walkthrough-openings",
+      severity: "ready",
+      title: `${reviewedConnections.length} reviewed walkthrough connection${reviewedConnections.length === 1 ? "" : "s"}`,
+      detail: "Room-to-room walkthrough uses reviewed shared-door evidence only.",
+    });
+  }
+
   if (!project.location?.trim()) {
     items.push({
       id: "location",
