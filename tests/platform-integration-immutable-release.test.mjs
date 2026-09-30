@@ -124,7 +124,7 @@ test("Platform integration resolves Studio-only immutable releases without legac
   assert.equal(result.model.available, true);
   assert.match(
     result.model.url,
-    /^\/3Dprojects\/api\/releases\/release_12345678901234567890\/models\/studio_model_main\/content\?v=1$/,
+    /^\/3Dprojects\/api\/releases\/release_12345678901234567890\/models\/studio_model_main\/model\.glb\?v=1$/,
   );
   assert.equal(result.release.id, manifest.release.id);
   assert.equal(result.release.version, 1);
