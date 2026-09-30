@@ -251,6 +251,46 @@ function validateScene(scene, assetIds) {
     rooms.set(room.id, room);
   }
 
+  if (scene.surfaceFinishes !== undefined) {
+    if (
+      !Array.isArray(scene.surfaceFinishes) ||
+      scene.surfaceFinishes.length > 40000
+    )
+      throw Error("Invalid Studio surface finishes.");
+    const finishKeys = new Set();
+    for (const finish of scene.surfaceFinishes) {
+      const room = rooms.get(finish?.roomId);
+      const key =
+        finish?.kind === "wall"
+          ? `${finish?.roomId}\u0000wall\u0000${finish?.edgeIndex ?? -1}`
+          : `${finish?.roomId}\u0000${finish?.kind}`;
+      if (
+        !room ||
+        !["floor", "ceiling", "wall"].includes(finish?.kind) ||
+        !["paint", "wood", "marble", "tile", "concrete", "custom"].includes(
+          finish?.presetId,
+        ) ||
+        !color(finish?.color) ||
+        !number(finish?.roughness, 0, 1) ||
+        !number(finish?.metalness, 0, 1) ||
+        finishKeys.has(key)
+      )
+        throw Error("Invalid Studio surface finish.");
+      if (finish.kind === "wall") {
+        const edgeCount = roomBoundary(room).length;
+        if (
+          !Number.isInteger(finish.edgeIndex) ||
+          finish.edgeIndex < 0 ||
+          finish.edgeIndex >= edgeCount
+        )
+          throw Error("Invalid Studio wall finish edge.");
+      } else if (finish.edgeIndex !== undefined) {
+        throw Error("Only Studio wall finishes may define an edge index.");
+      }
+      finishKeys.add(key);
+    }
+  }
+
   for (const item of scene.furniture ?? []) {
     const room = rooms.get(item.roomId);
     if (
@@ -538,6 +578,7 @@ export function publicStudioSnapshot(draft) {
       modelNodeTags: [],
       floors: structuredClone(scene.floors),
       rooms: (scene.rooms ?? []).map(publicRoom),
+      surfaceFinishes: structuredClone(scene.surfaceFinishes ?? []),
       furniture: structuredClone(scene.furniture ?? []),
       openings: (scene.openings ?? [])
         .filter((opening) => opening?.reviewed === true)
