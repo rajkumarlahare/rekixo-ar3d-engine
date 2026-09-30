@@ -245,3 +245,95 @@ test("cloud-linked design copies clear project-specific review evidence", async 
   assert.equal(copied.scene.openings[0].confidence, undefined);
   assert.deepEqual(copied.scene.modelNodeTags, []);
 });
+
+
+test("existing cloud identity adoption preserves the working draft and conflicting local cache", async () => {
+  const targetId = "project_cloud_identity_12345678";
+
+  const cloudCache = newProject("Jyoti Paradise cloud cache");
+  cloudCache.id = targetId;
+  cloudCache.slug = "jyoti-paradise-adoption-test";
+  cloudCache.cloud = {
+    revision: 3,
+    syncedAt: new Date().toISOString(),
+  };
+  const cachedAsset = await storage.makeAsset(
+    new File(["old-cache"], "old.glb", { type: "model/gltf-binary" }),
+    cloudCache.id,
+  );
+  cloudCache.assets = [cachedAsset.id];
+  cloudCache.scene.modelId = cachedAsset.id;
+  await storage.save(cloudCache, [cachedAsset]);
+
+  const local = newProject("Jyoti Paradise working draft");
+  local.slug = "jyoti-working-copy-adoption-test";
+  const currentAsset = await storage.makeAsset(
+    new File(["current-model"], "current.glb", {
+      type: "model/gltf-binary",
+    }),
+    local.id,
+  );
+  local.assets = [currentAsset.id];
+  local.scene.modelId = currentAsset.id;
+  local.scene.rooms.push({
+    id: "room_adoption_123",
+    name: "Living",
+    unit: "101",
+    floorId: local.scene.floors[0].id,
+    x: 0,
+    z: 0,
+    width: 4,
+    depth: 4,
+    height: 2.8,
+    color: "#dddddd",
+    source: "Reviewed local draft",
+    verified: true,
+  });
+  await storage.save(local, [currentAsset]);
+
+  // Match the existing cloud slug only in memory, reproducing a local edit that
+  // cannot be persisted because another cached project already owns the slug.
+  local.slug = "jyoti-paradise-adoption-test";
+
+  const adopted = await storage.adoptExistingCloudIdentity(
+    local,
+    [currentAsset],
+    {
+      id: targetId,
+      slug: "jyoti-paradise-adoption-test",
+      name: "Jyoti Paradise",
+      location: "Hingna, Nagpur",
+    },
+  );
+
+  assert.equal(adopted.project.id, targetId);
+  assert.equal(adopted.project.slug, "jyoti-paradise-adoption-test");
+  assert.equal(adopted.project.scene.rooms.length, 1);
+  assert.equal(adopted.project.cloud, undefined);
+  assert.equal(
+    (await storage.asset(currentAsset.id)).projectId,
+    targetId,
+  );
+
+  assert.equal(adopted.backupProjects.length, 1);
+  const backup = adopted.backupProjects[0];
+  assert.match(backup.name, /local backup/i);
+  assert.notEqual(backup.id, targetId);
+  assert.notEqual(backup.slug, "jyoti-paradise-adoption-test");
+  assert.equal(backup.cloud, undefined);
+  assert.equal(
+    (await storage.asset(cachedAsset.id)).projectId,
+    backup.id,
+  );
+
+  const projects = await storage.projects();
+  assert.equal(
+    projects.filter((project) => project.slug === "jyoti-paradise-adoption-test")
+      .length,
+    1,
+  );
+  assert.equal(
+    projects.some((project) => project.id === local.id),
+    false,
+  );
+});
