@@ -286,6 +286,7 @@ fs.writeFileSync(modelOut, chosen.bytes);
 const metadata = {
   format: "rekixo-geo-model-derivative",
   version: 1,
+  pipeline: "core-map-v2",
   generator: "@gltf-transform/*@4.5.1",
   projectId: project.id,
   projectSlug: slug,
