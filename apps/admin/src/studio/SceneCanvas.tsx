@@ -1646,7 +1646,6 @@ export default function SceneCanvas(props: Props) {
     props.isolateFloorId,
     props.roomMapEnabled,
     props.soloRoomId,
-    props.soloRoomId,
   ]);
   useEffect(() => {
     const runtime = api.current;
@@ -1854,6 +1853,7 @@ export default function SceneCanvas(props: Props) {
     props.scene.modelTransform?.z,
     props.scene.modelTransform?.rotationY,
     props.alignmentMode,
+    props.soloRoomId,
   ]);
 
   useEffect(() => {
