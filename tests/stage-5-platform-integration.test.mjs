@@ -35,3 +35,10 @@ test("Stage 5 does not enable privileged Engine write APIs", () => {
   const worker = read("workers/admin.mjs");
   assert.doesNotMatch(worker, /request\.method === "(?:POST|PUT|PATCH|DELETE)"/);
 });
+
+
+test("integration lookup survives temporary model storage probe failures", () => {
+  const worker = read("workers/admin.mjs");
+  assert.match(worker, /Platform project linking must still resolve the Engine project/);
+  assert.match(worker, /activeModelAvailable = false/);
+});
