@@ -230,3 +230,17 @@ test("whole-unit review keeps the fast path while individual correction remains 
   assert.match(studio, /candidate\.floorId === isolateFloorId && candidate\.unit === unit/);
   assert.match(studio, /verified: accepted/);
 });
+
+
+test("generated floors have one-click floor review while source rooms keep individual correction", () => {
+  const review = fs.readFileSync("apps/admin/src/studio/FloorRoomReview.tsx", "utf8");
+  const studio = fs.readFileSync("apps/admin/src/studio/Studio.tsx", "utf8");
+
+  assert.match(review, /Generated floor review/);
+  assert.match(review, /Accept generated floor/);
+  assert.match(review, /onReviewGeneratedFloor\(floorId\)/);
+  assert.match(studio, /function reviewGeneratedFloor/);
+  assert.match(studio, /isBatchRepeatedRoom\(entry\)/);
+  assert.match(studio, /next repeated floor opened for review/);
+  assert.match(studio, /analyzeAndApproveReadyOpenings\(next\)/);
+});
