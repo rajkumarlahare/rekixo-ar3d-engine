@@ -430,10 +430,15 @@ async function login(request, env) {
       name: error instanceof Error ? error.name : "UnknownError",
       message: error instanceof Error ? error.message : String(error),
     });
+    const reason =
+      error instanceof Error
+        ? `${error.name}: ${String(error.message || "").slice(0, 220)}`
+        : "UnknownError";
     return json(
       {
         error: "Engine Admin sign-in temporarily unavailable.",
         diagnostic: `login-stage:${stage}`,
+        reason,
       },
       { status: 503 },
     );
