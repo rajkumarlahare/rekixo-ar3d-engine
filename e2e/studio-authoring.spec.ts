@@ -242,10 +242,8 @@ test("Jyoti source floor preparation, room acceptance and repeat survive reload"
   await expect(panel).toContainText(`1/${expected} accepted`);
   await panel.getByRole("button", { name: "Unit 101", exact: true }).click();
   const count101 = fixture.unit101;
-  for (let index = 1; index < count101; index += 1) {
-    await panel.getByLabel("Rooms to review").getByRole("button", { name: /Needs review/ }).first().click();
-    await panel.getByRole("button", { name: "Accept room", exact: true }).click();
-  }
+  await panel.getByRole("button", { name: "Accept whole unit", exact: true }).click();
+  await expect(panel).toContainText(`${count101}/${count101} rooms accepted`);
   await panel.locator("summary").filter({ hasText: /Repeat floors/ }).click();
   await expect(panel.getByRole("button", { name: /Generate 4 units/ })).toBeEnabled();
   await panel.getByRole("button", { name: /Generate 4 units/ }).click();
