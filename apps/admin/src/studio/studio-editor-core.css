@@ -3302,3 +3302,73 @@
     flex-direction: column;
   }
 }
+
+
+/* Review: unresolved work first, reviewed detail collapsed */
+.ops-attention-summary {
+  display: grid;
+  gap: 8px;
+}
+
+.ops-attention-item {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid #304158;
+  border-radius: 10px;
+  background: #0b1624;
+}
+
+.ops-attention-item small {
+  color: #93a3b6;
+}
+
+.ops-attention-item--warning {
+  border-color: #66572a;
+  background: rgba(111, 89, 24, .12);
+}
+
+.ops-attention-item--blocker {
+  border-color: #713744;
+  background: rgba(117, 38, 55, .13);
+}
+
+.ops-evidence-row-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.ops-evidence-row-wrap .ops-evidence-row {
+  min-width: 0;
+}
+
+.ops-remove-draft {
+  white-space: nowrap;
+  border-color: #6e4350;
+  color: #f3bdc9;
+  background: rgba(110, 45, 61, .14);
+}
+
+.ops-reviewed-details {
+  margin-top: 12px;
+}
+
+.ops-reviewed-details > summary {
+  cursor: pointer;
+  color: #a7b3c4;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 8px 2px;
+}
+
+@media (max-width: 860px) {
+  .ops-evidence-row-wrap {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-remove-draft {
+    justify-self: start;
+  }
+}
