@@ -249,6 +249,10 @@ test("Jyoti source floor preparation, room acceptance and repeat survive reload"
   await panel.getByRole("button", { name: /Generate 4 units/ }).click();
   await expect(panel).toContainText("Floor 2");
   await expect(panel).toContainText(`0/${count101} accepted`);
+  await expect(panel.getByRole("button", { name: "Accept generated floor", exact: true })).toBeVisible();
+  await panel.getByRole("button", { name: "Accept generated floor", exact: true }).click();
+  await expect(panel).toContainText("Floor 3");
+  await expect(panel).toContainText(`0/${count101} accepted`);
   await expect(page.getByText("Autosaved", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(panel).toBeHidden();
