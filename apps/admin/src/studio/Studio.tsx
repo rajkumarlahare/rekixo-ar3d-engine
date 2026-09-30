@@ -131,6 +131,7 @@ export default function Studio() {
   const [transformMode, setTransformMode] = useState<TransformMode>("translate");
   const [transformSnap, setTransformSnap] = useState(true);
   const [focusRequest, setFocusRequest] = useState(0);
+  const [autoAlignRequest, setAutoAlignRequest] = useState(0);
   const [editorFocus, setEditorFocus] = useState(false);
   const [showLeftPanel, setShowLeftPanel] = useState(true);
   const [showRightPanel, setShowRightPanel] = useState(true);
@@ -3441,8 +3442,21 @@ export default function Studio() {
           >
             <div className="alignment-toolbar-title">
               <strong>Plan alignment</strong>
-              <small>Drag the building over the reference plan</small>
+              <small>Auto position first · fine-tune only if needed</small>
             </div>
+            <button
+              type="button"
+              className="primary alignment-auto-position"
+              disabled={Boolean(review) || busy || !p.scene.modelId}
+              onClick={() => {
+                setView("building");
+                setCameraOrientation("top");
+                setTransformMode("translate");
+                setAutoAlignRequest((value) => value + 1);
+              }}
+            >
+              Auto position
+            </button>
             <button
               type="button"
               className={cameraOrientation === "top" ? "active" : ""}
@@ -3812,6 +3826,7 @@ export default function Studio() {
             transformEnabled={!review && !busy}
             modelTransformEnabled={showReferenceWorkspace}
             alignmentMode={showReferenceWorkspace}
+            autoAlignRequest={autoAlignRequest}
             roomMapEnabled={showRoomMapper}
             roomDraw={{
               enabled:
