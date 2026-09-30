@@ -281,4 +281,3 @@ test("Platform integration exposes a verified optional Geo derivative without re
     /^\/3Dprojects\/api\/releases\/release_12345678901234567890\/geo-models\/studio_model_main\/model\.glb\?v=1$/,
   );
 });
-
