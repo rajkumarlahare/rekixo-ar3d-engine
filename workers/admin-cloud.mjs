@@ -14,6 +14,12 @@ const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 5;
 const MAX_DRAFT_BYTES = 2 * 1024 * 1024;
 const MAX_ASSET_BYTES = 64 * 1024 * 1024;
+/**
+ * Cloudflare workerd currently caps PBKDF2 deriveBits iterations at 100,000.
+ * Keep generator and verifier identical; dedicated auth is additionally protected
+ * by a strong unique password, same-origin checks and bounded login throttling.
+ */
+const PASSWORD_PBKDF2_ITERATIONS = 100000;
 
 const SECURITY_HEADERS = {
   "Referrer-Policy": "same-origin",
@@ -190,7 +196,7 @@ async function verifyPassword(password, saltB64, hashB64) {
       {
         name: "PBKDF2",
         salt,
-        iterations: 210000,
+        iterations: PASSWORD_PBKDF2_ITERATIONS,
         hash: "SHA-256",
       },
       key,
