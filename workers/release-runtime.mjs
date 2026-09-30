@@ -612,10 +612,11 @@ async function readGeoDerivativeMetadata(
   let object;
   let metadataObject;
   try {
-    [object, metadataObject] = await Promise.all([
-      env.MODEL_ASSETS.head(modelKey),
-      env.MODEL_ASSETS.get(metadataKey),
-    ]);
+    // Probe sequentially so a missing/failed optional derivative cannot leave
+    // a second R2 promise rejecting after the caller has already fallen back.
+    object = await env.MODEL_ASSETS.head(modelKey);
+    if (!object) return null;
+    metadataObject = await env.MODEL_ASSETS.get(metadataKey);
   } catch {
     // Geo derivatives are an optional rendering optimization. Storage/network
     // failures must fall back to the immutable source model instead of making
