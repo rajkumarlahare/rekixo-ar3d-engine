@@ -11,20 +11,22 @@ function baseRoomName(value: string) {
     .trim();
 }
 
-function dependencyFree(scene: Scene, room: Room) {
-  if (scene.furniture.some((item) => item.roomId === room.id)) return false;
-  if ((scene.openings ?? []).some((opening) => opening.roomIds.includes(room.id)))
-    return false;
-  return true;
+function hasOpeningDependency(scene: Scene, room: Room) {
+  return (scene.openings ?? []).some((opening) => opening.roomIds.includes(room.id));
 }
 
-function hasReviewedReplacement(scene: Scene, room: Room) {
+function fullyDependencyFree(scene: Scene, room: Room) {
+  if (scene.furniture.some((item) => item.roomId === room.id)) return false;
+  return !hasOpeningDependency(scene, room);
+}
+
+export function findSupersedingReviewedRoom(scene: Scene, room: Room) {
   const floor = scene.floors.find((candidate) => candidate.id === room.floorId);
-  if (!floor || floor.elevation > 0.01) return false;
+  if (!floor || floor.elevation > 0.01) return undefined;
 
   const unit = normalizeUnit(room.unit);
   const name = baseRoomName(room.name);
-  return scene.rooms.some((candidate) => {
+  return scene.rooms.find((candidate) => {
     if (!candidate.verified || candidate.id === room.id) return false;
     const candidateFloor = scene.floors.find(
       (entry) => entry.id === candidate.floorId,
@@ -41,7 +43,7 @@ function hasReviewedReplacement(scene: Scene, room: Room) {
 }
 
 export function isRemovableUnsourcedDraft(scene: Scene, room: Room) {
-  if (room.verified || !dependencyFree(scene, room)) return false;
+  if (room.verified || hasOpeningDependency(scene, room)) return false;
   if (
     room.sourceAssetId ||
     room.sourcePackSourceId ||
@@ -54,10 +56,10 @@ export function isRemovableUnsourcedDraft(scene: Scene, room: Room) {
     room.name.toLowerCase().includes("layout draft") &&
     source.includes("brochure page 2 living dimensions") &&
     source.includes("placement is a draft") &&
-    hasReviewedReplacement(scene, room);
+    Boolean(findSupersedingReviewedRoom(scene, room));
   if (supersededBrochureDraft) return true;
 
-  if (room.mesh) return false;
+  if (room.mesh || !fullyDependencyFree(scene, room)) return false;
 
   const draftOnly =
     !source ||
