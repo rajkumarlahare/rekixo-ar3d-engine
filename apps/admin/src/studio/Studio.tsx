@@ -186,6 +186,7 @@ export default function Studio() {
   const [modelMaterials, setModelMaterials] = useState<ModelMaterialSummary[]>([]);
   const [selectedMaterial, setSelectedMaterial] = useState("");
   const [selectedSurface, setSelectedSurface] = useState<{
+    roomId?: string;
     kind: SurfaceKind;
     edgeIndex?: number;
   }>({ kind: "floor" });
@@ -214,7 +215,10 @@ export default function Studio() {
   } = useStudioCloudState(project, setError);
 
   useEffect(() => {
-    setSelectedSurface({ kind: "floor" });
+    setSelectedSurface({
+      roomId: p.scene.rooms[0]?.id,
+      kind: "floor",
+    });
   }, [roomId]);
 
   useEffect(() => {
@@ -795,20 +799,29 @@ export default function Studio() {
     item = scene.furniture.find((f) => f.id === selected),
     floor = scene.floors.find((f) => f.id === room?.floorId),
     surfaceEdgeCount = room ? roomBoundaryPoints(room).length : 0,
+    surfaceSelection =
+      room &&
+      selectedSurface.roomId === room.id &&
+      (surfaceSelection.kind !== "wall" ||
+        (Number.isInteger(surfaceSelection.edgeIndex) &&
+          (surfaceSelection.edgeIndex ?? -1) >= 0 &&
+          (surfaceSelection.edgeIndex ?? -1) < surfaceEdgeCount))
+        ? selectedSurface
+        : { roomId: room?.id, kind: "floor" as const },
     authoredSurfaceFinish = room
       ? findSurfaceFinish(
           scene,
           room.id,
-          selectedSurface.kind,
-          selectedSurface.edgeIndex,
+          surfaceSelection.kind,
+          surfaceSelection.edgeIndex,
         )
       : undefined,
     activeSurfaceFinish = room
       ? resolvedSurfaceFinish(
           scene,
           room,
-          selectedSurface.kind,
-          selectedSurface.edgeIndex,
+          surfaceSelection.kind,
+          surfaceSelection.edgeIndex,
         )
       : undefined,
     readiness = buildStudioReadiness(
@@ -1054,9 +1067,9 @@ export default function Studio() {
       ...change,
       presetId: "custom",
       roomId: room.id,
-      kind: selectedSurface.kind,
-      ...(selectedSurface.kind === "wall"
-        ? { edgeIndex: selectedSurface.edgeIndex }
+      kind: surfaceSelection.kind,
+      ...(surfaceSelection.kind === "wall"
+        ? { edgeIndex: surfaceSelection.edgeIndex }
         : { edgeIndex: undefined }),
     });
   }
@@ -1071,9 +1084,9 @@ export default function Studio() {
     if (!preset) return;
     upsertSurfaceFinish({
       roomId: room.id,
-      kind: selectedSurface.kind,
-      ...(selectedSurface.kind === "wall"
-        ? { edgeIndex: selectedSurface.edgeIndex }
+      kind: surfaceSelection.kind,
+      ...(surfaceSelection.kind === "wall"
+        ? { edgeIndex: surfaceSelection.edgeIndex }
         : {}),
       presetId,
       color: preset.color,
@@ -1082,8 +1095,8 @@ export default function Studio() {
     });
     setMessage(
       `${preset.label} applied to ${surfaceDisplayName(
-        selectedSurface.kind,
-        selectedSurface.edgeIndex,
+        surfaceSelection.kind,
+        surfaceSelection.edgeIndex,
       )}.`,
     );
   }
@@ -1092,8 +1105,8 @@ export default function Studio() {
     if (!room) return;
     const key = surfaceFinishKey(
       room.id,
-      selectedSurface.kind,
-      selectedSurface.edgeIndex,
+      surfaceSelection.kind,
+      surfaceSelection.edgeIndex,
     );
     edit({
       ...p,
@@ -1114,7 +1127,7 @@ export default function Studio() {
   function applySelectedFinishToAllWalls() {
     if (
       !room ||
-      selectedSurface.kind !== "wall" ||
+      surfaceSelection.kind !== "wall" ||
       !activeSurfaceFinish
     )
       return;
@@ -1147,8 +1160,8 @@ export default function Studio() {
       edit(next);
       setMessage(
         `${surfaceDisplayName(
-          selectedSurface.kind,
-          selectedSurface.edgeIndex,
+          surfaceSelection.kind,
+          surfaceSelection.edgeIndex,
         )} finish applied to all ${wallFinishes.length} walls in ${room.name}.`,
       );
     } catch (reason) {
