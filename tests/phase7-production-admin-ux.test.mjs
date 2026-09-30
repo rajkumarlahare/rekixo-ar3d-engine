@@ -49,11 +49,13 @@ test("source intake distinguishes publish model from evidence files", () => {
   assert.match(source, /DWG\/DXF\/PDF\/SKP\/SKB\/DRS\/images\/CSV/);
 });
 
-test("evidence workspace keeps reviewed and unverified room provenance visible", () => {
+test("Review workspace prioritizes needs attention while preserving provenance", () => {
   const evidence = read("apps/admin/src/studio/StudioEvidence.tsx");
-  assert.match(evidence, /Measurement provenance/);
+  assert.match(evidence, /Needs attention/);
+  assert.match(evidence, /Unresolved rooms/);
+  assert.match(evidence, /Reviewed rooms/);
+  assert.match(evidence, /NEEDS REVIEW/);
   assert.match(evidence, /REVIEWED/);
-  assert.match(evidence, /UNVERIFIED/);
   assert.match(evidence, /sourcePackSourceId/);
   assert.match(evidence, /sourceClaimIds/);
   assert.match(evidence, /No source/);

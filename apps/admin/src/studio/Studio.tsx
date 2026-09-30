@@ -52,6 +52,7 @@ import ModelNodeInspector from "./ModelNodeInspector";
 import { useStudioCloudState } from "./useStudioCloudState";
 import StudioSources from "./StudioSources";
 import StudioEvidence from "./StudioEvidence";
+import { isRemovableUnsourcedDraft } from "./reviewDrafts";
 import StudioPublish from "./StudioPublish";
 import { buildStudioReadiness } from "./readiness";
 import { auditFbxSources, type FbxSourceAudit } from "./sourceAudit";
@@ -2908,6 +2909,39 @@ export default function Studio() {
             setView("rooms");
             setWorkspace("editor");
             setEditorFocus(false);
+          }}
+          onRemoveDraft={(key) => {
+            const target = p.scene.rooms.find((entry) => entry.id === key);
+            if (!target || !isRemovableUnsourcedDraft(p.scene, target)) {
+              setError("This room has source evidence or project dependencies and cannot be removed as an unsourced draft.");
+              return;
+            }
+            if (
+              !window.confirm(
+                `Remove the unsourced draft "${target.name}"? The change is autosaved and can still be undone in this editing session.`,
+              )
+            )
+              return;
+            const next: Project = {
+              ...p,
+              scene: {
+                ...p.scene,
+                rooms: p.scene.rooms.filter((entry) => entry.id !== key),
+              },
+            };
+            try {
+              validateProject(next);
+              edit(next);
+              if (roomId === key) setRoomId("");
+              if (selected === key) setSelected("");
+              setMessage("Unsourced draft removed. Reviewed/source-backed rooms were left untouched.");
+            } catch (reason) {
+              setError(
+                reason instanceof Error
+                  ? reason.message
+                  : "Unsourced draft could not be removed.",
+              );
+            }
           }}
         />
       )}
