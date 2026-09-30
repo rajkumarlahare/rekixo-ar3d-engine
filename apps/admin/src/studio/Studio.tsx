@@ -2036,6 +2036,12 @@ export default function Studio() {
               ? { ...entry, ...geometry, verified: false }
               : entry,
           ),
+          surfaceFinishes: (p.scene.surfaceFinishes ?? []).filter(
+            (finish) =>
+              finish.roomId !== roomId ||
+              finish.kind !== "wall" ||
+              (finish.edgeIndex ?? -1) < points.length,
+          ),
         },
       };
       validateProject(next);
@@ -5046,6 +5052,9 @@ export default function Studio() {
                         ),
                         openings: (p.scene.openings ?? []).filter(
                           (opening) => !opening.roomIds.includes(room.id),
+                        ),
+                        surfaceFinishes: (p.scene.surfaceFinishes ?? []).filter(
+                          (finish) => finish.roomId !== room.id,
                         ),
                       },
                     });
