@@ -12,6 +12,11 @@ test("Engine exposes a versioned minimal Platform integration contract", () => {
   assert.match(worker, /PLATFORM_ENGINE_CONTRACT_VERSION = 1/);
   assert.match(worker, /\/api\/integration\/projects\//);
   assert.match(worker, /x-rekixo-ar3d-contract/);
+  assert.match(worker, /activeReleaseState/);
+  assert.match(worker, /experienceFromActiveReleaseState/);
+  assert.match(worker, /immutableModel \? \{ model: immutableModel \} : \{\}/);
+  assert.match(contracts, /model\?: Model3D/);
+  assert.match(contracts, /release\?: \{/);
 });
 
 test("integration endpoint is read-only and project-scoped", () => {

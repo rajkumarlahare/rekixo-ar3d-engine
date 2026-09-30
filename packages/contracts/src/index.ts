@@ -134,4 +134,16 @@ export interface PlatformEngineProjectContract {
   project: Project3D;
   enabledSceneCount: number;
   activeModelAvailable: boolean;
+  /**
+   * Additive V1 fields. New Studio/cloud projects can publish directly from an
+   * immutable release without creating a legacy models_3d row. Older consumers
+   * may ignore these fields and older projects remain valid without them.
+   */
+  model?: Model3D;
+  release?: {
+    id: string;
+    version: number;
+    manifestSha256?: string;
+    createdAt?: string;
+  };
 }

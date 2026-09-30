@@ -1,4 +1,8 @@
-import { handleReleaseReadRequest } from "./release-runtime.mjs";
+import {
+  activeReleaseState,
+  experienceFromActiveReleaseState,
+  handleReleaseReadRequest,
+} from "./release-runtime.mjs";
 import { engineAdminReadAccess, handleCloudAdminRequest } from "./admin-cloud.mjs";
 import { assertProjectAssetKey } from "./storage-boundary.mjs";
 import { validProjectSlug } from "../shared/project-slug-policy.js";
@@ -91,7 +95,7 @@ async function listProjects(env) {
   }));
 }
 
-async function getIntegrationProject(env, slug) {
+export async function getIntegrationProject(env, slug) {
   const project = await env.DB.prepare(
     `SELECT p.id, p.slug, p.name, p.location, p.status, p.cover_asset_key,
             COUNT(DISTINCT CASE WHEN s.enabled = 1 THEN s.id END) AS enabled_scene_count,
@@ -106,14 +110,31 @@ async function getIntegrationProject(env, slug) {
 
   if (!project) return null;
 
-  let activeModelAvailable = false;
-  if (project.has_active_model) {
+  // New Studio/cloud projects can publish an immutable release without creating
+  // a legacy models_3d row. Prefer the active immutable release when available,
+  // while keeping the legacy model registry path intact for existing projects.
+  let immutableModel;
+  let immutableRelease;
+  if (project.status === "published") {
+    const releaseState = await activeReleaseState(env, slug);
+    if (releaseState.state === "ok") {
+      const experience = experienceFromActiveReleaseState(releaseState);
+      immutableModel = experience?.model;
+      immutableRelease = experience?.release;
+    }
+  }
+
+  let activeModelAvailable = Boolean(
+    immutableModel && immutableModel.available !== false,
+  );
+  if (!activeModelAvailable && project.has_active_model) {
     const model = await env.DB.prepare(
       `SELECT asset_key FROM models_3d
         WHERE project_id=? AND is_active=1
         ORDER BY version DESC LIMIT 1`,
     ).bind(project.id).first();
-    if (model?.asset_key) activeModelAvailable = Boolean(await env.MODEL_ASSETS.head(model.asset_key));
+    if (model?.asset_key)
+      activeModelAvailable = Boolean(await env.MODEL_ASSETS.head(model.asset_key));
   }
 
   return {
@@ -128,6 +149,8 @@ async function getIntegrationProject(env, slug) {
     },
     enabledSceneCount: Number(project.enabled_scene_count || 0),
     activeModelAvailable,
+    ...(immutableModel ? { model: immutableModel } : {}),
+    ...(immutableRelease ? { release: immutableRelease } : {}),
   };
 }
 
