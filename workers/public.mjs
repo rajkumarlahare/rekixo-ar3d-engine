@@ -1,6 +1,7 @@
 import {
   activeReleaseState,
   experienceFromActiveReleaseState,
+  geoModelDerivativeForActiveRelease,
   handleReleaseReadRequest,
   serveReleaseAsset,
 } from "./release-runtime.mjs";
@@ -102,8 +103,11 @@ function mapScene(row) {
 
 async function getProjectExperience(env, slug) {
   const release = await activeReleaseState(env, slug);
-  if (release.state === "ok")
-    return experienceFromActiveReleaseState(release);
+  if (release.state === "ok") {
+    const experience = experienceFromActiveReleaseState(release);
+    const geoModel = await geoModelDerivativeForActiveRelease(env, release);
+    return geoModel ? { ...experience, geoModel } : experience;
+  }
   if (release.state === "corrupt")
     return {
       __releaseCorrupt: true,
