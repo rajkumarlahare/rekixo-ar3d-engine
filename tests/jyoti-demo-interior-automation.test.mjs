@@ -101,6 +101,7 @@ test("typical-floor demo interior preserves existing living furniture and fills 
   assert.ok(result.created.some((item) => item.roomId === dining.id && item.kind === "table"));
   assert.ok(result.created.some((item) => item.roomId === balcony.id && item.kind === "plant"));
   assert.equal(result.created.some((item) => item.roomId === kitchen.id), false);
+  assert.ok(result.created.every((item) => item.origin === "demo-auto"));
 
   const rerun = helper.buildTypicalFloorDemoInterior(
     { ...scene, furniture: result.furniture },
@@ -182,11 +183,84 @@ test("repeated interior only copies to reviewed matching rooms and stays idempot
   assert.equal(blocked.created.length, 0);
 });
 
+
+test("demo interior audit detects and repairs incompatible furniture without touching supported rooms", () => {
+  const living = room("living-audit", "Living", "101", "f1", 4.95, 3.05);
+  const bedroom = room("bed-audit", "Bed Room", "101", "f1", 3.4, 3.2);
+  const kitchen = room("kitchen-audit", "Kitchen", "101", "f1", 3.2, 2.1);
+  const scene = {
+    scale: 1,
+    floors: [{ id: "f1", name: "Floor 1", elevation: 3.048 }],
+    rooms: [living, bedroom, kitchen],
+    furniture: [
+      { id: "living-sofa", kind: "sofa", roomId: living.id, x: 0, z: 0, rotation: 0, color: "#aaa" },
+      { id: "living-bed-wrong", kind: "bed", roomId: living.id, x: 0, z: 0, rotation: 0, color: "#bbb" },
+      { id: "living-wardrobe-wrong", kind: "wardrobe", roomId: living.id, x: 0, z: 0, rotation: 0, color: "#ccc" },
+      { id: "bed-bed", kind: "bed", roomId: bedroom.id, x: 0, z: 0, rotation: 0, color: "#ddd" },
+      { id: "kitchen-table-custom", kind: "table", roomId: kitchen.id, x: 0, z: 0, rotation: 0, color: "#eee" },
+    ],
+    openings: [],
+  };
+
+  const issues = helper.auditDemoInterior(scene);
+  assert.deepEqual(
+    issues.map((issue) => issue.furnitureId).sort(),
+    ["living-bed-wrong", "living-wardrobe-wrong"],
+  );
+
+  const repaired = helper.repairDemoInterior(scene);
+  assert.equal(repaired.removed.length, 2);
+  assert.ok(repaired.furniture.some((item) => item.id === "living-sofa"));
+  assert.ok(repaired.furniture.some((item) => item.id === "bed-bed"));
+  assert.ok(repaired.furniture.some((item) => item.id === "kitchen-table-custom"));
+  assert.equal(repaired.furniture.some((item) => item.id === "living-bed-wrong"), false);
+  assert.equal(repaired.furniture.some((item) => item.id === "living-wardrobe-wrong"), false);
+});
+
+test("repeat automation never propagates incompatible furniture from a source room", () => {
+  const sourceLiving = room("living-source-filter", "Living", "101", "f1", 4.95, 3.05);
+  const targetLiving = room("living-target-filter", "Living", "201", "f2", 4.95, 3.05);
+  const scene = {
+    scale: 1,
+    floors: [
+      { id: "f1", name: "Floor 1", elevation: 3.048 },
+      { id: "f2", name: "Floor 2", elevation: 6.0452 },
+    ],
+    rooms: [sourceLiving, targetLiving],
+    furniture: [
+      { id: "source-sofa", kind: "sofa", roomId: sourceLiving.id, x: 0, z: 0, rotation: 0, color: "#aaa" },
+      { id: "source-bed-wrong", kind: "bed", roomId: sourceLiving.id, x: 0, z: 0, rotation: 0, color: "#bbb" },
+    ],
+    openings: [],
+  };
+  const rows = [
+    {
+      key: "101:f2:201",
+      sourceFloorId: "f1",
+      sourceFloorName: "Floor 1",
+      sourceUnit: "101",
+      sourceRoomCount: 1,
+      targetFloorId: "f2",
+      targetFloorName: "Floor 2",
+      targetUnit: "201",
+      status: "existing",
+      reason: "Target already exists",
+    },
+  ];
+
+  const result = helper.buildRepeatedDemoInterior(scene, rows, makeId);
+  assert.ok(result.created.some((item) => item.kind === "sofa"));
+  assert.equal(result.created.some((item) => item.kind === "bed"), false);
+  assert.ok(result.created.every((item) => item.origin === "demo-repeat"));
+});
+
 test("Studio exposes the two-step interior automation instead of a bulk blind rollout", () => {
   const studio = fs.readFileSync("apps/admin/src/studio/Studio.tsx", "utf8");
   assert.match(studio, /Prepare demo interior/);
   assert.match(studio, /Repeat interior to upper floors/);
   assert.match(studio, /Demo interior ready ✓/);
+  assert.match(studio, /Fix misplaced furniture/);
+  assert.match(studio, /auditDemoInterior\(p\.scene\)/);
   assert.match(studio, /quickSourceSetup\.interiorAutomation\?\.enabled/);
   assert.doesNotMatch(studio, /jyoti-paradise/i);
 });

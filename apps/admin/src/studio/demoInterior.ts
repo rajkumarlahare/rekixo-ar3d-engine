@@ -13,6 +13,25 @@ export interface InteriorBuildResult {
   skippedRooms: string[];
 }
 
+export type DemoInteriorRoomRole =
+  | "living"
+  | "bedroom"
+  | "dining"
+  | "balcony"
+  | "unsupported";
+
+export interface DemoInteriorIssue {
+  furnitureId: string;
+  roomId: string;
+  kind: Kind;
+  roomRole: Exclude<DemoInteriorRoomRole, "unsupported">;
+}
+
+export interface DemoInteriorRepairResult {
+  furniture: Furniture[];
+  removed: DemoInteriorIssue[];
+}
+
 function normalizeRoomName(value: string) {
   return value
     .toLowerCase()
@@ -21,7 +40,7 @@ function normalizeRoomName(value: string) {
     .trim();
 }
 
-function roomRole(room: Room) {
+export function roomRole(room: Room): DemoInteriorRoomRole {
   const name = normalizeRoomName(room.name);
   if (
     name.includes("balcony") ||
@@ -32,6 +51,54 @@ function roomRole(room: Room) {
   if (name.includes("bed room") || name.includes("bedroom")) return "bedroom";
   if (name.includes("dining")) return "dining";
   return "unsupported";
+}
+
+function allowedKindsForRoom(room: Room): ReadonlySet<Kind> | undefined {
+  switch (roomRole(room)) {
+    case "living":
+      return new Set<Kind>(["sofa", "table", "plant"]);
+    case "bedroom":
+      return new Set<Kind>(["bed", "wardrobe"]);
+    case "dining":
+      return new Set<Kind>(["table"]);
+    case "balcony":
+      return new Set<Kind>(["plant"]);
+    default:
+      return undefined;
+  }
+}
+
+export function auditDemoInterior(scene: Scene): DemoInteriorIssue[] {
+  const roomById = new Map(scene.rooms.map((room) => [room.id, room]));
+  const issues: DemoInteriorIssue[] = [];
+
+  for (const item of scene.furniture) {
+    const room = roomById.get(item.roomId);
+    if (!room || !room.verified || room.unit.trim().toLowerCase() === "common")
+      continue;
+    const allowed = allowedKindsForRoom(room);
+    if (!allowed || allowed.has(item.kind)) continue;
+    const role = roomRole(room);
+    if (role === "unsupported") continue;
+    issues.push({
+      furnitureId: item.id,
+      roomId: room.id,
+      kind: item.kind,
+      roomRole: role,
+    });
+  }
+
+  return issues;
+}
+
+export function repairDemoInterior(scene: Scene): DemoInteriorRepairResult {
+  const removed = auditDemoInterior(scene);
+  if (!removed.length) return { furniture: scene.furniture, removed };
+  const ids = new Set(removed.map((issue) => issue.furnitureId));
+  return {
+    furniture: scene.furniture.filter((item) => !ids.has(item.id)),
+    removed,
+  };
 }
 
 function desiredPlacements(room: Room): Array<{
@@ -125,6 +192,7 @@ export function buildTypicalFloorDemoInterior(
         z: fitted.z,
         rotation: fitted.rotation,
         color: catalog[fitted.kind].color,
+        origin: "demo-auto",
       };
       created.push(furniture);
       existing.push(furniture);
@@ -198,8 +266,11 @@ export function buildRepeatedDemoInterior(
     }
 
     for (const [sourceRoom, targetRoom] of pairRooms(sourceRooms, targetRooms)) {
+      const allowedSourceKinds = allowedKindsForRoom(sourceRoom);
       const sourceItems = scene.furniture.filter(
-        (item) => item.roomId === sourceRoom.id,
+        (item) =>
+          item.roomId === sourceRoom.id &&
+          (!allowedSourceKinds || allowedSourceKinds.has(item.kind)),
       );
       if (!sourceItems.length) continue;
 
@@ -228,6 +299,7 @@ export function buildRepeatedDemoInterior(
           x: fitted.x,
           z: fitted.z,
           rotation: fitted.rotation,
+          origin: "demo-repeat",
         };
         created.push(furniture);
         existing.push(furniture);

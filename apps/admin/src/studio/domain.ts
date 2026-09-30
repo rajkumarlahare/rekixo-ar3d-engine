@@ -26,6 +26,8 @@ export interface Room {
   sourceClaimIds?: string[];
   mesh?: string;
 }
+export type FurnitureOrigin = "demo-auto" | "demo-repeat";
+
 export interface Furniture {
   id: string;
   kind: Kind;
@@ -34,6 +36,8 @@ export interface Furniture {
   z: number;
   rotation: number;
   color: string;
+  /** Optional provenance for engine-generated furniture. Undefined means user/imported furniture. */
+  origin?: FurnitureOrigin;
 }
 export type OpeningKind = "door" | "window" | "opening";
 export interface Opening {
@@ -702,6 +706,8 @@ export function validateScene(s: Scene): void {
       !r ||
       !number(f.rotation, -360, 360) ||
       !color(f.color) ||
+      (f.origin !== undefined &&
+        !["demo-auto", "demo-repeat"].includes(f.origin)) ||
       !number(f.x, -200, 200) ||
       !number(f.z, -200, 200)
     )
