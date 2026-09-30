@@ -187,5 +187,21 @@ test("Studio exposes the two-step interior automation instead of a bulk blind ro
   assert.match(studio, /Prepare demo interior/);
   assert.match(studio, /Repeat interior to upper floors/);
   assert.match(studio, /Demo interior ready ✓/);
-  assert.match(studio, /quickSourceSetup\.profile === "jyoti-paradise"/);
+  assert.match(studio, /quickSourceSetup\.interiorAutomation\?\.enabled/);
+  assert.doesNotMatch(studio, /jyoti-paradise/i);
+});
+
+
+test("Jyoti profile opts into generic interior automation capability", () => {
+  const profiles = fs.readFileSync(
+    "project-profiles/studio-source-profiles.ts",
+    "utf8",
+  );
+  const setup = fs.readFileSync(
+    "apps/admin/src/studio/sourcePackSetup.ts",
+    "utf8",
+  );
+  assert.match(profiles, /interiorAutomation: \{ enabled: true \}/);
+  assert.match(setup, /interiorAutomation\?: ProfileInteriorAutomation/);
+  assert.match(setup, /interiorAutomation: profile\.interiorAutomation/);
 });
