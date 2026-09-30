@@ -173,7 +173,7 @@ test("brochure-backed Ground layout draft is removable only when a reviewed repl
       }),
       ground,
     ),
-    false,
+    true,
   );
 });
 
@@ -220,4 +220,46 @@ test("legacy room cleanup preserves model tags while clearing the removed room b
   assert.match(studio, /modelNodeTags: \(p\.scene\.modelNodeTags \?\? \[\]\)\.map/);
   assert.match(studio, /if \(tag\.roomId !== key\) return tag/);
   assert.match(studio, /delete preserved\.roomId/);
+});
+
+
+test("superseded brochure draft can migrate furniture to its reviewed replacement", () => {
+  const floors = [
+    { id: "ground", name: "Ground", elevation: 0 },
+    { id: "floor-1", name: "Floor 1", elevation: 3.048 },
+  ];
+  const ground = room({
+    source:
+      "Brochure page 2 living dimensions. Studio placement is a draft and needs alignment with the source model.",
+  });
+  const replacement = room({
+    id: "living-101",
+    name: "Living",
+    floorId: "floor-1",
+    unit: "101",
+    source: "Brochure source",
+    verified: true,
+  });
+  const current = scene({
+    floors,
+    rooms: [ground, replacement],
+    furniture: [{ id: "sofa", roomId: ground.id }],
+  });
+
+  assert.equal(
+    draftModule.isRemovableUnsourcedDraft(current, ground),
+    true,
+  );
+  assert.equal(
+    draftModule.findSupersedingReviewedRoom(current, ground)?.id,
+    replacement.id,
+  );
+});
+
+test("Studio cleanup migrates furniture and blocks new furnishing on superseded draft", () => {
+  const studio = fs.readFileSync("apps/admin/src/studio/Studio.tsx", "utf8");
+  assert.match(studio, /item\.roomId === key && replacement/);
+  assert.match(studio, /roomId: replacement\.id/);
+  assert.match(studio, /legacyDraftFurnitureBlocked/);
+  assert.match(studio, /Remove\/review this superseded draft before furnishing/);
 });
