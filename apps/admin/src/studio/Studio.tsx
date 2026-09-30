@@ -736,10 +736,11 @@ export default function Studio() {
       quickSourceSetup.floorSkeleton,
       quickSourceSetup.repeatPlan,
     ),
-    jyotiDemoInteriorEnabled =
-      quickSourceSetup.profile === "jyoti-paradise" && Boolean(typicalFloorId),
+    profileDemoInteriorEnabled =
+      Boolean(quickSourceSetup.interiorAutomation?.enabled) &&
+      Boolean(typicalFloorId),
     typicalDemoInteriorPreview =
-      jyotiDemoInteriorEnabled && typicalFloorId
+      profileDemoInteriorEnabled && typicalFloorId
         ? (() => {
             let previewIndex = 0;
             return buildTypicalFloorDemoInterior(
@@ -760,7 +761,7 @@ export default function Studio() {
       typicalFloorRoomIds.has(entry.roomId),
     ).length,
     repeatDemoInteriorPreview =
-      jyotiDemoInteriorEnabled &&
+      profileDemoInteriorEnabled &&
       typicalFloorId &&
       typicalDemoInteriorPreview.created.length === 0 &&
       typicalFloorFurnitureCount > 0
@@ -931,7 +932,7 @@ export default function Studio() {
     });
   }
   function prepareTypicalDemoInterior() {
-    if (!jyotiDemoInteriorEnabled || !typicalFloorId) {
+    if (!profileDemoInteriorEnabled || !typicalFloorId) {
       setError("Jyoti typical floor is not ready for demo interior automation.");
       return;
     }
@@ -961,7 +962,7 @@ export default function Studio() {
 
   function repeatDemoInteriorToUpperFloors() {
     if (
-      !jyotiDemoInteriorEnabled ||
+      !profileDemoInteriorEnabled ||
       !typicalFloorId ||
       typicalDemoInteriorPreview.created.length > 0
     ) {
@@ -4366,7 +4367,7 @@ export default function Studio() {
                     : "Select a room to furnish"}
               </small>
             </div>
-            {jyotiDemoInteriorEnabled &&
+            {profileDemoInteriorEnabled &&
               isolateFloorId === typicalFloorId &&
               !review && (
                 <div className="interior-auto-action" role="group" aria-label="Jyoti demo interior automation">
