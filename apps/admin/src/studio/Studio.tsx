@@ -2927,6 +2927,12 @@ export default function Studio() {
               scene: {
                 ...p.scene,
                 rooms: p.scene.rooms.filter((entry) => entry.id !== key),
+                modelNodeTags: (p.scene.modelNodeTags ?? []).map((tag) => {
+                  if (tag.roomId !== key) return tag;
+                  const preserved = { ...tag };
+                  delete preserved.roomId;
+                  return preserved;
+                }),
               },
             };
             try {
