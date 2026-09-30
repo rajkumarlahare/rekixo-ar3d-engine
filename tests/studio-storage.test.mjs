@@ -245,3 +245,53 @@ test("cloud-linked design copies clear project-specific review evidence", async 
   assert.equal(copied.scene.openings[0].confidence, undefined);
   assert.deepEqual(copied.scene.modelNodeTags, []);
 });
+
+
+test("cloud cache preserves a conflicting local project and its asset bytes", async () => {
+  const local = { ...newProject("Jyoti Paradise"), slug: "jyoti-paradise" };
+  const localModel = await storage.makeAsset(
+    new File(["jyoti-model"], "jyoti.glb", { type: "model/gltf-binary" }),
+    local.id,
+  );
+  local.assets = [localModel.id];
+  local.scene.modelId = localModel.id;
+  await storage.save(local, [localModel]);
+
+  const cloudProject = structuredClone(local);
+  cloudProject.id = "project_jyoti_paradise";
+  cloudProject.slug = "jyoti-paradise";
+  cloudProject.cloud = { revision: 1, syncedAt: new Date().toISOString() };
+  const cloudModel = { ...localModel, projectId: cloudProject.id };
+
+  const cached = await storage.cacheCloudProject(cloudProject, [cloudModel]);
+  assert.ok(cached.backup);
+
+  const projects = await storage.projects();
+  const active = projects.find((project) => project.id === cloudProject.id);
+  const backup = projects.find((project) => project.id === local.id);
+  assert.equal(active.slug, "jyoti-paradise");
+  assert.match(backup.slug, /jyoti-paradise-local-backup-/);
+  assert.match(backup.name, /local backup/);
+
+  assert.notEqual(backup.scene.modelId, localModel.id);
+  const backupModel = await storage.asset(backup.scene.modelId);
+  assert.equal(backupModel.projectId, local.id);
+  assert.equal(await backupModel.blob.text(), "jyoti-model");
+
+  const activeModel = await storage.asset(active.scene.modelId);
+  assert.equal(active.scene.modelId, localModel.id);
+  assert.equal(activeModel.projectId, cloudProject.id);
+  assert.equal(await activeModel.blob.text(), "jyoti-model");
+});
+
+test("cloud cache refuses to shadow a different cloud-linked local project", async () => {
+  const first = { ...newProject("Cloud A"), slug: "cloud-collision" };
+  first.cloud = { revision: 2, syncedAt: new Date().toISOString() };
+  await storage.save(first);
+
+  const second = { ...newProject("Cloud B"), slug: "cloud-collision" };
+  await assert.rejects(
+    storage.cacheCloudProject(second),
+    /different cloud-linked local project/i,
+  );
+});
