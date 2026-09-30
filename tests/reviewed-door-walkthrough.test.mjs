@@ -40,7 +40,7 @@ test("demo room navigation is separate from reviewed-door transition truth", () 
   assert.match(domain, /room\.verified/);
   assert.match(domain, /room\.floorId === source\.floorId/);
   assert.match(domain, /room\.unit\.trim\(\)\.toLowerCase\(\) === unit/);
-  assert.match(readiness, /does not yield a trustworthy reviewed shared door/);
+  assert.match(readiness, /did not yield a trustworthy reviewed shared door/);
   assert.match(readiness, /same unit for demo navigation/);
   assert.match(canvas, /WASD inside room/);
 });
