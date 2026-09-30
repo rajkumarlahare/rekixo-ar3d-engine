@@ -158,3 +158,11 @@ test("alignment offers one-click auto positioning before manual fine tuning", ()
   assert.match(canvas, /rotationY: 0/);
   assert.match(css, /\.alignment-auto-position/);
 });
+
+
+test("reference plan is hidden after leaving alignment mode", () => {
+  const studio = read("apps/admin/src/studio/Studio.tsx");
+
+  assert.match(studio, /showReferenceLayers=\{showReferenceWorkspace\}/);
+  assert.match(studio, /\{showReferenceWorkspace && \([\s\S]*<ReferenceWorkspace/);
+});
