@@ -3445,3 +3445,82 @@
     order: 2;
   }
 }
+
+
+/* Interior Material Editor V1 */
+.editor-room-materials {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #34485d;
+  border-radius: 10px;
+  background: #0b1624;
+}
+
+.editor-room-materials > small,
+.surface-material-head small {
+  color: #93a3b6;
+}
+
+.surface-target-grid,
+.surface-preset-grid,
+.surface-material-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.surface-target-grid {
+  max-height: 118px;
+  overflow: auto;
+  padding: 2px;
+}
+
+.surface-target-grid button,
+.surface-preset {
+  min-height: 34px;
+}
+
+.surface-target-grid button.active,
+.surface-preset.active {
+  border-color: #72d0af;
+  background: rgba(39, 133, 103, .22);
+  color: #e9fff7;
+}
+
+.surface-material-head {
+  display: grid;
+  gap: 2px;
+  padding-top: 4px;
+  border-top: 1px solid #25374a;
+}
+
+.surface-preset {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.surface-preset-swatch {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border: 1px solid rgba(255, 255, 255, .25);
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12);
+}
+
+.surface-material-actions > button {
+  flex: 1 1 120px;
+}
+
+@media (max-width: 760px) {
+  .editor-room-materials {
+    padding: 10px;
+  }
+
+  .surface-target-grid {
+    max-height: 98px;
+  }
+}
