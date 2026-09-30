@@ -3271,3 +3271,34 @@
     flex-direction: column;
   }
 }
+
+
+/* Direct rollout action after source-floor review */
+.floor-review-rollout-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid #2f7f66;
+  border-radius: 10px;
+  background: rgba(31, 143, 107, .16);
+}
+
+.floor-review-rollout-action > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.floor-review-rollout-action small {
+  color: #9bb6ad;
+}
+
+@media (max-width: 760px) {
+  .floor-review-rollout-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

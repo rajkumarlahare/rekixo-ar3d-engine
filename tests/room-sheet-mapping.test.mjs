@@ -244,3 +244,14 @@ test("generated floors have one-click floor review while source rooms keep indiv
   assert.match(studio, /next repeated floor opened for review/);
   assert.match(studio, /analyzeAndApproveReadyOpenings\(next\)/);
 });
+
+
+test("fully reviewed source floor exposes direct repeat rollout action", () => {
+  const review = fs.readFileSync("apps/admin/src/studio/FloorRoomReview.tsx", "utf8");
+  assert.match(review, /Source floor reviewed/);
+  assert.match(review, /Generate repeated floors/);
+  assert.match(review, /sourceFloorReviewed/);
+  assert.match(review, /repeat\.readyTargets > 0/);
+  assert.match(review, /generatedOnFloor\.length === 0/);
+  assert.match(review, /rooms\.every\(\(room\) => room\.verified\)/);
+});

@@ -23,6 +23,10 @@ export default function FloorRoomReview({ scene, floorId, unit, selectedId, disa
   const selected = visible.find((room) => room.id === selectedId);
   const generatedOnFloor = rooms.filter(isBatchRepeatedRoom);
   const generatedAccepted = generatedOnFloor.filter((room) => room.verified).length;
+  const sourceFloorReviewed =
+    rooms.length > 0 &&
+    generatedOnFloor.length === 0 &&
+    rooms.every((room) => room.verified);
   const points = rooms.flatMap(roomBoundaryPoints);
   if (!points.length) return null;
   const minX = Math.min(...points.map(([x]) => x)) - 1;
@@ -46,6 +50,19 @@ export default function FloorRoomReview({ scene, floorId, unit, selectedId, disa
         <text x={room.x} y={room.z} textAnchor="middle" fontSize={0.32} fill="currentColor">{room.name}</text>
       </g>)}
     </svg>
+    {sourceFloorReviewed && repeat.readyTargets > 0 && (
+      <div className="floor-review-rollout-action">
+        <span>
+          <strong>Source floor reviewed</strong>
+          <small>
+            {repeat.readyTargets} repeated unit{repeat.readyTargets === 1 ? "" : "s"} ready · {repeat.roomsToCreate} draft rooms
+          </small>
+        </span>
+        <button type="button" className="primary" disabled={disabled} onClick={onRepeat}>
+          Generate repeated floors
+        </button>
+      </div>
+    )}
     <div className="floor-review-unit-action">
       <span>
         <strong>Unit {activeUnit}</strong>
