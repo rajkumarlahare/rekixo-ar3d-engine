@@ -161,7 +161,10 @@ test("public and release workers enforce R2 ownership and video range support", 
   assert.match(publicWorker, /assertProjectAssetKey/);
   assert.match(publicWorker, /allowRange: mimeType === "video\/mp4"/);
   assert.match(release, /assertReleaseAssetKey/);
-  assert.match(release, /allowRange: kind === "media" && mimeType === "video\/mp4"/);
+  assert.match(
+    release,
+    /allowRange:[\s\S]{0,180}kind === "model"[\s\S]{0,180}kind === "media" && mimeType === "video\/mp4"/,
+  );
   assert.match(publisher, /assertDraftAssetKey/);
   assert.match(publisher, /assertReleaseAssetKey/);
 });

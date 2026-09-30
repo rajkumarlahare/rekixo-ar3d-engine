@@ -470,3 +470,65 @@ test("public immutable experience exposes only reviewed two-room door graph in m
   assert.equal(experience.walkthrough.doors[0].width, 0.45);
   assert.equal(experience.walkthrough.rooms[0].elevation, 0);
 });
+
+test("immutable GLB release assets support byte-range streaming", async () => {
+  const DB = {
+    prepare(sql) {
+      return {
+        bind() {
+          return this;
+        },
+        async first() {
+          if (sql.includes("sqlite_master")) return { total: 3 };
+          if (sql.includes("pragma_table_info")) return { total: 1 };
+          if (sql.includes("FROM release_assets_3d")) {
+            return {
+              r2_key:
+                "projects/garden-heights/releases/release_12345678/models/model_main",
+              mime_type: "model/gltf-binary",
+              byte_size: 1024,
+              name: "Building",
+              sha256: null,
+              source_etag: null,
+              status: "published",
+              slug: "garden-heights",
+            };
+          }
+          throw new Error("Unexpected first SQL: " + sql);
+        },
+      };
+    },
+  };
+  let requestedRange;
+  const MODEL_ASSETS = {
+    async head() {
+      return {
+        size: 1024,
+        httpEtag: '"etag"',
+        writeHttpMetadata() {},
+      };
+    },
+    async get(_key, options) {
+      requestedRange = options?.range;
+      return { body: new Uint8Array([0x67, 0x6c, 0x54, 0x46]) };
+    },
+  };
+
+  const response = await runtime.serveReleaseAsset(
+    { DB, MODEL_ASSETS },
+    "release_12345678",
+    "models",
+    "model_main",
+    new Request(
+      "https://ar3dstudio.in/3Dprojects/api/releases/release_12345678/models/model_main/content",
+      { headers: { Range: "bytes=0-3" } },
+    ),
+  );
+
+  assert.equal(response.status, 206);
+  assert.equal(response.headers.get("accept-ranges"), "bytes");
+  assert.equal(response.headers.get("content-range"), "bytes 0-3/1024");
+  assert.equal(response.headers.get("content-length"), "4");
+  assert.deepEqual(requestedRange, { offset: 0, length: 4 });
+  assert.equal(Buffer.from(await response.arrayBuffer()).toString("ascii"), "glTF");
+});
