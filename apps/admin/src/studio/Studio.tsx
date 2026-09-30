@@ -1335,7 +1335,10 @@ export default function Studio() {
     );
   }
 
-  function prepareSuggestedTypicalFloor(targetFloorId: string) {
+  function prepareSuggestedTypicalFloor(
+    targetFloorId: string,
+    openMapper = true,
+  ) {
     if (!targetFloorId) {
       setError("Choose a floor before preparing the suggested layout.");
       return;
@@ -1376,7 +1379,7 @@ export default function Studio() {
       validateProject(next);
       edit(next);
       const first = additions[0];
-      setShowRoomMapper(true);
+      setShowRoomMapper(openMapper);
       setShowReferenceWorkspace(false);
       setShowAssetShelf(false);
       setView("building");
@@ -3717,10 +3720,15 @@ export default function Studio() {
                       const next = event.target.value;
                       setIsolateFloorId(next);
                       if (next) {
+                        setRoomMapFloorId(next);
                         const target = scene.floors.find((floor) => floor.id === next);
                         if (target) {
                           setSectionCutOffset(target.elevation + 1.5);
                           setView("building");
+                        }
+                        if (room?.floorId !== next) {
+                          setSelected("");
+                          setRoomId("");
                         }
                       }
                     }}
@@ -3742,6 +3750,31 @@ export default function Studio() {
                 )}
               </div>
             </details>
+
+            {isolateFloorId &&
+              roomSheetRows.some(
+                (row) =>
+                  row.origin === "profile" &&
+                  typeof row.suggestedX === "number" &&
+                  Number.isFinite(row.suggestedX) &&
+                  typeof row.suggestedZ === "number" &&
+                  Number.isFinite(row.suggestedZ) &&
+                  !mappedSheetKeys.has(row.key),
+              ) && (
+                <button
+                  type="button"
+                  className="primary editor-prepare-floor-action"
+                  disabled={busy || Boolean(review)}
+                  onClick={() =>
+                    prepareSuggestedTypicalFloor(isolateFloorId, false)
+                  }
+                >
+                  Prepare{" "}
+                  {scene.floors.find((floor) => floor.id === isolateFloorId)?.name ??
+                    "floor"}{" "}
+                  rooms
+                </button>
+              )}
 
             <button
               type="button"
