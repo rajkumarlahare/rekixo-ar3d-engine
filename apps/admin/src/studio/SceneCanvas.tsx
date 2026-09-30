@@ -7,7 +7,8 @@ import {
   summarizeModelMaterials,
   type ModelMaterialSummary,
 } from "./sceneCanvasModel";
-import { block, roomSurface } from "./sceneCanvasRooms";
+import { roomSurface } from "./sceneCanvasRooms";
+import { addFurnitureVisual } from "./furnitureVisual";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -21,7 +22,6 @@ import {
 import { asset } from "./storage";
 import {
   canWalk,
-  catalog,
   reviewedDoorConnections,
   resolveReviewedDoorWalkStep,
   roomBoundaryPoints,
@@ -1575,38 +1575,13 @@ export default function SceneCanvas(props: Props) {
       for (const f of props.scene.furniture.filter(
         (f) => f.roomId === room.id,
       )) {
-        const c = catalog[f.kind],
-          g = new T.Group();
+        const g = new T.Group();
         g.userData.selectId = f.id;
         g.position.set(f.x, 0, f.z);
         g.rotation.y = (f.rotation * Math.PI) / 180;
         root.add(g);
         r.selectables.set(f.id, g);
-        block(
-          g,
-          f.kind,
-          [c.width, c.height, c.depth],
-          [0, c.height / 2, 0],
-          f.color,
-        );
-        if (f.kind === "sofa") {
-          block(g, "backrest", [c.width, 0.5, 0.15], [0, 0.85, -0.35], f.color);
-          for (const x of [-0.94, 0.94])
-            block(g, "armrest", [0.22, 0.3, 0.8], [x, 0.75, 0], f.color);
-        }
-        if (f.kind === "bed") {
-          block(g, "headboard", [1.7, 0.9, 0.1], [0, 0.45, -1], "#816958");
-          for (const x of [-0.4, 0.4])
-            block(g, "pillow", [0.6, 0.12, 0.4], [x, 0.62, -0.65], "#f4f0e6");
-        }
-        if (f.kind === "plant") {
-          const leaves = new T.Mesh(
-            new T.IcosahedronGeometry(0.45, 1),
-            new T.MeshStandardMaterial({ color: 0x50734b }),
-          );
-          leaves.position.y = 1;
-          g.add(leaves);
-        }
+        addFurnitureVisual(g, f);
         if (f.id === props.selected) {
           g.updateWorldMatrix(true, true);
           r.rooms.add(new T.BoxHelper(g, 0xd67e34));
