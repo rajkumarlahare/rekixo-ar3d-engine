@@ -3225,3 +3225,49 @@
     flex: 1 1 100%;
   }
 }
+
+
+/* Jyoti rollout completion */
+.floor-review-generated-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 9px;
+  border: 1px solid #2b715c;
+  border-radius: 9px;
+  background: rgba(25, 92, 72, .16);
+}
+
+.floor-review-generated-action > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.floor-review-generated-action small {
+  color: #8fa7a0;
+}
+
+.builder-draft-options {
+  position: relative;
+}
+
+.builder-draft-options summary {
+  cursor: pointer;
+  color: #8d9aae;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.builder-draft-options button {
+  margin-top: 6px;
+}
+
+@media (max-width: 760px) {
+  .floor-review-generated-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

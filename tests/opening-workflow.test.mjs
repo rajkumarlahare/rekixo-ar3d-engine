@@ -235,6 +235,6 @@ test("Room Mapper exposes one-click opening preparation and review fallback", ()
   assert.match(mapper, /dimension-plausible associations/);
   assert.match(studio, /analyzeAndApproveReadyOpenings/);
   assert.match(studio, /applyReadyOpeningWorkflow/);
-  assert.match(studio, /suggestOpeningAssociations\(analysis, p\.scene\)/);
+  assert.match(studio, /suggestOpeningAssociations\(analysis, baseProject\.scene\)/);
   assert.match(studio, /Existing reviewed openings and manual labels were preserved/);
 });

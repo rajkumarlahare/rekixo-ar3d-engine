@@ -192,3 +192,19 @@ test("Jyoti repeat plan stays source-specific and excludes common rooms", () => 
   assert.doesNotMatch(profile, /sourceUnit: "Common"/);
   assert.match(profile, /not a certified legal floor schedule/);
 });
+
+
+test("batch repeated room identity is explicit and stable for review automation", () => {
+  const generated = repeat.applyBatchRepeatPlan(
+    scene([room("r1", "f1", "101", "Living"), room("r2", "f1", "101", "Bedroom")]),
+    "demo",
+    skeleton,
+    plan,
+    () => "copy",
+  );
+  assert.ok(generated.createdRooms.length > 0);
+  assert.ok(generated.createdRooms.every((entry) => repeat.isBatchRepeatedRoom(entry)));
+  assert.ok(generated.createdRooms.every((entry) =>
+    entry.source.startsWith(repeat.BATCH_REPEAT_SOURCE_PREFIX)));
+  assert.equal(repeat.isBatchRepeatedRoom(room("plain", "f1", "101", "Living")), false);
+});

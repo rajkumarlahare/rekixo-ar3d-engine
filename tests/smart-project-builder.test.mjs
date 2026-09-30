@@ -86,3 +86,13 @@ test("FBX texture warning follows the selected authoring model only", () => {
   assert.match(builder, /audit\.assetId === project\.scene\.modelId/);
   assert.match(builder, /Selected FBX external textures incomplete/);
 });
+
+
+test("completed smart draft is explicit and rebuild stays advanced", () => {
+  const builder = read("apps/admin/src/studio/SmartProjectBuilder.tsx");
+  assert.match(builder, /const draftBuilt =/);
+  assert.match(builder, /Draft built ✓/);
+  assert.match(builder, /Draft options/);
+  assert.match(builder, /Rebuild draft/);
+  assert.match(builder, /draftBuilt \|\|/);
+});

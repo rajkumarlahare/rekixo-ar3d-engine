@@ -91,6 +91,7 @@ import {
 import {
   applyBatchRepeatPlan,
   buildBatchRepeatPreview,
+  isBatchRepeatedRoom,
 } from "./unitRepeat";
 import {
   projectAheadOfCloud,
@@ -1770,6 +1771,98 @@ export default function Studio() {
     }
   }
 
+  function reviewGeneratedFloor(targetFloorId: string) {
+    const generated = p.scene.rooms.filter(
+      (entry) => entry.floorId === targetFloorId && isBatchRepeatedRoom(entry),
+    );
+    if (!generated.length) {
+      setMessage("No generated room drafts are waiting on this floor.");
+      return;
+    }
+
+    const next: Project = {
+      ...p,
+      scene: {
+        ...p.scene,
+        rooms: p.scene.rooms.map((entry) =>
+          entry.floorId === targetFloorId && isBatchRepeatedRoom(entry)
+            ? { ...entry, verified: true }
+            : entry,
+        ),
+      },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+
+      const nextPreview = buildBatchRepeatPreview(
+        next.scene,
+        quickSourceSetup.profile,
+        quickSourceSetup.floorSkeleton,
+        quickSourceSetup.repeatPlan,
+      );
+      const repeatTargets = nextPreview.rows.filter(
+        (row) => row.targetFloorId && row.targetUnit,
+      );
+      const pendingRoom = [...next.scene.floors]
+        .sort((left, right) => left.elevation - right.elevation)
+        .flatMap((floor) =>
+          next.scene.rooms.filter(
+            (entry) =>
+              entry.floorId === floor.id &&
+              !entry.verified &&
+              repeatTargets.some(
+                (row) =>
+                  row.targetFloorId === entry.floorId &&
+                  row.targetUnit.trim().toLowerCase() ===
+                    entry.unit.trim().toLowerCase(),
+              ),
+          ),
+        )[0];
+
+      if (pendingRoom) {
+        setRoomMapFloorId(pendingRoom.floorId);
+        setRoomMapUnit(pendingRoom.unit);
+        setRoomMapName(pendingRoom.name);
+        setIsolateFloorId(pendingRoom.floorId);
+        setRoomId(pendingRoom.id);
+        setSelected(pendingRoom.id);
+        const target = next.scene.floors.find(
+          (floor) => floor.id === pendingRoom.floorId,
+        );
+        if (target) setSectionCutOffset(target.elevation + 1.5);
+        setMessage(
+          `${generated.length} generated room drafts accepted on this floor · next repeated floor opened for review.`,
+        );
+        return;
+      }
+
+      if (nextPreview.readyTargets > 0 || nextPreview.blockedTargets > 0) {
+        setMessage(
+          `Generated rooms on this floor accepted · ${nextPreview.readyTargets} repeat target${nextPreview.readyTargets === 1 ? "" : "s"} ready and ${nextPreview.blockedTargets} still blocked by source review.`,
+        );
+        return;
+      }
+
+      if (next.scene.modelId) {
+        setMessage(
+          "Repeated-floor review complete. Analyzing high-confidence doors/windows next…",
+        );
+        void task(() => analyzeAndApproveReadyOpenings(next));
+      } else {
+        setMessage(
+          "Repeated-floor review complete. Select a project model before doors/windows analysis.",
+        );
+      }
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Generated floor review could not be saved.",
+      );
+    }
+  }
+
   function repeatMappedUnit(targetFloorId: string, targetUnit: string) {
     const sourceFloorId = roomMapFloorId;
     const sourceUnit = roomMapUnit.trim();
@@ -2159,26 +2252,26 @@ export default function Studio() {
       `Smart draft built · ${floors.length} floors · ${autoTagged} meshes auto-tagged. Ambiguous/multi-floor meshes remain unassigned for visual review.`,
     );
   }
-  async function analyzeAndApproveReadyOpenings() {
-    if (!p.scene.modelId)
+  async function analyzeAndApproveReadyOpenings(baseProject: Project = p) {
+    if (!baseProject.scene.modelId)
       throw Error("Select the project model before analyzing doors/windows.");
-    if (!p.scene.rooms.length)
+    if (!baseProject.scene.rooms.length)
       throw Error("Map the typical-floor rooms before analyzing doors/windows.");
 
     const analysis = await analyzeProjectFiles(
       files,
-      p.scene.modelId,
+      baseProject.scene.modelId,
       sourceAudits,
     );
-    const suggestions = suggestOpeningAssociations(analysis, p.scene);
+    const suggestions = suggestOpeningAssociations(analysis, baseProject.scene);
     const workflow = applyReadyOpeningWorkflow(
-      p.scene,
+      baseProject.scene,
       analysis.architecturalCandidates,
       suggestions,
       id,
     );
     const next: Project = {
-      ...p,
+      ...baseProject,
       scene: workflow.scene,
     };
     validateProject(next);
@@ -3996,6 +4089,7 @@ export default function Studio() {
                 setRoomId(first?.id ?? "");
                 setSelected(first?.id ?? "");
               }}
+              onReviewGeneratedFloor={reviewGeneratedFloor}
               onCorrect={() => {
                 setShowFloorReview(false); setShowRoomMapper(true);
                 setRoomMapFloorId(isolateFloorId); setRoomMapAction("idle");

@@ -97,6 +97,13 @@ export default function SmartProjectBuilder({
       (Boolean(quickSetup.publishModelId) &&
         project.scene.publishModelId === quickSetup.publishModelId)) &&
     (!floorStatus || floorStatus.missing === 0);
+  const draftBuilt =
+    project.scene.floors.length > 1 &&
+    Boolean(
+      project.scene.modelNodeTags?.some(
+        (tag) => Boolean(tag.floorId) && tag.assignment === "auto",
+      ),
+    );
   const roles = useMemo(() => {
     const count = new Map<SmartSourceRole, number>();
     for (const source of analysis?.sources ?? [])
@@ -175,7 +182,7 @@ export default function SmartProjectBuilder({
           ["1", "Project", Boolean(project.name.trim())],
           ["2", "Sources", files.length > 0],
           ["3", "Analyze", Boolean(analysis)],
-          ["4", "Build Draft", project.scene.floors.length > 1 || Boolean(project.scene.modelNodeTags?.length)],
+          ["4", "Build Draft", draftBuilt],
           ["5", "Review", false],
         ].map(([index, label, complete]) => (
           <div className={complete ? "complete" : ""} key={String(label)}>
@@ -726,17 +733,26 @@ export default function SmartProjectBuilder({
             type="button"
             className="primary"
             disabled={
+              draftBuilt ||
               busy ||
               !analysis?.modelAssetId ||
               analysis.floorCandidates.length === 0
             }
             onClick={onBuildDraft}
           >
-            Build smart draft
+            {draftBuilt ? "Draft built ✓" : "Build smart draft"}
           </button>
           <button type="button" disabled={busy} onClick={onOpenEditor}>
             Review visually
           </button>
+          {draftBuilt && analysis?.modelAssetId && analysis.floorCandidates.length > 0 && (
+            <details className="builder-draft-options">
+              <summary>Draft options</summary>
+              <button type="button" disabled={busy} onClick={onBuildDraft}>
+                Rebuild draft
+              </button>
+            </details>
+          )}
         </div>
       </article>
 

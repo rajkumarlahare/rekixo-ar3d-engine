@@ -70,6 +70,12 @@ function sameUnit(left: string, right: string) {
   return left.trim().toLowerCase() === right.trim().toLowerCase();
 }
 
+export const BATCH_REPEAT_SOURCE_PREFIX = "Batch repeated draft from ";
+
+export function isBatchRepeatedRoom(room: Pick<Room, "source">) {
+  return room.source.startsWith(BATCH_REPEAT_SOURCE_PREFIX);
+}
+
 export function buildBatchRepeatPreview(
   scene: Scene,
   profileId: string | undefined,
@@ -179,7 +185,7 @@ function copiedRoom(
     floorId: targetFloorId,
     unit: targetUnit,
     verified: false,
-    source: `Batch repeated draft from ${sourceFloorName} · ${sourceUnit} → ${targetUnit}. Geometry is copied for authoring convenience and requires visual review.`,
+    source: `${BATCH_REPEAT_SOURCE_PREFIX}${sourceFloorName} · ${sourceUnit} → ${targetUnit}. Geometry is copied for authoring convenience and requires visual review.`,
     sourceAssetId: undefined,
     sourcePackSourceId: undefined,
     sourceClaimIds: undefined,
