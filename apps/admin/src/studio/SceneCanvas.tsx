@@ -22,7 +22,6 @@ import {
 import { asset } from "./storage";
 import {
   canWalk,
-  catalog,
   reviewedDoorConnections,
   resolveReviewedDoorWalkStep,
   roomBoundaryPoints,
