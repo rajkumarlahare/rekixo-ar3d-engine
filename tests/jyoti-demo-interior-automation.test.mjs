@@ -275,7 +275,8 @@ test("Jyoti profile opts into generic interior automation capability", () => {
     "apps/admin/src/studio/sourcePackSetup.ts",
     "utf8",
   );
-  assert.match(profiles, /interiorAutomation: \{ enabled: true \}/);
+  assert.match(profiles, /interiorAutomation: \{ enabled: true, autoReconcile: true \}/);
   assert.match(setup, /interiorAutomation\?: ProfileInteriorAutomation/);
+  assert.match(setup, /autoReconcile\?: boolean/);
   assert.match(setup, /interiorAutomation: profile\.interiorAutomation/);
 });
