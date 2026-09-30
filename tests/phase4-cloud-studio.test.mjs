@@ -178,3 +178,12 @@ test("Platform credentials and cookies are not reused by Engine cloud auth", () 
   assert.doesNotMatch(worker, /\bADMIN_EMAIL\b/);
   assert.doesNotMatch(worker, /\bSESSION_SECRET\b/);
 });
+
+
+test("Engine Admin login failures return a safe diagnostic stage instead of Worker 1101", () => {
+  const worker = fs.readFileSync("workers/admin-cloud.mjs", "utf8");
+  assert.match(worker, /diagnostic: `login-stage:\${stage}`/);
+  assert.match(worker, /Engine Admin sign-in temporarily unavailable/);
+  assert.match(worker, /stage = "password-verify"/);
+  assert.match(worker, /stage = "record-failure"/);
+});
