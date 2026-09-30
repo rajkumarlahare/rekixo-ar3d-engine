@@ -74,7 +74,7 @@ function EvidenceRow({
           className="ops-remove-draft"
           onClick={() => onRemoveDraft(room.id)}
         >
-          Remove unsourced draft
+          Remove superseded draft
         </button>
       )}
     </div>
