@@ -30,6 +30,7 @@ export function roomSurface(
   height: number,
   mapper: boolean,
   selected: boolean,
+  interiorPresentation = false,
 ) {
   const world = roomBoundaryPoints(room);
   const local = world.map(
@@ -41,9 +42,12 @@ export function roomSurface(
     if (index) shape.lineTo(x, z);
   });
   shape.closePath();
+  const floorColor = interiorPresentation
+    ? new T.Color(room.color).lerp(new T.Color("#d8cbb8"), 0.24)
+    : new T.Color(room.color);
   const floorMaterial = new T.MeshStandardMaterial({
-    color: room.color,
-    roughness: 0.75,
+    color: floorColor,
+    roughness: interiorPresentation ? 0.92 : 0.75,
     side: T.DoubleSide,
     transparent: mapper,
     opacity: mapper ? (selected ? 0.52 : 0.24) : 1,
@@ -68,8 +72,14 @@ export function roomSurface(
     const wall = new T.Mesh(
       new T.BoxGeometry(length, height, 0.12),
       new T.MeshStandardMaterial({
-        color: index % 2 ? "#e7e0d5" : "#eee9df",
-        roughness: 0.82,
+        color: interiorPresentation
+          ? index % 2
+            ? "#eee8df"
+            : "#f4f0e9"
+          : index % 2
+            ? "#e7e0d5"
+            : "#eee9df",
+        roughness: interiorPresentation ? 0.92 : 0.82,
       }),
     );
     wall.name = "wall";
@@ -82,6 +92,25 @@ export function roomSurface(
     wall.castShadow = true;
     wall.receiveShadow = true;
     root.add(wall);
+
+    if (interiorPresentation) {
+      const skirting = new T.Mesh(
+        new T.BoxGeometry(length, 0.07, 0.135),
+        new T.MeshStandardMaterial({
+          color: "#c9b9a4",
+          roughness: 0.9,
+        }),
+      );
+      skirting.name = "skirting";
+      skirting.position.set(
+        (left[0] + right[0]) / 2,
+        0.055,
+        (left[1] + right[1]) / 2,
+      );
+      skirting.rotation.y = wall.rotation.y;
+      skirting.receiveShadow = true;
+      root.add(skirting);
+    }
   }
   return floor;
 }
