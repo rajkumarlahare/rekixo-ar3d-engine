@@ -776,3 +776,18 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+.studio-cloud-identity-notice {
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid rgba(89, 197, 153, .38);
+  border-radius: 9px;
+  background: rgba(29, 88, 67, .14);
+}
+
+.studio-cloud-identity-notice small {
+  color: #b7d7ca;
+  line-height: 1.4;
+}
