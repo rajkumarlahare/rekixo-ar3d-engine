@@ -42,6 +42,25 @@ function fixture() {
         mesh: "InternalLivingMesh",
       }],
       furniture: [],
+      surfaceFinishes: [
+        {
+          roomId: "room_living",
+          kind: "floor",
+          presetId: "wood",
+          color: "#a97952",
+          roughness: 0.58,
+          metalness: 0,
+        },
+        {
+          roomId: "room_living",
+          kind: "wall",
+          edgeIndex: 0,
+          presetId: "paint",
+          color: "#f2eee7",
+          roughness: 0.88,
+          metalness: 0,
+        },
+      ],
       openings: [
         {
           id: "door_reviewed",
@@ -147,8 +166,28 @@ test("public Studio snapshot is allowlisted and strips operator evidence", () =>
   assert.equal(published.scene.rooms[0].sourceClaimIds, undefined);
   assert.equal(published.scene.rooms[0].mesh, undefined);
   assert.equal(published.scene.rooms[0].source, "Published reviewed geometry.");
+  assert.deepEqual(published.scene.surfaceFinishes, draft.scene.surfaceFinishes);
   assert.equal(published.scene.openings.length, 1);
   assert.equal(published.scene.openings[0].id, "door_reviewed");
   assert.equal(published.scene.openings[0].sourceNodeName, undefined);
   assert.equal(published.scene.openings[0].confidence, undefined);
+});
+
+
+test("server validator rejects duplicate and out-of-range room surface finishes", () => {
+  const duplicate = fixture();
+  duplicate.draft.scene.surfaceFinishes.push({
+    ...duplicate.draft.scene.surfaceFinishes[0],
+  });
+  assert.throws(
+    () => validateStudioDraft(duplicate.draft, duplicate.project),
+    /surface finish/i,
+  );
+
+  const badWall = fixture();
+  badWall.draft.scene.surfaceFinishes[1].edgeIndex = 99;
+  assert.throws(
+    () => validateStudioDraft(badWall.draft, badWall.project),
+    /wall finish edge/i,
+  );
 });
