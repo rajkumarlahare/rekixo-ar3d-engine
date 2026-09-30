@@ -324,10 +324,11 @@ export default function Studio() {
       !project ||
       review ||
       busy ||
-      quickSourceSetup.profile?.id !== "jyoti-paradise" ||
+      !quickSourceSetup.profile ||
       !quickSourceSetup.interiorAutomation?.enabled ||
+      !quickSourceSetup.interiorAutomation?.autoReconcile ||
       !quickSourceSetup.repeatPlan ||
-      !quickSourceSetup.floorSkeleton.length
+      !quickSourceSetup.floorSkeleton?.length
     )
       return;
 
