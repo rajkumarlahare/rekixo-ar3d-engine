@@ -705,4 +705,3 @@ test("Geo derivative contract is omitted when derivative metadata is missing or 
   );
   assert.equal(geo, undefined);
 });
-
