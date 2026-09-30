@@ -3,7 +3,9 @@ import {
   roomBoundaryPoints,
   type Room,
   type RoomPoint,
+  type Scene,
 } from "./domain";
+import { findSurfaceFinish } from "./surfaceMaterials";
 
 export function block(
   root: T.Object3D,
@@ -31,6 +33,8 @@ export function roomSurface(
   mapper: boolean,
   selected: boolean,
   interiorPresentation = false,
+  scene?: Scene,
+  includeCeiling = false,
 ) {
   const world = roomBoundaryPoints(room);
   const local = world.map(
@@ -42,12 +46,19 @@ export function roomSurface(
     if (index) shape.lineTo(x, z);
   });
   shape.closePath();
-  const floorColor = interiorPresentation
-    ? new T.Color(room.color).lerp(new T.Color("#d8cbb8"), 0.24)
-    : new T.Color(room.color);
+  const floorFinish = scene
+    ? findSurfaceFinish(scene, room.id, "floor")
+    : undefined;
+  const floorColor = floorFinish
+    ? new T.Color(floorFinish.color)
+    : interiorPresentation
+      ? new T.Color(room.color).lerp(new T.Color("#d8cbb8"), 0.24)
+      : new T.Color(room.color);
   const floorMaterial = new T.MeshStandardMaterial({
     color: floorColor,
-    roughness: interiorPresentation ? 0.92 : 0.75,
+    roughness:
+      floorFinish?.roughness ?? (interiorPresentation ? 0.92 : 0.75),
+    metalness: floorFinish?.metalness ?? 0,
     side: T.DoubleSide,
     transparent: mapper,
     opacity: mapper ? (selected ? 0.52 : 0.24) : 1,
@@ -55,6 +66,8 @@ export function roomSurface(
   });
   const floor = new T.Mesh(new T.ShapeGeometry(shape), floorMaterial);
   floor.name = room.name;
+  floor.userData.surfaceRoomId = room.id;
+  floor.userData.surfaceKind = "floor";
   floor.rotation.x = Math.PI / 2;
   floor.position.y = mapper ? 0.04 : -0.04;
   floor.receiveShadow = true;
@@ -69,20 +82,30 @@ export function roomSurface(
     const dz = right[1] - left[1];
     const length = Math.hypot(dx, dz);
     if (length < 0.03) continue;
+    const wallFinish = scene
+      ? findSurfaceFinish(scene, room.id, "wall", index)
+      : undefined;
     const wall = new T.Mesh(
       new T.BoxGeometry(length, height, 0.12),
       new T.MeshStandardMaterial({
-        color: interiorPresentation
-          ? index % 2
-            ? "#eee8df"
-            : "#f4f0e9"
-          : index % 2
-            ? "#e7e0d5"
-            : "#eee9df",
-        roughness: interiorPresentation ? 0.92 : 0.82,
+        color:
+          wallFinish?.color ??
+          (interiorPresentation
+            ? index % 2
+              ? "#eee8df"
+              : "#f4f0e9"
+            : index % 2
+              ? "#e7e0d5"
+              : "#eee9df"),
+        roughness:
+          wallFinish?.roughness ?? (interiorPresentation ? 0.92 : 0.82),
+        metalness: wallFinish?.metalness ?? 0,
       }),
     );
     wall.name = "wall";
+    wall.userData.surfaceRoomId = room.id;
+    wall.userData.surfaceKind = "wall";
+    wall.userData.surfaceEdgeIndex = index;
     wall.position.set(
       (left[0] + right[0]) / 2,
       height / 2,
@@ -111,6 +134,28 @@ export function roomSurface(
       skirting.receiveShadow = true;
       root.add(skirting);
     }
+  }
+
+  if (includeCeiling) {
+    const ceilingFinish = scene
+      ? findSurfaceFinish(scene, room.id, "ceiling")
+      : undefined;
+    const ceiling = new T.Mesh(
+      new T.ShapeGeometry(shape),
+      new T.MeshStandardMaterial({
+        color: ceilingFinish?.color ?? "#f4f1e9",
+        roughness: ceilingFinish?.roughness ?? 0.9,
+        metalness: ceilingFinish?.metalness ?? 0,
+        side: T.DoubleSide,
+      }),
+    );
+    ceiling.name = "ceiling";
+    ceiling.userData.surfaceRoomId = room.id;
+    ceiling.userData.surfaceKind = "ceiling";
+    ceiling.rotation.x = Math.PI / 2;
+    ceiling.position.y = height;
+    ceiling.receiveShadow = true;
+    root.add(ceiling);
   }
   return floor;
 }
