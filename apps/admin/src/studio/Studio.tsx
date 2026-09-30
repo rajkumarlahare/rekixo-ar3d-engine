@@ -98,8 +98,10 @@ import {
   isBatchRepeatedRoom,
 } from "./unitRepeat";
 import {
+  auditDemoInterior,
   buildRepeatedDemoInterior,
   buildTypicalFloorDemoInterior,
+  repairDemoInterior,
 } from "./demoInterior";
 import {
   projectAheadOfCloud,
@@ -741,6 +743,9 @@ export default function Studio() {
     profileDemoInteriorEnabled =
       Boolean(quickSourceSetup.interiorAutomation?.enabled) &&
       Boolean(typicalFloorId),
+    demoInteriorIssues = profileDemoInteriorEnabled
+      ? auditDemoInterior(p.scene)
+      : [],
     typicalDemoInteriorPreview =
       profileDemoInteriorEnabled && typicalFloorId
         ? (() => {
@@ -933,6 +938,37 @@ export default function Studio() {
       },
     });
   }
+  function repairDemoInteriorConsistency() {
+    if (!profileDemoInteriorEnabled) {
+      setError("Interior automation is not enabled for this source profile.");
+      return;
+    }
+    const result = repairDemoInterior(p.scene);
+    if (!result.removed.length) {
+      setMessage("Interior room assignments are already consistent.");
+      return;
+    }
+    const next: Project = {
+      ...p,
+      scene: { ...p.scene, furniture: result.furniture },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      if (result.removed.some((issue) => issue.furnitureId === selected))
+        setSelected(roomId);
+      setMessage(
+        `${result.removed.length} misplaced furniture item${result.removed.length === 1 ? "" : "s"} removed from incompatible room types. Correct furniture and unsupported/custom rooms were preserved.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Interior consistency repair could not be applied safely.",
+      );
+    }
+  }
+
   function prepareTypicalDemoInterior() {
     if (!profileDemoInteriorEnabled || !typicalFloorId) {
       setError("Jyoti typical floor is not ready for demo interior automation.");
@@ -4392,7 +4428,24 @@ export default function Studio() {
               isolateFloorId === typicalFloorId &&
               !review && (
                 <div className="interior-auto-action" role="group" aria-label="Jyoti demo interior automation">
-                  {typicalDemoInteriorPreview.created.length > 0 ? (
+                  {demoInteriorIssues.length > 0 ? (
+                    <>
+                      <span>
+                        <b>Interior cleanup required</b>
+                        <small>
+                          {demoInteriorIssues.length} furniture item{demoInteriorIssues.length === 1 ? "" : "s"} are assigned to incompatible room types. Review-safe furniture will be preserved.
+                        </small>
+                      </span>
+                      <button
+                        type="button"
+                        className="primary"
+                        disabled={busy}
+                        onClick={repairDemoInteriorConsistency}
+                      >
+                        Fix misplaced furniture
+                      </button>
+                    </>
+                  ) : typicalDemoInteriorPreview.created.length > 0 ? (
                     <>
                       <span>
                         <b>Demo interior</b>
