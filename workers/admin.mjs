@@ -113,7 +113,18 @@ async function getIntegrationProject(env, slug) {
         WHERE project_id=? AND is_active=1
         ORDER BY version DESC LIMIT 1`,
     ).bind(project.id).first();
-    if (model?.asset_key) activeModelAvailable = Boolean(await env.MODEL_ASSETS.head(model.asset_key));
+    if (model?.asset_key) {
+      try {
+        activeModelAvailable = Boolean(
+          await env.MODEL_ASSETS.head(model.asset_key),
+        );
+      } catch {
+        // Platform project linking must still resolve the Engine project when
+        // object storage is temporarily unavailable. Customer/public model
+        // exposure remains fail-closed elsewhere.
+        activeModelAvailable = false;
+      }
+    }
   }
 
   return {
