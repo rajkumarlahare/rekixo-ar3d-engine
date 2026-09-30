@@ -148,6 +148,8 @@ export default function SceneCanvas(props: Props) {
     transform: TransformControls;
     hemi: T.HemisphereLight;
     sun: T.DirectionalLight;
+    fill: T.DirectionalLight;
+    grid: T.GridHelper;
     profileExterior?: ModelProfileRuntime["exterior"];
     modelSelection?: T.BoxHelper;
     roomDraft: T.Mesh;
@@ -172,7 +174,7 @@ export default function SceneCanvas(props: Props) {
     }
     renderer.setPixelRatio(Math.min(devicePixelRatio, 1.7));
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = T.PCFShadowMap;
+    renderer.shadowMap.type = T.PCFSoftShadowMap;
     renderer.localClippingEnabled = true;
     renderer.outputColorSpace = T.SRGBColorSpace;
     renderer.toneMapping = T.ACESFilmicToneMapping;
@@ -195,6 +197,8 @@ export default function SceneCanvas(props: Props) {
     sun.position.set(-15, 30, 20);
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.bias = -0.00012;
+    sun.shadow.normalBias = 0.025;
     Object.assign(sun.shadow.camera, {
       left: -30,
       right: 30,
@@ -202,6 +206,9 @@ export default function SceneCanvas(props: Props) {
       bottom: -30,
     });
     scene.add(sun);
+    const fill = new T.DirectionalLight(0xdde8f3, 0.72);
+    fill.position.set(12, 16, -18);
+    scene.add(fill);
     const grid = new T.GridHelper(100, 100, 0xa9b4bd, 0xcbd3d9);
     grid.position.y = -0.05;
     scene.add(grid);
@@ -461,14 +468,20 @@ export default function SceneCanvas(props: Props) {
       if (box.isEmpty()) return;
       const centre = box.getCenter(new T.Vector3());
       const size = box.getSize(new T.Vector3());
+      const focusedInterior =
+        latest.current.view === "rooms" && Boolean(latest.current.soloRoomId);
       const distance =
         (Math.max(size.y, size.x / camera.aspect, size.z / camera.aspect, 1.5) /
           Math.tan((camera.fov * Math.PI) / 360)) *
-        0.9;
+        (focusedInterior ? 1.04 : 0.9);
       controls.target.copy(centre);
       camera.position
         .copy(centre)
-        .add(new T.Vector3(-1, 0.7, 1).normalize().multiplyScalar(distance));
+        .add(
+          new T.Vector3(-1, focusedInterior ? 0.82 : 0.7, 1)
+            .normalize()
+            .multiplyScalar(distance),
+        );
       controls.update();
     };
     const focusSelected = () => {
@@ -510,6 +523,8 @@ export default function SceneCanvas(props: Props) {
       transform,
       hemi,
       sun,
+      fill,
+      grid,
       roomDraft,
       polygonDraft,
       polygonEdit,
@@ -1488,10 +1503,22 @@ export default function SceneCanvas(props: Props) {
     const runtime = api.current;
     if (!runtime) return;
     const appearance = props.scene.appearance;
-    runtime.renderer.toneMappingExposure = appearance?.exposure ?? 1;
-    runtime.hemi.intensity = appearance?.hemisphereIntensity ?? 2.8;
-    runtime.sun.intensity = appearance?.sunIntensity ?? 3.2;
-    if (runtime.profileExterior) {
+    const focusedInterior =
+      props.view === "rooms" && Boolean(props.soloRoomId);
+    runtime.renderer.toneMappingExposure = focusedInterior
+      ? Math.max(appearance?.exposure ?? 1, 1.08)
+      : appearance?.exposure ?? 1;
+    runtime.hemi.intensity = focusedInterior
+      ? Math.max(appearance?.hemisphereIntensity ?? 2.8, 3.15)
+      : appearance?.hemisphereIntensity ?? 2.8;
+    runtime.sun.intensity = focusedInterior
+      ? Math.max(appearance?.sunIntensity ?? 3.2, 3.45)
+      : appearance?.sunIntensity ?? 3.2;
+    runtime.fill.intensity = focusedInterior ? 1.0 : 0.72;
+    runtime.grid.visible = !focusedInterior;
+    if (focusedInterior) {
+      runtime.scene.background = new T.Color("#e7e1d8");
+    } else if (runtime.profileExterior) {
       const night = appearance?.nightMode ?? false;
       runtime.profileExterior.setNight(night);
       runtime.scene.background = night
@@ -1510,6 +1537,8 @@ export default function SceneCanvas(props: Props) {
     props.scene.appearance?.nightMode,
     props.scene.appearance?.referenceVisual,
     props.scene.modelId,
+    props.view,
+    props.soloRoomId,
   ]);
 
   useEffect(() => {
@@ -1564,15 +1593,26 @@ export default function SceneCanvas(props: Props) {
         !props.isolateFloorId || room.floorId === props.isolateFloorId;
       r.rooms.add(root);
       r.selectables.set(room.id, root);
-      const h = props.view === "walk" ? room.height : 0.65;
+      const focusedInterior =
+        props.view === "rooms" && Boolean(props.soloRoomId);
+      const h =
+        props.view === "walk"
+          ? room.height
+          : focusedInterior
+            ? Math.min(room.height, 1.05)
+            : 0.65;
       roomSurface(
         root,
         room,
         h,
         Boolean(props.roomMapEnabled && props.view === "building"),
         room.id === props.selected,
+        focusedInterior,
       );
-      if (room.id === props.selected) {
+      if (
+        room.id === props.selected &&
+        !(props.view === "rooms" && props.soloRoomId)
+      ) {
         const line = new T.BoxHelper(root, 0x148575);
         root.updateMatrixWorld(true);
         line.update();
@@ -1684,7 +1724,11 @@ export default function SceneCanvas(props: Props) {
     const isFurniture = props.scene.furniture.some(
       (item) => item.id === props.selected,
     );
-    if ((isRoom && mode === "rotate") || (isFurniture && mode === "scale"))
+    if (
+      (isRoom && mode === "rotate") ||
+      (isFurniture && mode === "scale") ||
+      (isRoom && props.view === "rooms" && props.soloRoomId)
+    )
       return;
 
     runtime.transform.setMode(mode);
@@ -1703,6 +1747,7 @@ export default function SceneCanvas(props: Props) {
     props.view,
     props.scene,
     props.roomId,
+    props.soloRoomId,
   ]);
 
   useEffect(() => {
