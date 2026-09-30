@@ -220,8 +220,8 @@ test("visual mapper exposes Unmapped Rooms and exact one-click placement", () =>
 
 
 test("whole-unit review keeps the fast path while individual correction remains available", () => {
-  const review = read("apps/admin/src/studio/FloorRoomReview.tsx");
-  const studio = read("apps/admin/src/studio/Studio.tsx");
+  const review = fs.readFileSync("apps/admin/src/studio/FloorRoomReview.tsx", "utf8");
+  const studio = fs.readFileSync("apps/admin/src/studio/Studio.tsx", "utf8");
 
   assert.match(review, /Accept whole unit/);
   assert.match(review, /onReviewUnit\(activeUnit, true\)/);
