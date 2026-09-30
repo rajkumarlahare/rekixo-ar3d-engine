@@ -1773,6 +1773,21 @@
   }
 }
 
+.room-door-connectivity .walkthrough-demo-fallback {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.room-door-connectivity .walkthrough-demo-fallback select {
+  min-height: 34px;
+  width: 100%;
+  border: 1px solid #2f6751;
+  border-radius: 7px;
+  background: #0e1b24;
+  color: #dff6eb;
+  padding: 6px 8px;
+}
+
+
 
 /* Step 2: guided mouse/touch plan alignment */
 .reference-quickbar {

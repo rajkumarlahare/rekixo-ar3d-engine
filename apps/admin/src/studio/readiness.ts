@@ -207,7 +207,7 @@ export function buildStudioReadiness(
         : "No source-backed walkthrough openings",
       detail: openings.length
         ? `${openings.length - reviewedOpenings.length} opening draft${openings.length - reviewedOpenings.length === 1 ? "" : "s"} remain unresolved; room-to-room walkthrough only uses reviewed shared doors.`
-        : "The current Jyoti/source model did not yield a trustworthy reviewed shared door. Walkthrough connectivity stays disabled rather than inventing architectural openings.",
+        : "The current Jyoti/source model did not yield a trustworthy reviewed shared door. Walkthrough connectivity stays disabled rather than inventing architectural openings. Studio can still jump between reviewed rooms in the same unit for demo navigation; this does not claim a physical doorway.",
     });
   } else if (reviewedConnections.length > 0) {
     items.push({
