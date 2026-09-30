@@ -254,6 +254,57 @@ test("repeat automation never propagates incompatible furniture from a source ro
   assert.ok(result.created.every((item) => item.origin === "demo-repeat"));
 });
 
+test("reconcileDemoInterior removes wrong-role items, restores missing typical items, repeats safely, and is idempotent", () => {
+  const sourceLiving = room("reconcile-living-101", "Living", "101", "f1", 4.95, 3.05);
+  const sourceBed = room("reconcile-bed-101", "Bed Room", "101", "f1", 3.4, 3.2);
+  const targetLiving = room("reconcile-living-201", "Living", "201", "f2", 4.95, 3.05);
+  const targetBed = room("reconcile-bed-201", "Bed Room", "201", "f2", 3.4, 3.2);
+  const scene = {
+    scale: 1,
+    floors: [
+      { id: "f1", name: "Floor 1", elevation: 3.048 },
+      { id: "f2", name: "Floor 2", elevation: 6.0452 },
+    ],
+    rooms: [sourceLiving, sourceBed, targetLiving, targetBed],
+    furniture: [
+      { id: "wrong-bed", kind: "bed", roomId: sourceLiving.id, x: 0, z: 0, rotation: 0, color: "#aaa" },
+      { id: "existing-sofa", kind: "sofa", roomId: sourceLiving.id, x: -1, z: -0.8, rotation: 0, color: "#bbb" },
+    ],
+    openings: [],
+  };
+  const rows = [
+    {
+      key: "101:f2:201",
+      sourceFloorId: "f1",
+      sourceFloorName: "Floor 1",
+      sourceUnit: "101",
+      sourceRoomCount: 2,
+      targetFloorId: "f2",
+      targetFloorName: "Floor 2",
+      targetUnit: "201",
+      status: "existing",
+      reason: "Target already exists",
+    },
+  ];
+
+  const result = helper.reconcileDemoInterior(scene, "f1", rows, makeId);
+  assert.equal(result.removed.length, 1);
+  assert.equal(result.furniture.some((item) => item.id === "wrong-bed"), false);
+  assert.ok(result.furniture.some((item) => item.roomId === sourceBed.id && item.kind === "bed"));
+  assert.ok(result.furniture.some((item) => item.roomId === targetLiving.id && item.kind === "sofa"));
+  assert.ok(result.furniture.some((item) => item.roomId === targetBed.id && item.kind === "bed"));
+
+  const rerun = helper.reconcileDemoInterior(
+    { ...scene, furniture: result.furniture },
+    "f1",
+    rows,
+    makeId,
+  );
+  assert.equal(rerun.removed.length, 0);
+  assert.equal(rerun.createdTypical.length, 0);
+  assert.equal(rerun.createdRepeated.length, 0);
+});
+
 test("Studio exposes the two-step interior automation instead of a bulk blind rollout", () => {
   const studio = fs.readFileSync("apps/admin/src/studio/Studio.tsx", "utf8");
   assert.match(studio, /Prepare demo interior/);
@@ -261,6 +312,8 @@ test("Studio exposes the two-step interior automation instead of a bulk blind ro
   assert.match(studio, /Demo interior ready ✓/);
   assert.match(studio, /Fix misplaced furniture/);
   assert.match(studio, /auditDemoInterior\(p\.scene\)/);
+  assert.match(studio, /reconcileDemoInterior\(/);
+  assert.match(studio, /interiorAutomation\?\.autoReconcile/);
   assert.match(studio, /quickSourceSetup\.interiorAutomation\?\.enabled/);
   assert.doesNotMatch(studio, /jyoti-paradise/i);
 });
@@ -275,7 +328,8 @@ test("Jyoti profile opts into generic interior automation capability", () => {
     "apps/admin/src/studio/sourcePackSetup.ts",
     "utf8",
   );
-  assert.match(profiles, /interiorAutomation: \{ enabled: true \}/);
+  assert.match(profiles, /interiorAutomation: \{ enabled: true, autoReconcile: true \}/);
   assert.match(setup, /interiorAutomation\?: ProfileInteriorAutomation/);
+  assert.match(setup, /autoReconcile\?: boolean/);
   assert.match(setup, /interiorAutomation: profile\.interiorAutomation/);
 });

@@ -44,6 +44,8 @@ export interface TrustedPublishModel {
 
 export interface ProfileInteriorAutomation {
   enabled: boolean;
+  /** Opt-in migration/reconciliation for projects that should self-heal on load. */
+  autoReconcile?: boolean;
 }
 
 export interface QuickSourceSetup {

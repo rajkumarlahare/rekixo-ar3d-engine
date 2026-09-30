@@ -32,6 +32,14 @@ export interface DemoInteriorRepairResult {
   removed: DemoInteriorIssue[];
 }
 
+export interface DemoInteriorReconcileResult {
+  furniture: Furniture[];
+  removed: DemoInteriorIssue[];
+  createdTypical: Furniture[];
+  createdRepeated: Furniture[];
+  skippedRooms: string[];
+}
+
 function normalizeRoomName(value: string) {
   return value
     .toLowerCase()
@@ -312,5 +320,39 @@ export function buildRepeatedDemoInterior(
     furniture: [...scene.furniture, ...created],
     created,
     skippedRooms: [...new Set(skippedRooms)],
+  };
+}
+
+
+export function reconcileDemoInterior(
+  scene: Scene,
+  typicalFloorId: string,
+  rows: readonly BatchRepeatPreviewRow[],
+  makeId: () => string = () => crypto.randomUUID(),
+): DemoInteriorReconcileResult {
+  const repaired = repairDemoInterior(scene);
+  const repairedScene: Scene = {
+    ...scene,
+    furniture: repaired.furniture,
+  };
+  const typical = buildTypicalFloorDemoInterior(
+    repairedScene,
+    typicalFloorId,
+    makeId,
+  );
+  const typicalScene: Scene = {
+    ...repairedScene,
+    furniture: typical.furniture,
+  };
+  const repeated = buildRepeatedDemoInterior(typicalScene, rows, makeId);
+
+  return {
+    furniture: repeated.furniture,
+    removed: repaired.removed,
+    createdTypical: typical.created,
+    createdRepeated: repeated.created,
+    skippedRooms: [
+      ...new Set([...typical.skippedRooms, ...repeated.skippedRooms]),
+    ],
   };
 }
