@@ -13,11 +13,18 @@ export interface InteriorBuildResult {
   skippedRooms: string[];
 }
 
+export type DemoInteriorRoomRole =
+  | "living"
+  | "bedroom"
+  | "dining"
+  | "balcony"
+  | "unsupported";
+
 export interface DemoInteriorIssue {
   furnitureId: string;
   roomId: string;
   kind: Kind;
-  roomRole: "living" | "bedroom" | "dining" | "balcony";
+  roomRole: Exclude<DemoInteriorRoomRole, "unsupported">;
 }
 
 export interface DemoInteriorRepairResult {
@@ -33,7 +40,7 @@ function normalizeRoomName(value: string) {
     .trim();
 }
 
-export function roomRole(room: Room) {
+export function roomRole(room: Room): DemoInteriorRoomRole {
   const name = normalizeRoomName(room.name);
   if (
     name.includes("balcony") ||
