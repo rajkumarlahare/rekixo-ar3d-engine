@@ -1,0 +1,191 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import test from "node:test";
+import ts from "typescript";
+
+const slugPolicyUrl =
+  "data:text/javascript;base64," +
+  Buffer.from(fs.readFileSync("shared/project-slug-policy.js", "utf8")).toString("base64");
+
+const domainCode = ts
+  .transpileModule(fs.readFileSync("apps/admin/src/studio/domain.ts", "utf8"), {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
+  })
+  .outputText.replace("../../../../shared/project-slug-policy.js", slugPolicyUrl);
+const domainUrl =
+  "data:text/javascript;base64," + Buffer.from(domainCode).toString("base64");
+
+const helperCode = ts
+  .transpileModule(
+    fs.readFileSync("apps/admin/src/studio/demoInterior.ts", "utf8"),
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.ESNext,
+        target: ts.ScriptTarget.ES2022,
+      },
+    },
+  )
+  .outputText.replace("./domain", domainUrl);
+const helper = await import(
+  "data:text/javascript;base64," + Buffer.from(helperCode).toString("base64")
+);
+
+const room = (id, name, unit, floorId, width, depth) => ({
+  id,
+  name,
+  unit,
+  floorId,
+  x: 0,
+  z: 0,
+  width,
+  depth,
+  height: 2.8,
+  color: "#dddddd",
+  source: "Reviewed brochure layout",
+  verified: true,
+});
+
+const makeId = (() => {
+  let index = 0;
+  return () => `demo-${++index}`;
+})();
+
+test("typical-floor demo interior preserves existing living furniture and fills supported room types", () => {
+  const living = room("living", "Living", "101", "f1", 4.95, 3.05);
+  const bedroom = room("bed", "Bed Room", "101", "f1", 3.4, 3.2);
+  const dining = room("dining", "Dining", "101", "f1", 1.265, 1.023);
+  const balcony = room("balcony", "Balcony", "101", "f1", 1.5, 1.4);
+  const kitchen = room("kitchen", "Kitchen", "101", "f1", 3.2, 2.1);
+  const scene = {
+    scale: 1,
+    floors: [{ id: "f1", name: "Floor 1", elevation: 3.048 }],
+    rooms: [living, bedroom, dining, balcony, kitchen],
+    furniture: [
+      {
+        id: "sofa-existing",
+        kind: "sofa",
+        roomId: living.id,
+        x: -1,
+        z: -0.8,
+        rotation: 0,
+        color: "#b9a58d",
+      },
+      {
+        id: "table-existing",
+        kind: "table",
+        roomId: living.id,
+        x: 0.6,
+        z: 0.5,
+        rotation: 0,
+        color: "#93684c",
+      },
+    ],
+    openings: [],
+  };
+
+  const result = helper.buildTypicalFloorDemoInterior(scene, "f1", makeId);
+  assert.equal(
+    result.furniture.filter((item) => item.roomId === living.id && item.kind === "sofa").length,
+    1,
+  );
+  assert.equal(
+    result.furniture.filter((item) => item.roomId === living.id && item.kind === "table").length,
+    1,
+  );
+  assert.ok(result.created.some((item) => item.roomId === living.id && item.kind === "plant"));
+  assert.ok(result.created.some((item) => item.roomId === bedroom.id && item.kind === "bed"));
+  assert.ok(result.created.some((item) => item.roomId === bedroom.id && item.kind === "wardrobe"));
+  assert.ok(result.created.some((item) => item.roomId === dining.id && item.kind === "table"));
+  assert.ok(result.created.some((item) => item.roomId === balcony.id && item.kind === "plant"));
+  assert.equal(result.created.some((item) => item.roomId === kitchen.id), false);
+
+  const rerun = helper.buildTypicalFloorDemoInterior(
+    { ...scene, furniture: result.furniture },
+    "f1",
+    makeId,
+  );
+  assert.equal(rerun.created.length, 0);
+});
+
+test("repeated interior only copies to reviewed matching rooms and stays idempotent", () => {
+  const sourceLiving = room("living-101", "Living", "101", "f1", 4.95, 3.05);
+  const sourceBed = room("bed-101", "Bed Room", "101", "f1", 3.4, 3.2);
+  const targetLiving = room("living-201", "Living", "201", "f2", 4.95, 3.05);
+  const targetBed = room("bed-201", "Bed Room", "201", "f2", 3.4, 3.2);
+  const scene = {
+    scale: 1,
+    floors: [
+      { id: "f1", name: "Floor 1", elevation: 3.048 },
+      { id: "f2", name: "Floor 2", elevation: 6.0452 },
+    ],
+    rooms: [sourceLiving, sourceBed, targetLiving, targetBed],
+    furniture: [
+      {
+        id: "sofa",
+        kind: "sofa",
+        roomId: sourceLiving.id,
+        x: -1,
+        z: -0.8,
+        rotation: 0,
+        color: "#b9a58d",
+      },
+      {
+        id: "bed",
+        kind: "bed",
+        roomId: sourceBed.id,
+        x: -0.3,
+        z: 0,
+        rotation: 0,
+        color: "#d9d3c4",
+      },
+    ],
+    openings: [],
+  };
+  const rows = [
+    {
+      key: "101:f2:201",
+      sourceFloorId: "f1",
+      sourceFloorName: "Floor 1",
+      sourceUnit: "101",
+      sourceRoomCount: 2,
+      targetFloorId: "f2",
+      targetFloorName: "Floor 2",
+      targetUnit: "201",
+      status: "existing",
+      reason: "Target already exists",
+    },
+  ];
+
+  const result = helper.buildRepeatedDemoInterior(scene, rows, makeId);
+  assert.equal(result.created.length, 2);
+  assert.ok(result.created.some((item) => item.roomId === targetLiving.id && item.kind === "sofa"));
+  assert.ok(result.created.some((item) => item.roomId === targetBed.id && item.kind === "bed"));
+
+  const rerun = helper.buildRepeatedDemoInterior(
+    { ...scene, furniture: result.furniture },
+    rows,
+    makeId,
+  );
+  assert.equal(rerun.created.length, 0);
+
+  const blocked = helper.buildRepeatedDemoInterior(
+    {
+      ...scene,
+      rooms: [sourceLiving, sourceBed, targetLiving, { ...targetBed, verified: false }],
+    },
+    rows,
+    makeId,
+  );
+  assert.equal(blocked.created.length, 0);
+});
+
+test("Studio exposes the two-step interior automation instead of a bulk blind rollout", () => {
+  const studio = fs.readFileSync("apps/admin/src/studio/Studio.tsx", "utf8");
+  assert.match(studio, /Prepare demo interior/);
+  assert.match(studio, /Repeat interior to upper floors/);
+  assert.match(studio, /Demo interior ready ✓/);
+  assert.match(studio, /quickSourceSetup\.profile === "jyoti-paradise"/);
+});
