@@ -4,15 +4,18 @@ import {
   assertSceneManifestV2,
   type SceneCatalogItemV2,
   type SceneManifestV2,
+  type SceneMaterialV2,
   type SceneSurfaceV2,
   type SceneUnitV2,
 } from "@rekixo/3d-contracts";
 import {
   catalog,
   projectSlug,
+  surfaceFinishKey,
   type Asset,
   type Project,
   type Room,
+  type SurfaceFinish,
 } from "./domain";
 
 function stableHash(value: string) {
@@ -39,29 +42,90 @@ function roomBoundary(room: Room): Array<[number, number]> {
   ];
 }
 
-function roomSemanticSurfaces(room: Room): SceneSurfaceV2[] {
+function roomSemanticSurfaces(
+  room: Room,
+  finishBySurface: Map<string, SurfaceFinish>,
+  materialIdBySurface: Map<string, string>,
+): SceneSurfaceV2[] {
   const edges = roomBoundary(room);
+  const finishFor = (
+    kind: "floor" | "ceiling" | "wall",
+    edgeIndex?: number,
+  ) => {
+    const key = surfaceFinishKey(room.id, kind, edgeIndex);
+    const authored = finishBySurface.get(key);
+    if (!authored)
+      return kind === "floor" ? { color: room.color } : undefined;
+    return {
+      color: authored.color,
+      materialId: materialIdBySurface.get(key),
+    };
+  };
   return [
     {
       id: `surface:${room.id}:floor`,
       roomId: room.id,
       kind: "floor",
-      finish: { color: room.color },
+      finish: finishFor("floor"),
     },
     {
       id: `surface:${room.id}:ceiling`,
       roomId: room.id,
       kind: "ceiling",
+      ...(finishFor("ceiling")
+        ? { finish: finishFor("ceiling") }
+        : {}),
     },
     ...edges.map(
-      (_, edgeIndex): SceneSurfaceV2 => ({
-        id: `surface:${room.id}:wall:${edgeIndex}`,
-        roomId: room.id,
-        kind: "wall",
-        edgeIndex,
-      }),
+      (_, edgeIndex): SceneSurfaceV2 => {
+        const finish = finishFor("wall", edgeIndex);
+        return {
+          id: `surface:${room.id}:wall:${edgeIndex}`,
+          roomId: room.id,
+          kind: "wall",
+          edgeIndex,
+          ...(finish ? { finish } : {}),
+        };
+      },
     ),
   ];
+}
+
+function buildSurfaceMaterials(finishes: readonly SurfaceFinish[]) {
+  const materials: SceneMaterialV2[] = [];
+  const materialIdByStyle = new Map<string, string>();
+  const materialIdBySurface = new Map<string, string>();
+  const finishBySurface = new Map<string, SurfaceFinish>();
+
+  for (const finish of finishes) {
+    const surfaceKey = surfaceFinishKey(
+      finish.roomId,
+      finish.kind,
+      finish.edgeIndex,
+    );
+    const styleKey = [
+      finish.presetId,
+      finish.color.toLowerCase(),
+      finish.roughness.toFixed(4),
+      finish.metalness.toFixed(4),
+    ].join("|");
+    let materialId = materialIdByStyle.get(styleKey);
+    if (!materialId) {
+      materialId = `material:surface:${stableHash(styleKey)}`;
+      materialIdByStyle.set(styleKey, materialId);
+      materials.push({
+        id: materialId,
+        name: `${finish.presetId} ${finish.color}`,
+        baseColor: finish.color,
+        roughness: finish.roughness,
+        metalness: finish.metalness,
+      });
+    }
+    finishBySurface.set(surfaceKey, finish);
+    materialIdBySurface.set(surfaceKey, materialId);
+  }
+
+  return { materials, materialIdBySurface, finishBySurface };
 }
 
 function legacyCatalogItems(): SceneCatalogItemV2[] {
@@ -94,6 +158,10 @@ export function buildSceneManifestV2(
   const modelId = project.scene.modelId
     ? `model:${project.scene.modelId}`
     : undefined;
+
+  const surfaceMaterials = buildSurfaceMaterials(
+    project.scene.surfaceFinishes ?? [],
+  );
 
   const unitEntries = Array.from(
     new Map(
@@ -223,7 +291,13 @@ export function buildSceneManifestV2(
           : [],
       finish: { color: room.color },
     })),
-    surfaces: project.scene.rooms.flatMap(roomSemanticSurfaces),
+    surfaces: project.scene.rooms.flatMap((room) =>
+      roomSemanticSurfaces(
+        room,
+        surfaceMaterials.finishBySurface,
+        surfaceMaterials.materialIdBySurface,
+      ),
+    ),
     catalogItems: legacyCatalogItems(),
     openings: (project.scene.openings ?? [])
       .filter((opening) => opening.reviewed)
@@ -258,7 +332,7 @@ export function buildSceneManifestV2(
         finish: { color: item.color },
       };
     }),
-    materials: [],
+    materials: surfaceMaterials.materials,
     cameras: [],
   };
 
