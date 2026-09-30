@@ -69,6 +69,92 @@ export async function save(p: Project, files: Asset[] = []) {
     tx.onerror = () => reject(tx.error);
   });
 }
+
+export interface CloudCacheResult {
+  backup?: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+}
+
+function localBackupSlug(project: Project, occupied: Set<string>) {
+  const suffix =
+    project.id.replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase() ||
+    "backup";
+  const root = projectSlug(project).slice(0, 52).replace(/-+$/g, "");
+  let candidate = `${root}-local-backup-${suffix}`;
+  let index = 2;
+  while (occupied.has(candidate)) {
+    candidate = `${root.slice(0, 48)}-local-backup-${suffix}-${index++}`;
+  }
+  return candidate;
+}
+
+export async function cacheCloudProject(
+  project: Project,
+  files: Asset[] = [],
+): Promise<CloudCacheResult> {
+  validateProject(project);
+  for (const asset of files)
+    if (asset.projectId !== project.id || !project.assets.includes(asset.id))
+      throw Error("Asset ownership mismatch.");
+
+  const database = await db();
+  return new Promise<CloudCacheResult>((resolve, reject) => {
+    const tx = database.transaction(["projects", "assets"], "readwrite");
+    let failure: Error | undefined;
+    let result: CloudCacheResult = {};
+    const store = tx.objectStore("projects");
+    const list = store.getAll();
+    list.onsuccess = () => {
+      const entries = list.result as Project[];
+      const occupied = new Set(entries.map((entry) => projectSlug(entry)));
+      const conflict = entries.find(
+        (entry) =>
+          entry.id !== project.id &&
+          projectSlug(entry) === projectSlug(project),
+      );
+
+      if (conflict) {
+        if (conflict.cloud) {
+          failure = Error(
+            "A different cloud-linked local project already uses this slug. Open that project instead.",
+          );
+          tx.abort();
+          return;
+        }
+        const backupSlug = localBackupSlug(conflict, occupied);
+        const backup: Project = {
+          ...conflict,
+          slug: backupSlug,
+          name: conflict.name.endsWith(" (local backup)")
+            ? conflict.name
+            : `${conflict.name.slice(0, 180)} (local backup)`,
+          updated: new Date().toISOString(),
+        };
+        store.put(backup);
+        result = {
+          backup: {
+            id: backup.id,
+            name: backup.name,
+            slug: backupSlug,
+          },
+        };
+      }
+
+      store.put({ ...project, slug: projectSlug(project) });
+      for (const asset of files) tx.objectStore("assets").put(asset);
+    };
+    tx.oncomplete = () => resolve(result);
+    tx.onabort = () =>
+      reject(
+        failure || tx.error || Error("Saving cloud cache failed; storage may be full."),
+      );
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 export const MAX_STUDIO_ASSET_BYTES = 64 * 1024 * 1024;
 
 export async function makeAsset(file: File, projectId: string): Promise<Asset> {
