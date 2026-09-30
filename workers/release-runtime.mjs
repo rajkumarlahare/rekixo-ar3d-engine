@@ -431,7 +431,7 @@ function publicExperience(manifest, manifestSha256) {
         available: true,
         url: `${RELEASE_BASE}/${encodeURIComponent(release.id)}/models/${encodeURIComponent(
           frozen.model.id,
-        )}/content?v=${encodeURIComponent(String(release.version))}`,
+        )}/model.glb?v=${encodeURIComponent(String(release.version))}`,
       }
     : undefined;
   if (model) delete model.releaseAssetId;
@@ -698,7 +698,9 @@ export async function handleReleaseReadRequest(
     parts.length === 4 &&
     ["models", "media"].includes(parts[1]) &&
     parts[2] &&
-    (parts[1] === "media" ? true : parts[3] === "content")
+    (parts[1] === "media"
+      ? true
+      : ["content", "model.glb"].includes(parts[3]))
   ) {
     if (parts[1] === "media") {
       // /{releaseId}/media/{fileName} has three path segments, handled below.
@@ -720,7 +722,7 @@ export async function handleReleaseReadRequest(
   if (
     parts.length === 4 &&
     parts[1] === "models" &&
-    parts[3] === "content"
+    ["content", "model.glb"].includes(parts[3])
   )
     return serveReleaseAsset(env, parts[0], "models", parts[2], request);
 
