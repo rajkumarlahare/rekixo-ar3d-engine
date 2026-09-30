@@ -214,6 +214,10 @@ export default function Studio() {
   } = useStudioCloudState(project, setError);
 
   useEffect(() => {
+    setSelectedSurface({ kind: "floor" });
+  }, [roomId]);
+
+  useEffect(() => {
     let active = true;
     void loadPublishedCatalog()
       .then((rows) => {
@@ -790,6 +794,23 @@ export default function Studio() {
     ),
     item = scene.furniture.find((f) => f.id === selected),
     floor = scene.floors.find((f) => f.id === room?.floorId),
+    surfaceEdgeCount = room ? roomBoundaryPoints(room).length : 0,
+    authoredSurfaceFinish = room
+      ? findSurfaceFinish(
+          scene,
+          room.id,
+          selectedSurface.kind,
+          selectedSurface.edgeIndex,
+        )
+      : undefined,
+    activeSurfaceFinish = room
+      ? resolvedSurfaceFinish(
+          scene,
+          room,
+          selectedSurface.kind,
+          selectedSurface.edgeIndex,
+        )
+      : undefined,
     readiness = buildStudioReadiness(
       p,
       files,
@@ -960,18 +981,183 @@ export default function Studio() {
     };
   function patchRoom(change: Partial<Room>) {
     if (!room) return;
+    const nextRoom = {
+      ...room,
+      ...change,
+      ...(["x", "z", "width", "depth", "height", "polygon", "floorId", "unit"].some(
+        (key) => key in change,
+      )
+        ? { verified: false }
+        : {}),
+    };
+    const nextEdgeCount = roomBoundaryPoints(nextRoom).length;
     edit({
       ...p,
       scene: {
         ...p.scene,
-        rooms: p.scene.rooms.map((r) =>
-          r.id === room.id ? { ...r, ...change,
-            ...(["x", "z", "width", "depth", "height", "polygon", "floorId", "unit"].some((key) => key in change)
-              ? { verified: false } : {}),
-          } : r,
+        rooms: p.scene.rooms.map((candidate) =>
+          candidate.id === room.id ? nextRoom : candidate,
+        ),
+        surfaceFinishes: (p.scene.surfaceFinishes ?? []).filter(
+          (finish) =>
+            finish.roomId !== room.id ||
+            finish.kind !== "wall" ||
+            (finish.edgeIndex ?? -1) < nextEdgeCount,
         ),
       },
     });
+  }
+
+  function upsertSurfaceFinish(nextFinish: SurfaceFinish) {
+    if (!room || nextFinish.roomId !== room.id) return;
+    const key = surfaceFinishKey(
+      nextFinish.roomId,
+      nextFinish.kind,
+      nextFinish.edgeIndex,
+    );
+    const previous = p.scene.surfaceFinishes ?? [];
+    const next: Project = {
+      ...p,
+      scene: {
+        ...p.scene,
+        surfaceFinishes: [
+          ...previous.filter(
+            (finish) =>
+              surfaceFinishKey(
+                finish.roomId,
+                finish.kind,
+                finish.edgeIndex,
+              ) !== key,
+          ),
+          nextFinish,
+        ],
+      },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Surface finish could not be applied.",
+      );
+    }
+  }
+
+  function patchSurfaceFinish(
+    change: Partial<Pick<SurfaceFinish, "color" | "roughness" | "metalness">>,
+  ) {
+    if (!room || !activeSurfaceFinish) return;
+    upsertSurfaceFinish({
+      ...activeSurfaceFinish,
+      ...change,
+      presetId: "custom",
+      roomId: room.id,
+      kind: selectedSurface.kind,
+      ...(selectedSurface.kind === "wall"
+        ? { edgeIndex: selectedSurface.edgeIndex }
+        : { edgeIndex: undefined }),
+    });
+  }
+
+  function applySurfacePreset(
+    presetId: Exclude<SurfaceFinish["presetId"], "custom">,
+  ) {
+    if (!room || !activeSurfaceFinish) return;
+    const preset = SURFACE_MATERIAL_PRESETS.find(
+      (candidate) => candidate.id === presetId,
+    );
+    if (!preset) return;
+    upsertSurfaceFinish({
+      roomId: room.id,
+      kind: selectedSurface.kind,
+      ...(selectedSurface.kind === "wall"
+        ? { edgeIndex: selectedSurface.edgeIndex }
+        : {}),
+      presetId,
+      color: preset.color,
+      roughness: preset.roughness,
+      metalness: preset.metalness,
+    });
+    setMessage(
+      `${preset.label} applied to ${surfaceDisplayName(
+        selectedSurface.kind,
+        selectedSurface.edgeIndex,
+      )}.`,
+    );
+  }
+
+  function resetSurfaceFinish() {
+    if (!room) return;
+    const key = surfaceFinishKey(
+      room.id,
+      selectedSurface.kind,
+      selectedSurface.edgeIndex,
+    );
+    edit({
+      ...p,
+      scene: {
+        ...p.scene,
+        surfaceFinishes: (p.scene.surfaceFinishes ?? []).filter(
+          (finish) =>
+            surfaceFinishKey(
+              finish.roomId,
+              finish.kind,
+              finish.edgeIndex,
+            ) !== key,
+        ),
+      },
+    });
+  }
+
+  function applySelectedFinishToAllWalls() {
+    if (
+      !room ||
+      selectedSurface.kind !== "wall" ||
+      !activeSurfaceFinish
+    )
+      return;
+    const roomKeyPrefix = `${room.id}\u0000wall\u0000`;
+    const previous = (p.scene.surfaceFinishes ?? []).filter(
+      (finish) =>
+        !surfaceFinishKey(
+          finish.roomId,
+          finish.kind,
+          finish.edgeIndex,
+        ).startsWith(roomKeyPrefix),
+    );
+    const wallFinishes = roomBoundaryPoints(room).map(
+      (_, edgeIndex): SurfaceFinish => ({
+        ...activeSurfaceFinish,
+        roomId: room.id,
+        kind: "wall",
+        edgeIndex,
+      }),
+    );
+    const next: Project = {
+      ...p,
+      scene: {
+        ...p.scene,
+        surfaceFinishes: [...previous, ...wallFinishes],
+      },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      setMessage(
+        `${surfaceDisplayName(
+          selectedSurface.kind,
+          selectedSurface.edgeIndex,
+        )} finish applied to all ${wallFinishes.length} walls in ${room.name}.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Wall finishes could not be applied.",
+      );
+    }
   }
   function bindSelectedMeshToRoom(targetRoomId: string) {
     if (!selectedModelNode) return;
