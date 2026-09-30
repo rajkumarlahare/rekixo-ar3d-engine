@@ -233,7 +233,7 @@ async function getProjectStatus(env, slug, url) {
       mimeType: row.mime_type || "model/gltf-binary",
       available,
       url: available
-        ? `https://ar3dstudio.in/3Dprojects/api/models/${encodeURIComponent(row.id)}/content`
+        ? `/3Dprojects/api/models/${encodeURIComponent(row.id)}/content`
         : undefined,
       active: Boolean(row.is_active),
       assetKey: row.asset_key,
