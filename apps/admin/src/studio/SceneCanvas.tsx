@@ -393,6 +393,14 @@ export default function SceneCanvas(props: Props) {
             hasContent = true;
           }
           if (hasContent) topBox = contentBox;
+          if (latest.current.roomMapEnabled && latest.current.isolateFloorId) {
+            const floorRooms = latest.current.scene.rooms.filter((room) => room.floorId === latest.current.isolateFloorId);
+            const floor = latest.current.scene.floors.find((entry) => entry.id === latest.current.isolateFloorId);
+            if (floorRooms.length && floor) {
+              topBox = new T.Box3().setFromPoints(floorRooms.flatMap((room) =>
+                roomBoundaryPoints(room).map(([x, z]) => new T.Vector3(x, floor.elevation, z))));
+            }
+          }
         }
         if (view !== "building" && r) {
           const boundary = roomBoundaryPoints(r);
@@ -1845,6 +1853,8 @@ export default function SceneCanvas(props: Props) {
     props.roomId,
     props.view,
     props.cameraOrientation,
+    props.isolateFloorId,
+    props.roomMapEnabled,
     props.scene.modelTransform?.x,
     props.scene.modelTransform?.y,
     props.scene.modelTransform?.z,

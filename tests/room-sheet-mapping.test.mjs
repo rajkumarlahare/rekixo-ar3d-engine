@@ -14,6 +14,22 @@ const roomSheet = await import(
   "data:text/javascript;base64," + Buffer.from(code).toString("base64")
 );
 
+test("suggested drafts follow arbitrary model alignment and retain dimensions as a polygon", () => {
+  const rows = roomSheet.profileRoomSheetRows([{ key: "living", unit: "101", name: "Living",
+    width: 4.954, depth: 3.05, suggestedX: 10, suggestedZ: -5 }], "fixture");
+  const transform = { x: 7, y: 3, z: -2, rotationY: 37 };
+  const [draft] = roomSheet.createSuggestedRoomDrafts(rows, [], "f1", transform, 1.2);
+  const angle = 37 * Math.PI / 180;
+  assert.ok(Math.abs(draft.x - (7 + 12 * Math.cos(angle) - 6 * Math.sin(angle))) < 0.001);
+  assert.ok(Math.abs(draft.z - (-2 - 12 * Math.sin(angle) - 6 * Math.cos(angle))) < 0.001);
+  assert.equal(draft.polygon.length, 4);
+  assert.ok(Math.abs(Math.hypot(draft.polygon[1][0] - draft.polygon[0][0],
+    draft.polygon[1][1] - draft.polygon[0][1]) - 4.954 * 1.2) < 0.002);
+  draft.width += 1; // Operator correction must survive another preparation.
+  assert.equal(roomSheet.createSuggestedRoomDrafts(rows, [draft], "f1", transform, 1.2).length, 0);
+  assert.equal(draft.verified, false);
+});
+
 test("CSV room sheet accepts metric and feet/inches without manual conversion", async () => {
   const csv = [
     "Floor,Flat,Room,Width,Depth,Height,Units,Notes",
@@ -200,4 +216,17 @@ test("visual mapper exposes Unmapped Rooms and exact one-click placement", () =>
   assert.match(canvas, /latest\.current\.roomStamp\?\.enabled/);
   assert.match(canvas, /width: Number\(stamp\.width\.toFixed\(3\)\)/);
   assert.match(canvas, /Click or tap once to place the exact room-sheet size/);
+});
+
+
+test("whole-unit review keeps the fast path while individual correction remains available", () => {
+  const review = fs.readFileSync("apps/admin/src/studio/FloorRoomReview.tsx", "utf8");
+  const studio = fs.readFileSync("apps/admin/src/studio/Studio.tsx", "utf8");
+
+  assert.match(review, /Accept whole unit/);
+  assert.match(review, /onReviewUnit\(activeUnit, true\)/);
+  assert.match(review, /Needs correction/);
+  assert.match(studio, /onReviewUnit=\{\(unit, accepted\) =>/);
+  assert.match(studio, /candidate\.floorId === isolateFloorId && candidate\.unit === unit/);
+  assert.match(studio, /verified: accepted/);
 });

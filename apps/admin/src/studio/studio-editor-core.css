@@ -3160,6 +3160,54 @@
 
 
 /* One-click alignment assist */
+.floor-room-review {
+  position: absolute;
+  top: 64px;
+  right: 12px;
+  z-index: 15;
+  width: min(350px, calc(100% - 24px));
+  max-height: calc(100% - 90px);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid #405265;
+  border-radius: 12px;
+  background: #14202ef5;
+  color: #eaf1fa;
+  box-shadow: 0 8px 32px #0005;
+}
+.floor-room-review header, .floor-review-units, .floor-review-decision > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.floor-room-review small { display: block; color: #b7c7d7; margin: 5px 0; }
+.floor-review-units { margin: 12px 0; }
+.floor-review-unit-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 10px 0 6px;
+  padding: 8px;
+  border: 1px solid #34485d;
+  border-radius: 9px;
+  background: #0d1825;
+}
+.floor-review-unit-action > span { min-width: 0; }
+.floor-review-unit-action > button { flex: 0 0 auto; }
+.floor-room-review svg { width: 100%; max-height: 210px; background: #0b1420; border-radius: 8px; }
+.floor-review-rooms { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 12px 0; }
+.floor-room-review button { min-height: 40px; white-space: normal; }
+.floor-room-review button[aria-pressed="true"] { background: #2c5266; outline: 2px solid #9addff; }
+.floor-room-review button:focus-visible, .floor-room-review summary:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.floor-review-decision, .floor-review-repeat { margin-top: 12px; }
+.floor-room-review details p { font-size: 12px; overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .floor-room-review { top: auto; bottom: 8px; max-height: 48%; }
+  .floor-room-review svg { max-height: 140px; }
+}
+
 .alignment-auto-position {
   min-width: 112px;
   border-color: #4fc49b !important;

@@ -8,6 +8,7 @@ import SceneCanvas, {
   type View,
 } from "./SceneCanvas";
 import ReferenceWorkspace from "./ReferenceWorkspace";
+import FloorRoomReview from "./FloorRoomReview";
 import VisualRoomMapper, {
   type RoomMapAction,
 } from "./VisualRoomMapper";
@@ -138,6 +139,7 @@ export default function Studio() {
   const [showAssetShelf, setShowAssetShelf] = useState(true);
   const [showReferenceWorkspace, setShowReferenceWorkspace] = useState(false);
   const [showRoomMapper, setShowRoomMapper] = useState(false);
+  const [showFloorReview, setShowFloorReview] = useState(false);
   const [roomMapFloorId, setRoomMapFloorId] = useState("");
   const [roomMapUnit, setRoomMapUnit] = useState("Unit 101");
   const [roomMapName, setRoomMapName] = useState("Room");
@@ -226,6 +228,7 @@ export default function Studio() {
     setSmartAnalysis(undefined);
     setShowReferenceWorkspace(false);
     setShowRoomMapper(false);
+    setShowFloorReview(false);
     setRoomMapFloorId(
       p.scene.rooms[0]?.floorId ?? p.scene.floors[0]?.id ?? "",
     );
@@ -629,6 +632,7 @@ export default function Studio() {
         setEditorFocus(false);
         return;
       }
+      if (event.key === "Escape") setShowFloorReview(false);
       if (review || busy) return;
       const target = event.target as HTMLElement | null;
       if (
@@ -706,6 +710,10 @@ export default function Studio() {
       ),
     ).size,
     mappedSheetKeys = mappedRoomSheetKeys(p.scene.rooms),
+    typicalFloorId = quickSourceSetup.profile && quickSourceSetup.repeatPlan
+      ? floorSkeletonStatus(p.scene, quickSourceSetup.profile, quickSourceSetup.floorSkeleton)
+          .floorIdByKey[quickSourceSetup.repeatPlan.sourceFloorKey]
+      : undefined,
     batchRepeatPreview = buildBatchRepeatPreview(
       p.scene,
       quickSourceSetup.profile,
@@ -810,7 +818,10 @@ export default function Studio() {
       scene: {
         ...p.scene,
         rooms: p.scene.rooms.map((r) =>
-          r.id === room.id ? { ...r, ...change } : r,
+          r.id === room.id ? { ...r, ...change,
+            ...(["x", "z", "width", "depth", "height", "polygon", "floorId", "unit"].some((key) => key in change)
+              ? { verified: false } : {}),
+          } : r,
         ),
       },
     });
@@ -1107,6 +1118,7 @@ export default function Studio() {
   }
 
   function startVisualAlignment() {
+    setShowFloorReview(false);
     setWorkspace("editor");
     setEditorFocus(false);
     setShowReferenceWorkspace(true);
@@ -1229,6 +1241,7 @@ export default function Studio() {
               return {
                 ...candidate,
                 ...geometry,
+                verified: false,
                 ...(change.height !== undefined
                   ? { height: change.height }
                   : {}),
@@ -1236,6 +1249,7 @@ export default function Studio() {
             }
             return {
               ...candidate,
+              verified: false,
               ...(change.x !== undefined ? { x: change.x } : {}),
               ...(change.z !== undefined ? { z: change.z } : {}),
               ...(change.width !== undefined ? { width: change.width } : {}),
@@ -1339,8 +1353,8 @@ export default function Studio() {
     targetFloorId: string,
     openMapper = true,
   ) {
-    if (!targetFloorId) {
-      setError("Choose a floor before preparing the suggested layout.");
+    if (!targetFloorId || (quickSourceSetup.repeatPlan && targetFloorId !== typicalFloorId)) {
+      setError("Select the source typical floor before preparing rooms. Use Repeat floors for upper floors.");
       return;
     }
     const suggestedRows = roomSheetRows.filter(
@@ -1380,6 +1394,7 @@ export default function Studio() {
       edit(next);
       const first = additions[0];
       setShowRoomMapper(openMapper);
+      setShowFloorReview(!openMapper);
       setShowReferenceWorkspace(false);
       setShowAssetShelf(false);
       setView("building");
@@ -1727,6 +1742,11 @@ export default function Studio() {
       validateProject(next);
       edit(next);
       const first = result.createdRooms[0];
+      setShowRoomMapper(false);
+      setShowFloorReview(true);
+      setShowReferenceWorkspace(false);
+      setView("building");
+      setCameraOrientation("top");
       setRoomMapFloorId(first.floorId);
       setRoomMapUnit(first.unit);
       setRoomMapName(first.name);
@@ -3751,7 +3771,7 @@ export default function Studio() {
               </div>
             </details>
 
-            {isolateFloorId &&
+            {isolateFloorId && (!quickSourceSetup.repeatPlan || isolateFloorId === typicalFloorId) &&
               roomSheetRows.some(
                 (row) =>
                   row.origin === "profile" &&
@@ -3765,9 +3785,11 @@ export default function Studio() {
                   type="button"
                   className="primary editor-prepare-floor-action"
                   disabled={busy || Boolean(review)}
-                  onClick={() =>
-                    prepareSuggestedTypicalFloor(isolateFloorId, false)
-                  }
+                  onClick={(event) => {
+                    event.currentTarget.closest("nav")?.querySelectorAll("details[open]")
+                      .forEach((menu) => menu.removeAttribute("open"));
+                    prepareSuggestedTypicalFloor(isolateFloorId, false);
+                  }}
                 >
                   Prepare{" "}
                   {scene.floors.find((floor) => floor.id === isolateFloorId)?.name ??
@@ -3775,6 +3797,18 @@ export default function Studio() {
                   rooms
                 </button>
               )}
+
+            {isolateFloorId && scene.rooms.some((entry) => entry.floorId === isolateFloorId) && (
+              <button type="button" onClick={(event) => {
+                event.currentTarget.closest("nav")?.querySelectorAll("details[open]")
+                  .forEach((menu) => menu.removeAttribute("open"));
+                setShowFloorReview(true);
+                setShowRoomMapper(false);
+                setShowReferenceWorkspace(false);
+                setView("building");
+                setCameraOrientation("top");
+              }}>Review floor rooms</button>
+            )}
 
             <button
               type="button"
@@ -3860,7 +3894,7 @@ export default function Studio() {
             modelTransformEnabled={showReferenceWorkspace}
             alignmentMode={showReferenceWorkspace}
             autoAlignRequest={autoAlignRequest}
-            roomMapEnabled={showRoomMapper}
+            roomMapEnabled={showRoomMapper || showFloorReview}
             roomDraw={{
               enabled:
                 showRoomMapper &&
@@ -3931,6 +3965,44 @@ export default function Studio() {
             onModelNodes={setModelNodes}
             onModelMaterials={setModelMaterials}
           />
+          {showFloorReview && isolateFloorId && !showReferenceWorkspace && (
+            <FloorRoomReview scene={scene} floorId={isolateFloorId} unit={roomMapUnit}
+              selectedId={selected} disabled={Boolean(review) || busy} repeat={batchRepeatPreview}
+              onUnit={(unit) => {
+                setRoomMapUnit(unit);
+                const first = scene.rooms.find((entry) => entry.floorId === isolateFloorId && entry.unit === unit);
+                setSelected(first?.id ?? "");
+                setRoomId(first?.id ?? "");
+              }}
+              onSelect={(entry) => { setRoomId(entry.id); setSelected(entry.id); }}
+              onReview={(entry, accepted) => {
+                if (review || busy) return;
+                edit({ ...p, scene: { ...p.scene, rooms: p.scene.rooms.map((candidate) =>
+                  candidate.id === entry.id ? { ...candidate, verified: accepted } : candidate) } });
+                if (accepted) {
+                  const next = scene.rooms.find((candidate) => candidate.floorId === isolateFloorId &&
+                    candidate.unit === entry.unit && candidate.id !== entry.id && !candidate.verified);
+                  if (next) { setRoomId(next.id); setSelected(next.id); }
+                }
+              }}
+              onReviewUnit={(unit, accepted) => {
+                if (review || busy) return;
+                edit({ ...p, scene: { ...p.scene, rooms: p.scene.rooms.map((candidate) =>
+                  candidate.floorId === isolateFloorId && candidate.unit === unit
+                    ? { ...candidate, verified: accepted }
+                    : candidate) } });
+                const first = scene.rooms.find((candidate) =>
+                  candidate.floorId === isolateFloorId && candidate.unit === unit);
+                setRoomId(first?.id ?? "");
+                setSelected(first?.id ?? "");
+              }}
+              onCorrect={() => {
+                setShowFloorReview(false); setShowRoomMapper(true);
+                setRoomMapFloorId(isolateFloorId); setRoomMapAction("idle");
+              }}
+              onRepeat={generateBatchRepeatedUnits}
+              onClose={() => setShowFloorReview(false)} />
+          )}
           {showRoomMapper && (
             <VisualRoomMapper
               scene={p.scene}
@@ -3944,6 +4016,10 @@ export default function Studio() {
               onFloor={(floorId) => {
                 setRoomMapFloorId(floorId);
                 setIsolateFloorId(floorId);
+                setSelected("");
+                setRoomId("");
+                setRoomMapAction("idle");
+                setSelectedRoomSheetKey("");
                 const target = p.scene.floors.find(
                   (entry) => entry.id === floorId,
                 );
@@ -3961,6 +4037,7 @@ export default function Studio() {
               roomSheetIssues={roomSheetIssues}
               onRoomSheetSelect={selectRoomSheetRow}
               onPrepareSuggestedLayout={prepareSuggestedTypicalFloor}
+              canPrepare={!quickSourceSetup.repeatPlan || roomMapFloorId === typicalFloorId}
               batchRepeatPreview={batchRepeatPreview}
               onGenerateBatchRepeat={generateBatchRepeatedUnits}
               openingWorkflow={openingWorkflowStatus}
