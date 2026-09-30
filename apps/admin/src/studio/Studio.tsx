@@ -101,6 +101,7 @@ import {
   auditDemoInterior,
   buildRepeatedDemoInterior,
   buildTypicalFloorDemoInterior,
+  reconcileDemoInterior,
   repairDemoInterior,
 } from "./demoInterior";
 import {
@@ -317,6 +318,75 @@ export default function Studio() {
       active = false;
     };
   }, [files]);
+
+  useEffect(() => {
+    if (
+      !project ||
+      review ||
+      busy ||
+      quickSourceSetup.profile?.id !== "jyoti-paradise" ||
+      !quickSourceSetup.interiorAutomation?.enabled ||
+      !quickSourceSetup.repeatPlan ||
+      !quickSourceSetup.floorSkeleton.length
+    )
+      return;
+
+    const floorStatus = floorSkeletonStatus(
+      project.scene,
+      quickSourceSetup.profile,
+      quickSourceSetup.floorSkeleton,
+    );
+    const typicalFloorId =
+      floorStatus.floorIdByKey[quickSourceSetup.repeatPlan.sourceFloorKey];
+    if (!typicalFloorId) return;
+
+    const repeatPreview = buildBatchRepeatPreview(
+      project.scene,
+      quickSourceSetup.profile,
+      quickSourceSetup.floorSkeleton,
+      quickSourceSetup.repeatPlan,
+    );
+    const result = reconcileDemoInterior(
+      project.scene,
+      typicalFloorId,
+      repeatPreview.rows,
+      id,
+    );
+    const changed =
+      result.removed.length +
+      result.createdTypical.length +
+      result.createdRepeated.length;
+    if (!changed) return;
+
+    const next: Project = {
+      ...project,
+      scene: { ...project.scene, furniture: result.furniture },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      setSelected((current) =>
+        result.removed.some((issue) => issue.furnitureId === current)
+          ? roomId
+          : current,
+      );
+      setMessage(
+        `Jyoti interior auto-repaired · ${result.removed.length} misplaced removed · ${result.createdTypical.length + result.createdRepeated.length} correct items restored/repeated.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Jyoti interior automatic repair could not be applied safely.",
+      );
+    }
+  }, [
+    project,
+    quickSourceSetup,
+    review,
+    busy,
+    roomId,
+  ]);
 
   useEffect(() => {
     let active = true;
