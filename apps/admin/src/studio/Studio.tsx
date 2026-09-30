@@ -20,8 +20,10 @@ import {
   id,
   newProject,
   roomArea,
+  roomBoundaryPoints,
   roomGeometryFromPolygon,
   snapshot,
+  surfaceFinishKey,
   validateProject,
   type Asset,
   type Furniture,
@@ -35,6 +37,8 @@ import {
   type Room,
   type RoomPoint,
   type SceneAppearance,
+  type SurfaceFinish,
+  type SurfaceKind,
 } from "./domain";
 import * as storage from "./storage";
 import * as cloud from "./cloud";
@@ -83,6 +87,12 @@ import {
   type AppearancePresetId,
 } from "./appearancePresets";
 import type { PdfReferenceRasterOptions } from "./pdfReferenceRaster";
+import {
+  SURFACE_MATERIAL_PRESETS,
+  findSurfaceFinish,
+  resolvedSurfaceFinish,
+  surfaceDisplayName,
+} from "./surfaceMaterials";
 import {
   createSuggestedRoomDrafts,
   mappedRoomSheetKeys,
@@ -175,6 +185,10 @@ export default function Studio() {
   const [sectionCutFlip, setSectionCutFlip] = useState(false);
   const [modelMaterials, setModelMaterials] = useState<ModelMaterialSummary[]>([]);
   const [selectedMaterial, setSelectedMaterial] = useState("");
+  const [selectedSurface, setSelectedSurface] = useState<{
+    kind: SurfaceKind;
+    edgeIndex?: number;
+  }>({ kind: "floor" });
   const [sourceAudits, setSourceAudits] = useState<FbxSourceAudit[]>([]);
   const [sourceAuditBusy, setSourceAuditBusy] = useState(false);
   const [smartAnalysis, setSmartAnalysis] = useState<SmartProjectAnalysis>();
@@ -237,6 +251,7 @@ export default function Studio() {
     setSectionCutFlip(false);
     setModelMaterials([]);
     setSelectedMaterial("");
+    setSelectedSurface({ kind: "floor" });
     setSourceAudits([]);
     setSmartAnalysis(undefined);
     setShowReferenceWorkspace(false);
