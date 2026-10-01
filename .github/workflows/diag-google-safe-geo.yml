@@ -1,0 +1,22 @@
+name: Diagnostic Google-safe Geo candidates
+
+on:
+  push:
+    branches:
+      - diag/google-safe-geo-candidates-20261001
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install
+      - run: node scripts/diag-google-safe-geo-candidates.mjs
