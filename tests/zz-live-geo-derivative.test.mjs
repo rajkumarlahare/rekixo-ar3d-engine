@@ -37,3 +37,24 @@ test("live Jyoti project exposes verified Geo derivative", async () => {
   assert.equal(bytes.toString("ascii"), "glTF");
   assert.equal(range.headers.get("access-control-allow-origin"), "*");
 });
+
+test("live Engine Admin integration contract exposes the same Geo derivative", async () => {
+  const url =
+    "https://admin.rekixo.com/3Dprojects/api/integration/projects/jyoti-paradise-local-backup-302a8799";
+  const response = await fetch(url, { redirect: "follow" });
+  const text = await response.text();
+  console.log("LIVE_GEO_INTEGRATION", response.status, text.slice(0, 5000));
+  assert.equal(response.ok, true);
+
+  const payload = JSON.parse(text);
+  assert.equal(payload.contractVersion, 1);
+  assert.equal(payload.project?.status, "published");
+  assert.equal(payload.release?.version, 1);
+  assert.equal(payload.geoModel?.variant, "geo-optimized");
+  assert.equal(payload.geoModel?.sourceModelId, payload.model?.id);
+  assert.equal(payload.geoModel?.byteSize, 1915564);
+  assert.match(
+    payload.geoModel?.url || "",
+    /\/geo-models\/.*\/model\.glb\?v=1$/,
+  );
+});
