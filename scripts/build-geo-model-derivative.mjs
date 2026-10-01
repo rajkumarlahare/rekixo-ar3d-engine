@@ -95,14 +95,25 @@ async function buildCandidate(sourcePath, outputPath, ratio, error) {
   const io = new NodeIO();
   const document = await io.read(sourcePath);
 
+  const root = document.getRoot();
+  const hasTextures = root.listTextures().length > 0;
+
   // Architectural/CAD exports often carry split vertex normals that prevent
   // meshoptimizer from collapsing geometry. For the map-only derivative we can
   // omit them: glTF normals are optional and the renderer can derive hard
-  // surface normals. The immutable source GLB remains untouched.
-  for (const mesh of document.getRoot().listMeshes()) {
+  // surface normals. If the document has no textures, UV attributes are also
+  // provably unused and can account for several megabytes of dead geometry
+  // payload. The immutable source GLB remains untouched.
+  for (const mesh of root.listMeshes()) {
     for (const primitive of mesh.listPrimitives()) {
       primitive.getAttribute("NORMAL")?.dispose();
       primitive.getAttribute("TANGENT")?.dispose();
+      if (!hasTextures) {
+        for (const semantic of primitive.listSemantics()) {
+          if (semantic.startsWith("TEXCOORD_"))
+            primitive.getAttribute(semantic)?.dispose();
+        }
+      }
     }
   }
 
