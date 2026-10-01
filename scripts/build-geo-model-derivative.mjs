@@ -53,13 +53,37 @@ async function geometryStats(buffer) {
   const size = min.map((value, index) => max[index] - value);
 
   let meshes = 0;
+  let primitives = 0;
   let vertices = 0;
   let triangles = 0;
+  let missingNormals = 0;
+  let invalidNormals = 0;
+  const normalValue = [0, 0, 0];
   for (const mesh of root.listMeshes()) {
     meshes += 1;
     for (const primitive of mesh.listPrimitives()) {
+      primitives += 1;
       const position = primitive.getAttribute("POSITION");
+      const normal = primitive.getAttribute("NORMAL");
       if (position) vertices += position.getCount();
+      if (!position || !normal || normal.getCount() !== position.getCount()) {
+        missingNormals += 1;
+      } else {
+        for (let index = 0; index < normal.getCount(); index += 1) {
+          normal.getElement(index, normalValue);
+          const length = Math.hypot(
+            normalValue[0],
+            normalValue[1],
+            normalValue[2],
+          );
+          if (
+            !Number.isFinite(length) ||
+            length < 0.99 ||
+            length > 1.01
+          )
+            invalidNormals += 1;
+        }
+      }
       const indices = primitive.getIndices();
       triangles += indices
         ? indices.getCount() / 3
@@ -72,8 +96,11 @@ async function geometryStats(buffer) {
   return {
     bounds: { min, max, center: centerPoint, size },
     meshes,
+    primitives,
     vertices,
     triangles,
+    missingNormals,
+    invalidNormals,
   };
 }
 
