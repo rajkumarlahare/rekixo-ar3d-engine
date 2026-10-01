@@ -279,6 +279,6 @@ test("Platform integration exposes a verified optional Geo derivative without re
   assert.equal(result.geoModel.sha256, geoSha);
   assert.match(
     result.geoModel.url,
-    /^\/3Dprojects\/api\/releases\/release_12345678901234567890\/geo-models\/studio_model_main\/model\.glb\?v=1$/,
+    /^\/3Dprojects\/api\/releases\/release_12345678901234567890\/geo-models\/studio_model_main\/model\.glb\?v=1&geo=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc$/,
   );
 });
