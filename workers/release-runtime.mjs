@@ -693,7 +693,7 @@ export async function geoModelDerivativeForActiveRelease(env, state) {
         state.manifest.release.id,
       )}/geo-models/${encodeURIComponent(model.id)}/model.glb?v=${encodeURIComponent(
         String(state.manifest.release.version),
-      )}`,
+      )}&geo=${encodeURIComponent(derivative.metadata.geoSha256)}`,
   };
 }
 
