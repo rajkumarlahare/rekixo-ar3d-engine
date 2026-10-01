@@ -632,7 +632,7 @@ export default function GeoMapper3D() {
               onChange={(e) => patch("publicEnabled", e.target.checked)}
             />
             <span>Public 3D Jio demo</span>
-            <small>Engine public route /3Dprojects/{slug}/geo ko enable karta hai; Platform Geo Mapper ko touch nahi karta.</small>
+            <small>Engine public Jio route ko enable karta hai; Platform Geo Mapper ko touch nahi karta.</small>
           </label>
         </div>
 
