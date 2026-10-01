@@ -62,6 +62,7 @@ export interface CloudGeoPlacementState {
     status: "draft" | "published" | "archived";
   };
   placement: CloudGeoPlacement | null;
+  placementStale?: boolean;
   release: {
     id: string;
     version: number;
@@ -453,3 +454,16 @@ export async function removeGeoPlacement(slug: string) {
   );
 }
 
+
+
+export async function geoMapsSettings() {
+  return api<{ apiKey: string | null }>(`${CLOUD_BASE}/settings/maps`);
+}
+
+export async function saveGeoMapsKey(apiKey: string) {
+  return api<{ ok: true; apiKey: string }>(`${CLOUD_BASE}/settings/maps`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ apiKey }),
+  });
+}
