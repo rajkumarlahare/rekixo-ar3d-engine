@@ -28,6 +28,28 @@ test("diagnose Jyoti source texture byte budget", async () => {
     };
   }).sort((a,b) => b.bytes - a.bytes);
 
+  const attributeUse = {};
+  for (const mesh of doc.getRoot().listMeshes()) {
+    for (const primitive of mesh.listPrimitives()) {
+      for (const semantic of primitive.listSemantics()) {
+        const accessor = primitive.getAttribute(semantic);
+        const item = attributeUse[semantic] || { primitives: 0, elements: 0, bytes: 0 };
+        item.primitives += 1;
+        item.elements += accessor?.getCount?.() || 0;
+        item.bytes += accessor?.getArray?.()?.byteLength || 0;
+        attributeUse[semantic] = item;
+      }
+      const indices = primitive.getIndices();
+      if (indices) {
+        const item = attributeUse.INDICES || { primitives: 0, elements: 0, bytes: 0 };
+        item.primitives += 1;
+        item.elements += indices.getCount();
+        item.bytes += indices.getArray()?.byteLength || 0;
+        attributeUse.INDICES = item;
+      }
+    }
+  }
+
   const materials = doc.getRoot().listMaterials().map((m) => ({
     name: m.getName(),
     alphaMode: m.getAlphaMode(),
@@ -45,5 +67,6 @@ test("diagnose Jyoti source texture byte budget", async () => {
     textureBytes: textures.reduce((sum,t)=>sum+t.bytes,0),
     textures,
     materials,
+    attributeUse,
   }));
 });
