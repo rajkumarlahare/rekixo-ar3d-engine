@@ -269,9 +269,45 @@ async function getProjectStatus(env, slug, url) {
   }
 
   const models = pageRows.map(mapModel);
-  const activeModel = activeRow
+  const mutableActiveModel = activeRow
     ? models.find((model) => model.id === activeRow.id) ?? mapModel(activeRow)
     : undefined;
+
+  // Studio/cloud projects may publish an immutable release without ever
+  // creating a legacy models_3d row. Admin status must reflect the same
+  // published truth used by Platform/Public integration; otherwise a valid
+  // release misleadingly appears as "Upload pending".
+  let immutableExperience;
+  if (project.status === "published") {
+    const releaseState = await activeReleaseState(env, slug);
+    if (releaseState.state === "ok")
+      immutableExperience = experienceFromActiveReleaseState(releaseState);
+  }
+  const immutableModel =
+    immutableExperience?.model?.available !== false
+      ? immutableExperience?.model
+      : undefined;
+  const activeModel = immutableModel ?? mutableActiveModel;
+  const immutableScenes = Array.isArray(immutableExperience?.scenes)
+    ? immutableExperience.scenes
+    : immutableExperience?.scene
+      ? [immutableExperience.scene]
+      : [];
+  const mutableScenes = (sceneResult.results ?? []).map((row) => ({
+    id: row.id,
+    projectId: row.project_id,
+    name: row.name,
+    type: row.type,
+    modelId: row.model_id ?? undefined,
+    cameraPresetId: row.camera_preset_id ?? undefined,
+    sortOrder: Number(row.sort_order || 0),
+    enabled: Boolean(row.enabled),
+    settings: parseJsonObject(
+      row.settings_json,
+      `Scene ${row.id} settings_json`,
+    ),
+  }));
+  const scenes = immutableScenes.length ? immutableScenes : mutableScenes;
   const total = Number(modelCountRow?.total || 0);
 
   return {
@@ -283,20 +319,7 @@ async function getProjectStatus(env, slug, url) {
       status: project.status,
       coverAssetKey: project.cover_asset_key ?? undefined,
     },
-    scenes: (sceneResult.results ?? []).map((row) => ({
-      id: row.id,
-      projectId: row.project_id,
-      name: row.name,
-      type: row.type,
-      modelId: row.model_id ?? undefined,
-      cameraPresetId: row.camera_preset_id ?? undefined,
-      sortOrder: Number(row.sort_order || 0),
-      enabled: Boolean(row.enabled),
-      settings: parseJsonObject(
-        row.settings_json,
-        `Scene ${row.id} settings_json`,
-      ),
-    })),
+    scenes,
     models,
     activeModel,
     modelPage: {
