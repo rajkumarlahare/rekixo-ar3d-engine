@@ -6,6 +6,7 @@ import { NodeIO } from "@gltf-transform/core";
 import {
   center,
   dedup,
+  flatten,
   getBounds,
   join,
   palette,
@@ -117,6 +118,9 @@ async function buildCandidate(sourcePath, outputPath, ratio, error) {
       keepLeaves: false,
       keepSolidTextures: false,
     }),
+    // join() only combines sibling nodes; flatten the architectural scene
+    // first so repeated CAD hierarchy does not keep hundreds of tiny meshes.
+    flatten(),
     join({ keepNamed: false, keepMeshes: false }),
     simplify({
       simplifier: MeshoptSimplifier,
