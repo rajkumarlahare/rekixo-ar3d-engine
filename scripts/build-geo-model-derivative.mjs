@@ -200,6 +200,8 @@ fs.writeFileSync(sourcePath, sourceBytes);
 // Prefer a small core-GLB with few draw calls. Google recommends keeping
 // complex map models around 5 MB when possible; 8 MB is our hard deployment
 // ceiling so an optimization regression cannot silently ship a huge model.
+// Derivative bytes are rebuildable; release-runtime content-addresses their
+// public URL by geoSha256 so immutable browser/Google caches remain correct.
 const attempts = [
   { ratio: 0.45, error: 0.006 },
   { ratio: 0.32, error: 0.01 },
