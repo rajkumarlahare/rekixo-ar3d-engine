@@ -32,6 +32,72 @@ function parseGlbJson(buffer) {
   );
 }
 
+function componentBytes(componentType) {
+  return componentType === 5120 || componentType === 5121
+    ? 1
+    : componentType === 5122 || componentType === 5123
+      ? 2
+      : componentType === 5125 || componentType === 5126
+        ? 4
+        : 0;
+}
+
+function typeComponents(type) {
+  return { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT2: 4, MAT3: 9, MAT4: 16 }[type] || 0;
+}
+
+function stripRedundantVertexStrides(buffer) {
+  const source = Buffer.from(buffer);
+  const jsonLength = source.readUInt32LE(12);
+  const jsonType = source.readUInt32LE(16);
+  assert.equal(jsonType, 0x4e4f534a);
+  const json = JSON.parse(
+    source
+      .subarray(20, 20 + jsonLength)
+      .toString("utf8")
+      .replace(/\u0000+$/g, "")
+      .trim(),
+  );
+
+  for (let viewIndex = 0; viewIndex < (json.bufferViews || []).length; viewIndex++) {
+    const view = json.bufferViews[viewIndex];
+    if (!Number.isInteger(view.byteStride)) continue;
+    const users = (json.accessors || [])
+      .map((accessor, index) => ({ accessor, index }))
+      .filter(({ accessor }) => accessor.bufferView === viewIndex);
+    assert.equal(users.length, 1, `strided view ${viewIndex} is shared`);
+    const accessor = users[0].accessor;
+    const packed =
+      componentBytes(accessor.componentType) * typeComponents(accessor.type);
+    assert.equal(view.byteStride, packed, `view ${viewIndex} is not tightly packed`);
+    delete view.byteStride;
+  }
+
+  const jsonBytes = Buffer.from(JSON.stringify(json), "utf8");
+  const paddedJsonLength = Math.ceil(jsonBytes.length / 4) * 4;
+  const jsonChunk = Buffer.alloc(paddedJsonLength, 0x20);
+  jsonBytes.copy(jsonChunk);
+
+  const binHeaderOffset = 20 + jsonLength;
+  const binLength = source.readUInt32LE(binHeaderOffset);
+  const binType = source.readUInt32LE(binHeaderOffset + 4);
+  assert.equal(binType, 0x004e4942);
+  const bin = source.subarray(binHeaderOffset + 8, binHeaderOffset + 8 + binLength);
+
+  const out = Buffer.alloc(12 + 8 + paddedJsonLength + 8 + bin.length);
+  out.writeUInt32LE(0x46546c67, 0);
+  out.writeUInt32LE(2, 4);
+  out.writeUInt32LE(out.length, 8);
+  out.writeUInt32LE(paddedJsonLength, 12);
+  out.writeUInt32LE(0x4e4f534a, 16);
+  jsonChunk.copy(out, 20);
+  const outBinHeader = 20 + paddedJsonLength;
+  out.writeUInt32LE(bin.length, outBinHeader);
+  out.writeUInt32LE(0x004e4942, outBinHeader + 4);
+  bin.copy(out, outBinHeader + 8);
+  return out;
+}
+
 test("experimental V4 candidate removes remaining Google renderer deltas", async () => {
   const payloadResponse = await fetch(PROJECT, {
     headers: { Accept: "application/json" },
@@ -91,7 +157,8 @@ test("experimental V4 candidate removes remaining Google renderer deltas", async
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rekixo-v4-probe-"));
   const out = path.join(dir, "candidate.glb");
   await io.write(out, document);
-  const bytes = fs.readFileSync(out);
+  const rawBytes = fs.readFileSync(out);
+  const bytes = stripRedundantVertexStrides(rawBytes);
   const json = parseGlbJson(bytes);
 
   const scene = document.getRoot().getDefaultScene() || document.getRoot().listScenes()[0];
