@@ -688,12 +688,17 @@ export async function geoModelDerivativeForActiveRelease(env, state) {
     sourceModelId: model.id,
     sourceSha256: derivative.metadata.sourceSha256,
     sha256: derivative.metadata.geoSha256,
+    // Geo derivatives are rebuildable optimizations layered on top of an
+    // immutable source release. Their bytes may legitimately change while the
+    // source release/version stays pinned, so the derivative content hash must
+    // participate in the public URL. Otherwise a previous derivative can remain
+    // cached for a year under the immutable Cache-Control policy.
     url:
       `${RELEASE_BASE}/${encodeURIComponent(
         state.manifest.release.id,
       )}/geo-models/${encodeURIComponent(model.id)}/model.glb?v=${encodeURIComponent(
         String(state.manifest.release.version),
-      )}`,
+      )}&geo=${encodeURIComponent(derivative.metadata.geoSha256)}`,
   };
 }
 
