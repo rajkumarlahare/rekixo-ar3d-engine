@@ -16,6 +16,10 @@ import { MeshoptSimplifier } from "meshoptimizer";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
+// Three.js GLTFLoader expects a browser-like global `self` when resolving
+// Blob/object URL helpers. Define it explicitly in Node before any model parse.
+if (typeof globalThis.self === "undefined") globalThis.self = globalThis;
+
 function fail(message) {
   throw new Error(message);
 }
