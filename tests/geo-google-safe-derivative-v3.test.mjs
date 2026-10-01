@@ -7,7 +7,7 @@ const runtime = fs.readFileSync("workers/release-runtime.mjs", "utf8");
 
 test("Geo derivative v4 keeps Google-safe explicit normals and source PBR materials", () => {
   assert.match(builder, /pipeline: "core-map-v4"/);
-  assert.match(runtime, /metadata\?\.pipeline !== "core-map-v3"/);
+  assert.match(runtime, /metadata\?\.pipeline !== "core-map-v4"/);
 
   assert.doesNotMatch(builder, /palette\s*\(/);
   assert.doesNotMatch(builder, /getAttribute\("NORMAL"\)\?\.dispose\(\)/);
@@ -35,7 +35,7 @@ test("Geo derivative v4 URL changes whenever rebuilt bytes change", () => {
 
 test("Geo derivative v4 stays bounded and triangle-only", () => {
   assert.match(builder, /chosen\.bytes\.byteLength > 8_000_000/);
-  assert.match(builder, /bytes\\.byteLength <= 4_800_000/);
+  assert.match(builder, /bytes\.byteLength <= 4_800_000/);
   assert.match(builder, /stats\.meshes <= 120/);
   assert.match(builder, /stats\.meshes > 180/);
   assert.match(builder, /primitive\.getMode\(\) !== 4/);
