@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { NodeIO } from "@gltf-transform/core";
+import { NodeIO, VertexLayout } from "@gltf-transform/core";
 import {
   center,
   dedup,
@@ -35,6 +35,95 @@ function parseGlbJson(buffer) {
   return JSON.parse(
     new TextDecoder().decode(jsonBytes).replace(/\u0000+$/g, "").trim(),
   );
+}
+
+function componentBytes(componentType) {
+  return componentType === 5120 || componentType === 5121
+    ? 1
+    : componentType === 5122 || componentType === 5123
+      ? 2
+      : componentType === 5125 || componentType === 5126
+        ? 4
+        : 0;
+}
+
+function typeComponents(type) {
+  return {
+    SCALAR: 1,
+    VEC2: 2,
+    VEC3: 3,
+    VEC4: 4,
+    MAT2: 4,
+    MAT3: 9,
+    MAT4: 16,
+  }[type] || 0;
+}
+
+function stripRedundantVertexStrides(buffer) {
+  const source = Buffer.from(buffer);
+  const jsonLength = source.readUInt32LE(12);
+  const jsonType = source.readUInt32LE(16);
+  if (jsonType !== 0x4e4f534a) fail("First GLB chunk must be JSON.");
+
+  const json = JSON.parse(
+    source
+      .subarray(20, 20 + jsonLength)
+      .toString("utf8")
+      .replace(/\u0000+$/g, "")
+      .trim(),
+  );
+
+  for (
+    let viewIndex = 0;
+    viewIndex < (json.bufferViews || []).length;
+    viewIndex += 1
+  ) {
+    const view = json.bufferViews[viewIndex];
+    if (!Number.isInteger(view.byteStride)) continue;
+
+    const users = (json.accessors || []).filter(
+      (accessor) => accessor.bufferView === viewIndex,
+    );
+    if (users.length !== 1)
+      fail(`Strided Geo vertex bufferView ${viewIndex} is shared.`);
+
+    const accessor = users[0];
+    const packed =
+      componentBytes(accessor.componentType) * typeComponents(accessor.type);
+    if (!packed || view.byteStride !== packed)
+      fail(`Geo vertex bufferView ${viewIndex} is not tightly packed.`);
+    delete view.byteStride;
+  }
+
+  const jsonBytes = Buffer.from(JSON.stringify(json), "utf8");
+  const paddedJsonLength = Math.ceil(jsonBytes.length / 4) * 4;
+  const jsonChunk = Buffer.alloc(paddedJsonLength, 0x20);
+  jsonBytes.copy(jsonChunk);
+
+  const binHeaderOffset = 20 + jsonLength;
+  const binLength = source.readUInt32LE(binHeaderOffset);
+  const binType = source.readUInt32LE(binHeaderOffset + 4);
+  if (binType !== 0x004e4942) fail("GLB BIN chunk is missing.");
+  const bin = source.subarray(
+    binHeaderOffset + 8,
+    binHeaderOffset + 8 + binLength,
+  );
+
+  const output = Buffer.alloc(
+    12 + 8 + paddedJsonLength + 8 + bin.length,
+  );
+  output.writeUInt32LE(0x46546c67, 0);
+  output.writeUInt32LE(2, 4);
+  output.writeUInt32LE(output.length, 8);
+  output.writeUInt32LE(paddedJsonLength, 12);
+  output.writeUInt32LE(0x4e4f534a, 16);
+  jsonChunk.copy(output, 20);
+
+  const outputBinHeader = 20 + paddedJsonLength;
+  output.writeUInt32LE(bin.length, outputBinHeader);
+  output.writeUInt32LE(0x004e4942, outputBinHeader + 4);
+  bin.copy(output, outputBinHeader + 8);
+  return output;
 }
 
 async function geometryStats(buffer) {
@@ -105,11 +194,16 @@ async function fetchBytes(url) {
 }
 
 async function buildCandidate(sourcePath, outputPath, ratio, error) {
-  const io = new NodeIO();
+  const io = new NodeIO().setVertexLayout(VertexLayout.SEPARATE);
   const document = await io.read(sourcePath);
 
   const root = document.getRoot();
   const hasTextures = root.listTextures().length > 0;
+
+  // Google Maps' official model sample is double-sided. Keep the map-only
+  // derivative tolerant of mirrored/CAD winding while leaving the immutable
+  // source GLB untouched.
+  for (const material of root.listMaterials()) material.setDoubleSided(true);
 
   // Keep explicit source normals and source PBR materials in the map derivative.
   // Google Maps 3D is a separate renderer from our Three.js viewer, so the
@@ -159,7 +253,9 @@ async function buildCandidate(sourcePath, outputPath, ratio, error) {
   );
 
   await io.write(outputPath, document);
-  return fs.readFileSync(outputPath);
+  const canonical = stripRedundantVertexStrides(fs.readFileSync(outputPath));
+  fs.writeFileSync(outputPath, canonical);
+  return canonical;
 }
 
 const slug = String(process.argv[2] || "").trim().toLowerCase();
@@ -267,7 +363,7 @@ for (const attempt of attempts) {
     chosen = candidate;
 
   if (
-    bytes.byteLength <= 6_000_000 &&
+    bytes.byteLength <= 4_800_000 &&
     stats.meshes <= 120 &&
     stats.primitivesWithoutNormals === 0 &&
     stats.nonTrianglePrimitives === 0
@@ -286,6 +382,19 @@ if (required.length || used.length)
   fail(
     `Geo derivative must remain core glTF without extensions. used=${used.join(",")} required=${required.join(",")}`,
   );
+
+const geoMaterials = geoJson.materials || [];
+if (
+  geoMaterials.length > 0 &&
+  geoMaterials.some((material) => material.doubleSided !== true)
+)
+  fail("Geo derivative materials must be double-sided for map compatibility.");
+if (
+  (geoJson.bufferViews || []).some((bufferView) =>
+    Number.isInteger(bufferView.byteStride),
+  )
+)
+  fail("Geo derivative must not retain vertex byteStride metadata.");
 
 const stats = chosen.stats;
 const [cx, , cz] = stats.bounds.center;
@@ -339,7 +448,7 @@ fs.writeFileSync(modelOut, chosen.bytes);
 const metadata = {
   format: "rekixo-geo-model-derivative",
   version: 1,
-  pipeline: "core-map-v3",
+  pipeline: "core-map-v4",
   generator: "@gltf-transform/*@4.5.1",
   projectId: project.id,
   projectSlug: slug,
@@ -358,6 +467,9 @@ const metadata = {
     explicitNormals: true,
     materialStrategy: "source-pbr",
     syntheticPaletteTexture: false,
+    vertexLayout: "separate-tight",
+    doubleSidedMaterials: true,
+    redundantByteStrideRemoved: true,
     sourceTextureCount,
     sourceMaterialCount,
   },
