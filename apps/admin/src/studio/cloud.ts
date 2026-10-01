@@ -36,6 +36,42 @@ export interface CloudReleaseSummary {
   active: boolean;
 }
 
+export interface CloudGeoPlacement {
+  projectId: string;
+  releaseId: string;
+  releaseVersion: number;
+  longitude: number;
+  latitude: number;
+  altitudeM: number;
+  headingDeg: number;
+  pitchDeg: number;
+  rollDeg: number;
+  scale: number;
+  publicEnabled: boolean;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+export interface CloudGeoPlacementState {
+  schemaReady: boolean;
+  project: {
+    id: string;
+    slug: string;
+    name: string;
+    location?: string;
+    status: "draft" | "published" | "archived";
+  };
+  placement: CloudGeoPlacement | null;
+  release: {
+    id: string;
+    version: number;
+    manifestSha256?: string;
+    createdAt?: string;
+  } | null;
+  mapsApiKey: string;
+  mapsConfigured: boolean;
+}
+
 export interface CloudAssetSummary {
   id: string;
   projectId: string;
@@ -380,3 +416,40 @@ export async function activateRelease(slug: string, releaseId: string) {
     },
   );
 }
+
+export async function geoPlacement(slug: string) {
+  return api<CloudGeoPlacementState>(
+    `${CLOUD_BASE}/projects/${encodeURIComponent(slug)}/geo-placement`,
+  );
+}
+
+export async function saveGeoPlacement(
+  slug: string,
+  placement: {
+    longitude: number;
+    latitude: number;
+    altitudeM: number;
+    headingDeg: number;
+    pitchDeg: number;
+    rollDeg: number;
+    scale: number;
+    publicEnabled: boolean;
+  },
+) {
+  return api<CloudGeoPlacementState>(
+    `${CLOUD_BASE}/projects/${encodeURIComponent(slug)}/geo-placement`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(placement),
+    },
+  );
+}
+
+export async function removeGeoPlacement(slug: string) {
+  return api<CloudGeoPlacementState>(
+    `${CLOUD_BASE}/projects/${encodeURIComponent(slug)}/geo-placement`,
+    { method: "DELETE" },
+  );
+}
+
