@@ -92,6 +92,39 @@ async function fetchBytes(url) {
   return Buffer.from(await response.arrayBuffer());
 }
 
+function sanitizeExplicitNormals(document) {
+  let repaired = 0;
+  const value = [0, 0, 0];
+  for (const mesh of document.getRoot().listMeshes()) {
+    for (const primitive of mesh.listPrimitives()) {
+      const normal = primitive.getAttribute("NORMAL");
+      if (!normal) continue;
+      for (let index = 0; index < normal.getCount(); index += 1) {
+        normal.getElement(index, value);
+        const length = Math.hypot(value[0], value[1], value[2]);
+        if (!Number.isFinite(length) || length < 1e-8) {
+          // A degenerate triangle has no geometric normal. It contributes no
+          // visible surface area, but glTF still requires NORMAL vectors to be
+          // normalized when present. Use a harmless unit fallback instead of
+          // emitting an invalid zero vector that stricter renderers may reject.
+          normal.setElement(index, [0, 1, 0]);
+          repaired += 1;
+          continue;
+        }
+        if (Math.abs(length - 1) > 1e-6) {
+          normal.setElement(index, [
+            value[0] / length,
+            value[1] / length,
+            value[2] / length,
+          ]);
+          repaired += 1;
+        }
+      }
+    }
+  }
+  return repaired;
+}
+
 async function buildCandidate(sourcePath, outputPath, ratio, error) {
   const io = new NodeIO();
   const document = await io.read(sourcePath);
@@ -153,6 +186,13 @@ async function buildCandidate(sourcePath, outputPath, ratio, error) {
       keepSolidTextures: false,
     }),
   );
+
+  const repairedNormals = sanitizeExplicitNormals(document);
+  if (repairedNormals)
+    console.log(
+      "REKIXO_GEO_NORMALS_REPAIRED",
+      JSON.stringify({ ratio, repairedNormals }),
+    );
 
   await io.write(outputPath, document);
   return fs.readFileSync(outputPath);
