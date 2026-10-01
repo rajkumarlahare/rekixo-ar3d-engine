@@ -88,3 +88,33 @@ test("admin status rejects insecure or non-Engine model URLs", () => {
     /Invalid model payload/,
   );
 });
+
+
+test("admin worker prefers immutable release model/scenes when legacy registry is empty", () => {
+  const worker = fs.readFileSync("workers/admin.mjs", "utf8");
+
+  assert.match(worker, /let immutableExperience/);
+  assert.match(worker, /activeReleaseState\(env, slug\)/);
+  assert.match(worker, /experienceFromActiveReleaseState\(releaseState\)/);
+  assert.match(worker, /const activeModel = immutableModel \?\? mutableActiveModel/);
+  assert.match(worker, /const scenes = immutableScenes\.length \? immutableScenes : mutableScenes/);
+});
+
+test("admin status accepts immutable release model URL shape", () => {
+  const payload = status(
+    "/3Dprojects/api/releases/release_123/models/model_123/model.glb?v=1",
+  );
+  payload.models = [];
+  payload.modelPage.total = 0;
+  payload.activeModel = {
+    id: "model_123",
+    projectId: "project_jyoti_paradise",
+    name: "Published immutable model",
+    version: 1,
+    mimeType: "model/gltf-binary",
+    available: true,
+    byteSize: 25582856,
+    url: "/3Dprojects/api/releases/release_123/models/model_123/model.glb?v=1",
+  };
+  assert.doesNotThrow(() => assertAdminStatusPayload(payload));
+});
