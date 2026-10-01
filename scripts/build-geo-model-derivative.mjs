@@ -6,6 +6,7 @@ import { NodeIO } from "@gltf-transform/core";
 import {
   center,
   dedup,
+  getBounds,
   join,
   palette,
   prune,
@@ -13,8 +14,6 @@ import {
   weld,
 } from "@gltf-transform/functions";
 import { MeshoptSimplifier } from "meshoptimizer";
-import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 function fail(message) {
   throw new Error(message);
@@ -38,47 +37,38 @@ function parseGlbJson(buffer) {
   );
 }
 
-function parseGlb(loader, buffer) {
-  return new Promise((resolve, reject) => {
-    loader.parse(
-      buffer.buffer.slice(
-        buffer.byteOffset,
-        buffer.byteOffset + buffer.byteLength,
-      ),
-      "",
-      resolve,
-      reject,
-    );
-  });
-}
-
 async function geometryStats(buffer) {
-  const loader = new GLTFLoader();
-  const gltf = await parseGlb(loader, buffer);
-  const scene = gltf.scene;
-  scene.updateMatrixWorld(true);
-  const bounds = new THREE.Box3().setFromObject(scene);
-  const centerPoint = bounds.getCenter(new THREE.Vector3());
-  const size = bounds.getSize(new THREE.Vector3());
+  const io = new NodeIO();
+  const document = await io.readBinary(new Uint8Array(buffer));
+  const root = document.getRoot();
+  const scene = root.getDefaultScene() || root.listScenes()[0];
+  if (!scene) fail("Geo derivative has no scene.");
+
+  const bounds = getBounds(scene);
+  const min = [...bounds.min];
+  const max = [...bounds.max];
+  const centerPoint = min.map((value, index) => (value + max[index]) / 2);
+  const size = min.map((value, index) => max[index] - value);
+
   let meshes = 0;
   let vertices = 0;
   let triangles = 0;
-  scene.traverse((node) => {
-    if (!node.isMesh) return;
+  for (const mesh of root.listMeshes()) {
     meshes += 1;
-    const geometry = node.geometry;
-    const position = geometry?.getAttribute?.("position");
-    if (position) vertices += position.count;
-    const index = geometry?.index;
-    triangles += index ? index.count / 3 : position ? position.count / 3 : 0;
-  });
+    for (const primitive of mesh.listPrimitives()) {
+      const position = primitive.getAttribute("POSITION");
+      if (position) vertices += position.getCount();
+      const indices = primitive.getIndices();
+      triangles += indices
+        ? indices.getCount() / 3
+        : position
+          ? position.getCount() / 3
+          : 0;
+    }
+  }
+
   return {
-    bounds: {
-      min: bounds.min.toArray(),
-      max: bounds.max.toArray(),
-      center: centerPoint.toArray(),
-      size: size.toArray(),
-    },
+    bounds: { min, max, center: centerPoint, size },
     meshes,
     vertices,
     triangles,
