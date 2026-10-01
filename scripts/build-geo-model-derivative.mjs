@@ -9,6 +9,7 @@ import {
   flatten,
   getBounds,
   join,
+  normals,
   palette,
   prune,
   simplify,
@@ -139,6 +140,12 @@ async function buildCandidate(sourcePath, outputPath, ratio, error) {
       error,
       lockBorder: false,
     }),
+    // Keep the optimization-friendly drop-before-simplify strategy, but write
+    // explicit core glTF normals back into the compact result. The glTF spec
+    // permits missing normals, yet embedded map renderers can be stricter than
+    // general-purpose viewers. Explicit normals remove that compatibility
+    // dependency while adding only a small payload after simplification.
+    normals({ overwrite: true }),
     prune({
       keepAttributes: false,
       keepIndices: false,
