@@ -47,3 +47,12 @@ WHEN NOT EXISTS (
 BEGIN
   SELECT RAISE(ABORT, 'Geo placement release must belong to project');
 END;
+
+-- Browser map keys are public client configuration, not authentication secrets.
+-- Keeping this Engine-owned avoids a runtime dependency on the Platform database.
+CREATE TABLE IF NOT EXISTS engine_settings_3d (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_by TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
