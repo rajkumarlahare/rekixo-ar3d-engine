@@ -195,7 +195,7 @@ test("Platform integration exposes a verified optional Geo derivative without re
   const metadata = {
     format: "rekixo-geo-model-derivative",
     version: 1,
-    pipeline: "core-map-v3",
+    pipeline: "core-map-v4",
     projectSlug: "studio-only",
     releaseId: manifest.release.id,
     sourceModelId: "studio_model_main",
