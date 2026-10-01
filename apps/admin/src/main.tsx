@@ -148,7 +148,7 @@ function App() {
       <header className="topbar">
         <div><p className="eyebrow">REKIXO</p><h1>AR3D Project Engine</h1></div>
         <div className="topbar-actions">
-          <a href="/3Dprojects/geo-mapper">3D Geo Mapper</a>
+          <a href="/3Dprojects/geo-mapper">3D Jio Mapper</a>
           <a href="/3Dprojects/studio">Open Design Studio</a>
           <select
             className="project-select"
@@ -241,7 +241,7 @@ createRoot(root).render(
         <PublishedViewer />
       </Suspense>
     ) : window.location.pathname.replace(/\/$/, "") === "/3Dprojects/geo-mapper" ? (
-      <Suspense fallback={<p>Opening 3D Geo Mapper…</p>}>
+      <Suspense fallback={<p>Opening 3D Jio Mapper…</p>}>
         <GeoMapper3D />
       </Suspense>
     ) : window.location.pathname.replace(/\/$/, "") === "/3Dprojects/studio" ? (
