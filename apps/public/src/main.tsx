@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   PUBLIC_BASE_PATH,
@@ -11,6 +11,8 @@ import { loadPublicExperience } from "./api";
 import { Viewer3D } from "./viewer/Viewer3D";
 import "./styles.css";
 import "./viewer/walkthrough-ui.css";
+
+const GeoPublicDemo = lazy(() => import("./geo/GeoPublicDemo"));
 
 type UnitFact = { series: string; type: string; areaSqFt: number };
 type NearbyFact = { name: string; distance: string };
@@ -855,6 +857,15 @@ function App() {
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root mount node");
+const geoRoute = /^\/3Dprojects\/[^/]+\/geo\/?$/.test(window.location.pathname);
 createRoot(root).render(
-  <React.StrictMode><App /></React.StrictMode>,
+  <React.StrictMode>
+    {geoRoute ? (
+      <Suspense fallback={<LoadingPage />}>
+        <GeoPublicDemo />
+      </Suspense>
+    ) : (
+      <App />
+    )}
+  </React.StrictMode>,
 );
