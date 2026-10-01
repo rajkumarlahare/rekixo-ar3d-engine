@@ -1,0 +1,66 @@
+name: Diagnostic Jyoti Engine State Audit
+
+on:
+  push:
+    branches:
+      - diag/jyoti-engine-state-audit-20261001
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read-only production D1 audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== PROJECTS ==='
+          npx --yes wrangler@4 d1 execute rekixo-3d-production --remote --json --config wrangler.admin.jsonc \
+            --command "SELECT p.id,p.slug,p.name,p.location,p.status,p.active_release_id AS activeReleaseId,COUNT(m.id) AS modelCount,SUM(CASE WHEN m.is_active=1 THEN 1 ELSE 0 END) AS activeMutableModels FROM projects_3d p LEFT JOIN models_3d m ON m.project_id=p.id WHERE p.slug LIKE 'jyoti-paradise%' GROUP BY p.id ORDER BY p.slug;"
+          echo '=== MUTABLE MODELS ==='
+          npx --yes wrangler@4 d1 execute rekixo-3d-production --remote --json --config wrangler.admin.jsonc \
+            --command "SELECT p.slug,m.id,m.name,m.asset_key AS assetKey,m.source_filename AS sourceFilename,m.mime_type AS mimeType,m.byte_size AS byteSize,m.version,m.is_active AS isActive,m.created_at AS createdAt FROM models_3d m JOIN projects_3d p ON p.id=m.project_id WHERE p.slug LIKE 'jyoti-paradise%' ORDER BY p.slug,m.is_active DESC,m.version DESC;"
+          echo '=== ACTIVE RELEASES ==='
+          npx --yes wrangler@4 d1 execute rekixo-3d-production --remote --json --config wrangler.admin.jsonc \
+            --command "SELECT p.slug,r.id AS releaseId,r.version,r.manifest_sha256 AS manifestSha256,r.created_at AS createdAt,json_extract(r.manifest_json,'$.experience.model.id') AS modelId,json_extract(r.manifest_json,'$.experience.model.name') AS modelName,json_extract(r.manifest_json,'$.experience.model.releaseAssetId') AS releaseAssetId,json_extract(r.manifest_json,'$.experience.model.mimeType') AS modelMimeType,json_extract(r.manifest_json,'$.project.id') AS manifestProjectId,json_extract(r.manifest_json,'$.project.slug') AS manifestProjectSlug FROM projects_3d p LEFT JOIN releases_3d r ON r.id=p.active_release_id AND r.project_id=p.id WHERE p.slug LIKE 'jyoti-paradise%' ORDER BY p.slug;"
+          echo '=== ACTIVE RELEASE MODEL ASSETS ==='
+          npx --yes wrangler@4 d1 execute rekixo-3d-production --remote --json --config wrangler.admin.jsonc \
+            --command "SELECT p.slug,a.release_id AS releaseId,a.logical_id AS logicalId,a.name,a.mime_type AS mimeType,a.byte_size AS byteSize,a.sha256,a.r2_key AS r2Key,a.created_at AS createdAt FROM projects_3d p JOIN release_assets_3d a ON a.release_id=p.active_release_id AND a.project_id=p.id WHERE p.slug LIKE 'jyoti-paradise%' AND a.kind='model' ORDER BY p.slug,a.logical_id;"
+          echo '=== ACTIVATION HISTORY ==='
+          npx --yes wrangler@4 d1 execute rekixo-3d-production --remote --json --config wrangler.admin.jsonc \
+            --command "SELECT p.slug,a.release_id AS releaseId,a.previous_release_id AS previousReleaseId,a.action,a.created_at AS createdAt FROM release_activations_3d a JOIN projects_3d p ON p.id=a.project_id WHERE p.slug LIKE 'jyoti-paradise%' ORDER BY a.created_at DESC LIMIT 20;"
+      - name: Read-only live public contract audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          for SLUG in jyoti-paradise jyoti-paradise-local-backup-302a8799; do
+            echo "=== PUBLIC CONTRACT $SLUG ==="
+            URL="https://ar3dstudio.in/3Dprojects/api/projects/$SLUG"
+            BODY="$(mktemp)"
+            STATUS="$(curl --silent --show-error --location --output "$BODY" --write-out '%{http_code}' "$URL" || true)"
+            echo "status=$STATUS"
+            cat "$BODY"
+            echo
+            if [ "$STATUS" = "200" ]; then
+              node - "$BODY" <<'NODE'
+          const fs=require("fs");
+          const p=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));
+          console.log("SUMMARY",JSON.stringify({
+            project:p.project,
+            model:p.model,
+            geoModel:p.geoModel,
+            release:p.release
+          }));
+          NODE
+            fi
+            rm -f "$BODY"
+          done
+        env:
+          NO_COLOR: "1"
