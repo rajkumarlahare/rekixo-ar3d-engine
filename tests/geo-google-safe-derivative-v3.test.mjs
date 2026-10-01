@@ -5,8 +5,8 @@ import test from "node:test";
 const builder = fs.readFileSync("scripts/build-geo-model-derivative.mjs", "utf8");
 const runtime = fs.readFileSync("workers/release-runtime.mjs", "utf8");
 
-test("Geo derivative v3 keeps Google-safe explicit normals and source PBR materials", () => {
-  assert.match(builder, /pipeline: "core-map-v3"/);
+test("Geo derivative v4 keeps Google-safe explicit normals and source PBR materials", () => {
+  assert.match(builder, /pipeline: "core-map-v4"/);
   assert.match(runtime, /metadata\?\.pipeline !== "core-map-v3"/);
 
   assert.doesNotMatch(builder, /palette\s*\(/);
@@ -17,9 +17,15 @@ test("Geo derivative v3 keeps Google-safe explicit normals and source PBR materi
   assert.match(builder, /sourceTextureCount === 0 && stats\.textures !== 0/);
   assert.match(builder, /materialStrategy: "source-pbr"/);
   assert.match(builder, /syntheticPaletteTexture: false/);
+  assert.match(builder, /VertexLayout\.SEPARATE/);
+  assert.match(builder, /setDoubleSided\(true\)/);
+  assert.match(builder, /vertexLayout: "separate-tight"/);
+  assert.match(builder, /doubleSidedMaterials: true/);
+  assert.match(builder, /redundantByteStrideRemoved: true/);
+  assert.match(builder, /Geo derivative must not retain vertex byteStride metadata/);
 });
 
-test("Geo derivative v3 URL changes whenever rebuilt bytes change", () => {
+test("Geo derivative v4 URL changes whenever rebuilt bytes change", () => {
   assert.match(runtime, /max-age=31536000, immutable/);
   assert.equal(
     runtime.includes("&geo=${encodeURIComponent(derivative.metadata.geoSha256)}"),
@@ -27,9 +33,9 @@ test("Geo derivative v3 URL changes whenever rebuilt bytes change", () => {
   );
 });
 
-test("Geo derivative v3 stays bounded and triangle-only", () => {
+test("Geo derivative v4 stays bounded and triangle-only", () => {
   assert.match(builder, /chosen\.bytes\.byteLength > 8_000_000/);
-  assert.match(builder, /bytes\.byteLength <= 6_000_000/);
+  assert.match(builder, /bytes\\.byteLength <= 4_800_000/);
   assert.match(builder, /stats\.meshes <= 120/);
   assert.match(builder, /stats\.meshes > 180/);
   assert.match(builder, /primitive\.getMode\(\) !== 4/);
