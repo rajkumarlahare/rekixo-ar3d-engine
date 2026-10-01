@@ -7,6 +7,7 @@ import {
 } from "./release-runtime.mjs";
 import { assertProjectAssetKey } from "./storage-boundary.mjs";
 import { serveR2Object } from "./http-range.mjs";
+import { validProjectSlug } from "../shared/project-slug-policy.js";
 const BASE_PATH = "/3Dprojects";
 const MODEL_ROUTE_PREFIX = `${BASE_PATH}/api/models/`;
 const PROJECT_ROUTE_PREFIX = `${BASE_PATH}/api/projects/`;
@@ -338,6 +339,87 @@ async function serveProjectMedia(env, slug, fileName, request) {
   return served.response;
 }
 
+
+async function publicGeo3DState(env, slug) {
+  if (!validProjectSlug(slug)) return null;
+
+  const schema = await env.DB.prepare(
+    `SELECT COUNT(*) AS total
+       FROM sqlite_master
+      WHERE type='table'
+        AND name IN ('geo_placements_3d','engine_settings_3d')`,
+  ).first();
+  if (Number(schema?.total || 0) !== 2) return null;
+
+  const release = await activeReleaseState(env, slug);
+  if (release.state !== "ok") return null;
+
+  const row = await env.DB.prepare(
+    `SELECT g.project_id AS projectId,g.release_id AS releaseId,
+            g.release_version AS releaseVersion,g.longitude,g.latitude,
+            g.altitude_m AS altitudeM,g.heading_deg AS headingDeg,
+            g.pitch_deg AS pitchDeg,g.roll_deg AS rollDeg,g.scale,
+            g.public_enabled AS publicEnabled
+       FROM geo_placements_3d g
+       JOIN projects_3d p ON p.id=g.project_id
+      WHERE p.slug=? AND p.status='published' AND g.public_enabled=1
+      LIMIT 1`,
+  ).bind(slug).first();
+  if (!row) return null;
+
+  if (
+    row.releaseId !== release.manifest.release.id ||
+    Number(row.releaseVersion) !== Number(release.manifest.release.version)
+  )
+    return null;
+
+  const experience = experienceFromActiveReleaseState(release);
+  const derivative = await geoModelDerivativeForActiveRelease(env, release);
+  const model =
+    derivative?.available !== false && derivative?.url
+      ? derivative
+      : experience.model;
+  if (!model?.url || model.available === false || model.mimeType !== "model/gltf-binary")
+    return null;
+
+  const setting = await env.DB.prepare(
+    "SELECT value FROM engine_settings_3d WHERE key='google_maps_browser_key' LIMIT 1",
+  ).first();
+  const mapsApiKey =
+    String(setting?.value || "").trim() ||
+    String(env.GOOGLE_MAPS_BROWSER_KEY || "").trim();
+
+  return {
+    project: experience.project,
+    release: {
+      id: release.manifest.release.id,
+      version: Number(release.manifest.release.version || 1),
+    },
+    placement: {
+      longitude: Number(row.longitude),
+      latitude: Number(row.latitude),
+      altitudeM: Number(row.altitudeM || 0),
+      headingDeg: Number(row.headingDeg || 0),
+      pitchDeg: Number(row.pitchDeg || 0),
+      rollDeg: Number(row.rollDeg || 0),
+      scale: Number(row.scale || 1),
+    },
+    maps: {
+      apiKey: mapsApiKey || null,
+      configured: Boolean(mapsApiKey),
+    },
+    model: {
+      id: model.id,
+      name: model.name,
+      mimeType: model.mimeType,
+      byteSize: model.byteSize,
+      url: model.url,
+      variant: model.variant || "source",
+      sha256: model.sha256,
+    },
+  };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -366,6 +448,20 @@ export default {
 
       if (parts[1] === "media" && parts[2]) {
         return serveProjectMedia(env, slug, parts[2], request);
+      }
+
+      if (parts[1] === "geo-placement" && parts.length === 2) {
+        if (request.method !== "GET")
+          return json({ error: "Method not allowed." }, { status: 405 });
+        const geo = await publicGeo3DState(env, slug);
+        if (!geo)
+          return json(
+            { error: "Public 3D Jio demo is not currently available." },
+            { status: 404 },
+          );
+        return json(geo, {
+          headers: { "Cache-Control": "public,max-age=5,stale-while-revalidate=15" },
+        });
       }
 
       if (parts.length > 1) {

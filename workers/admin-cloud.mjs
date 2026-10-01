@@ -1162,6 +1162,314 @@ async function projectReleases(request, env, actor, project, parts) {
   return json({ error: "Cloud release route not found." }, { status: 404 });
 }
 
+
+async function geoPlacementSchemaReady(env) {
+  try {
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name='geo_placements_3d'",
+    ).first();
+    return Number(row?.total || 0) === 1;
+  } catch {
+    return false;
+  }
+}
+
+function finiteNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+async function geoSettingsSchemaReady(env) {
+  try {
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name='engine_settings_3d'",
+    ).first();
+    return Number(row?.total || 0) === 1;
+  } catch {
+    return false;
+  }
+}
+
+async function engineMapsBrowserKey(env) {
+  if (await geoSettingsSchemaReady(env)) {
+    try {
+      const row = await env.DB.prepare(
+        "SELECT value FROM engine_settings_3d WHERE key='google_maps_browser_key' LIMIT 1",
+      ).first();
+      const stored = String(row?.value || "").trim();
+      if (stored) return stored;
+    } catch {
+      // Fall through to the Worker environment value.
+    }
+  }
+  return String(env.GOOGLE_MAPS_BROWSER_KEY || "").trim();
+}
+
+async function activeGeoRelease(env, project) {
+  if (!project.active_release_id) return null;
+  return env.DB.prepare(
+    `SELECT id,version,manifest_sha256 AS manifestSha256,created_at AS createdAt
+       FROM releases_3d
+      WHERE id=? AND project_id=?
+      LIMIT 1`,
+  ).bind(project.active_release_id, project.id).first();
+}
+
+async function geoPlacementState(env, project) {
+  if (!(await geoPlacementSchemaReady(env)))
+    return {
+      schemaReady: false,
+      project: {
+        id: project.id,
+        slug: project.slug,
+        name: project.name,
+        location: project.location || "",
+        status: project.status,
+      },
+      placement: null,
+      release: await activeGeoRelease(env, project),
+      mapsApiKey: "",
+      mapsConfigured: false,
+    };
+
+  const [placement, release] = await Promise.all([
+    env.DB.prepare(
+      `SELECT project_id AS projectId,
+              release_id AS releaseId,
+              release_version AS releaseVersion,
+              longitude,latitude,
+              altitude_m AS altitudeM,
+              heading_deg AS headingDeg,
+              pitch_deg AS pitchDeg,
+              roll_deg AS rollDeg,
+              scale,
+              public_enabled AS publicEnabled,
+              updated_by AS updatedBy,
+              updated_at AS updatedAt
+         FROM geo_placements_3d
+        WHERE project_id=?
+        LIMIT 1`,
+    ).bind(project.id).first(),
+    activeGeoRelease(env, project),
+  ]);
+  const mapsApiKey = await engineMapsBrowserKey(env);
+  const placementStale = Boolean(
+    placement &&
+      release &&
+      (placement.releaseId !== release.id ||
+        Number(placement.releaseVersion) !== Number(release.version)),
+  );
+
+  return {
+    schemaReady: true,
+    project: {
+      id: project.id,
+      slug: project.slug,
+      name: project.name,
+      location: project.location || "",
+      status: project.status,
+    },
+    placement: placement
+      ? { ...placement, publicEnabled: Boolean(placement.publicEnabled) }
+      : null,
+    placementStale,
+    release,
+    mapsApiKey,
+    mapsConfigured: Boolean(mapsApiKey),
+  };
+}
+
+async function projectGeoPlacement(request, env, actor, project) {
+  if (request.method === "GET")
+    return json(await geoPlacementState(env, project));
+
+  if (!(await geoPlacementSchemaReady(env)))
+    return json(
+      { error: "3D Geo Mapper schema is not installed." },
+      { status: 503 },
+    );
+
+  if (!sameOrigin(request))
+    return json({ error: "Invalid request origin." }, { status: 403 });
+
+  if (request.method === "DELETE") {
+    const now = new Date().toISOString();
+    await env.DB.batch([
+      env.DB.prepare(
+        "DELETE FROM geo_placements_3d WHERE project_id=?",
+      ).bind(project.id),
+      env.DB.prepare(
+        `INSERT INTO engine_admin_audit
+          (id,actor_email,action,project_id,target_id,details_json,created_at)
+          VALUES (?,?,?,?,?,?,?)`,
+      ).bind(
+        crypto.randomUUID(),
+        actor.email,
+        "geo.placement_removed",
+        project.id,
+        project.id,
+        "{}",
+        now,
+      ),
+    ]);
+    return json(await geoPlacementState(env, project));
+  }
+
+  if (request.method !== "PUT")
+    return json({ error: "Method not allowed." }, { status: 405 });
+
+  const release = await activeGeoRelease(env, project);
+  if (!release)
+    return json(
+      { error: "Publish an immutable Engine release before saving Geo placement." },
+      { status: 409 },
+    );
+
+  const body = await request.json().catch(() => ({}));
+  const longitude = finiteNumber(body.longitude);
+  const latitude = finiteNumber(body.latitude);
+  const altitudeM = finiteNumber(body.altitudeM ?? 0);
+  const headingDeg = finiteNumber(body.headingDeg ?? 0);
+  const pitchDeg = finiteNumber(body.pitchDeg ?? 0);
+  const rollDeg = finiteNumber(body.rollDeg ?? 0);
+  const scale = finiteNumber(body.scale ?? 1);
+  const publicEnabled = body.publicEnabled === true ? 1 : 0;
+
+  if (
+    longitude === null ||
+    longitude < -180 ||
+    longitude > 180 ||
+    latitude === null ||
+    latitude < -90 ||
+    latitude > 90 ||
+    altitudeM === null ||
+    altitudeM < -1000 ||
+    altitudeM > 10000 ||
+    headingDeg === null ||
+    Math.abs(headingDeg) > 36000 ||
+    pitchDeg === null ||
+    Math.abs(pitchDeg) > 360 ||
+    rollDeg === null ||
+    Math.abs(rollDeg) > 360 ||
+    scale === null ||
+    scale <= 0 ||
+    scale > 1000
+  )
+    return json({ error: "Valid 3D Geo placement values required." }, { status: 400 });
+
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO geo_placements_3d
+        (project_id,release_id,release_version,longitude,latitude,altitude_m,
+         heading_deg,pitch_deg,roll_deg,scale,public_enabled,updated_by,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+       ON CONFLICT(project_id) DO UPDATE SET
+         release_id=excluded.release_id,
+         release_version=excluded.release_version,
+         longitude=excluded.longitude,
+         latitude=excluded.latitude,
+         altitude_m=excluded.altitude_m,
+         heading_deg=excluded.heading_deg,
+         pitch_deg=excluded.pitch_deg,
+         roll_deg=excluded.roll_deg,
+         scale=excluded.scale,
+         public_enabled=excluded.public_enabled,
+         updated_by=excluded.updated_by,
+         updated_at=excluded.updated_at`,
+    ).bind(
+      project.id,
+      release.id,
+      Number(release.version),
+      longitude,
+      latitude,
+      altitudeM,
+      headingDeg,
+      pitchDeg,
+      rollDeg,
+      scale,
+      publicEnabled,
+      actor.email,
+      now,
+    ),
+    env.DB.prepare(
+      `INSERT INTO engine_admin_audit
+        (id,actor_email,action,project_id,target_id,details_json,created_at)
+        VALUES (?,?,?,?,?,?,?)`,
+    ).bind(
+      crypto.randomUUID(),
+      actor.email,
+      "geo.placement_saved",
+      project.id,
+      release.id,
+      JSON.stringify({
+        releaseVersion: Number(release.version),
+        longitude,
+        latitude,
+        altitudeM,
+        headingDeg,
+        pitchDeg,
+        rollDeg,
+        scale,
+        publicEnabled: Boolean(publicEnabled),
+      }),
+      now,
+    ),
+  ]);
+
+  return json(await geoPlacementState(env, project));
+}
+
+async function geoMapsSettings(request, env, actor) {
+  if (!(await geoSettingsSchemaReady(env)))
+    return json(
+      { error: "3D Jio Mapper settings schema is not installed." },
+      { status: 503 },
+    );
+
+  if (request.method === "GET")
+    return json({ apiKey: (await engineMapsBrowserKey(env)) || null });
+
+  if (request.method !== "PUT")
+    return json({ error: "Method not allowed." }, { status: 405 });
+  if (!sameOrigin(request))
+    return json({ error: "Invalid request origin." }, { status: 403 });
+
+  const body = await request.json().catch(() => ({}));
+  const apiKey = String(body.apiKey || "").trim();
+  if (!/^AIza[0-9A-Za-z_-]{20,80}$/.test(apiKey))
+    return json(
+      { error: "Valid Google Maps browser key required." },
+      { status: 400 },
+    );
+
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO engine_settings_3d(key,value,updated_by,updated_at)
+       VALUES ('google_maps_browser_key',?,?,?)
+       ON CONFLICT(key) DO UPDATE SET
+         value=excluded.value,
+         updated_by=excluded.updated_by,
+         updated_at=excluded.updated_at`,
+    ).bind(apiKey, actor.email, now),
+    env.DB.prepare(
+      `INSERT INTO engine_admin_audit
+        (id,actor_email,action,project_id,target_id,details_json,created_at)
+        VALUES (?,?,?,?,?,?,?)`,
+    ).bind(
+      crypto.randomUUID(),
+      actor.email,
+      "geo.maps_key_updated",
+      null,
+      "google_maps_browser_key",
+      JSON.stringify({ configured: true }),
+      now,
+    ),
+  ]);
+  return json({ ok: true, apiKey });
+}
+
 async function patchProject(request, env, actor, project) {
   if (request.method !== "PATCH")
     return json({ error: "Method not allowed." }, { status: 405 });
@@ -1258,6 +1566,9 @@ async function routeProjects(request, env, actor, url) {
   if (parts[1] === "releases")
     return projectReleases(request, env, actor, project, parts);
 
+  if (parts[1] === "geo-placement" && parts.length === 2)
+    return projectGeoPlacement(request, env, actor, project);
+
   if (parts[1] === "assets") {
     if (parts.length === 2) {
       if (request.method === "GET") return listAssets(env, project);
@@ -1304,6 +1615,9 @@ export async function handleCloudAdminRequest(request, env, url = new URL(reques
 
   if (url.pathname === `${CLOUD_PATH}/projects` || url.pathname.startsWith(`${CLOUD_PATH}/projects/`))
     return routeProjects(request, env, actor, url);
+
+  if (url.pathname === `${CLOUD_PATH}/settings/maps`)
+    return geoMapsSettings(request, env, actor);
 
   if (url.pathname === `${CLOUD_PATH}/audit`) {
     if (request.method !== "GET")

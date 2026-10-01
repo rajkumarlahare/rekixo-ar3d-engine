@@ -13,6 +13,7 @@ import { publicProjectPath } from "@rekixo/3d-engine-core";
 import "./styles.css";
 
 const Studio = lazy(() => import("./studio/Studio"));
+const GeoMapper3D = lazy(() => import("./geo/GeoMapper3D"));
 const PublishedViewer = lazy(() => import("./studio/PublishedViewer"));
 const CloudLogin = lazy(() => import("./CloudLogin"));
 
@@ -147,6 +148,7 @@ function App() {
       <header className="topbar">
         <div><p className="eyebrow">REKIXO</p><h1>AR3D Project Engine</h1></div>
         <div className="topbar-actions">
+          <a href="/3Dprojects/geo-mapper">3D Jio Mapper</a>
           <a href="/3Dprojects/studio">Open Design Studio</a>
           <select
             className="project-select"
@@ -237,6 +239,10 @@ createRoot(root).render(
     {window.location.pathname.startsWith("/3Dprojects/showcase/") ? (
       <Suspense fallback={<p>Loading published design…</p>}>
         <PublishedViewer />
+      </Suspense>
+    ) : window.location.pathname.replace(/\/$/, "") === "/3Dprojects/geo-mapper" ? (
+      <Suspense fallback={<p>Opening 3D Jio Mapper…</p>}>
+        <GeoMapper3D />
       </Suspense>
     ) : window.location.pathname.replace(/\/$/, "") === "/3Dprojects/studio" ? (
       <Suspense fallback={<p>Opening Design Studio…</p>}>

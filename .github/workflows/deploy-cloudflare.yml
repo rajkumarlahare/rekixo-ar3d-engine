@@ -55,6 +55,11 @@ jobs:
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
+          if printf '%s\n' "$CHANGED" | grep -Eq '^database/migrations/'; then
+            echo "migrations_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "migrations_changed=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -84,7 +89,9 @@ jobs:
           fi
 
       - name: Apply isolated D1 migrations
-        if: github.event_name == 'workflow_dispatch' && inputs.deployment_scope != 'admin-only'
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.deployment_scope != 'admin-only') ||
+          (github.event_name == 'push' && steps.public_runtime.outputs.migrations_changed == 'true')
         run: >-
           npx --yes wrangler@4
           d1 migrations apply rekixo-3d-production
