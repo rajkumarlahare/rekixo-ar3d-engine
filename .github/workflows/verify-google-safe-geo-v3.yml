@@ -1,0 +1,38 @@
+name: Verify Google-safe Geo derivative v3
+
+on:
+  push:
+    branches:
+      - fix/google-safe-geo-derivative-v3-20261001
+
+permissions:
+  contents: read
+
+jobs:
+  verify-geo-v3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Build Jyoti Geo derivative v3 without upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/jyoti-geo-v3"
+          mkdir -p "$OUT"
+          node scripts/build-geo-model-derivative.mjs jyoti-paradise-local-backup-302a8799 "$OUT"
+          node --input-type=module - "$OUT/metadata.json" <<'NODE'
+          import fs from "node:fs";
+          const metadata = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          if (metadata.pipeline !== "core-map-v3") throw new Error("wrong pipeline");
+          if (metadata.geoByteSize > 8_000_000) throw new Error("too large");
+          if (metadata.stats.primitivesWithoutNormals !== 0) throw new Error("missing normals");
+          if (metadata.stats.nonTrianglePrimitives !== 0) throw new Error("non-triangle primitive");
+          if (metadata.compatibility?.materialStrategy !== "source-pbr") throw new Error("materials changed");
+          if (metadata.compatibility?.syntheticPaletteTexture !== false) throw new Error("palette texture enabled");
+          console.log("GEO_V3_VERIFIED", JSON.stringify(metadata));
+          NODE
