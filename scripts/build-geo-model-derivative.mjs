@@ -334,6 +334,9 @@ const modelOut = path.join(outputDir, "model.glb");
 const metadataOut = path.join(outputDir, "metadata.json");
 fs.writeFileSync(modelOut, chosen.bytes);
 
+// Keep this builder path in the public-runtime deploy trigger. If a prior
+// production run fails before derivative upload, a later builder change safely
+// forces checksum-verified derivative rebuild and Public Worker recovery.
 const metadata = {
   format: "rekixo-geo-model-derivative",
   version: 1,
