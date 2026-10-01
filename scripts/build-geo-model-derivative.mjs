@@ -198,8 +198,10 @@ const sourcePath = path.join(workDir, "source.glb");
 fs.writeFileSync(sourcePath, sourceBytes);
 
 // Prefer a small core-GLB with few draw calls. Google recommends keeping
-// complex map models around 5 MB when possible; 8 MB is our hard deployment
-// ceiling so an optimization regression cannot silently ship a huge model.
+// complex map models under about 5 MB when possible. Target 4.8 MB so the
+// chosen candidate stays on the safe side of that guidance; 8 MB remains the
+// hard deployment ceiling so an optimization regression cannot silently ship
+// a huge model.
 const attempts = [
   { ratio: 0.45, error: 0.006 },
   { ratio: 0.32, error: 0.01 },
@@ -265,7 +267,7 @@ for (const attempt of attempts) {
     chosen = candidate;
 
   if (
-    bytes.byteLength <= 6_000_000 &&
+    bytes.byteLength <= 4_800_000 &&
     stats.meshes <= 120 &&
     stats.primitivesWithoutNormals === 0 &&
     stats.nonTrianglePrimitives === 0
