@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const URL =
+const PROJECT_URL =
   "https://ar3dstudio.in/3Dprojects/api/projects/jyoti-paradise-local-backup-302a8799";
 
 test("live Jyoti project exposes a verified Geo derivative", async () => {
-  const projectResponse = await fetch(URL, {
+  const projectResponse = await fetch(PROJECT_URL, {
     headers: { Accept: "application/json" },
     redirect: "follow",
   });
@@ -21,7 +21,7 @@ test("live Jyoti project exposes a verified Geo derivative", async () => {
   assert.ok(payload.geoModel?.byteSize < 5_000_000);
   assert.match(payload.geoModel?.url || "", /\/geo-models\/[^/]+\/model\.glb\?v=1$/);
 
-  const modelUrl = new URL(payload.geoModel.url, URL).toString();
+  const modelUrl = new globalThis.URL(payload.geoModel.url, PROJECT_URL).toString();
   const range = await fetch(modelUrl, {
     headers: { Range: "bytes=0-3" },
     redirect: "follow",
