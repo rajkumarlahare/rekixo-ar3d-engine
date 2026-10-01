@@ -19,6 +19,11 @@ test("Geo derivative v3 keeps Google-safe explicit normals and source PBR materi
   assert.match(builder, /syntheticPaletteTexture: false/);
 });
 
+test("Geo derivative v3 URL changes whenever rebuilt bytes change", () => {
+  assert.match(runtime, /max-age=31536000, immutable/);
+  assert.match(runtime, /&geo=\\\$\\\{encodeURIComponent\\\(derivative\\\.metadata\\\.geoSha256\\\)\\\}/);
+});
+
 test("Geo derivative v3 stays bounded and triangle-only", () => {
   assert.match(builder, /chosen\.bytes\.byteLength > 8_000_000/);
   assert.match(builder, /bytes\.byteLength <= 6_000_000/);
