@@ -634,7 +634,7 @@ async function readGeoDerivativeMetadata(
   if (
     metadata?.format !== "rekixo-geo-model-derivative" ||
     metadata?.version !== 1 ||
-    metadata?.pipeline !== "core-map-v2" ||
+    metadata?.pipeline !== "core-map-v3" ||
     metadata.projectSlug !== slug ||
     metadata.releaseId !== releaseId ||
     metadata.sourceModelId !== logicalId ||
