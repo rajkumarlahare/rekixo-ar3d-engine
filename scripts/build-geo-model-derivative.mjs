@@ -9,7 +9,6 @@ import {
   flatten,
   getBounds,
   join,
-  palette,
   prune,
   simplify,
   weld,
@@ -52,13 +51,21 @@ async function geometryStats(buffer) {
   const size = min.map((value, index) => max[index] - value);
 
   let meshes = 0;
+  let primitives = 0;
   let vertices = 0;
   let triangles = 0;
+  let primitivesWithNormals = 0;
+  let primitivesWithoutNormals = 0;
+  let nonTrianglePrimitives = 0;
   for (const mesh of root.listMeshes()) {
     meshes += 1;
     for (const primitive of mesh.listPrimitives()) {
+      primitives += 1;
       const position = primitive.getAttribute("POSITION");
       if (position) vertices += position.getCount();
+      if (primitive.getAttribute("NORMAL")) primitivesWithNormals += 1;
+      else primitivesWithoutNormals += 1;
+      if (primitive.getMode() !== 4) nonTrianglePrimitives += 1;
       const indices = primitive.getIndices();
       triangles += indices
         ? indices.getCount() / 3
@@ -71,8 +78,14 @@ async function geometryStats(buffer) {
   return {
     bounds: { min, max, center: centerPoint, size },
     meshes,
+    primitives,
     vertices,
     triangles,
+    materials: root.listMaterials().length,
+    textures: root.listTextures().length,
+    primitivesWithNormals,
+    primitivesWithoutNormals,
+    nonTrianglePrimitives,
   };
 }
 
@@ -98,17 +111,16 @@ async function buildCandidate(sourcePath, outputPath, ratio, error) {
   const root = document.getRoot();
   const hasTextures = root.listTextures().length > 0;
 
-  // Architectural/CAD exports often carry split vertex normals that prevent
-  // meshoptimizer from collapsing geometry. For the map-only derivative we can
-  // omit them: glTF normals are optional and the renderer can derive hard
-  // surface normals. If the document has no textures, UV attributes are also
-  // provably unused and can account for several megabytes of dead geometry
-  // payload. The immutable source GLB remains untouched.
+  // Keep explicit source normals and source PBR materials in the map derivative.
+  // Google Maps 3D is a separate renderer from our Three.js viewer, so the
+  // derivative intentionally avoids relying on renderer-generated normals or a
+  // synthetic palette texture. TANGENT and TEXCOORD_* are removed only when the
+  // immutable source has no textures, where those attributes cannot contribute
+  // to material sampling. The immutable source GLB remains untouched.
   for (const mesh of root.listMeshes()) {
     for (const primitive of mesh.listPrimitives()) {
-      primitive.getAttribute("NORMAL")?.dispose();
-      primitive.getAttribute("TANGENT")?.dispose();
       if (!hasTextures) {
+        primitive.getAttribute("TANGENT")?.dispose();
         for (const semantic of primitive.listSemantics()) {
           if (semantic.startsWith("TEXCOORD_"))
             primitive.getAttribute(semantic)?.dispose();
@@ -122,7 +134,6 @@ async function buildCandidate(sourcePath, outputPath, ratio, error) {
     center({ pivot: "below" }),
     weld(),
     dedup(),
-    palette({ min: 2 }),
     prune({
       keepAttributes: false,
       keepIndices: false,
@@ -236,6 +247,11 @@ for (const attempt of attempts) {
       meshes: stats.meshes,
       vertices: stats.vertices,
       triangles: stats.triangles,
+      materials: stats.materials,
+      textures: stats.textures,
+      primitivesWithNormals: stats.primitivesWithNormals,
+      primitivesWithoutNormals: stats.primitivesWithoutNormals,
+      nonTrianglePrimitives: stats.nonTrianglePrimitives,
       bounds: stats.bounds,
     }),
   );
@@ -248,7 +264,12 @@ for (const attempt of attempts) {
   )
     chosen = candidate;
 
-  if (bytes.byteLength <= 4_800_000 && stats.meshes <= 120) {
+  if (
+    bytes.byteLength <= 6_000_000 &&
+    stats.meshes <= 120 &&
+    stats.primitivesWithoutNormals === 0 &&
+    stats.nonTrianglePrimitives === 0
+  ) {
     chosen = candidate;
     break;
   }
@@ -279,6 +300,31 @@ if (stats.meshes > 180)
   fail(
     `Geo derivative still has too many rendered meshes: ${stats.meshes}`,
   );
+if (stats.primitives < 1 || stats.triangles < 1)
+  fail("Geo derivative has no rendered triangle geometry.");
+if (stats.nonTrianglePrimitives !== 0)
+  fail(
+    `Geo derivative contains non-TRIANGLES primitives: ${stats.nonTrianglePrimitives}`,
+  );
+if (
+  stats.primitivesWithoutNormals !== 0 ||
+  stats.primitivesWithNormals !== stats.primitives
+)
+  fail(
+    `Geo derivative must keep explicit NORMAL attributes on every primitive: with=${stats.primitivesWithNormals} without=${stats.primitivesWithoutNormals}`,
+  );
+const sourceTextureCount = Array.isArray(sourceJson.textures)
+  ? sourceJson.textures.length
+  : 0;
+const sourceMaterialCount = Array.isArray(sourceJson.materials)
+  ? sourceJson.materials.length
+  : 0;
+if (sourceTextureCount === 0 && stats.textures !== 0)
+  fail(
+    `Textureless source must not gain synthetic Geo textures: ${stats.textures}`,
+  );
+if (sourceMaterialCount > 0 && stats.materials < 1)
+  fail("Geo derivative unexpectedly lost all source PBR materials.");
 
 const releaseId = String(release.id);
 const modelId = String(model.id);
@@ -291,7 +337,7 @@ fs.writeFileSync(modelOut, chosen.bytes);
 const metadata = {
   format: "rekixo-geo-model-derivative",
   version: 1,
-  pipeline: "core-map-v2",
+  pipeline: "core-map-v3",
   generator: "@gltf-transform/*@4.5.1",
   projectId: project.id,
   projectSlug: slug,
@@ -306,6 +352,13 @@ const metadata = {
   geoByteSize: chosen.bytes.byteLength,
   simplifyRatio: chosen.ratio,
   simplifyError: chosen.error,
+  compatibility: {
+    explicitNormals: true,
+    materialStrategy: "source-pbr",
+    syntheticPaletteTexture: false,
+    sourceTextureCount,
+    sourceMaterialCount,
+  },
   extensionsUsed: used,
   extensionsRequired: required,
   stats,
