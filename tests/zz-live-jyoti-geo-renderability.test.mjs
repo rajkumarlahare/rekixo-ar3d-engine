@@ -143,6 +143,7 @@ test("live Jyoti Geo derivative is visually renderable core glTF", async () => {
   let visibleMeshes = 0;
   let vertices = 0;
   let triangles = 0;
+  const trianglesByAlphaMode = { OPAQUE: 0, MASK: 0, BLEND: 0 };
   for (const mesh of root.listMeshes()) {
     let meshTriangles = 0;
     for (const primitive of mesh.listPrimitives()) {
@@ -155,6 +156,9 @@ test("live Jyoti Geo derivative is visually renderable core glTF", async () => {
         : position.getCount() / 3;
       triangles += primitiveTriangles;
       meshTriangles += primitiveTriangles;
+      const alphaMode = primitive.getMaterial()?.getAlphaMode?.() || "OPAQUE";
+      trianglesByAlphaMode[alphaMode] =
+        (trianglesByAlphaMode[alphaMode] || 0) + primitiveTriangles;
     }
     if (meshTriangles > 0) visibleMeshes += 1;
   }
@@ -164,6 +168,10 @@ test("live Jyoti Geo derivative is visually renderable core glTF", async () => {
   assert.ok(size[1] > 10, "height > 10m");
   assert.ok(visibleMeshes > 0, "visible mesh count > 0");
   assert.ok(triangles > 0, "triangles > 0");
+  assert.ok(
+    trianglesByAlphaMode.OPAQUE > 1_000,
+    "substantial opaque geometry remains visible independent of texture alpha",
+  );
   assert.ok(Math.abs(center[0]) < 0.05, "center X ~= 0");
   assert.ok(Math.abs(center[2]) < 0.05, "center Z ~= 0");
   assert.ok(Math.abs(bounds.min[1]) < 0.05, "min Y ~= 0");
@@ -184,6 +192,12 @@ test("live Jyoti Geo derivative is visually renderable core glTF", async () => {
     materialSummary,
     textureCount: (json.textures || []).length,
     imageCount: (json.images || []).length,
+    textures: root.listTextures().map((texture) => ({
+      name: texture.getName(),
+      mimeType: texture.getMimeType(),
+      imageBytes: texture.getImage()?.byteLength || 0,
+    })),
+    trianglesByAlphaMode,
     vertices,
     triangles,
     bounds: {
