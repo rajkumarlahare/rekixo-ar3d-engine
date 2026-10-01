@@ -1179,6 +1179,32 @@ function finiteNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+async function geoSettingsSchemaReady(env) {
+  try {
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name='engine_settings_3d'",
+    ).first();
+    return Number(row?.total || 0) === 1;
+  } catch {
+    return false;
+  }
+}
+
+async function engineMapsBrowserKey(env) {
+  if (await geoSettingsSchemaReady(env)) {
+    try {
+      const row = await env.DB.prepare(
+        "SELECT value FROM engine_settings_3d WHERE key='google_maps_browser_key' LIMIT 1",
+      ).first();
+      const stored = String(row?.value || "").trim();
+      if (stored) return stored;
+    } catch {
+      // Fall through to the Worker environment value.
+    }
+  }
+  return String(env.GOOGLE_MAPS_BROWSER_KEY || "").trim();
+}
+
 async function activeGeoRelease(env, project) {
   if (!project.active_release_id) return null;
   return env.DB.prepare(
@@ -1226,7 +1252,13 @@ async function geoPlacementState(env, project) {
     ).bind(project.id).first(),
     activeGeoRelease(env, project),
   ]);
-  const mapsApiKey = String(env.GOOGLE_MAPS_BROWSER_KEY || "").trim();
+  const mapsApiKey = await engineMapsBrowserKey(env);
+  const placementStale = Boolean(
+    placement &&
+      release &&
+      (placement.releaseId !== release.id ||
+        Number(placement.releaseVersion) !== Number(release.version)),
+  );
 
   return {
     schemaReady: true,
@@ -1240,6 +1272,7 @@ async function geoPlacementState(env, project) {
     placement: placement
       ? { ...placement, publicEnabled: Boolean(placement.publicEnabled) }
       : null,
+    placementStale,
     release,
     mapsApiKey,
     mapsConfigured: Boolean(mapsApiKey),
@@ -1387,6 +1420,56 @@ async function projectGeoPlacement(request, env, actor, project) {
   return json(await geoPlacementState(env, project));
 }
 
+async function geoMapsSettings(request, env, actor) {
+  if (!(await geoSettingsSchemaReady(env)))
+    return json(
+      { error: "3D Jio Mapper settings schema is not installed." },
+      { status: 503 },
+    );
+
+  if (request.method === "GET")
+    return json({ apiKey: (await engineMapsBrowserKey(env)) || null });
+
+  if (request.method !== "PUT")
+    return json({ error: "Method not allowed." }, { status: 405 });
+  if (!sameOrigin(request))
+    return json({ error: "Invalid request origin." }, { status: 403 });
+
+  const body = await request.json().catch(() => ({}));
+  const apiKey = String(body.apiKey || "").trim();
+  if (!/^AIza[0-9A-Za-z_-]{20,80}$/.test(apiKey))
+    return json(
+      { error: "Valid Google Maps browser key required." },
+      { status: 400 },
+    );
+
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO engine_settings_3d(key,value,updated_by,updated_at)
+       VALUES ('google_maps_browser_key',?,?,?)
+       ON CONFLICT(key) DO UPDATE SET
+         value=excluded.value,
+         updated_by=excluded.updated_by,
+         updated_at=excluded.updated_at`,
+    ).bind(apiKey, actor.email, now),
+    env.DB.prepare(
+      `INSERT INTO engine_admin_audit
+        (id,actor_email,action,project_id,target_id,details_json,created_at)
+        VALUES (?,?,?,?,?,?,?)`,
+    ).bind(
+      crypto.randomUUID(),
+      actor.email,
+      "geo.maps_key_updated",
+      null,
+      "google_maps_browser_key",
+      JSON.stringify({ configured: true }),
+      now,
+    ),
+  ]);
+  return json({ ok: true, apiKey });
+}
+
 async function patchProject(request, env, actor, project) {
   if (request.method !== "PATCH")
     return json({ error: "Method not allowed." }, { status: 405 });
@@ -1532,6 +1615,9 @@ export async function handleCloudAdminRequest(request, env, url = new URL(reques
 
   if (url.pathname === `${CLOUD_PATH}/projects` || url.pathname.startsWith(`${CLOUD_PATH}/projects/`))
     return routeProjects(request, env, actor, url);
+
+  if (url.pathname === `${CLOUD_PATH}/settings/maps`)
+    return geoMapsSettings(request, env, actor);
 
   if (url.pathname === `${CLOUD_PATH}/audit`) {
     if (request.method !== "GET")
