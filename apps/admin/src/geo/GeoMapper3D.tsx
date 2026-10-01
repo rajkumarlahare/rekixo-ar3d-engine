@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  geoMapsSettings,
   geoPlacement,
   projects,
   removeGeoPlacement,
+  saveGeoMapsKey,
   saveGeoPlacement,
   session,
   type CloudGeoPlacementState,
@@ -189,6 +191,7 @@ export default function GeoMapper3D() {
     publicEnabled: false,
   });
   const [busy, setBusy] = useState(false);
+  const [mapsKeyInput, setMapsKeyInput] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const mapHostRef = useRef<HTMLDivElement | null>(null);
@@ -209,15 +212,20 @@ export default function GeoMapper3D() {
           );
           return null;
         }
-        return projects("", "active", 100, 0);
+        return Promise.all([
+          projects("", "active", 100, 0),
+          geoMapsSettings().catch(() => ({ apiKey: null })),
+        ]);
       })
       .then((payload) => {
         if (!live || !payload) return;
-        setProjectList(payload.projects);
+        const [projectsPayload, mapsPayload] = payload;
+        setProjectList(projectsPayload.projects);
+        if (mapsPayload.apiKey) setMapsKeyInput(mapsPayload.apiKey);
         const requested = requestedProjectSlug();
         const first =
-          payload.projects.find((item) => item.slug === requested)?.slug ||
-          payload.projects[0]?.slug ||
+          projectsPayload.projects.find((item) => item.slug === requested)?.slug ||
+          projectsPayload.projects[0]?.slug ||
           "";
         setSelectedSlug(first);
       })
@@ -245,7 +253,7 @@ export default function GeoMapper3D() {
       })
       .catch((reason) => {
         if (live)
-          setError(reason instanceof Error ? reason.message : "3D Geo Mapper load nahi hua.");
+          setError(reason instanceof Error ? reason.message : "3D Jio Mapper load nahi hua.");
       })
       .finally(() => {
         if (live) setBusy(false);
@@ -374,6 +382,28 @@ export default function GeoMapper3D() {
     markerRef.current?.setPosition(position);
   }, [form.longitude, form.latitude]);
 
+  async function saveMapsKey() {
+    const clean = mapsKeyInput.trim();
+    if (!clean) {
+      setError("Google Maps browser key enter karein.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await saveGeoMapsKey(clean);
+      if (selectedSlug) {
+        const next = await geoPlacement(selectedSlug);
+        setState(next);
+      }
+      setMessage("Google Maps browser key Engine me saved.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Maps key save nahi hui.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function save() {
     if (!selectedSlug || !validCoordinates(form)) {
       setError("Valid longitude/latitude set karein.");
@@ -408,14 +438,14 @@ export default function GeoMapper3D() {
 
   async function remove() {
     if (!selectedSlug || !state?.placement) return;
-    if (!window.confirm("Sirf 3D Geo placement remove karein? Model/release delete nahi honge.")) return;
+    if (!window.confirm("Sirf 3D Jio placement remove karein? Model/release delete nahi honge.")) return;
     setBusy(true);
     setError("");
     try {
       const next = await removeGeoPlacement(selectedSlug);
       setState(next);
       setForm(formFromState(next));
-      setMessage("3D Geo placement removed; Engine model/release safe hai.");
+      setMessage("3D Jio placement removed; Engine model/release safe hai.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Placement remove nahi hui.");
     } finally {
@@ -445,7 +475,7 @@ export default function GeoMapper3D() {
       <header className="geo3d-topbar">
         <div>
           <p className="eyebrow">REKIXO AR3D ENGINE</p>
-          <h1>3D Geo Mapper</h1>
+          <h1>3D Jio Mapper</h1>
           <p>Building placement Engine ke andar rakhein; Platform Geo Mapper masterplan-only rahega.</p>
         </div>
         <div className="geo3d-actions">
@@ -503,7 +533,13 @@ export default function GeoMapper3D() {
 
       {!state?.schemaReady ? (
         <section className="geo3d-alert geo3d-alert--error">
-          3D Geo Mapper database migration pending hai. Existing Engine projects safe hain; migration apply hone ke baad Save active hoga.
+          3D Jio Mapper database migration pending hai. Existing Engine projects safe hain; migration apply hone ke baad Save active hoga.
+        </section>
+      ) : null}
+
+      {state?.placementStale ? (
+        <section className="geo3d-alert geo3d-alert--error">
+          Active Engine release badal chuka hai. Purana Jio placement public nahi maana jayega; current release ke saath preview verify karke Save karein.
         </section>
       ) : null}
 
@@ -530,8 +566,20 @@ export default function GeoMapper3D() {
             </>
           ) : (
             <div className="geo3d-map-placeholder">
-              <strong>Google Satellite key Engine Admin me configured nahi hai.</strong>
-              <span>Coordinates manually set kar sakte hain; 3D preview aur save workflow independent hai.</span>
+              <strong>Google Maps browser key Engine me configure karein.</strong>
+              <span>Browser-restricted key use karein; ye client-side Maps API ke liye public configuration hoti hai.</span>
+              <div className="geo3d-key-row">
+                <input
+                  value={mapsKeyInput}
+                  onChange={(event) => setMapsKeyInput(event.target.value)}
+                  placeholder="AIza…"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <button type="button" onClick={() => void saveMapsKey()} disabled={busy}>
+                  Save Maps key
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -583,8 +631,8 @@ export default function GeoMapper3D() {
               checked={form.publicEnabled}
               onChange={(e) => patch("publicEnabled", e.target.checked)}
             />
-            <span>Public handoff ready</span>
-            <small>Engine flag only; Platform/customer site ko auto-publish nahi karta.</small>
+            <span>Public 3D Jio demo</span>
+            <small>Engine public route /3Dprojects/{slug}/geo ko enable karta hai; Platform Geo Mapper ko touch nahi karta.</small>
           </label>
         </div>
 
@@ -595,12 +643,23 @@ export default function GeoMapper3D() {
             onClick={() => void save()}
             disabled={busy || !state?.schemaReady || !renderModel || !engine?.release}
           >
-            {busy ? "Saving…" : "Save 3D Geo placement"}
+            {busy ? "Saving…" : "Save 3D Jio placement"}
           </button>
           {state?.placement ? (
             <button type="button" onClick={() => void remove()} disabled={busy}>
               Remove placement
             </button>
+          ) : null}
+
+          {state?.placement?.publicEnabled && !state?.placementStale ? (
+            <a
+              className="geo3d-public-link"
+              href={`https://ar3dstudio.in/3Dprojects/${encodeURIComponent(selectedSlug)}/geo`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open public Jio demo
+            </a>
           ) : null}
           <span>
             Model/release bytes immutable rahenge. Save sirf Engine Geo placement record update karta hai.
