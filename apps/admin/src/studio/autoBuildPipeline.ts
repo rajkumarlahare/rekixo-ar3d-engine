@@ -42,6 +42,7 @@ import {
   type RoomSemanticEvidence,
 } from "./roomSemanticBinding";
 import { buildSourceAutoInterior } from "./autoInteriorDraft";
+import { fuseCadOpeningEvidence } from "./cadOpeningFusion";
 
 export interface AutoBuildPipelineOptions {
   processDwgArchitecture?: DwgArchitectureProcessor;
@@ -83,6 +84,9 @@ export interface AutoBuildPipelineResult {
     readyRepeatsPrepared: number;
     readyOpeningsPrepared: number;
     openingReviewRemaining: number;
+    cadOpeningEvidence: number;
+    cadOpeningMatches: number;
+    cadOpeningReviewOnly: number;
     roomLabelsApplied: number;
     unitAnchorsMatched: number;
     unitRoomsAssigned: number;
@@ -693,18 +697,85 @@ export async function runAutoBuildPipeline(
 
   let readyOpeningsPrepared = 0;
   let openingReviewRemaining = 0;
-  if (next.scene.rooms.length && analysis.architecturalCandidates.length) {
-    const suggestions = suggestOpeningAssociations(analysis, next.scene);
-    const workflow = applyReadyOpeningWorkflow(
-      next.scene,
-      analysis.architecturalCandidates,
-      suggestions,
-      id,
-      "auto",
+  let cadOpeningEvidence = 0;
+  let cadOpeningMatches = 0;
+  let cadOpeningReviewOnly = 0;
+
+  if (next.scene.rooms.length) {
+    let suggestions = analysis.architecturalCandidates.length
+      ? suggestOpeningAssociations(analysis, next.scene)
+      : [];
+
+    const openingCadAudits = analysis.cadAudits.filter(
+      (audit) =>
+        (audit.kind === "dwg" || audit.kind === "dxf") &&
+        audit.geometryReady &&
+        (audit.semanticSegments?.some(
+          (segment) => segment.kind === "door" || segment.kind === "window",
+        ) ??
+          false),
     );
-    next = { ...next, scene: workflow.scene };
-    readyOpeningsPrepared = workflow.prepared;
-    openingReviewRemaining = workflow.reviewRemaining;
+
+    if (openingCadAudits.length === 1) {
+      const cadAudit = openingCadAudits[0];
+      const floorIndex = resolveCadFloorIndex(
+        cadAudit,
+        next.scene.floors.length,
+      );
+      const cadRegistration =
+        floorIndex !== undefined
+          ? estimateCadModelRegistration(
+              analysis,
+              cadAudit,
+              floorIndex,
+              next.scene.scale,
+              next.scene.modelTransform,
+            )
+          : undefined;
+      const floor =
+        floorIndex !== undefined ? next.scene.floors[floorIndex] : undefined;
+
+      if (
+        floor &&
+        cadRegistration?.compatible &&
+        !cadRegistration.ambiguous &&
+        cadRegistration.confidence >= 0.68
+      ) {
+        const fusion = fuseCadOpeningEvidence(
+          suggestions,
+          cadAudit,
+          floor.id,
+          floor.elevation,
+          next.scene,
+          cadRegistration,
+        );
+        suggestions = fusion.suggestions;
+        cadOpeningEvidence = fusion.cadEvidence;
+        cadOpeningMatches = fusion.matched;
+        cadOpeningReviewOnly = fusion.cadOnlyReview;
+      } else {
+        issues.push(
+          "CAD door/window evidence was detected, but CAD/model alignment is not reliable enough to move it into automatic opening placement.",
+        );
+      }
+    } else if (openingCadAudits.length > 1) {
+      issues.push(
+        "Multiple CAD sources contain door/window geometry. Opening fusion stays review-only until their floor roles are resolved.",
+      );
+    }
+
+    if (suggestions.length) {
+      const workflow = applyReadyOpeningWorkflow(
+        next.scene,
+        analysis.architecturalCandidates,
+        suggestions,
+        id,
+        "auto",
+      );
+      next = { ...next, scene: workflow.scene };
+      readyOpeningsPrepared = workflow.prepared;
+      openingReviewRemaining = workflow.reviewRemaining;
+    }
   }
 
   const autoInterior = buildSourceAutoInterior(next.scene, id);
@@ -750,6 +821,9 @@ export async function runAutoBuildPipeline(
       readyRepeatsPrepared: repeatReview.prepared,
       readyOpeningsPrepared,
       openingReviewRemaining,
+      cadOpeningEvidence,
+      cadOpeningMatches,
+      cadOpeningReviewOnly,
       roomLabelsApplied,
       unitAnchorsMatched,
       unitRoomsAssigned,
@@ -806,6 +880,9 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   const openings = summary.readyOpeningsPrepared
     ? ` · ${summary.readyOpeningsPrepared} opening${summary.readyOpeningsPrepared === 1 ? "" : "s"} ready for review`
     : "";
+  const cadOpenings = summary.cadOpeningEvidence
+    ? ` · CAD↔3D openings: ${summary.cadOpeningMatches}/${summary.cadOpeningEvidence} corroborated${summary.cadOpeningReviewOnly ? ` · ${summary.cadOpeningReviewOnly} CAD-only review` : ""}`
+    : "";
   const semantics =
     summary.roomLabelsApplied ||
     summary.unitRoomsAssigned ||
@@ -822,5 +899,5 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
     summary.readyRepeatsPrepared +
     summary.readyOpeningsPrepared +
     summary.roomSemanticReviewRemaining;
-  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${topology}${walls}${repeats}${openings}${semantics}${interior}${web}${textures}${materialFusion}${materialStyles}${resolvedTextures}${dwg}${pdf}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
+  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${topology}${walls}${repeats}${openings}${cadOpenings}${semantics}${interior}${web}${textures}${materialFusion}${materialStyles}${resolvedTextures}${dwg}${pdf}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
 }
