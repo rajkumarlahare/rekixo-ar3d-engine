@@ -65,11 +65,15 @@ function isTextureAsset(asset: Asset) {
 }
 
 function textureLookup(assets: readonly Asset[]) {
-  const exact = new Map<string, Asset>();
+  const exact = new Map<string, Asset | null>();
   const stem = new Map<string, Asset | null>();
   for (const asset of assets.filter(isTextureAsset)) {
     const leaf = safeLeaf(asset.name);
-    if (leaf && !exact.has(leaf)) exact.set(leaf, asset);
+    if (leaf) {
+      const previous = exact.get(leaf);
+      if (previous === undefined) exact.set(leaf, asset);
+      else if (previous?.id !== asset.id) exact.set(leaf, null);
+    }
     const key = normalizedStem(asset.name);
     if (!key) continue;
     const previous = stem.get(key);
@@ -84,7 +88,7 @@ function resolveTextureAsset(
   lookup: ReturnType<typeof textureLookup>,
 ) {
   const leaf = safeLeaf(requestedUrl);
-  if (leaf && lookup.exact.has(leaf)) return lookup.exact.get(leaf);
+  if (leaf && lookup.exact.has(leaf)) return lookup.exact.get(leaf) || undefined;
   const key = normalizedStem(requestedUrl);
   const byStem = key ? lookup.stem.get(key) : undefined;
   return byStem || undefined;
