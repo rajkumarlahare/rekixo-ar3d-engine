@@ -178,6 +178,7 @@ export function applyReadyOpeningWorkflow(
         approved += 1;
       } else if (existing.reviewed) {
         alreadyApproved += 1;
+        if (mode === "auto") continue;
       }
     } else {
       const human = mode === "human";
