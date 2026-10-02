@@ -186,6 +186,22 @@ jobs:
           NODE
           rm -f "$OUT"
 
+      - name: Check Cloudflare Containers access
+        id: containers-access
+        shell: bash
+        run: |
+          set -uo pipefail
+          OUT="$(mktemp)"
+          if npx --no-install wrangler containers list --config wrangler.admin.jsonc >"$OUT" 2>&1; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Cloudflare Containers API access verified."
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Cloudflare Containers API access is unavailable. Admin will deploy in safe Worker-only mode; DWG processing stays fail-closed until the account is on Workers Paid and CLOUDFLARE_API_TOKEN has Account > Containers > Write (or equivalent Workers Containers Write) access."
+            sed -n '1,120p' "$OUT" || true
+          fi
+          rm -f "$OUT"
+
       - name: Prepare published designs and verify model checksums
         run: node scripts/prepare-published-designs.mjs
 
@@ -237,13 +253,24 @@ jobs:
           done
 
       - name: Deploy isolated 3D Admin Worker
-        # Static publication assets are isolated from the existing D1/R2 project registry.
-        # Preparation above must succeed before deploying this Worker.
+        # Cloudflare activates Worker code before processing Container rollout.
+        # If the account/token cannot manage Containers, skip the rollout so
+        # normal Admin releases remain healthy and the DWG route fails closed.
         id: admin-deploy
-        run: >-
-          npx --no-install wrangler
-          deploy
-          --config wrangler.admin.jsonc
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.containers-access.outputs.available }}" = "true" ]; then
+            npx --no-install wrangler deploy --config wrangler.admin.jsonc
+          else
+            npx --no-install wrangler deploy --containers-rollout=none --config wrangler.admin.jsonc
+          fi
+
+      - name: Report DWG processor deployment state
+        if: steps.containers-access.outputs.available != 'true'
+        shell: bash
+        run: |
+          echo "::warning::Rekixo Admin is deployed, but native DWG decoding is not active on Cloudflare yet. Auto Build will preserve DWG as evidence and continue safely with the remaining source pack."
 
       - name: Verify Engine Admin invalid-login boundary
         shell: bash
