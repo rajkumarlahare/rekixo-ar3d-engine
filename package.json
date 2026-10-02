@@ -15,7 +15,8 @@
     "dev:public": "npm run dev --workspace @rekixo/3d-public",
     "build": "npm run build --workspace @rekixo/3d-admin && npm run build --workspace @rekixo/3d-public",
     "typecheck": "tsc -p apps/admin/tsconfig.json --noEmit && tsc -p apps/public/tsconfig.json --noEmit",
-    "test": "npm run typecheck && npm run build && node --test tests/*.test.mjs"
+    "test": "npm run typecheck && npm run build && node --test tests/*.test.mjs && npm run test:migrations",
+    "test:migrations": "node scripts/verify-fresh-migrations.mjs"
   },
   "devDependencies": {
     "@gltf-transform/core": "4.5.1",
