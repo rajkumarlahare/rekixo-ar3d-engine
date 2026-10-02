@@ -285,23 +285,14 @@ export function linkWallsToRooms(
 }
 
 
-function cadFloorIndex(
-  audit: SmartCadAudit,
+function floorIndexFromText(
+  value: string,
   floorCount: number,
 ): number | undefined {
-  if (floorCount === 1) return 0;
-  const text = [
-    audit.name,
-    ...audit.layerHints.map((entry) => entry.layer),
-    ...(audit.textLabels ?? []).map((entry) => entry.text),
-  ]
-    .join(" ")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ");
-
+  const text = value.toLowerCase().replace(/[^a-z0-9]+/g, " ");
   if (/\b(?:ground floor|ground|gf|g floor)\b/.test(text)) return 0;
   const words: Array<[RegExp, number]> = [
-    [/\b(?:first floor|1st floor|floor 1|f1)\b/, 1],
+    [/\b(?:first floor|1st floor|floor 1|f1|first to fourth floor)\b/, 1],
     [/\b(?:second floor|2nd floor|floor 2|f2)\b/, 2],
     [/\b(?:third floor|3rd floor|floor 3|f3)\b/, 3],
     [/\b(?:fourth floor|4th floor|floor 4|f4)\b/, 4],
@@ -311,6 +302,25 @@ function cadFloorIndex(
   for (const [pattern, index] of words)
     if (index < floorCount && pattern.test(text)) return index;
   return undefined;
+}
+
+function cadFloorIndex(
+  audit: SmartCadAudit,
+  floorCount: number,
+): number | undefined {
+  if (floorCount === 1) return 0;
+  const evidence = [
+    ...((audit.floorHints ?? []).map(String)),
+    audit.name,
+    ...audit.layerHints.map((entry) => entry.layer),
+    ...(audit.textLabels ?? []).map((entry) => entry.floorLabel ?? entry.text),
+  ];
+  const candidates = new Set(
+    evidence
+      .map((value) => floorIndexFromText(value, floorCount))
+      .filter((value): value is number => value !== undefined),
+  );
+  return candidates.size === 1 ? [...candidates][0] : undefined;
 }
 
 function transformedCadPoint(
@@ -332,6 +342,8 @@ function transformedCadPoint(
 export interface CadWallGraphResult {
   walls: Wall[];
   auditAssetId?: string;
+  auditKind?: "dwg" | "dxf";
+  measuredWallCount?: number;
   floorIndex?: number;
   quarterTurn: boolean;
   compatible: boolean;
@@ -344,19 +356,21 @@ export function deriveCadWallGraph(
   scale: number,
   transform?: ModelTransform,
 ): CadWallGraphResult {
-  const audit = analysis.cadAudits.find(
-    (entry) =>
-      entry.kind === "dxf" &&
-      entry.geometryReady &&
-      (entry.semanticSegments?.some((segment) => segment.kind === "wall") ??
-        false),
-  );
+  const audit = analysis.cadAudits
+    .filter(
+      (entry) =>
+        (entry.kind === "dwg" || entry.kind === "dxf") &&
+        entry.geometryReady &&
+        (entry.semanticSegments?.some((segment) => segment.kind === "wall") ??
+          false),
+    )
+    .sort((left, right) => Number(right.kind === "dwg") - Number(left.kind === "dwg"))[0];
   if (!audit)
     return {
       walls: [],
       quarterTurn: false,
       compatible: false,
-      reason: "No normalized DXF wall geometry is ready.",
+      reason: "No normalized CAD wall geometry is ready.",
     };
 
   const floorIndex = cadFloorIndex(audit, floors.length);
@@ -368,7 +382,7 @@ export function deriveCadWallGraph(
       quarterTurn: false,
       compatible: false,
       reason:
-        "DXF floor identity is ambiguous; keep CAD geometry as review evidence.",
+        "CAD floor identity is ambiguous; keep CAD geometry as review evidence.",
     };
 
   const wallSegments = (audit.semanticSegments ?? []).filter(
@@ -381,7 +395,7 @@ export function deriveCadWallGraph(
       floorIndex,
       quarterTurn: false,
       compatible: false,
-      reason: "DXF contains no normalized wall segments.",
+      reason: "CAD contains no normalized wall segments.",
     };
 
   const cadPoints = wallSegments.flatMap((segment) => [
@@ -401,7 +415,7 @@ export function deriveCadWallGraph(
       floorIndex,
       quarterTurn: false,
       compatible: false,
-      reason: "DXF wall bounds are too small for building reconstruction.",
+      reason: "CAD wall bounds are too small for building reconstruction.",
     };
 
   let targetCentre: RoomPoint = [0, 0];
@@ -429,7 +443,7 @@ export function deriveCadWallGraph(
         quarterTurn,
         compatible: false,
         reason:
-          "DXF/model footprint dimensions disagree too much for automatic alignment.",
+          "CAD/model footprint dimensions disagree too much for automatic alignment.",
       };
 
     const modelCentreX =
@@ -450,8 +464,28 @@ export function deriveCadWallGraph(
   }
 
   const cadCentre: RoomPoint = [(minX + maxX) / 2, (minZ + maxZ) / 2];
+  const sortedFloors = [...floors].sort(
+    (left, right) => left.elevation - right.elevation,
+  );
+  const floorPosition = sortedFloors.findIndex((candidate) => candidate.id === floor.id);
+  const nextFloor = sortedFloors[floorPosition + 1];
+  const inferredHeight = nextFloor
+    ? Math.max(2.4, Math.min(3.6, (nextFloor.elevation - floor.elevation) * 0.9))
+    : 2.8;
+
+  let measuredWallCount = 0;
   const walls = wallSegments
     .map((segment, index): Wall | undefined => {
+      const measuredThickness =
+        segment.thickness !== undefined &&
+        segment.thickness >= 0.06 &&
+        segment.thickness <= 1.2
+          ? segment.thickness
+          : undefined;
+      if (audit.kind === "dwg" && measuredThickness === undefined)
+        return undefined;
+      if (measuredThickness !== undefined) measuredWallCount += 1;
+
       const start = transformedCadPoint(
         segment.start,
         cadCentre,
@@ -472,11 +506,19 @@ export function deriveCadWallGraph(
         roomIds: [],
         start,
         end,
-        thickness: 0.12,
-        height: 2.8,
+        thickness: measuredThickness ?? 0.12,
+        height: inferredHeight,
         reviewed: false,
+        reviewState: "suggested",
         origin: "cad-auto",
-        confidence: 0.86,
+        confidence: Number(
+          Math.min(
+            0.98,
+            measuredThickness !== undefined
+              ? Math.max(segment.confidence ?? 0.9, 0.92)
+              : Math.min(segment.confidence ?? 0.82, 0.86),
+          ).toFixed(3),
+        ),
       };
     })
     .filter((wall): wall is Wall => Boolean(wall));
@@ -484,8 +526,16 @@ export function deriveCadWallGraph(
   return {
     walls,
     auditAssetId: audit.assetId,
+    auditKind: audit.kind,
+    measuredWallCount,
     floorIndex,
     quarterTurn,
     compatible: walls.length > 0,
+    ...(!walls.length && audit.kind === "dwg"
+      ? {
+          reason:
+            "DWG wall evidence is present, but no measured wall centerlines are safe enough to author automatically.",
+        }
+      : {}),
   };
 }
