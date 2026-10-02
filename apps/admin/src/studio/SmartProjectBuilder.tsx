@@ -96,6 +96,19 @@ export default function SmartProjectBuilder({
       (!publishModel || !/\.glb$/i.test(publishModel.name)),
   );
   const hasSketchUpSource = files.some((file) => /\.(?:skb|skp)$/i.test(file.name));
+  const draftBuilt =
+    project.scene.floors.length > 1 &&
+    Boolean(
+      project.scene.modelNodeTags?.some(
+        (tag) => Boolean(tag.floorId) && tag.assignment === "auto",
+      ),
+    );
+  const roles = useMemo(() => {
+    const count = new Map<SmartSourceRole, number>();
+    for (const source of analysis?.sources ?? [])
+      count.set(source.role, (count.get(source.role) ?? 0) + 1);
+    return [...count.entries()];
+  }, [analysis]);
   const repeatedFloorGroups = useMemo(
     () => (analysis ? detectRepeatedFloors(analysis) : []),
     [analysis],
