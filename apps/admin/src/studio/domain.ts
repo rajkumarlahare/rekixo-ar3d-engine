@@ -101,6 +101,31 @@ export interface SceneAppearance {
   nightMode: boolean;
 }
 
+export type ReferenceLightingMood =
+  | "day"
+  | "evening"
+  | "night"
+  | "unknown";
+
+export interface ReferenceImageEvidence {
+  assetId: string;
+  sourceWidth: number;
+  sourceHeight: number;
+  sampledWidth: number;
+  sampledHeight: number;
+  renderedPalette: string[];
+  averageLuminance: number;
+  warmFraction: number;
+  darkFraction: number;
+  highlightFraction: number;
+  averageSaturation: number;
+  verticalEdgeStrength: number;
+  horizontalEdgeStrength: number;
+  lightingMood: ReferenceLightingMood;
+  confidence: number;
+  sampleCount: number;
+}
+
 export const DEFAULT_SCENE_APPEARANCE: SceneAppearance = {
   exposure: 1,
   sunIntensity: 3.2,
@@ -165,6 +190,7 @@ export interface Scene {
   publishModelId?: string;
   scale: number;
   appearance?: SceneAppearance;
+  referenceImageEvidence?: ReferenceImageEvidence;
   materialOverrides?: MaterialOverride[];
   modelTransform?: ModelTransform;
   referenceLayers?: ReferenceLayer[];
@@ -590,6 +616,41 @@ export function validateScene(s: Scene): void {
       typeof s.appearance.nightMode !== "boolean")
   )
     throw Error("Invalid scene appearance settings.");
+  if (s.referenceImageEvidence !== undefined) {
+    const evidence = s.referenceImageEvidence;
+    if (
+      !evidence ||
+      !text(evidence.assetId, 100) ||
+      !Number.isInteger(evidence.sourceWidth) ||
+      !number(evidence.sourceWidth, 2, 50000) ||
+      !Number.isInteger(evidence.sourceHeight) ||
+      !number(evidence.sourceHeight, 2, 50000) ||
+      !Number.isInteger(evidence.sampledWidth) ||
+      !number(evidence.sampledWidth, 2, 2000) ||
+      !Number.isInteger(evidence.sampledHeight) ||
+      !number(evidence.sampledHeight, 2, 2000) ||
+      !Array.isArray(evidence.renderedPalette) ||
+      evidence.renderedPalette.length < 1 ||
+      evidence.renderedPalette.length > 8 ||
+      evidence.renderedPalette.some((entry) => !color(entry)) ||
+      new Set(evidence.renderedPalette.map((entry) => entry.toLowerCase()))
+        .size !== evidence.renderedPalette.length ||
+      !number(evidence.averageLuminance, 0, 1) ||
+      !number(evidence.warmFraction, 0, 1) ||
+      !number(evidence.darkFraction, 0, 1) ||
+      !number(evidence.highlightFraction, 0, 1) ||
+      !number(evidence.averageSaturation, 0, 1) ||
+      !number(evidence.verticalEdgeStrength, 0, 1) ||
+      !number(evidence.horizontalEdgeStrength, 0, 1) ||
+      !["day", "evening", "night", "unknown"].includes(
+        evidence.lightingMood,
+      ) ||
+      !number(evidence.confidence, 0, 1) ||
+      !Number.isInteger(evidence.sampleCount) ||
+      !number(evidence.sampleCount, 1, 1000000)
+    )
+      throw Error("Invalid reference image evidence.");
+  }
   if (s.materialOverrides !== undefined) {
     if (
       !Array.isArray(s.materialOverrides) ||
@@ -953,6 +1014,11 @@ export function validateProject(p: Project): void {
     for (const layer of s.referenceLayers ?? [])
       if (!p.assets.includes(layer.assetId))
         throw Error("Reference layer asset is missing.");
+    if (
+      s.referenceImageEvidence &&
+      !p.assets.includes(s.referenceImageEvidence.assetId)
+    )
+      throw Error("Reference image evidence asset is missing.");
     for (const room of s.rooms)
       if (room.sourceAssetId && !p.assets.includes(room.sourceAssetId))
         throw Error("Room source asset is missing.");
