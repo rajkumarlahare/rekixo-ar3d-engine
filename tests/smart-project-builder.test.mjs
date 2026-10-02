@@ -64,12 +64,16 @@ test("architectural automation stays suggestion-first and preserves manual label
   assert.match(studio, /Review them visually before treating them as architecture/);
 });
 
-test("CAD intake does not pretend binary DWG is semantically parsed", () => {
+test("CAD intake keeps binary DWG fail-closed and parses ASCII DXF through the normalized architecture parser", () => {
   const analyzer = read("apps/admin/src/studio/projectAnalyzer.ts");
-  assert.match(analyzer, /extension === "dwg"/);
+  const dxf = read("apps/admin/src/studio/dxfArchitecture.ts");
+  assert.match(analyzer, /extension !== "dxf"/);
+  assert.match(analyzer, /DWG is preserved as source evidence/);
   assert.match(analyzer, /Convert\/export to ASCII DXF/);
-  assert.match(analyzer, /no CAD semantics were guessed/);
-  assert.match(analyzer, /code === "8"/);
+  assert.match(analyzer, /semanticReady: false/);
+  assert.match(analyzer, /parseAsciiDxfArchitecture\(text\)/);
+  assert.match(dxf, /code === "8"/);
+  assert.match(dxf, /metresPerUnit/);
 });
 
 
