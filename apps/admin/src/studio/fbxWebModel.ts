@@ -5,13 +5,16 @@ import { id, type Asset } from "./domain";
 import { disposeObjectResources } from "./threeResources";
 import { MAX_STUDIO_ASSET_BYTES } from "./storage";
 import {
+  resolveSketchUpMaterialStyle,
   resolveSketchUpMaterialTexture,
+  type SketchUpMaterialStyleBinding,
   type SketchUpMaterialTextureBinding,
 } from "./sketchUpMaterialResolver";
 
 export interface FbxWebModelOptions {
   textureAssets?: readonly Asset[];
   materialBindings?: readonly SketchUpMaterialTextureBinding[];
+  materialStyles?: readonly SketchUpMaterialStyleBinding[];
 }
 
 export interface WebModelPreparationResult {
@@ -23,6 +26,7 @@ export interface WebModelPreparationResult {
   resolvedExternalTextures: number;
   unresolvedExternalTextures: number;
   materialTexturesApplied: number;
+  materialStylesApplied: number;
   textureLoadErrors: number;
 }
 
@@ -168,6 +172,55 @@ function loadTextureAsset(asset: Asset, objectUrls: Set<string>) {
   });
 }
 
+function applyRecoveredMaterialStyles(
+  root: T.Object3D,
+  bindings: readonly SketchUpMaterialStyleBinding[],
+) {
+  if (!bindings.length) return 0;
+  const seen = new Set<string>();
+  let applied = 0;
+
+  root.traverse((node) => {
+    if (!(node instanceof T.Mesh)) return;
+    const list = Array.isArray(node.material) ? node.material : [node.material];
+    for (const material of list) {
+      if (!(material instanceof T.MeshStandardMaterial)) continue;
+      if (seen.has(material.uuid)) continue;
+      seen.add(material.uuid);
+      const resolved = resolveSketchUpMaterialStyle(material.name, bindings);
+      if (!resolved) continue;
+
+      if (resolved.binding.baseColor)
+        material.color.set(resolved.binding.baseColor);
+      if (resolved.binding.opacity !== undefined) {
+        material.opacity = resolved.binding.opacity;
+        material.transparent = resolved.binding.opacity < 0.999;
+        material.depthWrite = resolved.binding.opacity >= 0.999;
+      }
+      material.userData = {
+        ...material.userData,
+        rekixoMaterialStyleSource: {
+          kind: "sketchup-material-definition",
+          sourceArchiveId: resolved.binding.sourceArchiveId,
+          archivePath: resolved.binding.archivePath,
+          confidence: resolved.binding.confidence,
+          matchScore: resolved.score,
+          ...(resolved.binding.xScale !== undefined
+            ? { xScale: resolved.binding.xScale }
+            : {}),
+          ...(resolved.binding.yScale !== undefined
+            ? { yScale: resolved.binding.yScale }
+            : {}),
+        },
+      };
+      material.needsUpdate = true;
+      applied += 1;
+    }
+  });
+
+  return applied;
+}
+
 async function applyRecoveredMaterialTextures(
   root: T.Object3D,
   files: readonly Asset[],
@@ -274,6 +327,10 @@ export async function prepareFbxWebModel(
 
     root.name = root.name || source.name.replace(/\.fbx$/i, "");
     const summary = standardizeModel(root);
+    const materialStylesApplied = applyRecoveredMaterialStyles(
+      root,
+      options.materialStyles ?? [],
+    );
     const materialRecovery = await applyRecoveredMaterialTextures(
       root,
       options.textureAssets ?? [],
@@ -289,6 +346,7 @@ export async function prepareFbxWebModel(
       resolvedExternalTextures,
       unresolvedExternalTextures,
       materialTexturesApplied: materialRecovery.applied,
+      materialStylesApplied,
     };
     root.updateMatrixWorld(true);
 
@@ -324,6 +382,7 @@ export async function prepareFbxWebModel(
       resolvedExternalTextures,
       unresolvedExternalTextures,
       materialTexturesApplied: materialRecovery.applied,
+      materialStylesApplied,
       textureLoadErrors,
     };
   } finally {
