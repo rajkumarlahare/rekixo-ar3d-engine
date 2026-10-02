@@ -21,3 +21,39 @@ test("Geo derivative deployment registry starts empty after legacy cleanup", () 
   assert.equal(registry.version, 1);
   assert.deepEqual(registry.projects, []);
 });
+
+
+test("clean-room reset clears project-owned D1 data and R2 project prefix", () => {
+  const migration = read("database/migrations/0028_clean_room_project_reset_v1.sql");
+  const workflow = read(".github/workflows/deploy-cloudflare.yml");
+  const purge = read("scripts/purge-project-r2-prefix.mjs");
+
+  for (const table of [
+    "geo_experience_active_releases_3d",
+    "geo_release_activations_3d",
+    "geo_releases_3d",
+    "geo_draft_verifications_3d",
+    "geo_placements_3d",
+    "geo_experience_drafts_3d",
+    "experiences_3d",
+    "release_activations_3d",
+    "release_assets_3d",
+    "releases_3d",
+    "studio_assets_3d",
+    "studio_drafts_3d",
+    "publish_versions_3d",
+    "scenes_3d",
+    "camera_presets_3d",
+    "models_3d",
+    "projects_3d",
+    "engine_deletion_jobs_3d",
+    "engine_admin_audit",
+  ])
+    assert.match(migration, new RegExp(`DELETE FROM ${table}`));
+
+  assert.match(workflow, /0028_clean_room_project_reset_v1\.sql/);
+  assert.match(workflow, /Purge project-owned R2 objects for clean-room reset/);
+  assert.match(workflow, /CONFIRM_ENGINE_PROJECT_PURGE: DELETE_ENGINE_PROJECT_DATA/);
+  assert.match(purge, /R2_PREFIX \|\| "projects\/"|process\.env\.R2_PREFIX/);
+  assert.match(purge, /Engine R2 project prefix is empty/);
+});
