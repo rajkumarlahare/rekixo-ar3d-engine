@@ -1479,81 +1479,6 @@ export default function Studio() {
     );
   }
 
-  function prepareSuggestedTypicalFloor(
-    targetFloorId: string,
-    openMapper = true,
-  ) {
-    if (!targetFloorId || (quickSourceSetup.repeatPlan && targetFloorId !== typicalFloorId)) {
-      setError("Select the source typical floor before preparing rooms. Use Repeat floors for upper floors.");
-      return;
-    }
-    const suggestedRows = roomSheetRows.filter(
-      (row) =>
-        row.origin === "profile" &&
-        typeof row.suggestedX === "number" &&
-        Number.isFinite(row.suggestedX) &&
-        typeof row.suggestedZ === "number" &&
-        Number.isFinite(row.suggestedZ),
-    );
-    if (!suggestedRows.length) {
-      setMessage("No project-profile suggested room positions are available.");
-      return;
-    }
-    const additions = createSuggestedRoomDrafts(
-      roomSheetRows,
-      p.scene.rooms,
-      targetFloorId,
-      modelTransform,
-      p.scene.scale,
-    );
-    if (!additions.length) {
-      setMessage(
-        "Suggested floor is already represented by mapped/existing rooms. Nothing was overwritten.",
-      );
-      return;
-    }
-    const next: Project = {
-      ...p,
-      scene: {
-        ...p.scene,
-        rooms: [...p.scene.rooms, ...additions],
-      },
-    };
-    try {
-      validateProject(next);
-      edit(next);
-      const first = additions[0];
-      setShowRoomMapper(openMapper);
-      setShowFloorReview(!openMapper);
-      setShowReferenceWorkspace(false);
-      setShowAssetShelf(false);
-      setView("building");
-      setCameraOrientation("top");
-      setRoomMapFloorId(targetFloorId);
-      setIsolateFloorId(targetFloorId);
-      setRoomId(first.id);
-      setSelected(first.id);
-      setRoomMapUnit(first.unit);
-      setRoomMapName(first.name);
-      setRoomMapAction("idle");
-      setSelectedRoomSheetKey("");
-      const target = next.scene.floors.find(
-        (entry) => entry.id === targetFloorId,
-      );
-      if (target) setSectionCutOffset(target.elevation + 1.5);
-      const kept = suggestedRows.length - additions.length;
-      setMessage(
-        `${additions.length} suggested room${additions.length === 1 ? "" : "s"} prepared as unverified draft positions${kept > 0 ? ` · ${kept} existing/mapped room${kept === 1 ? "" : "s"} kept untouched` : ""}. Review against the plan and adjust with mouse/touch.`,
-      );
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Suggested floor could not be prepared.",
-      );
-    }
-  }
-
   function commitMappedRoom(bounds: RoomDrawResult) {
     const floorId = roomMapFloorId || p.scene.floors[0]?.id;
     if (!floorId) {
@@ -1918,12 +1843,7 @@ export default function Studio() {
       validateProject(next);
       edit(next);
 
-      const nextPreview = buildBatchRepeatPreview(
-        next.scene,
-        quickSourceSetup.profile,
-        quickSourceSetup.floorSkeleton,
-        quickSourceSetup.repeatPlan,
-      );
+      const nextPreview = buildDetectedRepeatPreview(next.scene);
       const repeatTargets = nextPreview.rows.filter(
         (row) => row.targetFloorId && row.targetUnit,
       );
@@ -4045,33 +3965,6 @@ export default function Studio() {
               </div>
             </details>
 
-            {isolateFloorId && (!quickSourceSetup.repeatPlan || isolateFloorId === typicalFloorId) &&
-              roomSheetRows.some(
-                (row) =>
-                  row.origin === "profile" &&
-                  typeof row.suggestedX === "number" &&
-                  Number.isFinite(row.suggestedX) &&
-                  typeof row.suggestedZ === "number" &&
-                  Number.isFinite(row.suggestedZ) &&
-                  !mappedSheetKeys.has(row.key),
-              ) && (
-                <button
-                  type="button"
-                  className="primary editor-prepare-floor-action"
-                  disabled={busy || Boolean(review)}
-                  onClick={(event) => {
-                    event.currentTarget.closest("nav")?.querySelectorAll("details[open]")
-                      .forEach((menu) => menu.removeAttribute("open"));
-                    prepareSuggestedTypicalFloor(isolateFloorId, false);
-                  }}
-                >
-                  Prepare{" "}
-                  {scene.floors.find((floor) => floor.id === isolateFloorId)?.name ??
-                    "floor"}{" "}
-                  rooms
-                </button>
-              )}
-
             {isolateFloorId && scene.rooms.some((entry) => entry.floorId === isolateFloorId) && (
               <button type="button" onClick={(event) => {
                 event.currentTarget.closest("nav")?.querySelectorAll("details[open]")
@@ -4316,8 +4209,6 @@ export default function Studio() {
               selectedRoomSheetKey={selectedRoomSheetKey}
               roomSheetIssues={roomSheetIssues}
               onRoomSheetSelect={selectRoomSheetRow}
-              onPrepareSuggestedLayout={prepareSuggestedTypicalFloor}
-              canPrepare={true}
               batchRepeatPreview={batchRepeatPreview}
               onGenerateBatchRepeat={generateBatchRepeatedUnits}
               openingWorkflow={openingWorkflowStatus}
