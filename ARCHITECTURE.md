@@ -150,6 +150,7 @@ The 3D database is project-scoped. Core/planned entities:
 
 - `projects_3d`
 - `experiences_3d` — Building identity plus optional Geo identity
+- `geo_experience_drafts_3d` — editable Geo source/location/alignment state owned by a Geo Experience
 - `models_3d`
 - `scenes_3d`
 - `camera_presets_3d`
@@ -165,7 +166,12 @@ Each row that belongs to a project must be keyed by the 3D project ID. No custom
 existing immutable Building release system. Building release truth remains in
 `releases_3d`, `release_assets_3d`, `release_activations_3d` and
 `projects_3d.active_release_id`. A Geo Experience stores only a reference to a
-specific Building release at this phase; it does not copy Building assets.
+specific Building release; it does not copy Building assets.
+
+`geo_experience_drafts_3d` is mutable authoring state only. It is revision
+protected and may change without mutating the current public Geo snapshot.
+Legacy `geo_placements_3d` remains temporarily as the public compatibility
+snapshot until immutable Geo releases become the public source of truth.
 
 New customer projects are provisioned as draft D1 records through the controlled operator workflow. Customer onboarding is data provisioning, not a new repository and not a new schema migration.
 

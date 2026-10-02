@@ -1323,6 +1323,426 @@ async function projectExperiences(request, env, actor, project) {
   );
 }
 
+async function geoDraftSchemaReady(env) {
+  try {
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name='geo_experience_drafts_3d'",
+    ).first();
+    return Number(row?.total || 0) === 1;
+  } catch {
+    return false;
+  }
+}
+
+async function geoDraftContext(env, project) {
+  if (!(await geoDraftSchemaReady(env))) return null;
+  return env.DB.prepare(
+    `SELECT e.id AS experienceId,
+            e.lifecycle,
+            d.project_id AS projectId,
+            d.source_building_release_id AS sourceBuildingReleaseId,
+            d.source_building_release_version AS sourceBuildingReleaseVersion,
+            d.longitude,
+            d.latitude,
+            d.altitude_m AS altitudeM,
+            d.heading_deg AS headingDeg,
+            d.pitch_deg AS pitchDeg,
+            d.roll_deg AS rollDeg,
+            d.scale,
+            d.revision,
+            d.updated_by AS updatedBy,
+            d.updated_at AS updatedAt
+       FROM experiences_3d e
+       LEFT JOIN geo_experience_drafts_3d d
+         ON d.experience_id=e.id
+        AND d.project_id=e.project_id
+      WHERE e.project_id=?
+        AND e.type='geo'
+      LIMIT 1`,
+  ).bind(project.id).first();
+}
+
+function mapGeoDraft(row) {
+  if (!row?.experienceId || !row?.sourceBuildingReleaseId) return null;
+  return {
+    experienceId: row.experienceId,
+    projectId: row.projectId,
+    sourceBuildingReleaseId: row.sourceBuildingReleaseId,
+    sourceBuildingReleaseVersion: Number(row.sourceBuildingReleaseVersion),
+    longitude:
+      row.longitude === null || row.longitude === undefined
+        ? null
+        : Number(row.longitude),
+    latitude:
+      row.latitude === null || row.latitude === undefined
+        ? null
+        : Number(row.latitude),
+    altitudeM: Number(row.altitudeM || 0),
+    headingDeg: Number(row.headingDeg || 0),
+    pitchDeg: Number(row.pitchDeg || 0),
+    rollDeg: Number(row.rollDeg || 0),
+    scale: Number(row.scale || 1),
+    revision: Number(row.revision || 0),
+    updatedBy: row.updatedBy || "",
+    updatedAt: row.updatedAt || "",
+  };
+}
+
+async function geoDraftState(env, project) {
+  if (!(await geoDraftSchemaReady(env)))
+    return {
+      schemaReady: false,
+      project: {
+        id: project.id,
+        slug: project.slug,
+        name: project.name,
+        location: project.location || "",
+        status: project.status,
+      },
+      experience: null,
+      draft: null,
+      sourceRelease: null,
+      activeBuildingRelease: await activeGeoRelease(env, project),
+      sourceUpdateAvailable: false,
+      sourcePreviewAvailable: false,
+      legacyPlacement: null,
+      mapsApiKey: "",
+      mapsConfigured: false,
+    };
+
+  const context = await geoDraftContext(env, project);
+  if (!context?.experienceId) {
+    const [activeBuildingRelease, mapsApiKey] = await Promise.all([
+      activeGeoRelease(env, project),
+      engineMapsBrowserKey(env),
+    ]);
+    return {
+      schemaReady: true,
+      project: {
+        id: project.id,
+        slug: project.slug,
+        name: project.name,
+        location: project.location || "",
+        status: project.status,
+      },
+      experience: null,
+      draft: null,
+      sourceRelease: null,
+      activeBuildingRelease,
+      sourceUpdateAvailable: false,
+      sourcePreviewAvailable: false,
+      legacyPlacement: null,
+      mapsApiKey,
+      mapsConfigured: Boolean(mapsApiKey),
+    };
+  }
+
+  const [sourceRelease, activeBuildingRelease, legacyPlacement] = await Promise.all([
+    env.DB.prepare(
+      `SELECT id,version,manifest_sha256 AS manifestSha256,created_at AS createdAt
+         FROM releases_3d
+        WHERE id=? AND project_id=?
+        LIMIT 1`,
+    ).bind(context.sourceBuildingReleaseId, project.id).first(),
+    activeGeoRelease(env, project),
+    (await geoPlacementSchemaReady(env))
+      ? env.DB.prepare(
+          `SELECT release_id AS releaseId,
+                  release_version AS releaseVersion,
+                  public_enabled AS publicEnabled,
+                  updated_at AS updatedAt
+             FROM geo_placements_3d
+            WHERE project_id=?
+            LIMIT 1`,
+        ).bind(project.id).first()
+      : Promise.resolve(null),
+  ]);
+  const mapsApiKey = await engineMapsBrowserKey(env);
+  const draft = mapGeoDraft(context);
+
+  return {
+    schemaReady: true,
+    project: {
+      id: project.id,
+      slug: project.slug,
+      name: project.name,
+      location: project.location || "",
+      status: project.status,
+    },
+    experience: {
+      id: context.experienceId,
+      lifecycle: context.lifecycle,
+    },
+    draft,
+    sourceRelease: sourceRelease
+      ? {
+          id: sourceRelease.id,
+          version: Number(sourceRelease.version),
+          manifestSha256: sourceRelease.manifestSha256,
+          createdAt: sourceRelease.createdAt,
+        }
+      : null,
+    activeBuildingRelease,
+    sourceUpdateAvailable: Boolean(
+      draft &&
+        activeBuildingRelease &&
+        draft.sourceBuildingReleaseId !== activeBuildingRelease.id,
+    ),
+    sourcePreviewAvailable: Boolean(
+      draft &&
+        activeBuildingRelease &&
+        draft.sourceBuildingReleaseId === activeBuildingRelease.id,
+    ),
+    legacyPlacement: legacyPlacement
+      ? {
+          releaseId: legacyPlacement.releaseId,
+          releaseVersion: Number(legacyPlacement.releaseVersion),
+          publicEnabled: Boolean(legacyPlacement.publicEnabled),
+          updatedAt: legacyPlacement.updatedAt,
+        }
+      : null,
+    mapsApiKey,
+    mapsConfigured: Boolean(mapsApiKey),
+  };
+}
+
+async function projectGeoDraft(request, env, actor, project) {
+  if (!(await geoDraftSchemaReady(env)))
+    return json(
+      { error: "Geo Experience draft schema is not installed." },
+      { status: 503 },
+    );
+
+  const current = await geoDraftContext(env, project);
+  if (!current?.experienceId)
+    return json(
+      { error: "Create the optional 3D Geo Experience from the project workspace first." },
+      { status: 404 },
+    );
+  if (!current.projectId)
+    return json(
+      { error: "Geo Experience draft is missing. Run the latest Engine migration." },
+      { status: 503 },
+    );
+
+  if (request.method === "GET")
+    return json(await geoDraftState(env, project));
+
+  if (!sameOrigin(request))
+    return json({ error: "Invalid request origin." }, { status: 403 });
+  if (project.status === "archived")
+    return json(
+      { error: "Restore the project before editing the Geo Experience draft." },
+      { status: 409 },
+    );
+
+  if (request.method === "DELETE") {
+    const body = await request.json().catch(() => ({}));
+    const expectedRevision = Number(body.expectedRevision);
+    if (!Number.isInteger(expectedRevision) || expectedRevision < 0)
+      return json({ error: "Valid Geo draft revision required." }, { status: 400 });
+
+    const now = new Date().toISOString();
+    const reset = await env.DB.prepare(
+      `UPDATE geo_experience_drafts_3d
+          SET longitude=NULL,
+              latitude=NULL,
+              altitude_m=0,
+              heading_deg=0,
+              pitch_deg=0,
+              roll_deg=0,
+              scale=1,
+              revision=revision+1,
+              updated_by=?,
+              updated_at=?
+        WHERE experience_id=?
+          AND project_id=?
+          AND revision=?
+        RETURNING revision`,
+    ).bind(
+      actor.email,
+      now,
+      current.experienceId,
+      project.id,
+      expectedRevision,
+    ).first();
+    if (!reset)
+      return json(
+        { error: "Geo draft changed elsewhere. Reload before resetting it." },
+        { status: 409 },
+      );
+
+    await writeAudit(
+      env,
+      actor,
+      "geo.draft_reset",
+      project.id,
+      current.experienceId,
+      { revision: Number(reset.revision) },
+    );
+    return json(await geoDraftState(env, project));
+  }
+
+  if (request.method !== "PUT")
+    return json({ error: "Method not allowed." }, { status: 405 });
+
+  const body = await request.json().catch(() => ({}));
+  const expectedRevision = Number(body.expectedRevision);
+  if (!Number.isInteger(expectedRevision) || expectedRevision < 0)
+    return json({ error: "Valid Geo draft revision required." }, { status: 400 });
+
+  const sourceBuildingReleaseId = String(
+    body.sourceBuildingReleaseId || current.sourceBuildingReleaseId || "",
+  ).trim();
+  if (!/^release_[A-Za-z0-9-]{20,80}$/.test(sourceBuildingReleaseId))
+    return json(
+      { error: "Valid source Building release ID required." },
+      { status: 400 },
+    );
+
+  const source = await env.DB.prepare(
+    `SELECT id,version
+       FROM releases_3d
+      WHERE id=? AND project_id=?
+      LIMIT 1`,
+  ).bind(sourceBuildingReleaseId, project.id).first();
+  if (!source)
+    return json(
+      { error: "Source Building release does not belong to this project." },
+      { status: 404 },
+    );
+
+  const longitude = finiteNumber(body.longitude);
+  const latitude = finiteNumber(body.latitude);
+  const altitudeM = finiteNumber(body.altitudeM ?? 0);
+  const headingDeg = finiteNumber(body.headingDeg ?? 0);
+  const pitchDeg = finiteNumber(body.pitchDeg ?? 0);
+  const rollDeg = finiteNumber(body.rollDeg ?? 0);
+  const scale = finiteNumber(body.scale ?? 1);
+
+  if (
+    longitude === null ||
+    longitude < -180 ||
+    longitude > 180 ||
+    latitude === null ||
+    latitude < -90 ||
+    latitude > 90 ||
+    altitudeM === null ||
+    altitudeM < -1000 ||
+    altitudeM > 10000 ||
+    headingDeg === null ||
+    Math.abs(headingDeg) > 36000 ||
+    pitchDeg === null ||
+    Math.abs(pitchDeg) > 360 ||
+    rollDeg === null ||
+    Math.abs(rollDeg) > 360 ||
+    scale === null ||
+    scale <= 0 ||
+    scale > 1000
+  )
+    return json({ error: "Valid Geo draft placement values required." }, { status: 400 });
+
+  if (Number(current.revision) !== expectedRevision)
+    return json(
+      { error: "Geo draft changed elsewhere. Reload before saving it." },
+      { status: 409 },
+    );
+
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE experiences_3d
+          SET source_building_release_id=?,
+              updated_at=?
+        WHERE id=?
+          AND project_id=?
+          AND type='geo'
+          AND EXISTS (
+            SELECT 1
+              FROM geo_experience_drafts_3d d
+             WHERE d.experience_id=?
+               AND d.project_id=?
+               AND d.revision=?
+          )`,
+    ).bind(
+      source.id,
+      now,
+      current.experienceId,
+      project.id,
+      current.experienceId,
+      project.id,
+      expectedRevision,
+    ),
+    env.DB.prepare(
+      `UPDATE geo_experience_drafts_3d
+          SET source_building_release_id=?,
+              source_building_release_version=?,
+              longitude=?,
+              latitude=?,
+              altitude_m=?,
+              heading_deg=?,
+              pitch_deg=?,
+              roll_deg=?,
+              scale=?,
+              revision=revision+1,
+              updated_by=?,
+              updated_at=?
+        WHERE experience_id=?
+          AND project_id=?
+          AND revision=?`,
+    ).bind(
+      source.id,
+      Number(source.version),
+      longitude,
+      latitude,
+      altitudeM,
+      headingDeg,
+      pitchDeg,
+      rollDeg,
+      scale,
+      actor.email,
+      now,
+      current.experienceId,
+      project.id,
+      expectedRevision,
+    ),
+  ]);
+
+  const saved = await geoDraftContext(env, project);
+  const nextRevision = Number(saved?.revision);
+  if (
+    !Number.isInteger(nextRevision) ||
+    nextRevision !== expectedRevision + 1 ||
+    saved?.sourceBuildingReleaseId !== source.id
+  )
+    return json(
+      { error: "Geo draft changed elsewhere. Reload before saving it." },
+      { status: 409 },
+    );
+
+  await writeAudit(
+    env,
+    actor,
+    "geo.draft_saved",
+    project.id,
+    current.experienceId,
+    {
+      revision: nextRevision,
+      sourceBuildingReleaseId: source.id,
+      sourceBuildingReleaseVersion: Number(source.version),
+      longitude,
+      latitude,
+      altitudeM,
+      headingDeg,
+      pitchDeg,
+      rollDeg,
+      scale,
+    },
+  );
+
+  return json(await geoDraftState(env, project));
+}
+
 async function geoPlacementSchemaReady(env) {
   try {
     const row = await env.DB.prepare(
@@ -1527,7 +1947,6 @@ async function projectGeoPlacement(request, env, actor, project) {
          VALUES (?,?,'geo','active',?,?,?,?)
          ON CONFLICT(project_id,type) DO UPDATE SET
            lifecycle='active',
-           source_building_release_id=excluded.source_building_release_id,
            updated_at=excluded.updated_at`,
       ).bind(
         `experience_geo_${project.id}`,
@@ -1681,6 +2100,9 @@ async function deleteProjectRecords(env, project) {
     ).bind(project.id),
     env.DB.prepare(
       "DELETE FROM geo_placements_3d WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "DELETE FROM geo_experience_drafts_3d WHERE project_id=?",
     ).bind(project.id),
     env.DB.prepare(
       "DELETE FROM experiences_3d WHERE project_id=?",
@@ -1910,6 +2332,9 @@ async function routeProjects(request, env, actor, url) {
 
   if (parts[1] === "experiences" && parts.length === 2)
     return projectExperiences(request, env, actor, project);
+
+  if (parts[1] === "geo-draft" && parts.length === 2)
+    return projectGeoDraft(request, env, actor, project);
 
   if (parts[1] === "geo-placement" && parts.length === 2)
     return projectGeoPlacement(request, env, actor, project);

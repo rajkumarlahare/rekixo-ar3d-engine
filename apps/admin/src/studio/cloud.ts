@@ -74,6 +74,56 @@ export interface CloudGeoPlacementState {
   mapsConfigured: boolean;
 }
 
+
+export interface CloudGeoDraft {
+  experienceId: string;
+  projectId: string;
+  sourceBuildingReleaseId: string;
+  sourceBuildingReleaseVersion: number;
+  longitude: number | null;
+  latitude: number | null;
+  altitudeM: number;
+  headingDeg: number;
+  pitchDeg: number;
+  rollDeg: number;
+  scale: number;
+  revision: number;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+export interface CloudGeoDraftState {
+  schemaReady: boolean;
+  project: CloudGeoPlacementState["project"];
+  experience: {
+    id: string;
+    lifecycle: "active" | "archived";
+  } | null;
+  draft: CloudGeoDraft | null;
+  sourceRelease: {
+    id: string;
+    version: number;
+    manifestSha256?: string;
+    createdAt?: string;
+  } | null;
+  activeBuildingRelease: {
+    id: string;
+    version: number;
+    manifestSha256?: string;
+    createdAt?: string;
+  } | null;
+  sourceUpdateAvailable: boolean;
+  sourcePreviewAvailable: boolean;
+  legacyPlacement: {
+    releaseId: string;
+    releaseVersion: number;
+    publicEnabled: boolean;
+    updatedAt?: string;
+  } | null;
+  mapsApiKey: string;
+  mapsConfigured: boolean;
+}
+
 export interface CloudAssetSummary {
   id: string;
   projectId: string;
@@ -454,6 +504,47 @@ export async function activateRelease(slug: string, releaseId: string) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "{}",
+    },
+  );
+}
+
+export async function geoDraft(slug: string) {
+  return api<CloudGeoDraftState>(
+    `${CLOUD_BASE}/projects/${encodeURIComponent(slug)}/geo-draft`,
+  );
+}
+
+export async function saveGeoDraft(
+  slug: string,
+  draft: {
+    expectedRevision: number;
+    sourceBuildingReleaseId: string;
+    longitude: number;
+    latitude: number;
+    altitudeM: number;
+    headingDeg: number;
+    pitchDeg: number;
+    rollDeg: number;
+    scale: number;
+  },
+) {
+  return api<CloudGeoDraftState>(
+    `${CLOUD_BASE}/projects/${encodeURIComponent(slug)}/geo-draft`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(draft),
+    },
+  );
+}
+
+export async function resetGeoDraft(slug: string, expectedRevision: number) {
+  return api<CloudGeoDraftState>(
+    `${CLOUD_BASE}/projects/${encodeURIComponent(slug)}/geo-draft`,
+    {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedRevision }),
     },
   );
 }

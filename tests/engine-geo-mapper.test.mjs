@@ -18,19 +18,20 @@ test("3D Jio Mapper schema is additive and release pinned", () => {
   assert.doesNotMatch(sql, /\bDELETE\s+FROM\s+projects_3d\b/i);
 });
 
-test("Engine Admin owns placement mutation and browser Maps configuration", () => {
+test("Engine Admin owns editable Geo drafts while legacy placement remains isolated", () => {
   const worker = read("workers/admin-cloud.mjs");
+  assert.match(worker, /geoDraftSchemaReady/);
+  assert.match(worker, /projectGeoDraft/);
   assert.match(worker, /geoPlacementSchemaReady/);
   assert.match(worker, /projectGeoPlacement/);
   assert.match(worker, /geoMapsSettings/);
   assert.match(worker, /engineMapsBrowserKey/);
   assert.match(worker, /sameOrigin\(request\)/);
+  assert.match(worker, /geo\.draft_saved/);
+  assert.match(worker, /geo\.draft_reset/);
   assert.match(worker, /geo\.placement_saved/);
-  assert.match(worker, /geo\.placement_removed/);
   assert.match(worker, /geo\.maps_key_updated/);
-  assert.match(worker, /placementStale/);
-  assert.match(worker, /release_id=excluded\.release_id/);
-  assert.match(worker, /release_version=excluded\.release_version/);
+  assert.match(worker, /Geo draft changed elsewhere/);
 });
 
 test("3D Jio Mapper is an Engine route, not a Platform dependency", () => {
@@ -40,11 +41,14 @@ test("3D Jio Mapper is an Engine route, not a Platform dependency", () => {
   assert.match(dashboard, /\+ Add 3D Geo Experience/);
   assert.match(dashboard, /Manage Geo Experience/);
   assert.match(main, /\/3Dprojects\/geo-mapper/);
-  assert.match(mapper, /<h1>3D Jio Mapper<\/h1>/);
-  assert.match(mapper, /Building placement Engine ke andar/);
-  assert.match(mapper, /saveGeoPlacement/);
+  assert.match(mapper, /<h1>3D Geo Mapper<\/h1>/);
+  assert.match(mapper, /Optional Geo Experience/);
+  assert.match(mapper, /saveGeoDraft/);
+  assert.match(mapper, /resetGeoDraft/);
   assert.match(mapper, /saveGeoMapsKey/);
-  assert.match(mapper, /placementStale/);
+  assert.match(mapper, /sourceUpdateAvailable/);
+  assert.doesNotMatch(mapper, /saveGeoPlacement|removeGeoPlacement/);
+  assert.doesNotMatch(mapper, /Public 3D Jio demo|type="checkbox"/);
   assert.doesNotMatch(mapper, /tiyansh-production|rekixo-ar3d-platform|geo_3d_placements/);
 });
 
@@ -78,10 +82,11 @@ test("main deploy applies new Engine migrations before Workers deploy", () => {
   assert.ok(migrateAt >= 0 && adminDeployAt > migrateAt);
 });
 
-test("3D Jio mapper keeps model preview separate from anchor camera to avoid drag snap regression", () => {
+test("3D Geo mapper keeps model preview separate from map anchor to avoid drag snap regression", () => {
   const mapper = read("apps/admin/src/geo/GeoMapper3D.tsx");
   const preview = read("apps/admin/src/geo/GeoModelPreview.tsx");
-  assert.match(mapper, /Is map par GLB overlay nahi hota/);
+  assert.match(mapper, /Map anchor aur 3D/);
+  assert.match(mapper, /camera movement saved location ko/);
   assert.match(mapper, /<GeoModelPreview/);
   assert.match(preview, /Ground contact preview/);
   assert.match(preview, /Drag = orbit/);

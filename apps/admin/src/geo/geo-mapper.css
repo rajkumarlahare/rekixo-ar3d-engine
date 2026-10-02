@@ -462,3 +462,105 @@
 .geo3d-preview-status strong {
   color: #f1d79f;
 }
+
+
+/* Phase 4 — editable Geo Experience draft separated from the current live snapshot. */
+.geo3d-alert--warn {
+  border-color: #725c2d;
+  background: #261f0f;
+  color: #f2d899;
+}
+
+.geo3d-alert--info {
+  border-color: #345873;
+  background: #101f2b;
+  color: #b9d9ef;
+}
+
+.geo3d-source-card {
+  border-color: rgba(244, 185, 66, .28);
+  background:
+    linear-gradient(145deg, rgba(244, 185, 66, .07), transparent 52%),
+    #0a111a;
+}
+
+.geo3d-draft-badge {
+  padding: 5px 8px;
+  border: 1px solid rgba(244, 185, 66, .35);
+  border-radius: 999px;
+  background: rgba(244, 185, 66, .08);
+  color: var(--geo-gold-soft);
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: .1em;
+}
+
+.geo3d-source-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, .75fr) minmax(0, 1.25fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.geo3d-source-grid label {
+  display: grid;
+  gap: 7px;
+}
+
+.geo3d-source-grid label > span {
+  color: #8296ad;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .05em;
+}
+
+.geo3d-source-grid select {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid #303947;
+  border-radius: 10px;
+  outline: none;
+  background: #080f17;
+  color: #edf3fa;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.geo3d-source-grid select:focus {
+  border-color: var(--geo-gold-strong);
+  box-shadow: 0 0 0 3px rgba(244, 185, 66, .09);
+}
+
+.geo3d-source-grid select:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.geo3d-source-note {
+  padding: 11px 12px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  border: 1px solid #283544;
+  border-radius: 10px;
+  background: #080f17;
+}
+
+.geo3d-source-note strong {
+  color: #e8eef6;
+  font-size: 11px;
+}
+
+.geo3d-source-note span {
+  color: #77899d;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .geo3d-source-grid {
+    grid-template-columns: 1fr;
+  }
+}

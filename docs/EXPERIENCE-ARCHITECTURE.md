@@ -144,10 +144,26 @@ The Admin dashboard now presents the Building-first workflow:
 - Building and Geo canonical URLs remain independent and unchanged.
 - Existing Studio and Geo Mapper routes remain compatible.
 
-### Phase 4 — Geo draft separation
+### Phase 4 — Geo draft separation ✅
 
-Refactor current `geo_placements_3d` behavior into a proper editable Geo draft
-owned by a Geo Experience. Source selection pins an immutable Building release.
+Migration `0025_geo_experience_draft_v1.sql` adds
+`geo_experience_drafts_3d` as the editable authoring state owned by one optional
+Geo Experience.
+
+- Every Geo Experience owns one project-scoped Geo draft.
+- The draft pins a specific immutable Building release and its version.
+- Location, ground offset, heading, pitch, roll and scale are editable draft
+  values with optimistic `revision` conflict protection.
+- Existing compatible `geo_placements_3d` values are backfilled only when the
+  legacy placement release matches the Geo Experience source release.
+- A newer active Building release is surfaced as an available source update but
+  never switches the Geo draft automatically.
+- Geo Mapper now edits only `geo_experience_drafts_3d`; it no longer publishes
+  or removes the live Geo state directly.
+- Existing `geo_placements_3d` remains a backward-compatible public/live
+  snapshot during this transition and is not mutated by Geo draft saves.
+- Immutable Geo publication/history remains Phase 5; the public Geo runtime stays
+  on the legacy snapshot until Phase 6.
 
 ### Phase 5 — immutable Geo releases
 

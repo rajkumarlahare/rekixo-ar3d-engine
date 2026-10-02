@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  geoDraft,
   geoMapsSettings,
-  geoPlacement,
   projects,
-  removeGeoPlacement,
+  releases,
+  resetGeoDraft,
+  saveGeoDraft,
   saveGeoMapsKey,
-  saveGeoPlacement,
   session,
-  type CloudGeoPlacementState,
+  type CloudGeoDraftState,
   type CloudProjectSummary,
+  type CloudReleaseSummary,
 } from "../studio/cloud";
 import GeoModelPreview, { type GeoPreviewPlacement } from "./GeoModelPreview";
 import "./geo-mapper.css";
@@ -53,7 +55,6 @@ type FormState = {
   pitchDeg: string;
   rollDeg: string;
   scale: string;
-  publicEnabled: boolean;
 };
 
 type LatLngLike = { lat(): number; lng(): number };
@@ -86,7 +87,12 @@ let mapsPromise: Promise<GoogleRoot> | null = null;
 let mapsKeyLoaded = "";
 
 function requestedProjectSlug() {
-  return new URLSearchParams(window.location.search).get("project")?.trim().toLowerCase() || "";
+  return (
+    new URLSearchParams(window.location.search)
+      .get("project")
+      ?.trim()
+      .toLowerCase() || ""
+  );
 }
 
 function numberOr(value: string, fallback: number) {
@@ -129,7 +135,9 @@ function loadGoogleMaps(apiKey: string) {
     script.async = true;
     script.defer = true;
     script.src =
-      `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&loading=async&callback=${callback}`;
+      `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
+        apiKey,
+      )}&v=weekly&loading=async&callback=${callback}`;
     script.onerror = () => {
       mapsPromise = null;
       reject(new Error("Google Satellite map load nahi hua."));
@@ -146,41 +154,14 @@ async function integration(slug: string) {
   );
   const body = (await response.json()) as IntegrationPayload;
   if (!response.ok)
-    throw new Error(body.error || `Engine integration load failed (${response.status}).`);
+    throw new Error(
+      body.error || `Engine integration load failed (${response.status}).`,
+    );
   return body;
 }
 
-function formFromState(state: CloudGeoPlacementState): FormState {
-  const placement = state.placement;
-  if (!placement)
-    return {
-      longitude: "",
-      latitude: "",
-      altitudeM: "0",
-      headingDeg: "0",
-      pitchDeg: "0",
-      rollDeg: "0",
-      scale: "1",
-      publicEnabled: false,
-    };
+function emptyForm(): FormState {
   return {
-    longitude: String(placement.longitude),
-    latitude: String(placement.latitude),
-    altitudeM: String(placement.altitudeM),
-    headingDeg: String(placement.headingDeg),
-    pitchDeg: String(placement.pitchDeg),
-    rollDeg: String(placement.rollDeg),
-    scale: String(placement.scale),
-    publicEnabled: placement.publicEnabled,
-  };
-}
-
-export default function GeoMapper3D() {
-  const [projectList, setProjectList] = useState<CloudProjectSummary[]>([]);
-  const [selectedSlug, setSelectedSlug] = useState("");
-  const [state, setState] = useState<CloudGeoPlacementState>();
-  const [engine, setEngine] = useState<IntegrationPayload>();
-  const [form, setForm] = useState<FormState>({
     longitude: "",
     latitude: "",
     altitudeM: "0",
@@ -188,8 +169,31 @@ export default function GeoMapper3D() {
     pitchDeg: "0",
     rollDeg: "0",
     scale: "1",
-    publicEnabled: false,
-  });
+  };
+}
+
+function formFromState(state: CloudGeoDraftState): FormState {
+  const draft = state.draft;
+  if (!draft) return emptyForm();
+  return {
+    longitude: draft.longitude === null ? "" : String(draft.longitude),
+    latitude: draft.latitude === null ? "" : String(draft.latitude),
+    altitudeM: String(draft.altitudeM),
+    headingDeg: String(draft.headingDeg),
+    pitchDeg: String(draft.pitchDeg),
+    rollDeg: String(draft.rollDeg),
+    scale: String(draft.scale),
+  };
+}
+
+export default function GeoMapper3D() {
+  const [projectList, setProjectList] = useState<CloudProjectSummary[]>([]);
+  const [selectedSlug, setSelectedSlug] = useState("");
+  const [state, setState] = useState<CloudGeoDraftState>();
+  const [releaseItems, setReleaseItems] = useState<CloudReleaseSummary[]>([]);
+  const [sourceReleaseId, setSourceReleaseId] = useState("");
+  const [engine, setEngine] = useState<IntegrationPayload>();
+  const [form, setForm] = useState<FormState>(emptyForm);
   const [busy, setBusy] = useState(false);
   const [mapsKeyInput, setMapsKeyInput] = useState("");
   const [message, setMessage] = useState("");
@@ -231,7 +235,11 @@ export default function GeoMapper3D() {
       })
       .catch((reason) => {
         if (live)
-          setError(reason instanceof Error ? reason.message : "3D projects load nahi hue.");
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "3D projects load nahi hue.",
+          );
       });
     return () => {
       live = false;
@@ -244,29 +252,63 @@ export default function GeoMapper3D() {
     setBusy(true);
     setError("");
     setMessage("");
-    Promise.all([geoPlacement(selectedSlug), integration(selectedSlug)])
-      .then(([placementState, integrationState]) => {
+    setState(undefined);
+    setEngine(undefined);
+    setReleaseItems([]);
+    setSourceReleaseId("");
+    setForm(emptyForm());
+
+    Promise.all([
+      geoDraft(selectedSlug),
+      integration(selectedSlug),
+      releases(selectedSlug),
+    ])
+      .then(([draftState, integrationState, releaseState]) => {
         if (!live) return;
-        setState(placementState);
+        setState(draftState);
         setEngine(integrationState);
-        setForm(formFromState(placementState));
+        setReleaseItems(releaseState.releases);
+        setSourceReleaseId(
+          draftState.draft?.sourceBuildingReleaseId ||
+            draftState.sourceRelease?.id ||
+            "",
+        );
+        setForm(formFromState(draftState));
       })
       .catch((reason) => {
         if (live)
-          setError(reason instanceof Error ? reason.message : "3D Jio Mapper load nahi hua.");
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "3D Geo Mapper load nahi hua.",
+          );
       })
       .finally(() => {
         if (live) setBusy(false);
       });
+
     const url = new URL(window.location.href);
     url.searchParams.set("project", selectedSlug);
     window.history.replaceState({}, "", url);
+
     return () => {
       live = false;
     };
   }, [selectedSlug]);
 
+  const selectedSource = useMemo(
+    () => releaseItems.find((release) => release.id === sourceReleaseId),
+    [releaseItems, sourceReleaseId],
+  );
+
+  const sourcePreviewAvailable = Boolean(
+    sourceReleaseId &&
+      engine?.release?.id &&
+      sourceReleaseId === engine.release.id,
+  );
+
   const renderModel = useMemo(() => {
+    if (!sourcePreviewAvailable) return null;
     const source = engine?.model;
     const geo = engine?.geoModel;
     if (
@@ -277,10 +319,14 @@ export default function GeoMapper3D() {
       geo.sourceModelId === source.id
     )
       return geo;
-    if (source?.available !== false && source?.mimeType === "model/gltf-binary" && source.url)
+    if (
+      source?.available !== false &&
+      source?.mimeType === "model/gltf-binary" &&
+      source.url
+    )
       return source;
     return null;
-  }, [engine]);
+  }, [engine, sourcePreviewAvailable]);
 
   const modelUrl = useMemo(() => {
     if (!renderModel?.url) return null;
@@ -359,7 +405,11 @@ export default function GeoMapper3D() {
       })
       .catch((reason) => {
         if (!cancelled)
-          setError(reason instanceof Error ? reason.message : "Google Satellite map load nahi hua.");
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Google Satellite map load nahi hua.",
+          );
       });
 
     return () => {
@@ -393,30 +443,41 @@ export default function GeoMapper3D() {
     try {
       await saveGeoMapsKey(clean);
       if (selectedSlug) {
-        const next = await geoPlacement(selectedSlug);
+        const next = await geoDraft(selectedSlug);
         setState(next);
       }
       setMessage("Google Maps browser key Engine me saved.");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Maps key save nahi hui.");
+      setError(
+        reason instanceof Error ? reason.message : "Maps key save nahi hui.",
+      );
     } finally {
       setBusy(false);
     }
   }
 
   async function save() {
-    if (!selectedSlug || !validCoordinates(form)) {
-      setError("Valid longitude/latitude set karein.");
+    if (!selectedSlug || !state?.draft || !validCoordinates(form)) {
+      setError("Valid Geo draft aur longitude/latitude required hai.");
       return;
     }
-    if (!renderModel || !engine?.release) {
-      setError("Published GLB + active immutable release required.");
+    if (!sourceReleaseId || !selectedSource) {
+      setError("Source Building release select karein.");
       return;
     }
+    if (!sourcePreviewAvailable || !renderModel || !engine?.release) {
+      setError(
+        `Selected Building release preview available nahi hai. Current active Building v${engine?.release?.version ?? "—"} select karke upgrade preview verify karein.`,
+      );
+      return;
+    }
+
     setBusy(true);
     setError("");
     try {
-      const next = await saveGeoPlacement(selectedSlug, {
+      const next = await saveGeoDraft(selectedSlug, {
+        expectedRevision: state.draft.revision,
+        sourceBuildingReleaseId: sourceReleaseId,
         longitude: Number(form.longitude),
         latitude: Number(form.latitude),
         altitudeM: numberOr(form.altitudeM, 0),
@@ -424,30 +485,43 @@ export default function GeoMapper3D() {
         pitchDeg: numberOr(form.pitchDeg, 0),
         rollDeg: numberOr(form.rollDeg, 0),
         scale: Math.max(0.001, numberOr(form.scale, 1)),
-        publicEnabled: form.publicEnabled,
       });
       setState(next);
+      setSourceReleaseId(next.draft?.sourceBuildingReleaseId || sourceReleaseId);
       setForm(formFromState(next));
-      setMessage(`Placement saved · release v${next.placement?.releaseVersion ?? engine.release.version} pinned`);
+      setMessage(
+        `Geo draft saved · Building v${next.draft?.sourceBuildingReleaseVersion ?? selectedSource.version} pinned. Existing live Geo unchanged hai.`,
+      );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Placement save nahi hui.");
+      setError(
+        reason instanceof Error ? reason.message : "Geo draft save nahi hua.",
+      );
     } finally {
       setBusy(false);
     }
   }
 
-  async function remove() {
-    if (!selectedSlug || !state?.placement) return;
-    if (!window.confirm("Sirf 3D Jio placement remove karein? Model/release delete nahi honge.")) return;
+  async function resetDraft() {
+    if (!selectedSlug || !state?.draft) return;
+    if (
+      !window.confirm(
+        "Geo draft alignment reset karein? Existing live Geo snapshot change nahi hoga.",
+      )
+    )
+      return;
+
     setBusy(true);
     setError("");
     try {
-      const next = await removeGeoPlacement(selectedSlug);
+      const next = await resetGeoDraft(selectedSlug, state.draft.revision);
       setState(next);
+      setSourceReleaseId(next.draft?.sourceBuildingReleaseId || sourceReleaseId);
       setForm(formFromState(next));
-      setMessage("3D Jio placement removed; Engine model/release safe hai.");
+      setMessage("Geo draft reset hua. Existing live Geo snapshot safe hai.");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Placement remove nahi hui.");
+      setError(
+        reason instanceof Error ? reason.message : "Geo draft reset nahi hua.",
+      );
     } finally {
       setBusy(false);
     }
@@ -470,13 +544,20 @@ export default function GeoMapper3D() {
       )}`
     : null;
 
+  const legacyLive =
+    state?.legacyPlacement?.publicEnabled === true &&
+    Boolean(state.legacyPlacement.releaseId);
+
   return (
     <main className="geo3d-shell">
       <header className="geo3d-topbar">
         <div>
           <p className="eyebrow">REKIXO AR3D ENGINE</p>
-          <h1>3D Jio Mapper</h1>
-          <p>Building placement Engine ke andar rakhein; Platform Geo Mapper masterplan-only rahega.</p>
+          <h1>3D Geo Mapper</h1>
+          <p>
+            Optional Geo Experience ka source Building release, real location aur
+            alignment yahan draft me prepare karein.
+          </p>
         </div>
         <div className="geo3d-actions">
           <a href="/3Dprojects">Engine Home</a>
@@ -487,7 +568,7 @@ export default function GeoMapper3D() {
                 : "/3Dprojects/studio"
             }
           >
-            Edit model in Studio
+            Edit Building in Studio
           </a>
           <select
             value={selectedSlug}
@@ -505,8 +586,12 @@ export default function GeoMapper3D() {
         </div>
       </header>
 
-      {error ? <section className="geo3d-alert geo3d-alert--error">{error}</section> : null}
-      {message ? <section className="geo3d-alert geo3d-alert--ok">{message}</section> : null}
+      {error ? (
+        <section className="geo3d-alert geo3d-alert--error">{error}</section>
+      ) : null}
+      {message ? (
+        <section className="geo3d-alert geo3d-alert--ok">{message}</section>
+      ) : null}
 
       <section className="geo3d-health">
         <article>
@@ -515,47 +600,124 @@ export default function GeoMapper3D() {
           <small>{selectedSlug || "Select project"}</small>
         </article>
         <article>
-          <span>ACTIVE RELEASE</span>
-          <strong>{engine?.release ? `v${engine.release.version}` : "Required"}</strong>
-          <small>{engine?.release?.id || "Publish release first"}</small>
+          <span>DRAFT SOURCE</span>
+          <strong>
+            {selectedSource
+              ? `Building v${selectedSource.version}`
+              : state?.draft
+                ? `Building v${state.draft.sourceBuildingReleaseVersion}`
+                : "Required"}
+          </strong>
+          <small>{sourceReleaseId || "Geo Experience source not selected"}</small>
         </article>
         <article>
-          <span>GEO MODEL</span>
-          <strong>{renderModel?.name || "Published GLB required"}</strong>
+          <span>GEO MODEL PREVIEW</span>
+          <strong>{renderModel?.name || "Preview unavailable"}</strong>
           <small>
             {renderModel?.byteSize
               ? `${(renderModel.byteSize / 1_000_000).toFixed(2)} MB`
-              : renderModel?.mimeType || "—"}
+              : sourcePreviewAvailable
+                ? renderModel?.mimeType || "Published GLB required"
+                : "Select current active Building release to preview"}
           </small>
         </article>
         <article>
-          <span>PLACEMENT</span>
-          <strong>{state?.placement ? "Saved" : "Draft"}</strong>
+          <span>GEO DRAFT</span>
+          <strong>
+            {state?.draft ? `Revision ${state.draft.revision}` : "Not ready"}
+          </strong>
           <small>
-            {state?.placement
-              ? `Pinned release v${state.placement.releaseVersion}`
-              : "No Engine Geo placement yet"}
+            {state?.draft && state.draft.longitude !== null
+              ? "Location + alignment saved in editable draft"
+              : "Choose source, location and alignment"}
           </small>
         </article>
       </section>
 
-      {!state?.schemaReady ? (
+      {!state?.schemaReady && state ? (
         <section className="geo3d-alert geo3d-alert--error">
-          3D Jio Mapper database migration pending hai. Existing Engine projects safe hain; migration apply hone ke baad Save active hoga.
+          Geo draft database migration pending hai. Existing Building aur live Geo
+          data safe hai.
         </section>
       ) : null}
 
-      {state?.placementStale ? (
-        <section className="geo3d-alert geo3d-alert--error">
-          Active Engine release badal chuka hai. Purana Jio placement public nahi maana jayega; current release ke saath preview verify karke Save karein.
+      {state?.sourceUpdateAvailable ? (
+        <section className="geo3d-alert geo3d-alert--warn">
+          New Building release v{state.activeBuildingRelease?.version} available hai.
+          Geo draft abhi Building v{state.draft?.sourceBuildingReleaseVersion} par
+          pinned hai. Upgrade automatic nahi hoga; source select karke preview verify
+          karne ke baad hi draft save karein.
         </section>
       ) : null}
+
+      {sourceReleaseId && !sourcePreviewAvailable && engine?.release ? (
+        <section className="geo3d-alert geo3d-alert--warn">
+          Selected source Building v{selectedSource?.version ?? "—"} current active
+          Building v{engine.release.version} se alag hai. Existing pinned source safe
+          hai; model preview ke liye current active release select karein.
+        </section>
+      ) : null}
+
+      {legacyLive ? (
+        <section className="geo3d-alert geo3d-alert--info">
+          Existing Geo live snapshot Building v
+          {state?.legacyPlacement?.releaseVersion} par available hai. Geo draft save
+          karne se current live snapshot mutate nahi hota.
+        </section>
+      ) : null}
+
+      <section className="geo3d-form-card geo3d-source-card">
+        <div className="geo3d-section-head">
+          <div>
+            <p className="eyebrow">01 · SOURCE</p>
+            <h3>Immutable Building release</h3>
+          </div>
+          <span className="geo3d-draft-badge">DRAFT ONLY</span>
+        </div>
+
+        <div className="geo3d-source-grid">
+          <label>
+            <span>Source Building release</span>
+            <select
+              value={sourceReleaseId}
+              onChange={(event) => {
+                setSourceReleaseId(event.target.value);
+                setMessage("");
+                setError("");
+              }}
+              disabled={busy || !releaseItems.length}
+              aria-label="Geo source Building release"
+            >
+              {!releaseItems.length ? (
+                <option value="">Publish Building first</option>
+              ) : null}
+              {releaseItems.map((release) => (
+                <option key={release.id} value={release.id}>
+                  v{release.version}
+                  {release.active ? " · ACTIVE BUILDING" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="geo3d-source-note">
+            <strong>
+              {selectedSource
+                ? `Building Release v${selectedSource.version}`
+                : "Select immutable Building release"}
+            </strong>
+            <span>
+              Source change sirf Geo draft me pin hota hai. Building Website aur
+              existing Geo live snapshot automatically switch nahi honge.
+            </span>
+          </div>
+        </div>
+      </section>
 
       <section className="geo3d-workspace">
         <div className="geo3d-map-card">
           <div className="geo3d-section-head">
             <div>
-              <p className="eyebrow">GEO ANCHOR</p>
+              <p className="eyebrow">02 · LOCATION</p>
               <h3>Satellite placement</h3>
             </div>
             {mapsLink ? (
@@ -566,16 +728,24 @@ export default function GeoMapper3D() {
           </div>
           {state?.mapsConfigured ? (
             <>
-              <div ref={mapHostRef} className="geo3d-map" aria-label="3D building satellite anchor map" />
+              <div
+                ref={mapHostRef}
+                className="geo3d-map"
+                aria-label="3D building satellite anchor map"
+              />
               <p className="geo3d-help">
-                Map par click karein ya red anchor ko drag karein. Is map par GLB overlay nahi hota,
-                isliye camera jitter building placement ko move nahi kar sakta.
+                Map par click karein ya red anchor drag karein. Map anchor aur 3D
+                preview alag controls hain, isliye camera movement saved location ko
+                move nahi karta.
               </p>
             </>
           ) : (
             <div className="geo3d-map-placeholder">
               <strong>Google Maps browser key Engine me configure karein.</strong>
-              <span>Browser-restricted key use karein; ye client-side Maps API ke liye public configuration hoti hai.</span>
+              <span>
+                Browser-restricted key use karein; ye client-side Maps API ke liye
+                public configuration hoti hai.
+              </span>
               <div className="geo3d-key-row">
                 <input
                   value={mapsKeyInput}
@@ -584,7 +754,11 @@ export default function GeoMapper3D() {
                   autoComplete="off"
                   spellCheck={false}
                 />
-                <button type="button" onClick={() => void saveMapsKey()} disabled={busy}>
+                <button
+                  type="button"
+                  onClick={() => void saveMapsKey()}
+                  disabled={busy}
+                >
                   Save Maps key
                 </button>
               </div>
@@ -598,49 +772,76 @@ export default function GeoMapper3D() {
       <section className="geo3d-form-card">
         <div className="geo3d-section-head">
           <div>
-            <p className="eyebrow">PLACEMENT VALUES</p>
+            <p className="eyebrow">03 · ALIGNMENT</p>
             <h3>Geo + model alignment</h3>
           </div>
-          <button type="button" onClick={resetAlignment} disabled={busy}>Reset alignment</button>
+          <button type="button" onClick={resetAlignment} disabled={busy}>
+            Reset alignment values
+          </button>
         </div>
 
         <div className="geo3d-form-grid">
           <label>
             <span>Longitude</span>
-            <input value={form.longitude} onChange={(e) => patch("longitude", e.target.value)} placeholder="82.9500214" />
+            <input
+              value={form.longitude}
+              onChange={(event) => patch("longitude", event.target.value)}
+              placeholder="82.9500214"
+            />
           </label>
           <label>
             <span>Latitude</span>
-            <input value={form.latitude} onChange={(e) => patch("latitude", e.target.value)} placeholder="21.9617594" />
+            <input
+              value={form.latitude}
+              onChange={(event) => patch("latitude", event.target.value)}
+              placeholder="21.9617594"
+            />
           </label>
           <label>
             <span>Ground offset (m)</span>
-            <input type="number" step="0.1" value={form.altitudeM} onChange={(e) => patch("altitudeM", e.target.value)} />
+            <input
+              type="number"
+              step="0.1"
+              value={form.altitudeM}
+              onChange={(event) => patch("altitudeM", event.target.value)}
+            />
           </label>
           <label>
             <span>Heading (°)</span>
-            <input type="number" step="1" value={form.headingDeg} onChange={(e) => patch("headingDeg", e.target.value)} />
+            <input
+              type="number"
+              step="1"
+              value={form.headingDeg}
+              onChange={(event) => patch("headingDeg", event.target.value)}
+            />
           </label>
           <label>
             <span>Scale</span>
-            <input type="number" step="0.01" min="0.001" value={form.scale} onChange={(e) => patch("scale", e.target.value)} />
+            <input
+              type="number"
+              step="0.01"
+              min="0.001"
+              value={form.scale}
+              onChange={(event) => patch("scale", event.target.value)}
+            />
           </label>
           <label>
             <span>Pitch (°)</span>
-            <input type="number" step="1" value={form.pitchDeg} onChange={(e) => patch("pitchDeg", e.target.value)} />
+            <input
+              type="number"
+              step="1"
+              value={form.pitchDeg}
+              onChange={(event) => patch("pitchDeg", event.target.value)}
+            />
           </label>
           <label>
             <span>Roll (°)</span>
-            <input type="number" step="1" value={form.rollDeg} onChange={(e) => patch("rollDeg", e.target.value)} />
-          </label>
-          <label className="geo3d-toggle">
             <input
-              type="checkbox"
-              checked={form.publicEnabled}
-              onChange={(e) => patch("publicEnabled", e.target.checked)}
+              type="number"
+              step="1"
+              value={form.rollDeg}
+              onChange={(event) => patch("rollDeg", event.target.value)}
             />
-            <span>Public 3D Jio demo</span>
-            <small>Engine public Jio route ko enable karta hai; Platform Geo Mapper ko touch nahi karta.</small>
           </label>
         </div>
 
@@ -649,28 +850,44 @@ export default function GeoMapper3D() {
             className="geo3d-primary"
             type="button"
             onClick={() => void save()}
-            disabled={busy || !state?.schemaReady || !renderModel || !engine?.release}
+            disabled={
+              busy ||
+              !state?.schemaReady ||
+              !state?.draft ||
+              !sourceReleaseId ||
+              !sourcePreviewAvailable ||
+              !renderModel
+            }
           >
-            {busy ? "Saving…" : "Save 3D Jio placement"}
+            {busy ? "Saving…" : "Save Geo draft"}
           </button>
-          {state?.placement ? (
-            <button type="button" onClick={() => void remove()} disabled={busy}>
-              Remove placement
+
+          {state?.draft && state.draft.longitude !== null ? (
+            <button
+              type="button"
+              onClick={() => void resetDraft()}
+              disabled={busy}
+            >
+              Reset Geo draft
             </button>
           ) : null}
 
-          {state?.placement?.publicEnabled && !state?.placementStale ? (
+          {legacyLive ? (
             <a
               className="geo3d-public-link"
-              href={`https://ar3dstudio.in/3Dprojects/${encodeURIComponent(selectedSlug)}/geo`}
+              href={`https://ar3dstudio.in/3Dprojects/${encodeURIComponent(
+                selectedSlug,
+              )}/geo`}
               target="_blank"
               rel="noreferrer"
             >
-              Open public Jio demo
+              Open current Geo Live
             </a>
           ) : null}
+
           <span>
-            Model/release bytes immutable rahenge. Save sirf Engine Geo placement record update karta hai.
+            Save editable Geo draft ko update karta hai. Existing live Geo snapshot
+            aur immutable Building release bytes change nahi hote.
           </span>
         </div>
       </section>
