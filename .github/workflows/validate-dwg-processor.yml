@@ -1,0 +1,64 @@
+name: Validate DWG Processor
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "services/dwg-processor/**"
+      - "workers/dwg-processor-container.mjs"
+      - "workers/dwg-processor-route.mjs"
+      - "workers/admin-entry.mjs"
+      - "wrangler.admin.jsonc"
+      - ".github/workflows/validate-dwg-processor.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-dwg-processor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build pinned DWG processor image
+        run: >-
+          docker build
+          --file services/dwg-processor/Dockerfile
+          --tag rekixo-dwg-processor:test
+          .
+
+      - name: Start processor
+        run: |
+          docker run --detach --rm             --name rekixo-dwg-processor-test             --publish 18080:8080             rekixo-dwg-processor:test
+
+      - name: Verify processor health and fail-closed intake
+        shell: bash
+        run: |
+          set -euo pipefail
+          HEALTH="$(mktemp)"
+          for attempt in $(seq 1 30); do
+            CODE="$(curl --silent --show-error --output "$HEALTH" --write-out '%{http_code}'               http://127.0.0.1:18080/health || true)"
+            if [ "$CODE" = "200" ]; then
+              break
+            fi
+            sleep 1
+          done
+          test "$CODE" = "200"
+          grep -Fq '"processor":"rekixo-dwg-processor"' "$HEALTH"
+          grep -Fq '"libredwg":"0.14"' "$HEALTH"
+
+          BAD="$(mktemp)"
+          BAD_CODE="$(printf 'not-a-dwg' | curl --silent --show-error             --output "$BAD" --write-out '%{http_code}'             --request POST             --header 'X-Rekixo-Source-Asset-Id: asset_test_12345'             --header 'X-Rekixo-Source-Sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'             --header 'X-Rekixo-Source-Name: invalid.dwg'             --data-binary @-             http://127.0.0.1:18080/v1/dwg/normalize)"
+          test "$BAD_CODE" = "415"
+          grep -Fq 'DWG AC10xx header was not recognized' "$BAD"
+
+      - name: Show processor logs on failure
+        if: failure()
+        run: docker logs rekixo-dwg-processor-test || true
+
+      - name: Stop processor
+        if: always()
+        run: docker stop rekixo-dwg-processor-test || true
