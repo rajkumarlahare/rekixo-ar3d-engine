@@ -373,7 +373,7 @@ export function deriveCadWallGraph(
       reason: "No normalized CAD wall geometry is ready.",
     };
 
-  const auditKind: "dwg" | "dxf" = auditKind === "dwg" ? "dwg" : "dxf";
+  const auditKind: "dwg" | "dxf" = audit.kind === "dwg" ? "dwg" : "dxf";
   const floorIndex = cadFloorIndex(audit, floors.length);
   const floor = floorIndex !== undefined ? floors[floorIndex] : undefined;
   if (!floor)
