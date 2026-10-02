@@ -4,11 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./reference-context": "./src/referenceContext.ts",
-    "./reference-exterior": "./src/referenceExterior.ts",
-    "./reference-materials": "./src/referenceMaterials.ts",
-    "./reference-source": "./src/referenceSourceRuntime.ts"
+    ".": "./src/index.ts"
   },
   "dependencies": {
     "three": "0.186.0"

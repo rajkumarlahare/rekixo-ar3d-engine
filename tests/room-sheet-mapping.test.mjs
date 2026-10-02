@@ -80,9 +80,9 @@ test("CSV room sheet also accepts a single Size column", async () => {
 
 test("room-sheet markers make mapped/unmapped state reconstructable after reload", () => {
   const row = {
-    key: "profile:jyoti:101-living",
+    key: "profile:sample:101-living",
     assetId: "brochure",
-    assetName: "Jyoti Paradise.pdf",
+    assetName: "sample-plan.pdf",
     rowNumber: 1,
     floorLabel: "Typical",
     unit: "101",
@@ -111,31 +111,12 @@ test("room-sheet markers make mapped/unmapped state reconstructable after reload
   assert.deepEqual([...roomSheet.mappedRoomSheetKeys([room])], [row.key]);
 });
 
-test("Jyoti profile derives starter queue and suggested centres from existing evidence", () => {
-  const profile = fs.readFileSync(
-    "project-profiles/studio-source-profiles.ts",
-    "utf8",
-  );
-  assert.match(profile, /jyotiRoomSheetTemplate/);
-  assert.match(profile, /jyotiInteriorScene\.rooms/);
-  assert.match(profile, /unit\.id\.includes\("101"\)/);
-  assert.match(profile, /roomSheetTemplate: jyotiRoomSheetTemplate/);
-  assert.match(profile, /suggestedX:/);
-  assert.match(profile, /suggestedZ:/);
-  assert.match(profile, /sourcePackSourceId:/);
-  assert.match(profile, /audit\.architecturalFloorLevelsM/);
-  assert.match(profile, /floorSkeleton: jyotiFloorSkeleton/);
-  assert.match(profile, /repeatPlan: jyotiRepeatPlan/);
-  assert.match(profile, /101 to 501/);
-  assert.match(profile, /102 to 502/);
-  assert.match(profile, /103 to 403/);
-});
 
 test("profile suggested rooms seed once and preserve evidence provenance", () => {
   const sourceAsset = {
     id: "brochure",
     projectId: "project",
-    name: "Jyoti Paradise.pdf",
+    name: "sample-plan.pdf",
     type: "application/pdf",
     size: 10,
     hash: "c".repeat(64),
@@ -153,11 +134,11 @@ test("profile suggested rooms seed once and preserve evidence provenance", () =>
         height: 2.75,
         suggestedX: 10,
         suggestedZ: -5,
-        sourcePackSourceId: "jyoti-source-brochure",
-        sourceNote: "Reconstructed placement from brochure page 2",
+        sourcePackSourceId: "sample-source-plan",
+        sourceNote: "Reviewed source-plan placement",
       },
     ],
-    "jyoti-paradise",
+    "sample-project",
     sourceAsset,
   );
 
@@ -177,7 +158,7 @@ test("profile suggested rooms seed once and preserve evidence provenance", () =>
   assert.equal(rooms[0].depth, 3.05);
   assert.equal(rooms[0].verified, false);
   assert.equal(rooms[0].sourceAssetId, "brochure");
-  assert.equal(rooms[0].sourcePackSourceId, "jyoti-source-brochure");
+  assert.equal(rooms[0].sourcePackSourceId, "sample-source-plan");
   assert.equal(roomSheet.roomSheetKeyFromRoom(rooms[0]), row.key);
 
   const repeated = roomSheet.createSuggestedRoomDrafts(

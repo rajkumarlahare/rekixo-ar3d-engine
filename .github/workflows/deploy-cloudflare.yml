@@ -85,7 +85,7 @@ jobs:
           fi
           CHANGED="$(git diff --name-only "$BEFORE" "$GITHUB_SHA")"
           printf '%s\n' "$CHANGED"
-          if printf '%s\n' "$CHANGED" | grep -Eq '^(apps/public/|workers/(public|release-runtime|geo-release-runtime|http-range|storage-boundary)\.mjs$|packages/(contracts|engine-core)/|shared/|scripts/build-geo-model-derivative\.mjs$|project-profiles/geo-model-derivatives\.json$|package(-lock)?\.json$|wrangler\.public\.jsonc$|\.github/workflows/deploy-cloudflare\.yml$)'; then
+          if printf '%s\n' "$CHANGED" | grep -Eq '^(apps/public/|workers/(public|release-runtime|geo-release-runtime|http-range|storage-boundary)\.mjs$|packages/(contracts|engine-core|model-profiles)/|shared/|scripts/build-geo-model-derivative\.mjs$|project-profiles/|package(-lock)?\.json$|wrangler\.public\.jsonc$|\.github/workflows/deploy-cloudflare\.yml$)'; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -94,6 +94,11 @@ jobs:
             echo "migrations_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "migrations_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+          if printf '%s\n' "$CHANGED" | grep -Fxq 'database/migrations/0028_clean_room_project_reset_v1.sql'; then
+            echo "project_reset_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "project_reset_changed=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Node.js
@@ -142,6 +147,14 @@ jobs:
           else
             npx --no-install wrangler r2 bucket create rekixo-3d-assets
           fi
+
+      - name: Purge project-owned R2 objects for clean-room reset
+        if: github.event_name == 'push' && steps.public_runtime.outputs.project_reset_changed == 'true'
+        env:
+          CONFIRM_ENGINE_PROJECT_PURGE: DELETE_ENGINE_PROJECT_DATA
+          R2_BUCKET: rekixo-3d-assets
+          R2_PREFIX: projects/
+        run: node scripts/purge-project-r2-prefix.mjs
 
       - name: Verify remote Engine Admin secret names
         shell: bash

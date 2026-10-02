@@ -41,39 +41,15 @@ const adminAssets = files("apps/admin/dist/assets");
 const publicEntry = one(publicAssets, /^index-[^.]+\.js$/, "Public entry JS");
 atMost(publicEntry, 980 * KiB, "Public entry JS");
 
-const publicProfile = one(
-  publicAssets,
-  /^(?:referenceSourceV9Materials|referenceMaterials)-[^.]+\.js$/,
-  "Public Reference Source V9 material chunk",
-);
-atMost(publicProfile, 40 * KiB, "Public profile material JS");
-
-const adminProfile = one(
-  adminAssets,
-  /^(?:referenceSourceV9Materials|referenceMaterials)-[^.]+\.js$/,
-  "Admin Reference Source V9 material chunk",
-);
-atMost(adminProfile, 40 * KiB, "Admin profile material JS");
-
-const textureAsset = one(
-  publicAssets,
-  /^source-textures-[^.]+\.json$/,
-  "Reference source texture asset",
-);
-atMost(textureAsset, 400 * KiB, "Reference source texture asset");
-
 for (const item of [...publicAssets, ...adminAssets]) {
-  if (/sourceTextureData/i.test(item.name))
+  if (
+    /referenceSource|referenceMaterials|source-textures|projectExperience/i.test(
+      item.name,
+    )
+  )
     throw new Error(
-      `Inline source texture JavaScript chunk returned unexpectedly: ${item.name}`,
+      `Project-specific bundle asset returned unexpectedly: ${item.name}`,
     );
 }
 
-console.log(
-  [
-    `Public entry: ${(publicEntry.bytes / KiB).toFixed(1)} KiB`,
-    `Public profile JS: ${(publicProfile.bytes / KiB).toFixed(1)} KiB`,
-    `Admin profile JS: ${(adminProfile.bytes / KiB).toFixed(1)} KiB`,
-    `Profile texture asset: ${(textureAsset.bytes / KiB).toFixed(1)} KiB`,
-  ].join("\n"),
-);
+console.log(`Public entry: ${(publicEntry.bytes / KiB).toFixed(1)} KiB`);

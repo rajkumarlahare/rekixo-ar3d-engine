@@ -104,6 +104,33 @@ const missing = [...requiredObjects].filter((name) => !found.has(name));
 if (missing.length)
   throw new Error(`Fresh migration chain is missing required schema objects: ${missing.join(", ")}`);
 
+const projectCountRows = executeJson("SELECT COUNT(*) AS total FROM projects_3d");
+if (Number(projectCountRows[0]?.total ?? -1) !== 0)
+  throw new Error("Fresh migration chain must end with an empty project registry.");
+
+const projectOwnedCounts = executeJson(
+  `SELECT
+     (SELECT COUNT(*) FROM models_3d) +
+     (SELECT COUNT(*) FROM camera_presets_3d) +
+     (SELECT COUNT(*) FROM scenes_3d) +
+     (SELECT COUNT(*) FROM publish_versions_3d) +
+     (SELECT COUNT(*) FROM studio_drafts_3d) +
+     (SELECT COUNT(*) FROM studio_assets_3d) +
+     (SELECT COUNT(*) FROM releases_3d) +
+     (SELECT COUNT(*) FROM release_assets_3d) +
+     (SELECT COUNT(*) FROM release_activations_3d) +
+     (SELECT COUNT(*) FROM experiences_3d) +
+     (SELECT COUNT(*) FROM geo_placements_3d) +
+     (SELECT COUNT(*) FROM geo_experience_drafts_3d) +
+     (SELECT COUNT(*) FROM geo_draft_verifications_3d) +
+     (SELECT COUNT(*) FROM geo_releases_3d) +
+     (SELECT COUNT(*) FROM geo_experience_active_releases_3d) +
+     (SELECT COUNT(*) FROM geo_release_activations_3d) +
+     (SELECT COUNT(*) FROM engine_deletion_jobs_3d) AS total`,
+);
+if (Number(projectOwnedCounts[0]?.total ?? -1) !== 0)
+  throw new Error("Fresh migration chain left project-owned rows behind.");
+
 const migrationFiles = fs
   .readdirSync(path.join(root, "database", "migrations"))
   .filter((name) => /^\d+.*\.sql$/i.test(name))
@@ -117,5 +144,5 @@ if (applied !== migrationFiles.length)
   );
 
 console.log(
-  `Fresh D1 migration chain verified: ${applied} migrations, required tables/triggers present.`,
+  `Fresh D1 migration chain verified: ${applied} migrations, required tables/triggers present, project state empty.`,
 );
