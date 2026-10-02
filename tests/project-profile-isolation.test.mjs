@@ -48,7 +48,12 @@ test("generic realism cannot inherit Reference Source V9 customer textures or ti
   assert.doesNotMatch(generic, /color_a06|color_m06|metal_panel:\s*0x|frontcolor:\s*0x/);
   assert.match(profile, /JYOTI_SOURCE_MODEL_SHA256/);
   assert.match(profile, /if \(!hasReferenceSource\(root\)\) return false/);
+  assert.match(profile, /source-textures\.json\?url/);
   assert.match(profile, /sourceTextureData/);
+  assert.doesNotMatch(profile, /data:image\/[^;]+;base64,/);
+  assert.doesNotMatch(profile, /^const sourceTextureCache/m);
+  assert.match(profile, /const sourceTextureCache = new Map/);
+  assert.match(profile, /disposedProfileMaterials/);
   assert.match(profile, /sourceMaterialTint/);
   assert.match(profile, /referenceFacadeTint/);
   assert.match(registry, /await import\("\.\/referenceSourceV9Materials"\)/);
@@ -72,4 +77,36 @@ test("Studio propagates the verified local asset hash only for direct FBX parsin
     studio.slice(studio.indexOf("} else {"), studio.indexOf("if (cancelled)")),
     /sha256:\s*f\.hash/,
   );
+});
+
+
+test("Reference Source V9 textures live in a lazy emitted asset, not TypeScript", () => {
+  const sourcePath =
+    "project-profiles/reference-source-v9/source-textures.json";
+  assert.equal(
+    fs.existsSync("apps/public/src/viewer/sourceTextureData.ts"),
+    false,
+  );
+  assert.equal(fs.existsSync(sourcePath), true);
+
+  const textures = JSON.parse(read(sourcePath));
+  const entries = Object.entries(textures);
+  assert.ok(entries.length >= 10);
+  for (const [name, value] of entries) {
+    assert.ok(name.length > 0);
+    assert.equal(typeof value, "string");
+    assert.match(value, /^data:image\/[a-z0-9.+-]+;base64,/i);
+  }
+});
+
+test("bundle budgets guard public entry and project-profile payloads", () => {
+  const root = JSON.parse(read("package.json"));
+  const budget = read("scripts/check-bundle-budgets.mjs");
+  assert.match(root.scripts.test, /npm run test:bundles/);
+  assert.equal(root.scripts["test:bundles"], "node scripts/check-bundle-budgets.mjs");
+  assert.match(budget, /Public entry JS/);
+  assert.match(budget, /Public profile material JS/);
+  assert.match(budget, /Admin profile material JS/);
+  assert.match(budget, /Reference source texture asset/);
+  assert.match(budget, /sourceTextureData/i);
 });
