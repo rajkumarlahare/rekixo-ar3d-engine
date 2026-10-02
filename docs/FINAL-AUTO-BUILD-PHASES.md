@@ -42,7 +42,7 @@ Status: **implementation complete; production decoder activates only when Cloudf
 
 ## Phase 4 — PDF + SKB + DRS deep extraction
 
-Status: **implementation complete on this branch; pending validation/merge**
+Status: **complete — structured DRS/SKB/PDF extraction implemented; validation and browser E2E passed before merge**
 
 - Extract PDF embedded floor-plan imagery in addition to the text layer.
 - Recover room/flat labels and dimensional evidence with coordinates.
