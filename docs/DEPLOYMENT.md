@@ -36,7 +36,7 @@ Every push to `main`:
 
 1. checks out the repository;
 2. uses Node.js 22;
-3. installs dependencies;
+3. installs the exact `package-lock.json` graph with `npm ci`;
 4. runs `npm test` (typecheck, Admin/Public builds and Node regression tests);
 5. installs Playwright Chromium and runs the browser E2E smoke;
 6. verifies the Cloudflare deployment token and required Engine Admin secret names;
@@ -48,7 +48,7 @@ Every push to `main`:
 12. deploys the Public Worker only when public runtime/dependency inputs changed;
 13. verifies the deployed Admin bundle, protected Admin reads and the empty-safe production shell.
 
-Wrangler is pinned to `4.146.0` in production/provision workflows. Do not replace it with a floating major version without a reviewed upgrade.
+Wrangler `4.146.0` and Playwright `1.55.1` are exact workspace dependencies captured by `package-lock.json`. CI, production deploy and provisioning use `npm ci`; Wrangler commands use `npx --no-install` so workflows cannot silently fetch a different CLI.
 
 ## Manual deployment scopes
 
@@ -68,7 +68,7 @@ Use the manual workflow `Provision Rekixo AR3D Project` with:
 - `name` — display name;
 - `location` — optional.
 
-The workflow renders validated SQL and writes a draft project row to isolated Engine D1. Re-running the same slug does not overwrite an existing project. Wrangler is pinned to the same reviewed production version.
+The workflow runs `npm ci`, renders validated SQL and writes a draft project row to isolated Engine D1. Re-running the same slug does not overwrite an existing project. The same lockfile-pinned Wrangler is used for provisioning.
 
 The authenticated Engine dashboard can also create projects through the Engine-owned cloud contract. No project creation path may touch Platform D1/R2.
 
@@ -97,3 +97,9 @@ Privileged Engine reads/writes require the dedicated Engine Admin session. Mutat
 - Public/runtime changes must pass the repository regression and browser gates before production deployment.
 
 See `docs/PHASE-8-CLOSEOUT.md` for the remaining hardening phases.
+
+## Fresh migration-chain verification
+
+`npm test` runs `scripts/verify-fresh-migrations.mjs`. The verifier creates a fresh local D1 state directory, applies every checked-in migration from `0001` through the latest migration, applies the chain a second time to verify the migration ledger is stable, and confirms critical tables/triggers plus the applied migration count.
+
+This test is local-only and never touches production D1. Production migrations remain a separate remote deployment step when migration files change.
