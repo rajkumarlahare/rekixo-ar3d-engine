@@ -38,6 +38,30 @@ export interface SceneSiteV2 {
   name: string;
 }
 
+export type SceneSiteElementKindV2 =
+  | "garden"
+  | "lawn"
+  | "path"
+  | "road"
+  | "parking"
+  | "tree"
+  | "plant"
+  | "gate"
+  | "outdoor-light";
+
+export interface SceneSiteElementV2 {
+  id: string;
+  siteId: string;
+  kind: SceneSiteElementKindV2;
+  transform: SceneTransformV2;
+  dimensionsM: [number, number, number];
+  finish?: {
+    color?: string;
+    materialId?: string;
+  };
+  evidence: SceneMeasurementEvidenceV2;
+}
+
 export interface SceneBuildingV2 {
   id: string;
   siteId: string;
@@ -201,6 +225,7 @@ export interface SceneManifestV2 {
   assets: SceneAssetV2[];
   models: SceneModelV2[];
   sites: SceneSiteV2[];
+  siteElements?: SceneSiteElementV2[];
   buildings: SceneBuildingV2[];
   floors: SceneFloorV2[];
   units: SceneUnitV2[];
@@ -221,6 +246,7 @@ const MAX = {
   assets: 500,
   models: 50,
   sites: 50,
+  siteElements: 5000,
   buildings: 250,
   floors: 1000,
   units: 10000,
@@ -433,6 +459,7 @@ export function assertSceneManifestV2(
   const assets = requireArray(value, "assets");
   const models = requireArray(value, "models");
   const sites = requireArray(value, "sites");
+  const siteElements = optionalArray(value, "siteElements");
   const buildings = requireArray(value, "buildings");
   const floors = requireArray(value, "floors");
   const units = requireArray(value, "units");
@@ -506,6 +533,56 @@ export function assertSceneManifestV2(
   for (const item of sites) {
     const site = item as Record<string, unknown>;
     if (!isText(site.name, 300)) throw Error("Invalid scene site.");
+  }
+
+  for (const item of siteElements) {
+    const siteElement = item as Record<string, unknown>;
+    if (
+      !siteIds.has(siteElement.siteId as string) ||
+      ![
+        "garden",
+        "lawn",
+        "path",
+        "road",
+        "parking",
+        "tree",
+        "plant",
+        "gate",
+        "outdoor-light",
+      ].includes(siteElement.kind as string) ||
+      !isVector(siteElement.dimensionsM, 3, 0.01, 1000) ||
+      !isObject(siteElement.evidence)
+    )
+      throw Error("Invalid scene site element.");
+
+    validateTransform(siteElement.transform);
+
+    const evidence = siteElement.evidence as Record<string, unknown>;
+    if (
+      evidence.status !== "reviewed" ||
+      (evidence.sourceNote !== undefined &&
+        (typeof evidence.sourceNote !== "string" ||
+          evidence.sourceNote.length > 4000)) ||
+      (evidence.sourceAssetId !== undefined &&
+        !assetIds.has(evidence.sourceAssetId as string)) ||
+      (evidence.basis !== undefined &&
+        (typeof evidence.basis !== "string" ||
+          evidence.basis.length > 1000))
+    )
+      throw Error("Invalid site element evidence.");
+
+    if (siteElement.finish !== undefined) {
+      if (!isObject(siteElement.finish))
+        throw Error("Invalid site element finish.");
+      const finish = siteElement.finish as Record<string, unknown>;
+      if (finish.color !== undefined && !isColor(finish.color))
+        throw Error("Invalid site element finish color.");
+      if (
+        finish.materialId !== undefined &&
+        !materialIds.has(finish.materialId as string)
+      )
+        throw Error("Invalid site element material.");
+    }
   }
 
   for (const item of buildings) {
