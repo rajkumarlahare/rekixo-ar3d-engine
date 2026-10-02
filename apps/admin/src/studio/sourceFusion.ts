@@ -149,8 +149,10 @@ function itemFor(asset: Asset): SourceFusionItem {
       extension: ext,
       kind: "drawing",
       support: "evidence-only",
-      capabilities: ["dimensions", "visual-style"],
-      findings: ["PDF pages can be rasterized and calibrated for plan alignment."],
+      capabilities: ["dimensions", "rooms", "visual-style"],
+      findings: [
+        "PDF pages can provide spatial room/dimension evidence and rasterized plan references.",
+      ],
       warnings: [],
     };
   if (["jpg", "jpeg", "png", "webp", "tif", "tiff"].includes(ext))
