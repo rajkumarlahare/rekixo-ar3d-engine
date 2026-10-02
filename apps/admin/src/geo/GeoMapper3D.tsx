@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  activateGeoRelease,
   geoDraft,
   geoMapsSettings,
+  geoReleases,
   projects,
+  publishGeoRelease,
   releases,
   resetGeoDraft,
   saveGeoDraft,
   saveGeoMapsKey,
   session,
+  verifyGeoPreview,
   type CloudGeoDraftState,
+  type CloudGeoReleaseState,
   type CloudProjectSummary,
   type CloudReleaseSummary,
 } from "../studio/cloud";
@@ -190,10 +195,12 @@ export default function GeoMapper3D() {
   const [projectList, setProjectList] = useState<CloudProjectSummary[]>([]);
   const [selectedSlug, setSelectedSlug] = useState("");
   const [state, setState] = useState<CloudGeoDraftState>();
+  const [geoReleaseState, setGeoReleaseState] = useState<CloudGeoReleaseState>();
   const [releaseItems, setReleaseItems] = useState<CloudReleaseSummary[]>([]);
   const [sourceReleaseId, setSourceReleaseId] = useState("");
   const [engine, setEngine] = useState<IntegrationPayload>();
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [draftDirty, setDraftDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [mapsKeyInput, setMapsKeyInput] = useState("");
   const [message, setMessage] = useState("");
@@ -253,6 +260,7 @@ export default function GeoMapper3D() {
     setError("");
     setMessage("");
     setState(undefined);
+    setGeoReleaseState(undefined);
     setEngine(undefined);
     setReleaseItems([]);
     setSourceReleaseId("");
@@ -262,10 +270,12 @@ export default function GeoMapper3D() {
       geoDraft(selectedSlug),
       integration(selectedSlug),
       releases(selectedSlug),
+      geoReleases(selectedSlug),
     ])
-      .then(([draftState, integrationState, releaseState]) => {
+      .then(([draftState, integrationState, releaseState, geoReleaseResult]) => {
         if (!live) return;
         setState(draftState);
+        setGeoReleaseState(geoReleaseResult);
         setEngine(integrationState);
         setReleaseItems(releaseState.releases);
         setSourceReleaseId(
@@ -274,6 +284,7 @@ export default function GeoMapper3D() {
             "",
         );
         setForm(formFromState(draftState));
+        setDraftDirty(false);
       })
       .catch((reason) => {
         if (live)
@@ -346,10 +357,12 @@ export default function GeoMapper3D() {
   };
 
   function patch<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setDraftDirty(true);
     setForm((current) => ({ ...current, [key]: value }));
   }
 
   function setCoordinates(longitude: number, latitude: number) {
+    setDraftDirty(true);
     setForm((current) => ({
       ...current,
       longitude: longitude.toFixed(7),
@@ -489,6 +502,8 @@ export default function GeoMapper3D() {
       setState(next);
       setSourceReleaseId(next.draft?.sourceBuildingReleaseId || sourceReleaseId);
       setForm(formFromState(next));
+      setDraftDirty(false);
+      setGeoReleaseState(await geoReleases(selectedSlug));
       setMessage(
         `Geo draft saved · Building v${next.draft?.sourceBuildingReleaseVersion ?? selectedSource.version} pinned. Existing live Geo unchanged hai.`,
       );
@@ -517,6 +532,8 @@ export default function GeoMapper3D() {
       setState(next);
       setSourceReleaseId(next.draft?.sourceBuildingReleaseId || sourceReleaseId);
       setForm(formFromState(next));
+      setDraftDirty(false);
+      setGeoReleaseState(await geoReleases(selectedSlug));
       setMessage("Geo draft reset hua. Existing live Geo snapshot safe hai.");
     } catch (reason) {
       setError(
@@ -528,6 +545,7 @@ export default function GeoMapper3D() {
   }
 
   function resetAlignment() {
+    setDraftDirty(true);
     setForm((current) => ({
       ...current,
       altitudeM: "0",
@@ -536,6 +554,92 @@ export default function GeoMapper3D() {
       rollDeg: "0",
       scale: "1",
     }));
+  }
+
+  async function verifyPreview() {
+    if (!selectedSlug || !state?.draft) return;
+    if (draftDirty) {
+      setError("Preview verify karne se pehle current Geo changes Save karein.");
+      return;
+    }
+    if (!sourcePreviewAvailable || !renderModel || !validCoordinates(form)) {
+      setError("Current active Building source ke saath valid Geo preview required hai.");
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    try {
+      await verifyGeoPreview(selectedSlug, state.draft.revision);
+      const next = await geoReleases(selectedSlug);
+      setGeoReleaseState(next);
+      setMessage(
+        `Geo preview verified · draft revision ${state.draft.revision}. Ab immutable Geo release publish ki ja sakti hai.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Geo preview verify nahi hua.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function publishGeo() {
+    if (!selectedSlug || !state?.draft) return;
+    if (draftDirty) {
+      setError("Geo release publish karne se pehle current changes Save karein.");
+      return;
+    }
+    if (!geoReleaseState?.previewVerified) {
+      setError("Current Geo preview verify karna required hai.");
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    try {
+      const result = await publishGeoRelease(
+        selectedSlug,
+        state.draft.revision,
+      );
+      const next = await geoReleases(selectedSlug);
+      setGeoReleaseState(next);
+      setMessage(
+        `Immutable Geo Release v${result.release.version} published and activated. Building Website unchanged hai.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Geo release publish nahi hui.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function activateGeoVersion(releaseId: string, version: number) {
+    if (!selectedSlug) return;
+    if (
+      !window.confirm(
+        `Geo Release v${version} activate karein? Building Website aur Geo draft change nahi honge.`,
+      )
+    )
+      return;
+
+    setBusy(true);
+    setError("");
+    try {
+      await activateGeoRelease(selectedSlug, releaseId);
+      const next = await geoReleases(selectedSlug);
+      setGeoReleaseState(next);
+      setMessage(`Geo Release v${version} active ho gayi. Rollback pointer safely update hua.`);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Geo release activate nahi hui.",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   const mapsLink = validCoordinates(form)
@@ -682,6 +786,7 @@ export default function GeoMapper3D() {
               value={sourceReleaseId}
               onChange={(event) => {
                 setSourceReleaseId(event.target.value);
+                setDraftDirty(true);
                 setMessage("");
                 setError("");
               }}
@@ -889,6 +994,126 @@ export default function GeoMapper3D() {
             Save editable Geo draft ko update karta hai. Existing live Geo snapshot
             aur immutable Building release bytes change nahi hote.
           </span>
+        </div>
+      </section>
+
+      <section className="geo3d-form-card geo3d-release-card">
+        <div className="geo3d-section-head">
+          <div>
+            <p className="eyebrow">04 · RELEASE</p>
+            <h3>Verify → Publish → Activate / Rollback</h3>
+          </div>
+          <span className="geo3d-draft-badge">
+            {geoReleaseState?.activeRelease
+              ? `ACTIVE GEO v${geoReleaseState.activeRelease.version}`
+              : "NO GEO RELEASE"}
+          </span>
+        </div>
+
+        <div className="geo3d-release-readiness">
+          <article>
+            <span>SAVED DRAFT</span>
+            <strong>{state?.draft ? `r${state.draft.revision}` : "—"}</strong>
+            <small>{draftDirty ? "Unsaved changes present" : "Saved state"}</small>
+          </article>
+          <article>
+            <span>PREVIEW CHECK</span>
+            <strong>
+              {geoReleaseState?.previewVerified ? "Verified" : "Required"}
+            </strong>
+            <small>
+              {geoReleaseState?.previewVerification
+                ? `Building v${geoReleaseState.previewVerification.sourceBuildingReleaseVersion}`
+                : "Verify current saved preview"}
+            </small>
+          </article>
+          <article>
+            <span>ACTIVE IMMUTABLE GEO</span>
+            <strong>
+              {geoReleaseState?.activeRelease
+                ? `v${geoReleaseState.activeRelease.version}`
+                : "None"}
+            </strong>
+            <small>
+              {geoReleaseState?.activeRelease
+                ? `Building v${geoReleaseState.activeRelease.sourceBuildingReleaseVersion}`
+                : "Publish verified draft"}
+            </small>
+          </article>
+        </div>
+
+        <div className="geo3d-save-row">
+          <button
+            type="button"
+            onClick={() => void verifyPreview()}
+            disabled={
+              busy ||
+              !state?.draft ||
+              draftDirty ||
+              !sourcePreviewAvailable ||
+              !renderModel ||
+              !validCoordinates(form)
+            }
+          >
+            {geoReleaseState?.previewVerified
+              ? "Preview verified"
+              : "Verify current preview"}
+          </button>
+          <button
+            className="geo3d-primary"
+            type="button"
+            onClick={() => void publishGeo()}
+            disabled={
+              busy ||
+              draftDirty ||
+              !state?.draft ||
+              !geoReleaseState?.previewVerified
+            }
+          >
+            Publish Geo Release
+          </button>
+          <span>
+            Publication immutable Geo history banata hai. Existing public Geo compatibility
+            snapshot is phase me automatically mutate nahi hota.
+          </span>
+        </div>
+
+        <div className="geo3d-release-history">
+          <div className="geo3d-release-history__title">
+            <strong>Geo Release History</strong>
+            <span>{geoReleaseState?.releases.length ?? 0} immutable release(s)</span>
+          </div>
+          {geoReleaseState?.releases.length ? (
+            geoReleaseState.releases.map((release) => (
+              <article key={release.id}>
+                <div>
+                  <strong>Geo v{release.version}</strong>
+                  <span>
+                    Building v{release.sourceBuildingReleaseVersion} · draft r
+                    {release.sourceDraftRevision}
+                  </span>
+                  <small>{release.createdAt}</small>
+                </div>
+                {release.active ? (
+                  <b>ACTIVE</b>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      void activateGeoVersion(release.id, release.version)
+                    }
+                  >
+                    Activate / Rollback
+                  </button>
+                )}
+              </article>
+            ))
+          ) : (
+            <div className="geo3d-release-empty">
+              Preview verify karke first immutable Geo Release publish karein.
+            </div>
+          )}
         </div>
       </section>
     </main>
