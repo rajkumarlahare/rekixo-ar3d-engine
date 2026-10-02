@@ -3556,6 +3556,42 @@ export default function Studio() {
             ))}
             </section>
           </details>
+          {(scene.siteElements?.length ?? 0) > 0 && (
+            <>
+              <div className="section-label">SITE &amp; LANDSCAPE</div>
+              <div className="room-tree site-element-tree">
+                {(scene.siteElements ?? []).map((entry) => (
+                  <button
+                    type="button"
+                    key={entry.id}
+                    className={
+                      selected === entry.id
+                        ? "tree-room active"
+                        : "tree-room"
+                    }
+                    onClick={() => {
+                      setView("building");
+                      setSelected(entry.id);
+                      setMesh("");
+                      setSelectedModelNodeKey("");
+                    }}
+                  >
+                    <span>
+                      {entry.reviewed ? "◉" : "○"}{" "}
+                      {entry.kind
+                        .replaceAll("-", " ")
+                        .replace(/\b\w/g, (value) => value.toUpperCase())}
+                    </span>
+                    <small>
+                      {entry.origin === "cad-auto" ? "CAD source" : "Edited"}
+                      {" · "}
+                      {entry.width.toFixed(1)} × {entry.depth.toFixed(1)} m
+                    </small>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           <div className="section-label">
             PROJECT{" "}
             <button
