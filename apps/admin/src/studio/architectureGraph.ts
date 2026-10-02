@@ -527,4 +527,3 @@ export function deriveCadWallGraph(
     reason: registration.reason,
   };
 }
-
