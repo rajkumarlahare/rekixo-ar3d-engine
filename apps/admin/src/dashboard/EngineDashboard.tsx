@@ -333,9 +333,30 @@ export default function EngineDashboard() {
     [status],
   );
   const enabledCount = status?.scenes.filter((scene) => scene.enabled).length ?? 0;
-  const liveUrl = status
+  const activeBuildingRelease = releaseItems.find((release) => release.active);
+  const buildingExperience = experienceItems.find((item) => item.type === "building");
+  const geoExperience = experienceItems.find((item) => item.type === "geo");
+  const buildingLive = Boolean(
+    status?.project.status === "published" && activeBuildingRelease,
+  );
+  const buildingUrl = status
     ? `https://ar3dstudio.in${publicProjectPath(status.project.slug)}`
     : "";
+  const geoUrl = status
+    ? `https://ar3dstudio.in${geoPublicProjectPath(status.project.slug)}`
+    : "";
+  const geoLive = Boolean(
+    geoExperience &&
+      geoState?.placement?.publicEnabled &&
+      !geoState?.placementStale &&
+      status?.project.status === "published",
+  );
+  const geoNeedsSourceUpgrade = Boolean(
+    geoExperience &&
+      activeBuildingRelease &&
+      geoExperience.sourceBuildingReleaseId &&
+      geoExperience.sourceBuildingReleaseId !== activeBuildingRelease.id,
+  );
   const assetPrefix = status
     ? `projects/${status.project.slug}`
     : "projects/{slug}";
