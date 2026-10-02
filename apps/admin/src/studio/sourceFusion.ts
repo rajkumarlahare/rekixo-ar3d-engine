@@ -2,6 +2,8 @@ import type { Asset } from "./domain";
 import type { FbxSourceAudit } from "./sourceAudit";
 import type { SmartProjectAnalysis } from "./projectAnalyzer";
 import type { RoomSheetRow } from "./roomSheet";
+import { inspectSketchUpArchive } from "./sketchUpArchive";
+import { inspectDwgEvidence } from "./dwgEvidence";
 
 export type SourceFusionKind =
   | "authoring-model"
@@ -358,6 +360,87 @@ export async function buildSourceFusionReport(
         ),
       );
     }
+  }
+
+  for (const asset of files.filter((entry) => /\.dwg$/i.test(entry.name))) {
+    const inspection = await inspectDwgEvidence(asset);
+    const item = items.find((entry) => entry.assetId === asset.id);
+    if (!item) continue;
+    if (inspection.versionCode)
+      item.findings.push(
+        `${inspection.versionCode} · ${inspection.versionLabel ?? "DWG"}`,
+      );
+    if (inspection.aecTokens.length) {
+      item.findings.push(
+        `${inspection.aecTokens.length} architectural token${inspection.aecTokens.length === 1 ? "" : "s"} detected.`,
+      );
+      facts.push(
+        fact(
+          asset.id,
+          "dwg.architectural-tokens",
+          inspection.aecTokens,
+          0.62,
+          "Literal DWG binary text evidence; not decoded geometry",
+          "suggested",
+        ),
+      );
+    }
+    if (inspection.drawingTextHints.length)
+      facts.push(
+        fact(
+          asset.id,
+          "dwg.text-hints",
+          inspection.drawingTextHints,
+          0.55,
+          "Readable drawing strings found in DWG bytes",
+          "suggested",
+        ),
+      );
+    item.warnings.push(...inspection.issues);
+  }
+
+  for (const asset of files.filter((entry) => /\.(?:skb|skp)$/i.test(entry.name))) {
+    const inspection = await inspectSketchUpArchive(asset);
+    const item = items.find((entry) => entry.assetId === asset.id);
+    if (!item) continue;
+    if (inspection.zipLike) {
+      item.findings.push(
+        `${inspection.entryCount} SketchUp archive entr${inspection.entryCount === 1 ? "y" : "ies"} inspected.`,
+      );
+      if (inspection.materialDefinitionFiles.length)
+        item.findings.push(
+          `${inspection.materialDefinitionFiles.length} material definition file${inspection.materialDefinitionFiles.length === 1 ? "" : "s"} found.`,
+        );
+      if (inspection.textureFiles.length)
+        item.findings.push(
+          `${inspection.textureFiles.length} material texture file${inspection.textureFiles.length === 1 ? "" : "s"} found.`,
+        );
+      facts.push(
+        fact(
+          asset.id,
+          "sketchup.archive-summary",
+          [
+            `entries:${inspection.entryCount}`,
+            `materials:${inspection.materialDefinitionFiles.length}`,
+            `textures:${inspection.textureFiles.length}`,
+            `models:${inspection.modelFiles.length}`,
+          ],
+          0.95,
+          "ZIP central-directory inspection",
+        ),
+      );
+      if (inspection.textureFiles.length)
+        facts.push(
+          fact(
+            asset.id,
+            "sketchup.texture-files",
+            inspection.textureFiles.slice(0, 250),
+            0.95,
+            "SketchUp archive file table",
+          ),
+        );
+    }
+    item.warnings.push(...inspection.issues);
   }
 
   const recommendedActions: string[] = [];
