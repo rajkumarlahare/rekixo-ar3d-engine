@@ -69,9 +69,7 @@ import {
   type SourceFusionReport,
 } from "./sourceFusion";
 import { prepareFbxWebModel } from "./fbxWebModel";
-import { deriveModelWallGraph } from "./architectureGraph";
-import { detectRepeatedFloors } from "./repeatedFloorDetector";
-import { deriveAutoRoomDrafts } from "./autoRoomDraft";
+import { buildSmartSceneDraft } from "./smartDraftBuilder";
 import {
   suggestOpeningAssociations,
   type OpeningSuggestion,
@@ -2583,163 +2581,21 @@ export default function Studio() {
   }
 
   function buildSmartDraft() {
-    if (!smartAnalysis?.modelAssetId)
+    if (!smartAnalysis)
       throw Error("Analyze a selected GLB/FBX model before building the draft.");
-    if (!smartAnalysis.floorCandidates.length)
-      throw Error("No reliable floor structure was detected. Review the model manually.");
-
-    const hasAuthoredRooms = p.scene.rooms.length > 0;
-    const replaceFloorSkeleton =
-      !hasAuthoredRooms &&
-      p.scene.floors.length === 1 &&
-      !(p.scene.modelNodeTags?.length);
-    const modelY = p.scene.modelTransform?.y ?? 0;
-    const scale = p.scene.scale;
-    const suggestedElevations = smartAnalysis.floorCandidates
-      .map((candidate) => candidate.elevation * scale + modelY)
-      .sort((left, right) => left - right);
-    let floors = replaceFloorSkeleton
-      ? suggestedElevations.map((elevation, index) => ({
-          id: id(),
-          name: index === 0 ? "Ground" : `Floor ${index}`,
-          elevation: Number(elevation.toFixed(4)),
-        }))
-      : [...p.scene.floors].sort(
-          (left, right) => left.elevation - right.elevation,
-        );
-
-    const repeatGroups = detectRepeatedFloors(smartAnalysis);
-    const repeatByTarget = new Map<
-      number,
-      { sourceFloorIndex: number; similarity: number }
-    >();
-    for (const group of repeatGroups)
-      for (const member of group.members)
-        repeatByTarget.set(member.floorIndex, {
-          sourceFloorIndex: group.sourceFloorIndex,
-          similarity: member.similarity,
-        });
-    floors = floors.map((floor, index) => {
-      const repeat = repeatByTarget.get(index);
-      if (!repeat)
-        return {
-          ...floor,
-          repeatOfFloorId: undefined,
-          repeatConfidence: undefined,
-          repeatReviewed: undefined,
-        };
-      const sourceFloor = floors[repeat.sourceFloorIndex];
-      return {
-        ...floor,
-        repeatOfFloorId: sourceFloor?.id,
-        repeatConfidence: Number(repeat.similarity.toFixed(3)),
-        repeatReviewed: false,
-      };
-    });
-
-    if (!floors.length)
-      throw Error("Create or detect at least one floor before auto-tagging meshes.");
-
-    const existingTags = p.scene.modelNodeTags ?? [];
-    const byKey = new Map<string, ModelNodeTag>();
-    for (const tag of existingTags) {
-      const cleaned = { ...tag };
-      if (cleaned.assignment === "auto") {
-        delete cleaned.floorId;
-        delete cleaned.assignment;
-        delete cleaned.confidence;
-      }
-      const keep =
-        Boolean(cleaned.floorId) ||
-        Boolean(cleaned.unit) ||
-        Boolean(cleaned.roomId) ||
-        Boolean(cleaned.semantic) ||
-        Boolean(cleaned.semanticAssignment) ||
-        cleaned.semanticConfidence !== undefined;
-      if (keep)
-        byKey.set(
-          `${cleaned.nodeName}\u0000${cleaned.occurrence}`,
-          cleaned,
-        );
-    }
-
-    let autoTagged = 0;
-    for (const assignment of smartAnalysis.nodeAssignments) {
-      if (
-        assignment.floorIndex === undefined ||
-        assignment.confidence < 0.62
-      )
-        continue;
-      const key = `${assignment.nodeName}\u0000${assignment.occurrence}`;
-      const current = byKey.get(key);
-      if (current?.assignment === "manual") continue;
-      const sourceFloor =
-        smartAnalysis.floorCandidates[assignment.floorIndex];
-      const worldElevation = sourceFloor.elevation * scale + modelY;
-      const targetFloor = [...floors].sort(
-        (left, right) =>
-          Math.abs(left.elevation - worldElevation) -
-          Math.abs(right.elevation - worldElevation),
-      )[0];
-      byKey.set(key, {
-        ...(current ?? {
-          nodeName: assignment.nodeName,
-          occurrence: assignment.occurrence,
-        }),
-        floorId: targetFloor.id,
-        assignment: "auto",
-        confidence: Number(assignment.confidence.toFixed(3)),
-      });
-      autoTagged += 1;
-    }
-
-    const generatedWalls = deriveModelWallGraph(
-      smartAnalysis,
-      floors,
-      p.scene.scale,
-      p.scene.modelTransform,
-    );
-    const retainedWalls = (p.scene.walls ?? []).filter(
-      (wall) => wall.origin !== "model-auto" || wall.reviewed,
-    );
-    const retainedIds = new Set(retainedWalls.map((wall) => wall.id));
-    const walls = [
-      ...retainedWalls,
-      ...generatedWalls.filter((wall) => !retainedIds.has(wall.id)),
-    ];
-
-    const autoRoomDraft =
-      p.scene.rooms.length === 0
-        ? deriveAutoRoomDrafts(
-            walls,
-            floors,
-            smartAnalysis.modelAssetId,
-          )
-        : { rooms: [], skippedFloors: [] as string[] };
-    const rooms =
-      p.scene.rooms.length > 0 ? p.scene.rooms : autoRoomDraft.rooms;
-
-    edit({
-      ...p,
-      scene: {
-        ...p.scene,
-        floors,
-        rooms,
-        walls,
-        modelNodeTags: [...byKey.values()],
-      },
-    });
-    const repeatedCount = floors.filter((floor) => floor.repeatOfFloorId).length;
-    const roomText = autoRoomDraft.rooms.length
-      ? ` · ${autoRoomDraft.rooms.length} closed-loop room draft${autoRoomDraft.rooms.length === 1 ? "" : "s"} generated`
+    const result = buildSmartSceneDraft(p, smartAnalysis);
+    edit({ ...p, scene: result.scene });
+    const roomText = result.summary.autoRooms
+      ? ` · ${result.summary.autoRooms} closed-loop room draft${result.summary.autoRooms === 1 ? "" : "s"} generated`
       : "";
-    const skippedText = autoRoomDraft.skippedFloors.length
-      ? ` · ${autoRoomDraft.skippedFloors.length} floor${autoRoomDraft.skippedFloors.length === 1 ? "" : "s"} kept for manual room review`
+    const skippedText = result.summary.skippedRoomFloors
+      ? ` · ${result.summary.skippedRoomFloors} floor${result.summary.skippedRoomFloors === 1 ? "" : "s"} kept for manual room review`
       : "";
     setMessage(
-      `Smart draft built · ${floors.length} floors · ${autoTagged} meshes auto-tagged · ${walls.length} parametric wall candidate${walls.length === 1 ? "" : "s"} · ${repeatedCount} repeated floor${repeatedCount === 1 ? "" : "s"} detected${roomText}${skippedText}. Ambiguous geometry remains review-only.`,
+      `Smart draft built · ${result.summary.floors} floors · ${result.summary.autoTagged} meshes auto-tagged · ${result.summary.walls} parametric wall candidate${result.summary.walls === 1 ? "" : "s"} · ${result.summary.repeatedFloors} repeated floor${result.summary.repeatedFloors === 1 ? "" : "s"} detected${roomText}${skippedText}. Ambiguous geometry remains review-only.`,
     );
   }
+
   async function analyzeAndApproveReadyOpenings(baseProject: Project = p) {
     if (!baseProject.scene.modelId)
       throw Error("Select the project model before analyzing doors/windows.");
