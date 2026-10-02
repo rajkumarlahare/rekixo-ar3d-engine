@@ -126,7 +126,8 @@ function supportAdjustment(item: SourceFusionItem) {
 export function chooseSourceAuthorities(
   items: readonly SourceFusionItem[],
 ): SourceAuthorityDecision[] {
-  return CAPABILITIES.flatMap((capability) => {
+  const decisions: SourceAuthorityDecision[] = [];
+  for (const capability of CAPABILITIES) {
     const candidates = items
       .filter((item) => item.capabilities.includes(capability))
       .map((item) => ({
@@ -141,31 +142,30 @@ export function chooseSourceAuthorities(
           right.score - left.score ||
           left.item.assetId.localeCompare(right.item.assetId),
       );
-    if (!candidates.length) return [];
+    if (!candidates.length) continue;
     const top = candidates[0];
     const tied = candidates.filter(
       (candidate) => candidate.score === top.score,
     );
-    if (tied.length > 1)
-      return [
-        {
-          capability,
-          status: "review" as const,
-          score: top.score,
-          reason: `Multiple equally authoritative ${capability} sources are attached; Rekixo will not silently choose one.`,
-        },
-      ];
-    return [
-      {
+    if (tied.length > 1) {
+      decisions.push({
         capability,
-        status: "selected" as const,
-        sourceAssetId: top.item.assetId,
-        sourceKind: top.item.kind,
+        status: "review",
         score: top.score,
-        reason: `${top.item.kind} is the strongest available ${capability} source under the six-file authority policy.`,
-      },
-    ];
-  });
+        reason: `Multiple equally authoritative ${capability} sources are attached; Rekixo will not silently choose one.`,
+      });
+      continue;
+    }
+    decisions.push({
+      capability,
+      status: "selected",
+      sourceAssetId: top.item.assetId,
+      sourceKind: top.item.kind,
+      score: top.score,
+      reason: `${top.item.kind} is the strongest available ${capability} source under the six-file authority policy.`,
+    });
+  }
+  return decisions;
 }
 
 function normalizedLabel(value: string) {
