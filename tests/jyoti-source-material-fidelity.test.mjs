@@ -29,7 +29,7 @@ test("viewer ships textures extracted from the supplied SKB as a lazy asset", ()
 });
 
 test("architectural model reapplies source textures to GLB material names", () => {
-  const realism = read("apps/public/src/viewer/referenceSourceV9Materials.ts");
+  const realism = read("packages/model-profiles/src/referenceMaterials.ts");
   assert.match(realism, /source-textures\.json\?url/);
   assert.match(realism, /sourceTextureData/);
   assert.match(realism, /TextureLoader/);
