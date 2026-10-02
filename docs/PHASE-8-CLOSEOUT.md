@@ -24,7 +24,7 @@ Exit gate:
 
 ## Phase 2 — Data lifecycle and deployment confidence
 
-Status: IN PROGRESS — Steps 1–2 complete; Step 3 security/operations rollout in review
+Status: COMPLETE — production hardening steps deployed and verified
 
 Finish the high-risk operational items:
 
@@ -32,9 +32,9 @@ Finish the high-risk operational items:
 - [done] add a committed lockfile and switch CI/deploy/provisioning to reproducible installs;
 - [done] run the full migration chain against a fresh local D1-compatible database in every normal test gate;
 - [done] add post-deploy read-only integrity checks for active immutable Building/Geo releases and their model bytes;
-- [tracked separately] enforce/verify main-branch merge protection outside repository code (GitHub issue #143);
-- [in review] introduce CSP in report-only mode first and verify it on Admin/Public before any enforcement;
-- [in review] document recovery/runbook steps for D1, R2, Worker, Building release and Geo release incidents;
+- [mitigated in code + tracked separately] production deploys now fail closed unless the pushed main commit is associated with a merged PR; native GitHub branch protection remains repository-admin issue #143;
+- [done] introduce CSP in report-only mode first and verify it on deployed Admin/Public before any enforcement;
+- [done] document recovery/runbook steps for D1, R2, Worker, Building release and Geo release incidents;
 - [deferred until dedicated isolated staging resources exist] destructive publish/rollback staging rehearsal. Production is never used as a mutation test fixture.
 
 Exit gate:
