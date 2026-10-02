@@ -239,3 +239,72 @@ test("Phase 2 auto room draft creates only closed-wall-loop rooms", () => {
   const openResult = autoRooms.deriveAutoRoomDrafts(open, [floor], "model");
   assert.equal(openResult.rooms.length, 0);
 });
+
+
+function storedZip(name, dataBytes) {
+  const encoder = new TextEncoder();
+  const nameBytes = encoder.encode(name);
+  const data = new Uint8Array(dataBytes);
+
+  const local = new Uint8Array(30 + nameBytes.length + data.length);
+  const localView = new DataView(local.buffer);
+  localView.setUint32(0, 0x04034b50, true);
+  localView.setUint16(8, 0, true);
+  localView.setUint32(18, data.length, true);
+  localView.setUint32(22, data.length, true);
+  localView.setUint16(26, nameBytes.length, true);
+  local.set(nameBytes, 30);
+  local.set(data, 30 + nameBytes.length);
+
+  const central = new Uint8Array(46 + nameBytes.length);
+  const centralView = new DataView(central.buffer);
+  centralView.setUint32(0, 0x02014b50, true);
+  centralView.setUint16(10, 0, true);
+  centralView.setUint32(20, data.length, true);
+  centralView.setUint32(24, data.length, true);
+  centralView.setUint16(28, nameBytes.length, true);
+  centralView.setUint32(42, 0, true);
+  central.set(nameBytes, 46);
+
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(8, 1, true);
+  endView.setUint16(10, 1, true);
+  endView.setUint32(12, central.length, true);
+  endView.setUint32(16, local.length, true);
+
+  return new Blob([local, central, end]);
+}
+
+test("Phase 2 recovers safe material textures from a ZIP-style SKB", async () => {
+  const blob = storedZip("materials/Brick/brick.jpg", [1, 2, 3, 4]);
+  const recovered = await sketch.extractSketchUpTextures({
+    id: "skb-texture",
+    projectId: "p",
+    name: "building.skb",
+    type: "application/octet-stream",
+    size: blob.size,
+    hash: "c".repeat(64),
+    blob,
+  });
+  assert.equal(recovered.issues.length, 0);
+  assert.equal(recovered.textures.length, 1);
+  assert.equal(recovered.textures[0].name, "brick.jpg");
+  assert.equal(recovered.textures[0].type, "image/jpeg");
+  assert.equal(recovered.textures[0].blob.size, 4);
+});
+
+test("Phase 2 builder exposes automatic SketchUp texture recovery", () => {
+  const builder = fs.readFileSync(
+    "apps/admin/src/studio/SmartProjectBuilder.tsx",
+    "utf8",
+  );
+  const studio = fs.readFileSync(
+    "apps/admin/src/studio/Studio.tsx",
+    "utf8",
+  );
+  assert.match(builder, /Recover SKB textures/);
+  assert.match(studio, /extractSketchUpTextures/);
+  assert.match(studio, /SketchUp material texture/);
+});
