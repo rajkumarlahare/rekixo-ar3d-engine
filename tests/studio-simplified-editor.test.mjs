@@ -41,6 +41,7 @@ test("Studio editor never traps the operator in full screen", () => {
 
 test("advanced editor capabilities stay available but collapsed by default", () => {
   const studio = read("apps/admin/src/studio/Studio.tsx");
+  const materials = read("apps/admin/src/studio/MaterialQuickEditor.tsx");
 
   for (const label of [
     "Project utilities",
@@ -52,12 +53,13 @@ test("advanced editor capabilities stay available but collapsed by default", () 
     "Model binding",
     "Room actions",
     "Model scale",
-    "Materials",
-    "Fine tune",
     "Review & versions",
   ])
     assert.match(studio, new RegExp(`<summary>${label}<\\/summary>`));
 
+  assert.match(materials, /<summary>Materials<\/summary>/);
+  assert.match(materials, /<summary>Fine tune material<\/summary>/);
+  assert.match(studio, /<MaterialQuickEditor/);
   assert.match(studio, /className="room-object-details"/);
   assert.match(studio, /view === "rooms" && showAssetShelf/);
   assert.match(studio, /showReferenceWorkspace \? "editor-core--alignment" : ""/);
