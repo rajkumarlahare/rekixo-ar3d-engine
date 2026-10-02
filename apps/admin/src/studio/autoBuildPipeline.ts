@@ -36,6 +36,11 @@ import {
   estimateCadModelRegistration,
 } from "./sourceRegistration";
 import { resolveCadFloorIndex } from "./architectureGraph";
+import {
+  applyRoomSemanticEvidence,
+  classifyRoomSemanticText,
+  type RoomSemanticEvidence,
+} from "./roomSemanticBinding";
 
 export interface AutoBuildPipelineOptions {
   processDwgArchitecture?: DwgArchitectureProcessor;
@@ -77,6 +82,11 @@ export interface AutoBuildPipelineResult {
     readyRepeatsPrepared: number;
     readyOpeningsPrepared: number;
     openingReviewRemaining: number;
+    roomLabelsApplied: number;
+    unitAnchorsMatched: number;
+    unitRoomsAssigned: number;
+    unitGroupsDetected: number;
+    roomSemanticReviewRemaining: number;
   };
   issues: string[];
 }
@@ -472,6 +482,205 @@ export async function runAutoBuildPipeline(
     }
   }
 
+
+  let roomLabelsApplied = 0;
+  let unitAnchorsMatched = 0;
+  let unitRoomsAssigned = 0;
+  let unitGroupsDetected = 0;
+  let roomSemanticReviewRemaining = 0;
+
+  const semanticCadAudits = analysis.cadAudits.filter(
+    (audit) =>
+      (audit.kind === "dwg" || audit.kind === "dxf") &&
+      audit.geometryReady &&
+      ((audit.textLabels?.length ?? 0) > 0 ||
+        Boolean(
+          audit.normalizedDwg?.inserts.some(
+            (entry) => entry.kind === "stair" || entry.kind === "lift",
+          ) ||
+            audit.normalizedDwg?.objects.some(
+              (entry) => entry.kind === "stair" || entry.kind === "lift",
+            ),
+        )),
+  );
+
+  if (semanticCadAudits.length === 1) {
+    const cadAudit = semanticCadAudits[0];
+    const floorIndex = resolveCadFloorIndex(
+      cadAudit,
+      next.scene.floors.length,
+    );
+    const cadRegistration =
+      floorIndex !== undefined
+        ? estimateCadModelRegistration(
+            analysis,
+            cadAudit,
+            floorIndex,
+            next.scene.scale,
+            next.scene.modelTransform,
+          )
+        : undefined;
+
+    if (
+      floorIndex !== undefined &&
+      cadRegistration?.compatible &&
+      !cadRegistration.ambiguous &&
+      cadRegistration.confidence >= 0.72 &&
+      next.scene.floors[floorIndex]
+    ) {
+      const floorId = next.scene.floors[floorIndex].id;
+      const evidence: RoomSemanticEvidence[] = [];
+      const sourceConfidence = Math.min(
+        0.98,
+        0.08 + cadRegistration.confidence * 0.9,
+      );
+
+      for (let index = 0; index < (cadAudit.textLabels ?? []).length; index += 1) {
+        const label = cadAudit.textLabels![index];
+        const semantic = classifyRoomSemanticText(label.text);
+        if (!semantic.roomName && !semantic.unitName) continue;
+        const point = applyCadRegistrationPoint(
+          label.point,
+          cadRegistration.sourceCentre,
+          cadRegistration.targetCentre,
+          cadRegistration.rotationDeg,
+        );
+        evidence.push({
+          id: `cad-text-${cadAudit.assetId}-${index + 1}`,
+          floorId,
+          point,
+          text: label.text,
+          sourceAssetId: cadAudit.assetId,
+          source: "cad-text",
+          confidence: sourceConfidence,
+          ...semantic,
+        });
+      }
+
+      const circulation = [
+        ...(cadAudit.normalizedDwg?.inserts ?? [])
+          .filter((entry) => entry.kind === "stair" || entry.kind === "lift")
+          .map((entry) => ({
+            id: entry.id,
+            kind: entry.kind,
+            point: entry.point,
+            confidence: entry.confidence,
+            text: entry.name,
+          })),
+        ...(cadAudit.normalizedDwg?.objects ?? [])
+          .filter((entry) => entry.kind === "stair" || entry.kind === "lift")
+          .flatMap((entry) => {
+            const point =
+              entry.point ??
+              (entry.bounds
+                ? ([
+                    (entry.bounds.min[0] + entry.bounds.max[0]) / 2,
+                    (entry.bounds.min[1] + entry.bounds.max[1]) / 2,
+                  ] as [number, number])
+                : undefined);
+            return point
+              ? [
+                  {
+                    id: entry.id,
+                    kind: entry.kind,
+                    point,
+                    confidence: entry.confidence,
+                    text: entry.sourceEntity,
+                  },
+                ]
+              : [];
+          }),
+      ];
+
+      for (const entry of circulation) {
+        const point = applyCadRegistrationPoint(
+          entry.point,
+          cadRegistration.sourceCentre,
+          cadRegistration.targetCentre,
+          cadRegistration.rotationDeg,
+        );
+        evidence.push({
+          id: `cad-object-${cadAudit.assetId}-${entry.id}`,
+          floorId,
+          point,
+          text: entry.text,
+          sourceAssetId: cadAudit.assetId,
+          source: "cad-object",
+          confidence: Math.min(
+            sourceConfidence,
+            entry.confidence * 0.85 + cadRegistration.confidence * 0.15,
+          ),
+          roomName: entry.kind === "lift" ? "Lift" : "Stair",
+        });
+      }
+
+      if (pdfPlanEvidence) {
+        const pdfRegistration = estimatePdfCadRegistration(
+          pdfPlanEvidence,
+          cadAudit,
+        );
+        if (
+          pdfRegistration.compatible &&
+          pdfRegistration.confidence >= 0.78
+        ) {
+          for (let index = 0; index < pdfPlanEvidence.spatialLabels.length; index += 1) {
+            const label = pdfPlanEvidence.spatialLabels[index];
+            if (label.kind !== "room" && label.kind !== "unit") continue;
+            const semantic = classifyRoomSemanticText(label.text);
+            if (!semantic.roomName && !semantic.unitName) continue;
+            const cadPoint = applyPdfCadPoint(
+              [
+                label.x * pdfPlanEvidence.aspectRatio,
+                label.y,
+              ],
+              pdfRegistration,
+            );
+            if (!cadPoint) continue;
+            const point = applyCadRegistrationPoint(
+              cadPoint,
+              cadRegistration.sourceCentre,
+              cadRegistration.targetCentre,
+              cadRegistration.rotationDeg,
+            );
+            evidence.push({
+              id: `pdf-text-${pdfPlanPage ?? 0}-${index + 1}`,
+              floorId,
+              point,
+              text: label.text,
+              source: "pdf-text",
+              confidence: Math.min(
+                0.94,
+                0.9 *
+                  Math.min(
+                    pdfRegistration.confidence,
+                    cadRegistration.confidence,
+                  ) +
+                  0.05,
+              ),
+              ...semantic,
+            });
+          }
+        }
+      }
+
+      const semantics = applyRoomSemanticEvidence(next.scene, evidence);
+      next = { ...next, scene: semantics.scene };
+      roomLabelsApplied = semantics.roomNamesApplied;
+      unitAnchorsMatched = semantics.unitAnchorsMatched;
+      unitRoomsAssigned = semantics.unitRoomsAssigned;
+      unitGroupsDetected = semantics.unitGroupsDetected;
+      roomSemanticReviewRemaining = semantics.reviewRemaining;
+    } else if ((cadAudit.textLabels?.length ?? 0) > 0) {
+      issues.push(
+        "CAD room/unit labels were detected, but alignment is not unambiguous enough to auto-assign room semantics.",
+      );
+    }
+  } else if (semanticCadAudits.length > 1) {
+    issues.push(
+      "Multiple CAD sources contain room/unit semantics. Rekixo kept semantic assignment review-only instead of mixing floors automatically.",
+    );
+  }
+
   const wallReview = markAutoReadyModelWalls(next.scene);
   next = { ...next, scene: wallReview.scene };
   const repeatReview = markAutoReadyRepeatedFloors(next.scene);
@@ -533,6 +742,11 @@ export async function runAutoBuildPipeline(
       readyRepeatsPrepared: repeatReview.prepared,
       readyOpeningsPrepared,
       openingReviewRemaining,
+      roomLabelsApplied,
+      unitAnchorsMatched,
+      unitRoomsAssigned,
+      unitGroupsDetected,
+      roomSemanticReviewRemaining,
     },
     issues: [...new Set([...issues, ...analysis.issues])],
   };
@@ -580,11 +794,18 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   const openings = summary.readyOpeningsPrepared
     ? ` · ${summary.readyOpeningsPrepared} opening${summary.readyOpeningsPrepared === 1 ? "" : "s"} ready for review`
     : "";
+  const semantics =
+    summary.roomLabelsApplied ||
+    summary.unitRoomsAssigned ||
+    summary.unitGroupsDetected
+      ? ` · semantics: ${summary.roomLabelsApplied} room label${summary.roomLabelsApplied === 1 ? "" : "s"} · ${summary.unitRoomsAssigned} room unit assignment${summary.unitRoomsAssigned === 1 ? "" : "s"} · ${summary.unitGroupsDetected} unit group${summary.unitGroupsDetected === 1 ? "" : "s"}`
+      : "";
   const review =
     result.issues.length +
     summary.openingReviewRemaining +
     summary.readyWallsPrepared +
     summary.readyRepeatsPrepared +
-    summary.readyOpeningsPrepared;
-  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${topology}${walls}${repeats}${openings}${web}${textures}${materialFusion}${materialStyles}${resolvedTextures}${dwg}${pdf}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
+    summary.readyOpeningsPrepared +
+    summary.roomSemanticReviewRemaining;
+  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${topology}${walls}${repeats}${openings}${semantics}${web}${textures}${materialFusion}${materialStyles}${resolvedTextures}${dwg}${pdf}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
 }
