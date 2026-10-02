@@ -14,6 +14,12 @@ export interface ModelProfileExteriorRuntime {
   dispose(): void;
 }
 
+export type ModelProfileMaterialEnhancer = (
+  root: THREE.Object3D,
+  renderer: THREE.WebGLRenderer,
+  referenceVisual?: boolean,
+) => boolean | void;
+
 export interface ModelProfileRuntime {
   id: string;
   exterior?: ModelProfileExteriorRuntime;
@@ -35,6 +41,6 @@ export function applyModelProfileExterior(
 
 export async function loadModelProfileMaterialEnhancer(
   _profile: ModelProfileRuntime | undefined,
-) {
+): Promise<ModelProfileMaterialEnhancer | undefined> {
   return undefined;
 }
