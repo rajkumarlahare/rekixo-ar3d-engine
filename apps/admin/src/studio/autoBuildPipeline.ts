@@ -41,6 +41,7 @@ import {
   classifyRoomSemanticText,
   type RoomSemanticEvidence,
 } from "./roomSemanticBinding";
+import { buildSourceAutoInterior } from "./autoInteriorDraft";
 
 export interface AutoBuildPipelineOptions {
   processDwgArchitecture?: DwgArchitectureProcessor;
@@ -87,6 +88,10 @@ export interface AutoBuildPipelineResult {
     unitRoomsAssigned: number;
     unitGroupsDetected: number;
     roomSemanticReviewRemaining: number;
+    autoFurniturePrepared: number;
+    autoFurnishedRooms: number;
+    autoFurnitureRepaired: number;
+    autoFurnitureSkippedRooms: number;
   };
   issues: string[];
 }
@@ -702,6 +707,9 @@ export async function runAutoBuildPipeline(
     openingReviewRemaining = workflow.reviewRemaining;
   }
 
+  const autoInterior = buildSourceAutoInterior(next.scene, id);
+  next = { ...next, scene: autoInterior.scene };
+
   validateProject(next);
 
   return {
@@ -747,6 +755,10 @@ export async function runAutoBuildPipeline(
       unitRoomsAssigned,
       unitGroupsDetected,
       roomSemanticReviewRemaining,
+      autoFurniturePrepared: autoInterior.created.length,
+      autoFurnishedRooms: autoInterior.furnishedRooms,
+      autoFurnitureRepaired: autoInterior.removedInvalidAutomatic,
+      autoFurnitureSkippedRooms: autoInterior.skippedRooms.length,
     },
     issues: [...new Set([...issues, ...analysis.issues])],
   };
@@ -800,6 +812,9 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
     summary.unitGroupsDetected
       ? ` · semantics: ${summary.roomLabelsApplied} room label${summary.roomLabelsApplied === 1 ? "" : "s"} · ${summary.unitRoomsAssigned} room unit assignment${summary.unitRoomsAssigned === 1 ? "" : "s"} · ${summary.unitGroupsDetected} unit group${summary.unitGroupsDetected === 1 ? "" : "s"}`
       : "";
+  const interior = summary.autoFurniturePrepared
+    ? ` · interior draft: ${summary.autoFurniturePrepared} item${summary.autoFurniturePrepared === 1 ? "" : "s"} across ${summary.autoFurnishedRooms} room${summary.autoFurnishedRooms === 1 ? "" : "s"}`
+    : "";
   const review =
     result.issues.length +
     summary.openingReviewRemaining +
@@ -807,5 +822,5 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
     summary.readyRepeatsPrepared +
     summary.readyOpeningsPrepared +
     summary.roomSemanticReviewRemaining;
-  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${topology}${walls}${repeats}${openings}${semantics}${web}${textures}${materialFusion}${materialStyles}${resolvedTextures}${dwg}${pdf}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
+  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${topology}${walls}${repeats}${openings}${semantics}${interior}${web}${textures}${materialFusion}${materialStyles}${resolvedTextures}${dwg}${pdf}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
 }
