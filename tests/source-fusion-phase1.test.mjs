@@ -25,6 +25,9 @@ const drsUrl = asUrl(
 const conflictsUrl = asUrl(
   compile("apps/admin/src/studio/sourceConflicts.ts"),
 );
+const crossSourceUrl = asUrl(
+  compile("apps/admin/src/studio/crossSourceFusion.ts"),
+);
 const dwgNormalizedUrl = asUrl(
   compile("apps/admin/src/studio/dwgNormalized.ts"),
 );
@@ -48,6 +51,10 @@ const sourceFusionCode = compile("apps/admin/src/studio/sourceFusion.ts")
   .replace(
     /from "\.\/sourceConflicts"/,
     `from ${JSON.stringify(conflictsUrl)}`,
+  )
+  .replace(
+    /from "\.\/crossSourceFusion"/,
+    `from ${JSON.stringify(crossSourceUrl)}`,
   );
 const { buildSourceFusionReport } = await import(asUrl(sourceFusionCode));
 
