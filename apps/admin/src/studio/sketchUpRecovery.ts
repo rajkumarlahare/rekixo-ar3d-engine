@@ -1,9 +1,13 @@
 import type { Asset, Project } from "./domain";
 import * as storage from "./storage";
-import { extractSketchUpTextures } from "./sketchUpArchive";
+import {
+  extractSketchUpMaterialDefinitions,
+  extractSketchUpTextures,
+} from "./sketchUpArchive";
 import { auditFbxSources } from "./sourceAudit";
 import {
   materialNameFromArchivePath,
+  type SketchUpMaterialStyleBinding,
   type SketchUpMaterialTextureBinding,
 } from "./sketchUpMaterialResolver";
 
@@ -84,6 +88,7 @@ export interface SketchUpTextureRecoveryResult {
   archives: number;
   recoveredFiles: number;
   materialBindings: SketchUpMaterialTextureBinding[];
+  materialStyles: SketchUpMaterialStyleBinding[];
 }
 
 function equivalentByHash(
@@ -107,6 +112,7 @@ export async function prepareSketchUpTextureRecovery(
     throw Error("Attach a SketchUp SKB/SKP source before recovering textures.");
 
   const recoveredRows: RecoveredTextureRow[] = [];
+  const materialStyles: SketchUpMaterialStyleBinding[] = [];
   const issues: string[] = [];
   const fbxAudits = await auditFbxSources([...files]);
   const expectedTextureNames = [
@@ -118,6 +124,23 @@ export async function prepareSketchUpTextureRecovery(
   ];
 
   for (const archive of archives) {
+    const definitions = await extractSketchUpMaterialDefinitions(archive);
+    issues.push(...definitions.issues);
+    for (const definition of definitions.definitions) {
+      materialStyles.push({
+        sourceArchiveId: archive.id,
+        archivePath: definition.archivePath,
+        materialName: definition.name,
+        ...(definition.baseColor ? { baseColor: definition.baseColor } : {}),
+        ...(definition.opacity !== undefined
+          ? { opacity: definition.opacity }
+          : {}),
+        ...(definition.xScale !== undefined ? { xScale: definition.xScale } : {}),
+        ...(definition.yScale !== undefined ? { yScale: definition.yScale } : {}),
+        confidence: 0.99,
+      });
+    }
+
     const recovered = await extractSketchUpTextures(archive);
     issues.push(...recovered.issues);
     for (const texture of recovered.textures) {
@@ -185,6 +208,7 @@ export async function prepareSketchUpTextureRecovery(
     archives: archives.length,
     recoveredFiles: recoveredRows.length,
     materialBindings,
+    materialStyles,
     nextProject: {
       ...project,
       assets: [
