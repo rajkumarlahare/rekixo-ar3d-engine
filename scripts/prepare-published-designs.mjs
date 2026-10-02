@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 const out = path.resolve("apps/admin/dist/published");
 await fs.mkdir(out, { recursive: true });
 const catalog = [];
-for (const name of await fs.readdir("published")) {
+for (const name of await fs.readdir("published").catch(() => [])) {
   if (!name.endsWith(".json")) continue;
   const data = JSON.parse(
     await fs.readFile(path.join("published", name), "utf8"),
