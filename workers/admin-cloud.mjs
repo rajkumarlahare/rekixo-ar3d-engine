@@ -98,6 +98,80 @@ async function schemaReady(env) {
   }
 }
 
+async function deletionJobsSchemaReady(env) {
+  try {
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name='engine_deletion_jobs_3d'",
+    ).first();
+    return Number(row?.total || 0) === 1;
+  } catch {
+    return false;
+  }
+}
+
+function deletionJobProjects(row) {
+  let projects;
+  try {
+    projects = JSON.parse(String(row?.projects_json || "[]"));
+  } catch {
+    throw Error("Deletion job project snapshot is corrupted.");
+  }
+  if (
+    !Array.isArray(projects) ||
+    projects.some(
+      (project) =>
+        !project ||
+        typeof project !== "object" ||
+        !validProjectId(project.id) ||
+        !validProjectSlug(project.slug),
+    )
+  )
+    throw Error("Deletion job project snapshot is invalid.");
+  return projects.map((project) => ({
+    id: project.id,
+    slug: project.slug,
+    name: String(project.name || project.slug).slice(0, 200),
+    status: String(project.status || "archived").slice(0, 40),
+  }));
+}
+
+function deletionJobResponse(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    status: row.status,
+    expectedProjectCount: Number(row.expected_project_count || 0),
+    deletedProjects: Number(row.deleted_projects || 0),
+    deletedR2Objects: Number(row.deleted_r2_objects || 0),
+    lastError: row.last_error || undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function activeDeletionJob(env) {
+  if (!(await deletionJobsSchemaReady(env))) return null;
+  return env.DB.prepare(
+    `SELECT id,kind,status,actor_email,expected_project_count,projects_json,
+            deleted_projects,deleted_r2_objects,last_error,created_at,updated_at,completed_at
+       FROM engine_deletion_jobs_3d
+      WHERE kind='all-projects' AND status<>'completed'
+      ORDER BY created_at DESC
+      LIMIT 1`,
+  ).first();
+}
+
+async function deletionStatus(request, env) {
+  if (request.method !== "GET")
+    return json({ error: "Method not allowed." }, { status: 405 });
+  if (!(await deletionJobsSchemaReady(env)))
+    return json(
+      { error: "Project deletion job schema is not installed." },
+      { status: 503 },
+    );
+  return json({ job: deletionJobResponse(await activeDeletionJob(env)) });
+}
+
 function bytesFromBase64(value) {
   try {
     return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
@@ -590,6 +664,16 @@ async function listCloudProjects(env, url) {
 async function createCloudProject(request, env, actor) {
   if (!sameOrigin(request))
     return json({ error: "Invalid request origin." }, { status: 403 });
+  const deletionJob = await activeDeletionJob(env);
+  if (deletionJob)
+    return json(
+      {
+        error:
+          "Permanent project cleanup is in progress. Finish that cleanup before creating another project.",
+        deletionJob: deletionJobResponse(deletionJob),
+      },
+      { status: 409 },
+    );
   const body = await request.json().catch(() => ({}));
   const id = String(body.id || "").trim();
   const slug = String(body.slug || "").trim().toLowerCase();
@@ -2276,11 +2360,275 @@ async function deleteProjectRecords(env, project) {
   ]);
 }
 
+async function setDeletionJobState(
+  env,
+  jobId,
+  status,
+  deletedProjects,
+  deletedR2Objects,
+  lastError = null,
+  completedAt = null,
+) {
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    `UPDATE engine_deletion_jobs_3d
+        SET status=?,
+            deleted_projects=?,
+            deleted_r2_objects=?,
+            last_error=?,
+            updated_at=?,
+            completed_at=?
+      WHERE id=?`,
+  )
+    .bind(
+      status,
+      deletedProjects,
+      deletedR2Objects,
+      lastError,
+      now,
+      completedAt,
+      jobId,
+    )
+    .run();
+}
+
+async function runDeletionJob(env, actor, row) {
+  const projects = deletionJobProjects(row);
+  let deletedR2Objects = Number(row.deleted_r2_objects || 0);
+  let deletedProjects = Number(row.deleted_projects || 0);
+  let status = String(row.status || "running");
+
+  if (status === "running" || status === "cleanup_pending") {
+    try {
+      for (const project of projects) {
+        const removed = await deleteProjectOwnedObjects(env, project.slug);
+        deletedR2Objects += removed;
+        await setDeletionJobState(
+          env,
+          row.id,
+          "running",
+          deletedProjects,
+          deletedR2Objects,
+        );
+      }
+      status = "db_cleanup_pending";
+      await setDeletionJobState(
+        env,
+        row.id,
+        status,
+        deletedProjects,
+        deletedR2Objects,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown R2 cleanup failure.";
+      await setDeletionJobState(
+        env,
+        row.id,
+        "cleanup_pending",
+        deletedProjects,
+        deletedR2Objects,
+        message.slice(0, 500),
+      );
+      return json(
+        {
+          error:
+            "Project records are safely archived, but storage cleanup is incomplete. Retry permanent deletion to resume.",
+          retryable: true,
+          job: {
+            ...deletionJobResponse(row),
+            status: "cleanup_pending",
+            deletedProjects,
+            deletedR2Objects,
+            lastError: message.slice(0, 500),
+          },
+        },
+        { status: 503 },
+      );
+    }
+  }
+
+  if (status === "db_cleanup_pending") {
+    try {
+      for (const project of projects)
+        await deleteProjectRecords(env, project);
+      deletedProjects = projects.length;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown database cleanup failure.";
+      await setDeletionJobState(
+        env,
+        row.id,
+        "db_cleanup_pending",
+        deletedProjects,
+        deletedR2Objects,
+        message.slice(0, 500),
+      );
+      return json(
+        {
+          error:
+            "Storage cleanup finished, but database cleanup is incomplete. Retry permanent deletion to resume.",
+          retryable: true,
+          job: {
+            ...deletionJobResponse(row),
+            status: "db_cleanup_pending",
+            deletedProjects,
+            deletedR2Objects,
+            lastError: message.slice(0, 500),
+          },
+        },
+        { status: 503 },
+      );
+    }
+  }
+
+  const remaining = await env.DB.prepare(
+    "SELECT COUNT(*) AS total FROM projects_3d",
+  ).first();
+  if (Number(remaining?.total || 0) !== 0) {
+    const message = "Project cleanup did not reach an empty registry.";
+    await setDeletionJobState(
+      env,
+      row.id,
+      "db_cleanup_pending",
+      deletedProjects,
+      deletedR2Objects,
+      message,
+    );
+    return json(
+      {
+        error: message,
+        retryable: true,
+        job: {
+          ...deletionJobResponse(row),
+          status: "db_cleanup_pending",
+          deletedProjects,
+          deletedR2Objects,
+          lastError: message,
+        },
+      },
+      { status: 500 },
+    );
+  }
+
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE engine_deletion_jobs_3d
+          SET status='completed',
+              deleted_projects=?,
+              deleted_r2_objects=?,
+              last_error=NULL,
+              updated_at=?,
+              completed_at=?
+        WHERE id=?`,
+    ).bind(deletedProjects, deletedR2Objects, now, now, row.id),
+    env.DB.prepare(
+      `INSERT INTO engine_admin_audit
+        (id,actor_email,action,project_id,target_id,details_json,created_at)
+        VALUES (?,?,?,?,?,?,?)`,
+    ).bind(
+      crypto.randomUUID(),
+      actor.email,
+      "projects.all_deleted",
+      null,
+      row.id,
+      JSON.stringify({
+        jobId: row.id,
+        projectCount: projects.length,
+        deletedR2Objects,
+        slugs: projects.map((project) => project.slug),
+      }),
+      now,
+    ),
+  ]);
+
+  return json({
+    ok: true,
+    jobId: row.id,
+    status: "completed",
+    deletedProjects,
+    deletedR2Objects,
+    remainingProjects: 0,
+  });
+}
+
+async function startDeletionJob(env, actor, projectRows) {
+  const now = new Date().toISOString();
+  const jobId = crypto.randomUUID();
+  const snapshot = projectRows.map((project) => ({
+    id: project.id,
+    slug: project.slug,
+    name: project.name,
+    status: project.status,
+  }));
+  const statements = [
+    env.DB.prepare(
+      `INSERT INTO engine_deletion_jobs_3d
+        (id,kind,status,actor_email,expected_project_count,projects_json,
+         deleted_projects,deleted_r2_objects,last_error,created_at,updated_at)
+       VALUES (?,'all-projects','running',?,?,?,0,0,NULL,?,?)`,
+    ).bind(
+      jobId,
+      actor.email,
+      snapshot.length,
+      JSON.stringify(snapshot),
+      now,
+      now,
+    ),
+  ];
+
+  for (const project of projectRows) {
+    statements.push(
+      env.DB.prepare(
+        "UPDATE projects_3d SET status='archived',updated_at=? WHERE id=?",
+      ).bind(now, project.id),
+      env.DB.prepare(
+        "UPDATE experiences_3d SET lifecycle='archived',updated_at=? WHERE project_id=?",
+      ).bind(now, project.id),
+    );
+  }
+
+  statements.push(
+    env.DB.prepare(
+      `INSERT INTO engine_admin_audit
+        (id,actor_email,action,project_id,target_id,details_json,created_at)
+        VALUES (?,?,?,?,?,?,?)`,
+    ).bind(
+      crypto.randomUUID(),
+      actor.email,
+      "projects.delete_started",
+      null,
+      jobId,
+      JSON.stringify({
+        jobId,
+        projectCount: snapshot.length,
+        slugs: snapshot.map((project) => project.slug),
+      }),
+      now,
+    ),
+  );
+
+  await env.DB.batch(statements);
+  return env.DB.prepare(
+    `SELECT id,kind,status,actor_email,expected_project_count,projects_json,
+            deleted_projects,deleted_r2_objects,last_error,created_at,updated_at,completed_at
+       FROM engine_deletion_jobs_3d
+      WHERE id=?
+      LIMIT 1`,
+  ).bind(jobId).first();
+}
+
 async function hardDeleteAllProjects(request, env, actor) {
   if (request.method !== "DELETE")
     return json({ error: "Method not allowed." }, { status: 405 });
   if (!sameOrigin(request))
     return json({ error: "Invalid request origin." }, { status: 403 });
+  if (!(await deletionJobsSchemaReady(env)))
+    return json(
+      { error: "Project deletion job schema is not installed." },
+      { status: 503 },
+    );
 
   const body = await request.json().catch(() => ({}));
   if (String(body.confirm || "") !== "DELETE ALL PROJECTS")
@@ -2288,6 +2636,9 @@ async function hardDeleteAllProjects(request, env, actor) {
       { error: "Type DELETE ALL PROJECTS to confirm permanent deletion." },
       { status: 400 },
     );
+
+  const existingJob = await activeDeletionJob(env);
+  if (existingJob) return runDeletionJob(env, actor, existingJob);
 
   const rows = await env.DB.prepare(
     `SELECT id,slug,name,status
@@ -2310,47 +2661,29 @@ async function hardDeleteAllProjects(request, env, actor) {
       { status: 409 },
     );
 
-  let deletedR2Objects = 0;
-  for (const project of projectRows)
-    deletedR2Objects += await deleteProjectOwnedObjects(env, project.slug);
+  if (projectRows.length === 0)
+    return json({
+      ok: true,
+      status: "completed",
+      deletedProjects: 0,
+      deletedR2Objects: 0,
+      remainingProjects: 0,
+    });
 
-  for (const project of projectRows)
-    await deleteProjectRecords(env, project);
-
-  const remaining = await env.DB.prepare(
-    "SELECT COUNT(*) AS total FROM projects_3d",
-  ).first();
-  if (Number(remaining?.total || 0) !== 0)
+  let job;
+  try {
+    job = await startDeletionJob(env, actor, projectRows);
+  } catch (error) {
+    const concurrent = await activeDeletionJob(env);
+    if (concurrent) return runDeletionJob(env, actor, concurrent);
+    throw error;
+  }
+  if (!job)
     return json(
-      { error: "Project cleanup did not reach an empty registry." },
+      { error: "Permanent project cleanup job could not be created." },
       { status: 500 },
     );
-
-  const now = new Date().toISOString();
-  await env.DB.prepare(
-    `INSERT INTO engine_admin_audit
-      (id,actor_email,action,project_id,target_id,details_json,created_at)
-      VALUES (?,?,?,?,?,?,?)`,
-  ).bind(
-    crypto.randomUUID(),
-    actor.email,
-    "projects.all_deleted",
-    null,
-    "all-projects",
-    JSON.stringify({
-      projectCount: projectRows.length,
-      deletedR2Objects,
-      slugs: projectRows.map((project) => project.slug),
-    }),
-    now,
-  ).run();
-
-  return json({
-    ok: true,
-    deletedProjects: projectRows.length,
-    deletedR2Objects,
-    remainingProjects: 0,
-  });
+  return runDeletionJob(env, actor, job);
 }
 
 async function patchProject(request, env, actor, project) {
@@ -2454,6 +2787,19 @@ async function routeProjects(request, env, actor, url) {
   const project = await projectBySlug(env, slug);
   if (!project) return json({ error: "Cloud project not found." }, { status: 404 });
 
+  if (request.method !== "GET") {
+    const deletionJob = await activeDeletionJob(env);
+    if (deletionJob)
+      return json(
+        {
+          error:
+            "Permanent project cleanup is in progress. Project mutations are frozen until it finishes.",
+          deletionJob: deletionJobResponse(deletionJob),
+        },
+        { status: 409 },
+      );
+  }
+
   if (parts.length === 1)
     return patchProject(request, env, actor, project);
 
@@ -2521,6 +2867,9 @@ export async function handleCloudAdminRequest(request, env, url = new URL(reques
   const actor = await sessionFor(request, env);
   if (!actor)
     return json({ error: "Engine Admin sign-in required." }, { status: 401 });
+
+  if (url.pathname === `${CLOUD_PATH}/deletion-status`)
+    return deletionStatus(request, env);
 
   if (url.pathname === `${CLOUD_PATH}/projects` || url.pathname.startsWith(`${CLOUD_PATH}/projects/`))
     return routeProjects(request, env, actor, url);
