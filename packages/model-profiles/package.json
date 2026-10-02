@@ -1,0 +1,16 @@
+{
+  "name": "@rekixo/3d-model-profiles",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./reference-context": "./src/referenceContext.ts",
+    "./reference-exterior": "./src/referenceExterior.ts",
+    "./reference-materials": "./src/referenceMaterials.ts",
+    "./reference-source": "./src/referenceSourceRuntime.ts"
+  },
+  "dependencies": {
+    "three": "0.186.0"
+  }
+}
