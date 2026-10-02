@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "rekixo-3d-admin",
   "compatibility_date": "2026-10-02",
-  "main": "./workers/admin.mjs",
+  "main": "./workers/admin-entry.mjs",
   "workers_dev": false,
   "routes": [
     {
@@ -40,6 +40,7 @@
     {
       "class_name": "DwgProcessor",
       "image": "./services/dwg-processor/Dockerfile",
+      "image_build_context": ".",
       "instance_type": "basic",
       "max_instances": 2
     }
