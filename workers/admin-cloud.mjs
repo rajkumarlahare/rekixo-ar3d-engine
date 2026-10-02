@@ -3,7 +3,7 @@ import {
   buildAndActivateRelease,
   listProjectReleases,
 } from "./release-publish.mjs";
-import { assertDraftAssetKey, projectAssetPrefix } from "./storage-boundary.mjs";
+import { assertDraftAssetKey } from "./storage-boundary.mjs";
 import { validateStudioDraft } from "./studio-draft-validation.mjs";
 import { validProjectSlug } from "../shared/project-slug-policy.js";
 import { listGeoReleases } from "./geo-release-admin.mjs";
