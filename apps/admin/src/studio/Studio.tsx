@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { SnapshotHistory } from "@rekixo/3d-engine-core";
+import {
+  detectPlanFaces,
+  SnapshotHistory,
+  type PlanSegment,
+} from "@rekixo/3d-engine-core";
 import SceneCanvas, {
   type ModelMaterialSummary,
   type ModelNodeSummary,
   type RoomDrawResult,
+  type WallDrawResult,
   type TransformCommit,
   type TransformMode,
   type View,
@@ -38,6 +43,7 @@ import {
   type Room,
   type RoomPoint,
   type SceneAppearance,
+  type Wall,
 } from "./domain";
 import * as storage from "./storage";
 import * as cloud from "./cloud";
@@ -86,6 +92,7 @@ import {
   acceptReadyRepeatedFloors,
   approveReadyModelWalls,
 } from "./autoBuildingReview";
+import { linkWallsToRooms } from "./architectureGraph";
 import {
   suggestOpeningAssociations,
   type OpeningSuggestion,
@@ -165,6 +172,8 @@ export default function Studio() {
   const [roomMapAction, setRoomMapAction] =
     useState<RoomMapAction>("idle");
   const [roomMapSnap, setRoomMapSnap] = useState(true);
+  const [roomMapWallThickness, setRoomMapWallThickness] = useState(0.12);
+  const [roomMapWallHeight, setRoomMapWallHeight] = useState(2.8);
   const [roomSheetRows, setRoomSheetRows] = useState<RoomSheetRow[]>([]);
   const [roomSheetIssues, setRoomSheetIssues] = useState<string[]>([]);
   const [selectedRoomSheetKey, setSelectedRoomSheetKey] = useState("");
@@ -806,6 +815,7 @@ export default function Studio() {
     release = p.releases.find((r) => r.id === review),
     scene = release?.scene ?? p.scene,
     room = scene.rooms.find((r) => r.id === roomId),
+    selectedWall = (scene.walls ?? []).find((wall) => wall.id === selected),
     supersedingRoom = room ? findSupersedingReviewedRoom(scene, room) : undefined,
     legacyDraftFurnitureBlocked = Boolean(
       room &&
@@ -1510,6 +1520,187 @@ export default function Studio() {
     return 2.8;
   }
 
+  function commitMappedWall(result: WallDrawResult) {
+    const floorId = roomMapFloorId || p.scene.floors[0]?.id;
+    if (!floorId) {
+      setError("Create or detect a floor before drawing walls.");
+      return;
+    }
+    const wall: Wall = {
+      id: id(),
+      floorId,
+      roomIds: [],
+      start: [result.start[0], result.start[1]],
+      end: [result.end[0], result.end[1]],
+      thickness: Math.max(0.03, Math.min(1.2, result.thickness)),
+      height: Math.max(0.3, Math.min(20, result.height)),
+      reviewed: true,
+      origin: "manual",
+      confidence: 1,
+    };
+    const walls = linkWallsToRooms(
+      [...(p.scene.walls ?? []), wall],
+      p.scene.rooms,
+    );
+    const next: Project = {
+      ...p,
+      scene: { ...p.scene, walls },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      setSelected(wall.id);
+      setRoomId("");
+      setMessage(
+        `Wall added · ${result.length.toFixed(2)} m · ${wall.thickness.toFixed(2)} m thick · continue drawing`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Wall could not be added.",
+      );
+    }
+  }
+
+  function applySelectedWallSize() {
+    if (!selectedWall || selectedWall.origin !== "manual") return;
+    const next: Project = {
+      ...p,
+      scene: {
+        ...p.scene,
+        walls: (p.scene.walls ?? []).map((wall) =>
+          wall.id === selectedWall.id
+            ? {
+                ...wall,
+                thickness: Math.max(
+                  0.03,
+                  Math.min(1.2, roomMapWallThickness),
+                ),
+                height: Math.max(0.3, Math.min(20, roomMapWallHeight)),
+              }
+            : wall,
+        ),
+      },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      setMessage("Selected manual wall size updated.");
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Wall size update failed.",
+      );
+    }
+  }
+
+  function deleteSelectedWall() {
+    if (!selectedWall || selectedWall.origin !== "manual") return;
+    const next: Project = {
+      ...p,
+      scene: {
+        ...p.scene,
+        walls: (p.scene.walls ?? []).filter(
+          (wall) => wall.id !== selectedWall.id,
+        ),
+      },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      setSelected("");
+      setMessage("Manual wall deleted. Existing rooms were preserved.");
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Wall delete failed.",
+      );
+    }
+  }
+
+  function generateRoomsFromManualWalls() {
+    const floorId = roomMapFloorId || p.scene.floors[0]?.id;
+    if (!floorId) {
+      setError("Choose a floor before detecting closed rooms.");
+      return;
+    }
+    const manualWalls = (p.scene.walls ?? []).filter(
+      (wall) => wall.floorId === floorId && wall.origin === "manual",
+    );
+    const segments: PlanSegment[] = manualWalls.map((wall) => ({
+      id: wall.id,
+      start: [wall.start[0], wall.start[1]],
+      end: [wall.end[0], wall.end[1]],
+    }));
+    const faces = detectPlanFaces(segments, {
+      nodeMergeTolerance: 0.01,
+      minimumArea: 0.5,
+      maxSegments: 512,
+    });
+    if (!faces.length) {
+      setMessage(
+        "No closed wall loop detected yet. Connect wall endpoints to form a room boundary.",
+      );
+      return;
+    }
+
+    const floorRooms = p.scene.rooms.filter(
+      (candidate) => candidate.floorId === floorId,
+    );
+    const additions: Room[] = [];
+    for (const face of faces) {
+      const points = face.points.map(
+        ([x, z]) => [x, z] as RoomPoint,
+      );
+      const geometry = roomGeometryFromPolygon(points);
+      const duplicate = [...floorRooms, ...additions].some(
+        (candidate) =>
+          Math.hypot(candidate.x - geometry.x, candidate.z - geometry.z) <=
+            0.12 &&
+          Math.abs(roomArea(candidate) - face.area) <=
+            Math.max(0.1, face.area * 0.02),
+      );
+      if (duplicate) continue;
+      additions.push({
+        id: id(),
+        name: `Room ${p.scene.rooms.length + additions.length + 1}`,
+        unit: roomMapUnit.trim() || "Unit",
+        floorId,
+        ...geometry,
+        height: roomHeightForFloor(floorId),
+        color: "#cdbfa9",
+        source: `[manual-wall-face:${face.key}] Closed manual wall loop draft`,
+        verified: false,
+      });
+    }
+    if (!additions.length) {
+      setMessage(
+        "Closed wall rooms are already mapped on this floor; no duplicates were created.",
+      );
+      return;
+    }
+
+    const rooms = [...p.scene.rooms, ...additions];
+    const walls = linkWallsToRooms(p.scene.walls ?? [], rooms);
+    const next: Project = {
+      ...p,
+      scene: { ...p.scene, rooms, walls },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      setRoomId(additions[0].id);
+      setSelected(additions[0].id);
+      setRoomMapName(additions[0].name);
+      setMessage(
+        `${additions.length} closed room draft${additions.length === 1 ? "" : "s"} created from manual walls. Review names/dimensions before approval.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Closed wall rooms could not be generated.",
+      );
+    }
+  }
+
   function selectRoomSheetRow(row: RoomSheetRow) {
     const fallbackFloorId =
       roomMapFloorId || room?.floorId || p.scene.floors[0]?.id || "";
@@ -2029,6 +2220,17 @@ export default function Studio() {
 
   function select(key: string) {
     setSelected(key);
+    const wall = (scene.walls ?? []).find((entry) => entry.id === key);
+    if (wall) {
+      setRoomId("");
+      if (showRoomMapper) {
+        setRoomMapFloorId(wall.floorId);
+        setRoomMapWallThickness(wall.thickness);
+        setRoomMapWallHeight(wall.height);
+        setRoomMapAction("idle");
+      }
+      return;
+    }
     const r =
       scene.rooms.find((r) => r.id === key) ??
       scene.rooms.find(
@@ -4121,6 +4323,13 @@ export default function Studio() {
               floorId: roomMapFloorId,
               snap: roomMapSnap,
             }}
+            wallDraw={{
+              enabled: showRoomMapper && roomMapAction === "wall",
+              floorId: roomMapFloorId,
+              snap: roomMapSnap,
+              thickness: roomMapWallThickness,
+              height: roomMapWallHeight,
+            }}
             roomStamp={{
               enabled:
                 showRoomMapper &&
@@ -4173,6 +4382,7 @@ export default function Studio() {
             }}
             onTransformCommit={commitCanvasTransform}
             onRoomDraw={commitMappedRoom}
+            onWallDraw={commitMappedWall}
             onRoomPolygonDraw={commitMappedPolygon}
             onRoomPolygonChange={commitEditedPolygon}
             furniturePlacement={
@@ -4250,6 +4460,9 @@ export default function Studio() {
               action={roomMapAction}
               snap={roomMapSnap}
               selectedRoom={selected === room?.id ? room : undefined}
+              selectedWall={selectedWall}
+              wallThickness={roomMapWallThickness}
+              wallHeight={roomMapWallHeight}
               disabled={Boolean(review) || busy}
               onFloor={(floorId) => {
                 setRoomMapFloorId(floorId);
@@ -4261,7 +4474,10 @@ export default function Studio() {
                 const target = p.scene.floors.find(
                   (entry) => entry.id === floorId,
                 );
-                if (target) setSectionCutOffset(target.elevation + 1.5);
+                if (target) {
+                  setSectionCutOffset(target.elevation + 1.5);
+                  setRoomMapWallHeight(roomHeightForFloor(floorId));
+                }
               }}
               onUnit={setRoomMapUnit}
               onRoomName={setRoomMapName}
@@ -4269,6 +4485,15 @@ export default function Studio() {
               onSnap={setRoomMapSnap}
               onClone={cloneMappedRoom}
               onMirror={mirrorMappedRoom}
+              onWallThickness={(value) =>
+                setRoomMapWallThickness(Math.max(0.03, Math.min(1.2, value)))
+              }
+              onWallHeight={(value) =>
+                setRoomMapWallHeight(Math.max(0.3, Math.min(20, value)))
+              }
+              onWallApplySize={applySelectedWallSize}
+              onWallDelete={deleteSelectedWall}
+              onGenerateRoomsFromWalls={generateRoomsFromManualWalls}
               roomSheetRows={roomSheetRows}
               mappedRoomSheetKeys={mappedSheetKeys}
               selectedRoomSheetKey={selectedRoomSheetKey}
