@@ -96,20 +96,33 @@ step for publishing the Building Website.
 
 ## Migration phases
 
-### Phase 1 — architecture guardrails
+### Phase 1 — architecture guardrails ✅
 
-- Lock canonical Building and Geo route helpers.
-- Add shared Experience identity contracts.
-- Lock the Building-versus-Geo lifecycle in architecture documentation.
-- Add regression tests for route stability, Building release compatibility and
-  Platform resource isolation.
-- No database migration and no production behavior change.
+- Canonical Building and Geo route helpers are locked.
+- Shared Experience identity contracts are present.
+- Building-versus-Geo lifecycle and Platform no-touch boundaries are locked.
+- Regression tests protect route stability, Building release compatibility and
+  Engine-only production resources.
+- No database migration or production behavior change was made in Phase 1.
 
-### Phase 2 — additive Experience data model
+### Phase 2 — additive Experience data model ✅
 
-Add Engine-only additive migrations for Experience identity and future Geo release
-history. Do not rewrite applied migrations. Backfill/compatibility must treat all
-existing Engine projects as having a Building Experience.
+Migration `0024_experience_identity_v1.sql` adds Engine-owned
+`experiences_3d` identity without rewriting any existing Building release
+tables.
+
+- Every existing project is backfilled with one `building` Experience.
+- A DB trigger gives every future Engine project one Building Experience.
+- Existing Geo placement work is backfilled as an optional `geo` Experience.
+- Geo Experience source identity is pinned to an immutable Building release.
+- Cross-project source release attachment is blocked by DB triggers.
+- Authenticated Admin API supports listing Experiences and explicit Geo
+  Experience creation.
+- Existing Geo placement save self-registers/updates Geo Experience identity for
+  compatibility with the current mapper.
+- Project hard-delete removes Experience identity before restricted Building
+  release rows.
+- No Platform database, R2, route or deployment dependency is introduced.
 
 ### Phase 3 — project-centric Admin workspace
 
