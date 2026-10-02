@@ -2,6 +2,12 @@ import type { Asset } from "./domain";
 import type { FbxSourceAudit } from "./sourceAudit";
 import type { SmartProjectAnalysis } from "./projectAnalyzer";
 import type { RoomSheetRow } from "./roomSheet";
+import { inspectSketchUpArchive } from "./sketchUpArchive";
+import { inspectDwgEvidence } from "./dwgEvidence";
+import {
+  detectSourceFusionConflicts,
+  type SourceFusionConflict,
+} from "./sourceConflicts";
 
 export type SourceFusionKind =
   | "authoring-model"
@@ -62,6 +68,7 @@ export interface SourceFusionReport {
   evidenceOnlySources: number;
   needsConversionSources: number;
   reviewCount: number;
+  conflicts: SourceFusionConflict[];
   recommendedActions: string[];
 }
 
@@ -360,6 +367,144 @@ export async function buildSourceFusionReport(
     }
   }
 
+  for (const asset of files.filter((entry) => /\.dwg$/i.test(entry.name))) {
+    const inspection = await inspectDwgEvidence(asset);
+    const item = items.find((entry) => entry.assetId === asset.id);
+    if (!item) continue;
+    if (inspection.versionCode)
+      item.findings.push(
+        `${inspection.versionCode} · ${inspection.versionLabel ?? "DWG"}`,
+      );
+    if (inspection.aecTokens.length) {
+      item.findings.push(
+        `${inspection.aecTokens.length} architectural token${inspection.aecTokens.length === 1 ? "" : "s"} detected.`,
+      );
+      facts.push(
+        fact(
+          asset.id,
+          "dwg.architectural-tokens",
+          inspection.aecTokens,
+          0.62,
+          "Literal DWG binary text evidence; not decoded geometry",
+          "suggested",
+        ),
+      );
+    }
+    if (inspection.drawingTextHints.length)
+      facts.push(
+        fact(
+          asset.id,
+          "dwg.text-hints",
+          inspection.drawingTextHints,
+          0.55,
+          "Readable drawing strings found in DWG bytes",
+          "suggested",
+        ),
+      );
+    item.warnings.push(...inspection.issues);
+  }
+
+  for (const asset of files.filter((entry) => /\.(?:skb|skp)$/i.test(entry.name))) {
+    const inspection = await inspectSketchUpArchive(asset);
+    const item = items.find((entry) => entry.assetId === asset.id);
+    if (!item) continue;
+    if (inspection.zipLike) {
+      item.findings.push(
+        `${inspection.entryCount} SketchUp archive entr${inspection.entryCount === 1 ? "y" : "ies"} inspected.`,
+      );
+      if (inspection.materialDefinitionFiles.length)
+        item.findings.push(
+          `${inspection.materialDefinitionFiles.length} material definition file${inspection.materialDefinitionFiles.length === 1 ? "" : "s"} found.`,
+        );
+      if (inspection.textureFiles.length)
+        item.findings.push(
+          `${inspection.textureFiles.length} material texture file${inspection.textureFiles.length === 1 ? "" : "s"} found.`,
+        );
+      facts.push(
+        fact(
+          asset.id,
+          "sketchup.archive-summary",
+          [
+            `entries:${inspection.entryCount}`,
+            `materials:${inspection.materialDefinitionFiles.length}`,
+            `textures:${inspection.textureFiles.length}`,
+            `models:${inspection.modelFiles.length}`,
+          ],
+          0.95,
+          "ZIP central-directory inspection",
+        ),
+      );
+      if (inspection.textureFiles.length)
+        facts.push(
+          fact(
+            asset.id,
+            "sketchup.texture-files",
+            inspection.textureFiles.slice(0, 250),
+            0.95,
+            "SketchUp archive file table",
+          ),
+        );
+    }
+    item.warnings.push(...inspection.issues);
+  }
+
+  for (const asset of files.filter((entry) => /\.pdf$/i.test(entry.name))) {
+    if (asset.size < 8) continue;
+    const item = items.find((entry) => entry.assetId === asset.id);
+    if (!item) continue;
+    try {
+      const { inspectPdfPlans } = await import("./pdfPlanInspector");
+      const inspection = await inspectPdfPlans(asset);
+      const best = inspection.pages.find(
+        (page) => page.page === inspection.bestPage,
+      );
+      if (best) {
+        item.findings.push(
+          `PDF page ${best.page} is the strongest floor-plan candidate (score ${best.score}).`,
+        );
+        facts.push(
+          fact(
+            asset.id,
+            "pdf.plan-page",
+            best.page,
+            Math.min(0.95, 0.55 + best.score / 40),
+            "PDF text-layer floor-plan/room/dimension evidence",
+            "suggested",
+          ),
+        );
+        if (best.roomLabels.length)
+          facts.push(
+            fact(
+              asset.id,
+              "pdf.room-labels",
+              best.roomLabels,
+              0.72,
+              `PDF page ${best.page} text layer`,
+              "suggested",
+            ),
+          );
+        if (best.dimensionStrings.length)
+          facts.push(
+            fact(
+              asset.id,
+              "pdf.dimension-text",
+              best.dimensionStrings,
+              0.7,
+              `PDF page ${best.page} text layer`,
+              "suggested",
+            ),
+          );
+      }
+      item.warnings.push(...inspection.issues);
+    } catch (error) {
+      item.warnings.push(
+        error instanceof Error
+          ? `PDF plan inspection skipped: ${error.message}`
+          : "PDF plan inspection skipped.",
+      );
+    }
+  }
+
   const recommendedActions: string[] = [];
   const selected = analysis?.modelAssetId
     ? files.find((file) => file.id === analysis.modelAssetId)
@@ -377,6 +522,11 @@ export async function buildSourceFusionReport(
     recommendedActions.push(
       "Run the controlled SketchUp processor to recover component/material metadata.",
     );
+  const planFact = facts.find((entry) => entry.key === "pdf.plan-page");
+  if (planFact && typeof planFact.value === "number")
+    recommendedActions.push(
+      `Use PDF page ${planFact.value} as the first visual-alignment candidate.`,
+    );
   if (analysis?.floorCandidates.length)
     recommendedActions.push(
       "Review detected floor levels, then build the draft structure.",
@@ -386,17 +536,21 @@ export async function buildSourceFusionReport(
       "Use the parsed room sheet to place exact-size rooms with mouse/touch.",
     );
 
+  const conflicts = detectSourceFusionConflicts(files, items, facts, audits);
+
   return {
     createdAt: new Date().toISOString(),
     items,
     facts,
+    conflicts,
     readySources: items.filter((item) => item.support === "ready").length,
     partialSources: items.filter((item) => item.support === "partial").length,
     evidenceOnlySources: items.filter((item) => item.support === "evidence-only").length,
     needsConversionSources: items.filter((item) => item.support === "needs-conversion").length,
     reviewCount:
       items.reduce((sum, item) => sum + item.warnings.length, 0) +
-      (analysis?.issues.length ?? 0),
+      (analysis?.issues.length ?? 0) +
+      conflicts.length,
     recommendedActions,
   };
 }

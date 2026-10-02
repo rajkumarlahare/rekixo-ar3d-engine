@@ -5,6 +5,10 @@ export interface Floor {
   id: string;
   name: string;
   elevation: number;
+  /** Auto-detected repeated floor relationship. Undefined means unique/unclassified. */
+  repeatOfFloorId?: string;
+  repeatConfidence?: number;
+  repeatReviewed?: boolean;
 }
 export type RoomPoint = [number, number];
 export interface Room {
@@ -38,6 +42,21 @@ export interface Furniture {
   color: string;
   /** Optional provenance for engine-generated furniture. Undefined means user/imported furniture. */
   origin?: FurnitureOrigin;
+}
+export type WallOrigin = "model-auto" | "room-derived" | "cad-auto" | "manual";
+export interface Wall {
+  id: string;
+  floorId: string;
+  roomIds: string[];
+  start: RoomPoint;
+  end: RoomPoint;
+  thickness: number;
+  height: number;
+  reviewed: boolean;
+  origin: WallOrigin;
+  sourceNodeName?: string;
+  sourceOccurrence?: number;
+  confidence?: number;
 }
 export type OpeningKind = "door" | "window" | "opening";
 export interface Opening {
@@ -131,6 +150,7 @@ export interface Scene {
   floors: Floor[];
   rooms: Room[];
   furniture: Furniture[];
+  walls?: Wall[];
   openings?: Opening[];
   /** Source/authoring model used for analysis, mesh tags and Studio editing. */
   modelId?: string;
@@ -447,6 +467,44 @@ export function duplicateFloor(p: Project, floorId: string): Project {
       .filter((f) => remap.has(f.roomId))
       .map((f) => ({ ...f, id: id(), roomId: remap.get(f.roomId)! })),
   );
+  next.scene.walls ??= [];
+  next.scene.walls.push(
+    ...(p.scene.walls ?? [])
+      .filter((wall) => wall.floorId === floorId)
+      .map((wall) => ({
+        ...wall,
+        id: id(),
+        floorId: newFloor.id,
+        roomIds: wall.roomIds.flatMap((roomId) => {
+          const mapped = remap.get(roomId);
+          return mapped ? [mapped] : [];
+        }),
+        reviewed: false,
+        sourceNodeName: undefined,
+        sourceOccurrence: undefined,
+        confidence: wall.origin === "manual" ? wall.confidence : undefined,
+        origin: wall.origin === "manual" ? ("manual" as const) : ("room-derived" as const),
+      })),
+  );
+  next.scene.openings ??= [];
+  next.scene.openings.push(
+    ...(p.scene.openings ?? [])
+      .filter((opening) => opening.floorId === floorId)
+      .map((opening) => ({
+        ...opening,
+        id: id(),
+        floorId: newFloor.id,
+        roomIds: opening.roomIds.flatMap((roomId) => {
+          const mapped = remap.get(roomId);
+          return mapped ? [mapped] : [];
+        }),
+        reviewed: false,
+        sourceNodeName: undefined,
+        sourceOccurrence: undefined,
+        confidence: undefined,
+      }))
+      .filter((opening) => opening.roomIds.length > 0),
+  );
   validateProject(next);
   return next;
 }
@@ -471,6 +529,7 @@ export function newProject(name: string): Project {
       floors: [{ id: id(), name: "Ground", elevation: 0 }],
       rooms: [],
       furniture: [],
+      walls: [],
       openings: [],
     },
   };
@@ -494,6 +553,8 @@ export function validateScene(s: Scene): void {
     s.rooms.length > 500 ||
     !Array.isArray(s.furniture) ||
     s.furniture.length > 2000 ||
+    (s.walls !== undefined &&
+      (!Array.isArray(s.walls) || s.walls.length > 10000)) ||
     (s.openings !== undefined &&
       (!Array.isArray(s.openings) || s.openings.length > 5000)) ||
     !number(s.scale, 0.0001, 10000)
@@ -503,6 +564,7 @@ export function validateScene(s: Scene): void {
     !unique(s.floors) ||
     !unique(s.rooms) ||
     !unique(s.furniture) ||
+    (s.walls !== undefined && !unique(s.walls)) ||
     (s.openings !== undefined && !unique(s.openings))
   )
     throw Error("Duplicate or invalid object IDs.");
@@ -621,8 +683,19 @@ export function validateScene(s: Scene): void {
     }
   }
   for (const f of s.floors)
-    if (!text(f.name) || !number(f.elevation, -500, 2000))
-      throw Error("Invalid floor elevation or name.");
+    if (
+      !text(f.name) ||
+      !number(f.elevation, -500, 2000) ||
+      (f.repeatOfFloorId !== undefined &&
+        (!text(f.repeatOfFloorId, 100) ||
+          f.repeatOfFloorId === f.id ||
+          !s.floors.some((candidate) => candidate.id === f.repeatOfFloorId))) ||
+      (f.repeatConfidence !== undefined &&
+        !number(f.repeatConfidence, 0, 1)) ||
+      (f.repeatReviewed !== undefined &&
+        typeof f.repeatReviewed !== "boolean")
+    )
+      throw Error("Invalid floor elevation, repeat relationship or name.");
   for (const r of s.rooms)
     if (
       !text(r.name) ||
@@ -665,6 +738,47 @@ export function validateScene(s: Scene): void {
       (r.mesh !== undefined && !text(r.mesh, 500))
     )
       throw Error("Check room dimensions, floor and measurement source.");
+  for (const wall of s.walls ?? []) {
+    const rooms = wall.roomIds.map((roomId) =>
+      s.rooms.find((room) => room.id === roomId),
+    );
+    if (
+      !text(wall.id, 100) ||
+      !s.floors.some((floor) => floor.id === wall.floorId) ||
+      !Array.isArray(wall.roomIds) ||
+      wall.roomIds.length > 2 ||
+      new Set(wall.roomIds).size !== wall.roomIds.length ||
+      rooms.some((room) => !room || room.floorId !== wall.floorId) ||
+      !Array.isArray(wall.start) ||
+      wall.start.length !== 2 ||
+      !number(wall.start[0], -10000, 10000) ||
+      !number(wall.start[1], -10000, 10000) ||
+      !Array.isArray(wall.end) ||
+      wall.end.length !== 2 ||
+      !number(wall.end[0], -10000, 10000) ||
+      !number(wall.end[1], -10000, 10000) ||
+      Math.hypot(
+        wall.end[0] - wall.start[0],
+        wall.end[1] - wall.start[1],
+      ) < 0.03 ||
+      !number(wall.thickness, 0.03, 5) ||
+      !number(wall.height, 0.3, 20) ||
+      typeof wall.reviewed !== "boolean" ||
+      !["model-auto", "room-derived", "cad-auto", "manual"].includes(
+        wall.origin,
+      ) ||
+      (wall.sourceNodeName !== undefined &&
+        !text(wall.sourceNodeName, 500)) ||
+      (wall.sourceOccurrence !== undefined &&
+        (!Number.isInteger(wall.sourceOccurrence) ||
+          wall.sourceOccurrence < 1 ||
+          wall.sourceOccurrence > 100000 ||
+          !wall.sourceNodeName)) ||
+      (wall.confidence !== undefined &&
+        !number(wall.confidence, 0, 1))
+    )
+      throw Error("Invalid parametric wall.");
+  }
   for (const opening of s.openings ?? []) {
     const rooms = opening.roomIds.map((roomId) =>
       s.rooms.find((room) => room.id === roomId),

@@ -18,6 +18,7 @@ interface Props {
   layers: ReferenceLayer[];
   modelTransform: ModelTransform;
   quickSetup?: QuickSourceSetup;
+  recommendedPdfPage?: number;
   transformMode: TransformMode;
   snap: boolean;
   disabled?: boolean;
@@ -62,6 +63,7 @@ export default function ReferenceWorkspace({
   layers,
   modelTransform,
   quickSetup,
+  recommendedPdfPage,
   transformMode,
   snap,
   disabled,
@@ -94,10 +96,17 @@ export default function ReferenceWorkspace({
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
   const [previewZoom, setPreviewZoom] = useState(1);
   const [previewExpanded, setPreviewExpanded] = useState(false);
-  const [pdfPage, setPdfPage] = useState(quickSetup?.alignment?.page ?? 1);
+  const [pdfPage, setPdfPage] = useState(
+    quickSetup?.alignment?.page ?? recommendedPdfPage ?? 1,
+  );
   const [preparingPdf, setPreparingPdf] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const imageRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    if (!quickSetup?.alignment?.page && recommendedPdfPage)
+      setPdfPage(recommendedPdfPage);
+  }, [quickSetup?.alignment?.page, recommendedPdfPage]);
 
   useEffect(() => {
     if (

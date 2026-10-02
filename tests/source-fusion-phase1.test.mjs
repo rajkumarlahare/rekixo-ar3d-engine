@@ -13,9 +13,29 @@ const compile = (path) =>
 const asUrl = (code) =>
   "data:text/javascript;base64," + Buffer.from(code).toString("base64");
 
-const { buildSourceFusionReport } = await import(
-  asUrl(compile("apps/admin/src/studio/sourceFusion.ts"))
+const sketchUrl = asUrl(
+  compile("apps/admin/src/studio/sketchUpArchive.ts"),
 );
+const dwgUrl = asUrl(
+  compile("apps/admin/src/studio/dwgEvidence.ts"),
+);
+const conflictsUrl = asUrl(
+  compile("apps/admin/src/studio/sourceConflicts.ts"),
+);
+const sourceFusionCode = compile("apps/admin/src/studio/sourceFusion.ts")
+  .replace(
+    /from "\.\/sketchUpArchive"/,
+    `from ${JSON.stringify(sketchUrl)}`,
+  )
+  .replace(
+    /from "\.\/dwgEvidence"/,
+    `from ${JSON.stringify(dwgUrl)}`,
+  )
+  .replace(
+    /from "\.\/sourceConflicts"/,
+    `from ${JSON.stringify(conflictsUrl)}`,
+  );
+const { buildSourceFusionReport } = await import(asUrl(sourceFusionCode));
 
 function asset(id, name, text = "") {
   const blob = new Blob([text]);

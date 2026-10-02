@@ -69,6 +69,16 @@ import {
   type SourceFusionReport,
 } from "./sourceFusion";
 import { prepareFbxWebModel } from "./fbxWebModel";
+import { buildSmartSceneDraft } from "./smartDraftBuilder";
+import {
+  autoBuildSummaryMessage,
+  runAutoBuildPipeline,
+} from "./autoBuildPipeline";
+import { prepareSketchUpTextureRecovery } from "./sketchUpRecovery";
+import {
+  acceptReadyRepeatedFloors,
+  approveReadyModelWalls,
+} from "./autoBuildingReview";
 import {
   suggestOpeningAssociations,
   type OpeningSuggestion,
@@ -401,13 +411,13 @@ export default function Studio() {
           : current,
       );
       setMessage(
-        `Jyoti interior auto-repaired · ${result.removed.length} misplaced removed · ${result.createdTypical.length + result.createdRepeated.length} correct items restored/repeated.`,
+        `Demo interior auto-repaired · ${result.removed.length} misplaced removed · ${result.createdTypical.length + result.createdRepeated.length} correct items restored/repeated.`,
       );
     } catch (reason) {
       setError(
         reason instanceof Error
           ? reason.message
-          : "Jyoti interior automatic repair could not be applied safely.",
+          : "Demo interior automatic repair could not be applied safely.",
       );
     }
   }, [
@@ -1195,7 +1205,7 @@ export default function Studio() {
 
   function prepareTypicalDemoInterior() {
     if (!profileDemoInteriorEnabled || !typicalFloorId) {
-      setError("Jyoti typical floor is not ready for demo interior automation.");
+      setError("Typical floor is not ready for demo interior automation.");
       return;
     }
     const result = buildTypicalFloorDemoInterior(p.scene, typicalFloorId, id);
@@ -2446,6 +2456,53 @@ export default function Studio() {
     );
   }
 
+  async function recoverSketchUpTextures() {
+    const result = await prepareSketchUpTextureRecovery(files, p);
+    if (!result.recoveredFiles) {
+      setMessage(
+        result.issues[0] ??
+          "No material texture file was found inside the SketchUp source.",
+      );
+      return;
+    }
+    if (!result.assets.length) {
+      setMessage("SketchUp textures are already attached to this project.");
+      return;
+    }
+    await persist(result.nextProject, result.assets);
+    setSmartAnalysis(undefined);
+    const issueText = result.issues.length
+      ? ` · ${result.issues.length} archive item${result.issues.length === 1 ? "" : "s"} skipped/reviewed`
+      : "";
+    setMessage(
+      `${result.assets.length} SketchUp material texture${result.assets.length === 1 ? "" : "s"} recovered automatically${issueText}.`,
+    );
+  }
+
+  function approveHighConfidenceWalls() {
+    const result = approveReadyModelWalls(p.scene);
+    if (!result.approved) {
+      setMessage("No additional high-confidence wall is ready for one-click approval.");
+      return;
+    }
+    edit({ ...p, scene: result.scene });
+    setMessage(
+      `${result.approved} high-confidence wall candidate${result.approved === 1 ? "" : "s"} approved. Lower-confidence walls remain review-only.`,
+    );
+  }
+
+  function acceptHighConfidenceRepeatedFloors() {
+    const result = acceptReadyRepeatedFloors(p.scene);
+    if (!result.accepted) {
+      setMessage("No additional high-confidence repeated floor is ready for one-click acceptance.");
+      return;
+    }
+    edit({ ...p, scene: result.scene });
+    setMessage(
+      `${result.accepted} repeated floor relationship${result.accepted === 1 ? "" : "s"} accepted. Lower-confidence repeats remain review-only.`,
+    );
+  }
+
   async function autoSetupDetectedSourcePack() {
     let setup = await detectQuickSourceSetup(files);
     if (!setup.profile || !setup.slug)
@@ -2579,100 +2636,30 @@ export default function Studio() {
     );
   }
 
+  async function buildAutomatically() {
+    const result = await runAutoBuildPipeline(p, files, sourceAudits);
+    await persist(result.project, result.assets);
+    setSmartAnalysis(result.analysis);
+    setView("building");
+    setMessage(autoBuildSummaryMessage(result));
+  }
+
   function buildSmartDraft() {
-    if (!smartAnalysis?.modelAssetId)
+    if (!smartAnalysis)
       throw Error("Analyze a selected GLB/FBX model before building the draft.");
-    if (!smartAnalysis.floorCandidates.length)
-      throw Error("No reliable floor structure was detected. Review the model manually.");
-
-    const hasAuthoredRooms = p.scene.rooms.length > 0;
-    const replaceFloorSkeleton =
-      !hasAuthoredRooms &&
-      p.scene.floors.length === 1 &&
-      !(p.scene.modelNodeTags?.length);
-    const modelY = p.scene.modelTransform?.y ?? 0;
-    const scale = p.scene.scale;
-    const suggestedElevations = smartAnalysis.floorCandidates
-      .map((candidate) => candidate.elevation * scale + modelY)
-      .sort((left, right) => left - right);
-    const floors = replaceFloorSkeleton
-      ? suggestedElevations.map((elevation, index) => ({
-          id: id(),
-          name: index === 0 ? "Ground" : `Floor ${index}`,
-          elevation: Number(elevation.toFixed(4)),
-        }))
-      : [...p.scene.floors].sort(
-          (left, right) => left.elevation - right.elevation,
-        );
-
-    if (!floors.length)
-      throw Error("Create or detect at least one floor before auto-tagging meshes.");
-
-    const existingTags = p.scene.modelNodeTags ?? [];
-    const byKey = new Map<string, ModelNodeTag>();
-    for (const tag of existingTags) {
-      const cleaned = { ...tag };
-      if (cleaned.assignment === "auto") {
-        delete cleaned.floorId;
-        delete cleaned.assignment;
-        delete cleaned.confidence;
-      }
-      const keep =
-        Boolean(cleaned.floorId) ||
-        Boolean(cleaned.unit) ||
-        Boolean(cleaned.roomId) ||
-        Boolean(cleaned.semantic) ||
-        Boolean(cleaned.semanticAssignment) ||
-        cleaned.semanticConfidence !== undefined;
-      if (keep)
-        byKey.set(
-          `${cleaned.nodeName}\u0000${cleaned.occurrence}`,
-          cleaned,
-        );
-    }
-
-    let autoTagged = 0;
-    for (const assignment of smartAnalysis.nodeAssignments) {
-      if (
-        assignment.floorIndex === undefined ||
-        assignment.confidence < 0.62
-      )
-        continue;
-      const key = `${assignment.nodeName}\u0000${assignment.occurrence}`;
-      const current = byKey.get(key);
-      if (current?.assignment === "manual") continue;
-      const sourceFloor =
-        smartAnalysis.floorCandidates[assignment.floorIndex];
-      const worldElevation = sourceFloor.elevation * scale + modelY;
-      const targetFloor = [...floors].sort(
-        (left, right) =>
-          Math.abs(left.elevation - worldElevation) -
-          Math.abs(right.elevation - worldElevation),
-      )[0];
-      byKey.set(key, {
-        ...(current ?? {
-          nodeName: assignment.nodeName,
-          occurrence: assignment.occurrence,
-        }),
-        floorId: targetFloor.id,
-        assignment: "auto",
-        confidence: Number(assignment.confidence.toFixed(3)),
-      });
-      autoTagged += 1;
-    }
-
-    edit({
-      ...p,
-      scene: {
-        ...p.scene,
-        floors,
-        modelNodeTags: [...byKey.values()],
-      },
-    });
+    const result = buildSmartSceneDraft(p, smartAnalysis);
+    edit({ ...p, scene: result.scene });
+    const roomText = result.summary.autoRooms
+      ? ` · ${result.summary.autoRooms} closed-loop room draft${result.summary.autoRooms === 1 ? "" : "s"} generated`
+      : "";
+    const skippedText = result.summary.skippedRoomFloors
+      ? ` · ${result.summary.skippedRoomFloors} floor${result.summary.skippedRoomFloors === 1 ? "" : "s"} kept for manual room review`
+      : "";
     setMessage(
-      `Smart draft built · ${floors.length} floors · ${autoTagged} meshes auto-tagged. Ambiguous/multi-floor meshes remain unassigned for visual review.`,
+      `Smart draft built · ${result.summary.floors} floors · ${result.summary.autoTagged} meshes auto-tagged · ${result.summary.walls} parametric wall candidate${result.summary.walls === 1 ? "" : "s"} · ${result.summary.repeatedFloors} repeated floor${result.summary.repeatedFloors === 1 ? "" : "s"} detected${roomText}${skippedText}. Ambiguous geometry remains review-only.`,
     );
   }
+
   async function analyzeAndApproveReadyOpenings(baseProject: Project = p) {
     if (!baseProject.scene.modelId)
       throw Error("Select the project model before analyzing doors/windows.");
@@ -3295,7 +3282,11 @@ export default function Studio() {
             void task(() => uploadSourcePack(selectedFiles))
           }
           onAnalyze={() => void task(analyzeSmartProject)}
+          onAutoBuild={() => void task(buildAutomatically)}
           onPrepareWebModel={() => void task(prepareSelectedWebModel)}
+          onRecoverSketchUpTextures={() => void task(recoverSketchUpTextures)}
+          onApproveReadyWalls={approveHighConfidenceWalls}
+          onAcceptRepeatedFloors={acceptHighConfidenceRepeatedFloors}
           onSelectModel={selectBuilderModel}
           onBuildDraft={() => {
             try {
@@ -3317,9 +3308,7 @@ export default function Studio() {
             if (p.scene.modelId) setView("building");
           }}
           onOpenSources={() => setWorkspace("sources")}
-          onAutoSetup={() => void task(autoSetupDetectedSourcePack)}
           onStartAlignment={startVisualAlignment}
-          quickSetup={quickSourceSetup}
         />
       )}
       {workspace === "overview" && (
@@ -4679,6 +4668,12 @@ export default function Studio() {
               layers={p.scene.referenceLayers ?? []}
               modelTransform={modelTransform}
               quickSetup={quickSourceSetup}
+              recommendedPdfPage={(() => {
+                const value = sourceFusion?.facts.find(
+                  (fact) => fact.key === "pdf.plan-page",
+                )?.value;
+                return typeof value === "number" ? value : undefined;
+              })()}
               transformMode={transformMode}
               snap={transformSnap}
               disabled={Boolean(review) || busy}
@@ -4722,7 +4717,7 @@ export default function Studio() {
             {profileDemoInteriorEnabled &&
               isolateFloorId === typicalFloorId &&
               !review && (
-                <div className="interior-auto-action" role="group" aria-label="Jyoti demo interior automation">
+                <div className="interior-auto-action" role="group" aria-label="Demo interior automation">
                   {demoInteriorIssues.length > 0 ? (
                     <>
                       <span>

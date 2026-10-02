@@ -187,6 +187,7 @@ function validateScene(scene, assetIds) {
     !scene.floors.length ||
     !uniqueIds(scene.rooms ?? [], 500) ||
     !uniqueIds(scene.furniture ?? [], 2000) ||
+    (scene.walls !== undefined && !uniqueIds(scene.walls, 10000)) ||
     (scene.openings !== undefined && !uniqueIds(scene.openings, 5000)) ||
     !number(scene.scale, 0.0001, 10000)
   )
@@ -201,7 +202,18 @@ function validateScene(scene, assetIds) {
     throw Error("Studio scene publish model asset is missing.");
 
   for (const floor of scene.floors)
-    if (!text(floor.name) || !number(floor.elevation, -500, 2000))
+    if (
+      !text(floor.name) ||
+      !number(floor.elevation, -500, 2000) ||
+      (floor.repeatOfFloorId !== undefined &&
+        (!text(floor.repeatOfFloorId, 100) ||
+          floor.repeatOfFloorId === floor.id ||
+          !scene.floors.some((candidate) => candidate.id === floor.repeatOfFloorId))) ||
+      (floor.repeatConfidence !== undefined &&
+        !number(floor.repeatConfidence, 0, 1)) ||
+      (floor.repeatReviewed !== undefined &&
+        typeof floor.repeatReviewed !== "boolean")
+    )
       throw Error("Invalid Studio floor.");
 
   const floors = new Map(scene.floors.map((floor) => [floor.id, floor]));
@@ -263,6 +275,43 @@ function validateScene(scene, assetIds) {
       !furnitureFits(room, item)
     )
       throw Error("Invalid Studio furniture placement.");
+  }
+
+  for (const wall of scene.walls ?? []) {
+    if (
+      !floors.has(wall.floorId) ||
+      !Array.isArray(wall.roomIds) ||
+      wall.roomIds.length > 2 ||
+      new Set(wall.roomIds).size !== wall.roomIds.length ||
+      wall.roomIds.some((roomId) => {
+        const room = rooms.get(roomId);
+        return !room || room.floorId !== wall.floorId;
+      }) ||
+      !Array.isArray(wall.start) ||
+      wall.start.length !== 2 ||
+      !number(wall.start[0], -10000, 10000) ||
+      !number(wall.start[1], -10000, 10000) ||
+      !Array.isArray(wall.end) ||
+      wall.end.length !== 2 ||
+      !number(wall.end[0], -10000, 10000) ||
+      !number(wall.end[1], -10000, 10000) ||
+      Math.hypot(
+        wall.end[0] - wall.start[0],
+        wall.end[1] - wall.start[1],
+      ) < 0.03 ||
+      !number(wall.thickness, 0.03, 5) ||
+      !number(wall.height, 0.3, 20) ||
+      typeof wall.reviewed !== "boolean" ||
+      !["model-auto", "room-derived", "cad-auto", "manual"].includes(wall.origin) ||
+      (wall.sourceNodeName !== undefined && !text(wall.sourceNodeName, 500)) ||
+      (wall.sourceOccurrence !== undefined &&
+        (!Number.isInteger(wall.sourceOccurrence) ||
+          wall.sourceOccurrence < 1 ||
+          wall.sourceOccurrence > 100000 ||
+          !wall.sourceNodeName)) ||
+      (wall.confidence !== undefined && !number(wall.confidence, 0, 1))
+    )
+      throw Error("Invalid Studio parametric wall.");
   }
 
   for (const opening of scene.openings ?? []) {
@@ -464,6 +513,23 @@ export function validateStudioDraft(draft, project) {
   return draft.assets;
 }
 
+function publicFloor(floor) {
+  return {
+    id: floor.id,
+    name: floor.name,
+    elevation: floor.elevation,
+    ...(floor.repeatReviewed === true && floor.repeatOfFloorId
+      ? {
+          repeatOfFloorId: floor.repeatOfFloorId,
+          ...(floor.repeatConfidence !== undefined
+            ? { repeatConfidence: floor.repeatConfidence }
+            : {}),
+          repeatReviewed: true,
+        }
+      : {}),
+  };
+}
+
 function publicRoom(room) {
   return {
     id: room.id,
@@ -479,6 +545,21 @@ function publicRoom(room) {
     color: room.color,
     source: room.verified ? "Published reviewed geometry." : "",
     verified: room.verified,
+  };
+}
+
+function publicWall(wall) {
+  return {
+    id: wall.id,
+    floorId: wall.floorId,
+    roomIds: [...wall.roomIds],
+    start: [...wall.start],
+    end: [...wall.end],
+    thickness: wall.thickness,
+    height: wall.height,
+    reviewed: wall.reviewed,
+    origin: wall.origin,
+    ...(wall.confidence !== undefined ? { confidence: wall.confidence } : {}),
   };
 }
 
@@ -536,9 +617,12 @@ export function publicStudioSnapshot(draft) {
         : {}),
       referenceLayers: [],
       modelNodeTags: [],
-      floors: structuredClone(scene.floors),
+      floors: (scene.floors ?? []).map(publicFloor),
       rooms: (scene.rooms ?? []).map(publicRoom),
       furniture: structuredClone(scene.furniture ?? []),
+      walls: (scene.walls ?? [])
+        .filter((wall) => wall?.reviewed === true)
+        .map(publicWall),
       openings: (scene.openings ?? [])
         .filter((opening) => opening?.reviewed === true)
         .map(publicOpening),

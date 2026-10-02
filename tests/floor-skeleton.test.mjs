@@ -34,7 +34,7 @@ const skeleton = [
 
 test("source floor skeleton adds only missing model-derived levels", () => {
   const input = scene();
-  const result = floors.applyFloorSkeleton(input, "jyoti-paradise", skeleton);
+  const result = floors.applyFloorSkeleton(input, "sample-project", skeleton);
   assert.equal(result.added, 3);
   assert.equal(result.floors.length, 4);
   assert.equal(result.missing, 0);
@@ -48,7 +48,7 @@ test("source floor skeleton adds only missing model-derived levels", () => {
 test("source floor skeleton is repeat-safe and tracks model scale/Y", () => {
   const first = floors.applyFloorSkeleton(
     { ...scene(), scale: 2, modelTransform: { x: 0, y: 1, z: 0, rotationY: 0 } },
-    "jyoti-paradise",
+    "sample-project",
     skeleton,
   );
   assert.deepEqual(
@@ -61,7 +61,7 @@ test("source floor skeleton is repeat-safe and tracks model scale/Y", () => {
       scale: 2,
       modelTransform: { x: 0, y: 1, z: 0, rotationY: 0 },
     },
-    "jyoti-paradise",
+    "sample-project",
     skeleton,
   );
   assert.equal(repeated.added, 0);
@@ -74,24 +74,25 @@ test("source skeleton never deletes existing manual floors", () => {
     { id: "ground", name: "Ground", elevation: 0 },
     { id: "manual", name: "Client mezzanine", elevation: 1.6 },
   ]);
-  const result = floors.applyFloorSkeleton(input, "jyoti-paradise", skeleton);
+  const result = floors.applyFloorSkeleton(input, "sample-project", skeleton);
   assert.ok(result.floors.some((floor) => floor.id === "manual"));
   assert.equal(result.floors.length, 5);
 });
 
-test("quick setup and Builder expose automatic floor preparation", () => {
-  const setup = fs.readFileSync("apps/admin/src/studio/sourcePackSetup.ts", "utf8");
+test("generic Smart Draft prepares model-derived floors without source profiles", () => {
+  const smartDraft = fs.readFileSync(
+    "apps/admin/src/studio/smartDraftBuilder.ts",
+    "utf8",
+  );
   const builder = fs.readFileSync(
     "apps/admin/src/studio/SmartProjectBuilder.tsx",
     "utf8",
   );
-  const studio = fs.readFileSync("apps/admin/src/studio/Studio.tsx", "utf8");
 
-  assert.match(setup, /floorSkeleton\?: readonly FloorSkeletonLevel\[\]/);
-  assert.match(setup, /applyFloorSkeleton/);
-  assert.match(setup, /floors: floorResult\.floors/);
-  assert.match(builder, /Source floor skeleton/);
-  assert.match(builder, /will be prepared by Auto setup/);
-  assert.match(studio, /floorSkeletonStatus/);
-  assert.match(studio, /model-derived source levels ready/);
+  assert.match(smartDraft, /analysis\.floorCandidates/);
+  assert.match(smartDraft, /suggestedElevations/);
+  assert.match(smartDraft, /detectRepeatedFloors/);
+  assert.match(builder, /Build automatically/);
+  assert.doesNotMatch(builder, /SOURCE LOCK DETECTED/);
+  assert.doesNotMatch(builder, /Exact SHA-256 source matches/);
 });

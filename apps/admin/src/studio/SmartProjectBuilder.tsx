@@ -3,9 +3,9 @@ import type { Asset, Project } from "./domain";
 import type { FbxSourceAudit } from "./sourceAudit";
 import type { SmartProjectAnalysis, SmartSourceRole } from "./projectAnalyzer";
 import type { OpeningSuggestion } from "./openingAssociator";
-import { floorSkeletonStatus } from "./floorSkeleton";
-import type { QuickSourceSetup } from "./sourcePackSetup";
 import type { SourceFusionReport } from "./sourceFusion";
+import { detectRepeatedFloors } from "./repeatedFloorDetector";
+import { autoBuildingReviewCounts } from "./autoBuildingReview";
 
 const ROLE_LABEL: Record<SmartSourceRole, string> = {
   model: "3D model",
@@ -41,7 +41,11 @@ export default function SmartProjectBuilder({
   onProjectMeta,
   onImportFiles,
   onAnalyze,
+  onAutoBuild,
   onPrepareWebModel,
+  onRecoverSketchUpTextures,
+  onApproveReadyWalls,
+  onAcceptRepeatedFloors,
   onSelectModel,
   onBuildDraft,
   onApplyArchitecturalCandidates,
@@ -49,9 +53,7 @@ export default function SmartProjectBuilder({
   onApproveReadyOpenings,
   onOpenEditor,
   onOpenSources,
-  onAutoSetup,
   onStartAlignment,
-  quickSetup,
 }: {
   project: Project;
   files: Asset[];
@@ -67,7 +69,11 @@ export default function SmartProjectBuilder({
   ) => void;
   onImportFiles: (files: File[]) => void;
   onAnalyze: () => void;
+  onAutoBuild: () => void;
   onPrepareWebModel: () => void;
+  onRecoverSketchUpTextures: () => void;
+  onApproveReadyWalls: () => void;
+  onAcceptRepeatedFloors: () => void;
   onSelectModel: (assetId: string) => void;
   onBuildDraft: () => void;
   onApplyArchitecturalCandidates: () => void;
@@ -75,9 +81,7 @@ export default function SmartProjectBuilder({
   onApproveReadyOpenings: () => void;
   onOpenEditor: () => void;
   onOpenSources: () => void;
-  onAutoSetup: () => void;
   onStartAlignment: () => void;
-  quickSetup: QuickSourceSetup;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -91,26 +95,13 @@ export default function SmartProjectBuilder({
       /\.fbx$/i.test(selectedModel.name) &&
       (!publishModel || !/\.glb$/i.test(publishModel.name)),
   );
-  const floorStatus = quickSetup.profile
-    ? floorSkeletonStatus(
-        project.scene,
-        quickSetup.profile,
-        quickSetup.floorSkeleton,
-      )
-    : undefined;
-  const quickSetupAuthoringModelReady =
-    !quickSetup.primaryModelId ||
-    project.scene.modelId === quickSetup.primaryModelId ||
-    (Boolean(quickSetup.publishModelId) &&
-      project.scene.modelId === quickSetup.publishModelId);
-  const quickSetupApplied =
-    Boolean(quickSetup.profile) &&
-    project.slug === quickSetup.slug &&
-    quickSetupAuthoringModelReady &&
-    (!quickSetup.publishModel ||
-      (Boolean(quickSetup.publishModelId) &&
-        project.scene.publishModelId === quickSetup.publishModelId)) &&
-    (!floorStatus || floorStatus.missing === 0);
+  const hasSketchUpSource = files.some((file) => /\.(?:skb|skp)$/i.test(file.name));
+  const hasPlanReference = files.some(
+    (file) =>
+      /\.pdf$/i.test(file.name) ||
+      file.type.startsWith("image/") ||
+      /\.(?:png|jpe?g|webp|tiff?)$/i.test(file.name),
+  );
   const draftBuilt =
     project.scene.floors.length > 1 &&
     Boolean(
@@ -124,6 +115,20 @@ export default function SmartProjectBuilder({
       count.set(source.role, (count.get(source.role) ?? 0) + 1);
     return [...count.entries()];
   }, [analysis]);
+  const repeatedFloorGroups = useMemo(
+    () => (analysis ? detectRepeatedFloors(analysis) : []),
+    [analysis],
+  );
+  const repeatedFloorCount = repeatedFloorGroups.reduce(
+    (sum, group) => sum + group.members.length,
+    0,
+  );
+
+  const autoReview = useMemo(
+    () => autoBuildingReviewCounts(project.scene),
+    [project.scene],
+  );
+
   const architecturalCounts = useMemo(() => {
     const rows = analysis?.architecturalCandidates ?? [];
     return {
@@ -322,18 +327,38 @@ export default function SmartProjectBuilder({
                     evidence और processing gap track होती है.
                   </small>
                 </div>
-                {needsWebModel ? (
-                  <button
-                    type="button"
-                    className="primary"
-                    disabled={busy}
-                    onClick={onPrepareWebModel}
-                  >
-                    Prepare web GLB
-                  </button>
-                ) : publishModel && /\.glb$/i.test(publishModel.name) ? (
-                  <span className="ops-pill ops-pill--ready">WEB MODEL READY</span>
-                ) : null}
+                <div className="builder-source-fusion-actions">
+                  {needsWebModel ? (
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={busy}
+                      onClick={onPrepareWebModel}
+                    >
+                      Prepare web GLB
+                    </button>
+                  ) : publishModel && /\.glb$/i.test(publishModel.name) ? (
+                    <span className="ops-pill ops-pill--ready">WEB MODEL READY</span>
+                  ) : null}
+                  {hasSketchUpSource && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={onRecoverSketchUpTextures}
+                    >
+                      Recover SKB textures
+                    </button>
+                  )}
+                  {hasPlanReference && project.scene.modelId && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={onStartAlignment}
+                    >
+                      Align floor plan →
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="builder-source-fusion-stats">
                 <span>Ready <b>{fusion.readySources}</b></span>
@@ -341,6 +366,7 @@ export default function SmartProjectBuilder({
                 <span>Evidence <b>{fusion.evidenceOnlySources}</b></span>
                 <span>Processor needed <b>{fusion.needsConversionSources}</b></span>
                 <span>Review <b>{fusion.reviewCount}</b></span>
+                <span>Conflicts <b>{fusion.conflicts.length}</b></span>
               </div>
               <div className="builder-source-fusion-list">
                 {fusion.items.map((item) => (
@@ -357,6 +383,18 @@ export default function SmartProjectBuilder({
                   </div>
                 ))}
               </div>
+              {fusion.conflicts.length > 0 && (
+                <details className="builder-draft-options builder-source-conflicts">
+                  <summary>
+                    Source review queue · {fusion.conflicts.length}
+                  </summary>
+                  {fusion.conflicts.map((conflict) => (
+                    <p key={conflict.id}>
+                      <b>{conflict.kind.replaceAll("-", " ")}</b> · {conflict.message}
+                    </p>
+                  ))}
+                </details>
+              )}
               {fusion.recommendedActions.length > 0 && (
                 <details className="builder-draft-options">
                   <summary>Next automatic processing</summary>
@@ -368,101 +406,6 @@ export default function SmartProjectBuilder({
             </div>
           )}
 
-          {quickSetup.profile && (
-            <div className="builder-source-lock" aria-label="Recognized project quick setup">
-              <div className="builder-source-lock-head">
-                <div>
-                  <span className="ops-eyebrow">SOURCE LOCK DETECTED</span>
-                  <strong>{quickSetup.name ?? "Recognized project"}</strong>
-                  <small>
-                    Exact SHA-256 source matches · {quickSetup.matchedCount}/{quickSetup.requiredCount}
-                  </small>
-                </div>
-                <div className="builder-source-lock-actions">
-                  <button
-                    type="button"
-                    className="primary"
-                    disabled={busy || quickSetupApplied}
-                    onClick={onAutoSetup}
-                  >
-                    {quickSetupApplied
-                      ? "Auto setup applied"
-                      : `Auto setup ${quickSetup.name ?? "project"}`}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy || !quickSetupApplied || !quickSetup.alignment}
-                    onClick={onStartAlignment}
-                  >
-                    Align floor plan →
-                  </button>
-                </div>
-              </div>
-              <div className="builder-source-lock-grid">
-                {quickSetup.publishModel ? (
-                  <div
-                    className={
-                      quickSetup.publishModelId &&
-                      project.scene.publishModelId === quickSetup.publishModelId
-                        ? "ready"
-                        : "missing"
-                    }
-                    title={quickSetup.publishModel.sha256}
-                  >
-                    <span>
-                      {quickSetup.publishModelId &&
-                      project.scene.publishModelId === quickSetup.publishModelId
-                        ? "✓"
-                        : "↓"}
-                    </span>
-                    <span>
-                      <b>Web publish model</b>
-                      <small>
-                        {quickSetup.publishModelId
-                          ? quickSetup.publishModel.name
-                          : `${quickSetup.publishModel.name} · Auto setup will attach verified GLB`}
-                      </small>
-                    </span>
-                  </div>
-                ) : null}
-                {quickSetup.floorSkeleton?.length ? (
-                  <div
-                    className={floorStatus?.missing ? "missing" : "ready"}
-                    title="Model-derived source-coordinate level bands; reviewable and not an as-built survey."
-                  >
-                    <span>{floorStatus?.missing ? "—" : "✓"}</span>
-                    <span>
-                      <b>Source floor skeleton</b>
-                      <small>
-                        {floorStatus?.matched ?? 0}/{quickSetup.floorSkeleton.length} levels ready
-                        {floorStatus?.missing
-                          ? ` · ${floorStatus.missing} will be prepared by Auto setup`
-                          : ""}
-                      </small>
-                    </span>
-                  </div>
-                ) : null}
-                {quickSetup.slots.map((slot) => (
-                  <div
-                    key={slot.key}
-                    className={slot.exact ? "ready" : "missing"}
-                    title={slot.asset?.hash ?? "Source not attached"}
-                  >
-                    <span>{slot.exact ? "✓" : "—"}</span>
-                    <span>
-                      <b>{slot.label}</b>
-                      <small>{slot.asset?.name ?? "Not attached yet"}</small>
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <p>
-                Rekixo source/authoring model, separate verified web GLB और
-                known source floor levels automatically तैयार करेगा. Raw source
-                files unchanged रहेंगी; customer publish FBX पर depend नहीं करेगा.
-              </p>
-            </div>
-          )}
           {modelCandidates.length > 0 && (
             <label className="builder-model-picker">
               Authoring / source 3D model
@@ -555,6 +498,15 @@ export default function SmartProjectBuilder({
                 <small>high-confidence mesh assignments</small>
               </div>
               <div>
+                <span>REPEATED</span>
+                <strong>{repeatedFloorCount || "—"}</strong>
+                <small>
+                  {repeatedFloorCount
+                    ? `${repeatedFloorGroups.length} typical-floor group${repeatedFloorGroups.length === 1 ? "" : "s"}`
+                    : "no confident repeat yet"}
+                </small>
+              </div>
+              <div>
                 <span>REVIEW</span>
                 <strong>{analysis.reviewAssignments + analysis.commonAssignments}</strong>
                 <small>manual confirmation candidates</small>
@@ -584,6 +536,54 @@ export default function SmartProjectBuilder({
                       </i>
                     </span>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {(draftBuilt ||
+              autoReview.readyWalls > 0 ||
+              autoReview.readyRepeats > 0 ||
+              autoReview.approvedWalls > 0 ||
+              autoReview.acceptedRepeats > 0) && (
+              <div className="builder-auto-review">
+                <div className="builder-architecture-head">
+                  <div>
+                    <b>Fast building review</b>
+                    <small>
+                      सिर्फ high-confidence wall और repeated-floor suggestions
+                      one-click में accept होंगी. बाकी items review में ही रहेंगी.
+                    </small>
+                  </div>
+                  <div className="builder-source-fusion-actions">
+                    <button
+                      type="button"
+                      disabled={busy || autoReview.readyWalls === 0}
+                      onClick={onApproveReadyWalls}
+                    >
+                      Approve {autoReview.readyWalls} ready walls
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy || autoReview.readyRepeats === 0}
+                      onClick={onAcceptRepeatedFloors}
+                    >
+                      Accept {autoReview.readyRepeats} repeated floors
+                    </button>
+                  </div>
+                </div>
+                <div className="builder-architecture-stats">
+                  <span>
+                    Approved walls <b>{autoReview.approvedWalls}</b>
+                  </span>
+                  <span>
+                    Wall review <b>{autoReview.wallReview}</b>
+                  </span>
+                  <span>
+                    Accepted repeats <b>{autoReview.acceptedRepeats}</b>
+                  </span>
+                  <span>
+                    Repeat review <b>{autoReview.repeatReview}</b>
+                  </span>
                 </div>
               </div>
             )}
@@ -802,6 +802,13 @@ export default function SmartProjectBuilder({
           <button
             type="button"
             className="primary"
+            disabled={busy || modelCandidates.length === 0}
+            onClick={onAutoBuild}
+          >
+            Build automatically
+          </button>
+          <button
+            type="button"
             disabled={
               draftBuilt ||
               busy ||
@@ -810,7 +817,7 @@ export default function SmartProjectBuilder({
             }
             onClick={onBuildDraft}
           >
-            {draftBuilt ? "Draft built ✓" : "Build smart draft"}
+            {draftBuilt ? "Draft built ✓" : "Build analyzed draft"}
           </button>
           <button type="button" disabled={busy} onClick={onOpenEditor}>
             Review visually

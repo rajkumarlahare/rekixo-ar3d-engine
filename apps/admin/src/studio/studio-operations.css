@@ -1210,7 +1210,8 @@
 
 
 /* Architectural source candidate review */
-.builder-architecture-review {
+.builder-architecture-review,
+.builder-auto-review {
   display: grid;
   gap: 10px;
   padding: 12px;
@@ -1488,6 +1489,17 @@
   border: 1px solid #cfdcda;
   border-radius: 13px;
   background: #f7fbfa;
+}
+
+.builder-source-fusion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.builder-source-fusion-actions button {
+  min-height: 34px;
 }
 
 .builder-source-fusion-stats {
