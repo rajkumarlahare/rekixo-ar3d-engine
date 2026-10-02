@@ -3320,9 +3320,7 @@ export default function Studio() {
             if (p.scene.modelId) setView("building");
           }}
           onOpenSources={() => setWorkspace("sources")}
-          onAutoSetup={() => void task(autoSetupDetectedSourcePack)}
           onStartAlignment={startVisualAlignment}
-          quickSetup={quickSourceSetup}
         />
       )}
       {workspace === "overview" && (
