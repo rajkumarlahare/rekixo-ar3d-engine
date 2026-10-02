@@ -413,7 +413,7 @@ export default function EngineDashboard() {
             <article>
               <span>RELEASE</span>
               <strong>{status?.project.status === "published" ? "Published" : "Draft"}</strong>
-              <small>{status?.project.slug ?? selectedSlug || "Select a project"}</small>
+              <small>{status?.project.slug || selectedSlug || "Select a project"}</small>
             </article>
           </section>
 
