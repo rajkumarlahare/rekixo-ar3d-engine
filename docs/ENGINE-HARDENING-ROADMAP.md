@@ -119,16 +119,15 @@ Status: COMPLETE — validated on main (PR #44, GitHub Actions run 36422064753)
 - no dependency on Platform UI/runtime code.
 
 ### Phase 8 — CI, deployment, performance and operations
-Status: PENDING
+Status: IN PROGRESS
 
-- fresh migration-chain integration test;
-- browser/WebGL E2E and visual regression;
-- bundle budgets and project-profile chunk checks;
-- lockfile + reproducible install;
-- Windows-safe CLI entry detection;
-- align deployment docs with actual workflow behavior;
-- clean stale Cloudflare resource metadata;
-- large-project performance work such as BVH/navmesh/collider layers.
+Phase 8 is being closed in three minimal reviewed slices so production behavior stays stable:
+
+1. production safety and correctness;
+2. data lifecycle and deployment confidence;
+3. performance and maintainability.
+
+The exact scope and exit gates are tracked in [Phase 8 Closeout Plan](./PHASE-8-CLOSEOUT.md).
 
 ## Tracked defect backlog
 
