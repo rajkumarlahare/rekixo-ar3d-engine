@@ -19,6 +19,9 @@ const drs = await import(
 const sketch = await import(
   asUrl(compile("apps/admin/src/studio/sketchUpArchive.ts")),
 );
+const pdfCoordinates = await import(
+  asUrl(compile("apps/admin/src/studio/pdfCoordinates.ts")),
+);
 
 function asset(id, name, body, type = "application/octet-stream") {
   const blob = body instanceof Blob ? body : new Blob([body], { type });
@@ -181,4 +184,76 @@ test("Phase 4 DRS dependencies remain provenance metadata when bytes are absent"
   assert.match(fusion, /resource bytes not present in the six-file pack/);
   assert.match(fusion, /cannot be reconstructed or published automatically/);
   assert.match(fusion, /DRS detail_Info room-center hints; not geometry truth/);
+});
+
+test("Phase 4 SketchUp material XML attributes recover real source appearance", async () => {
+  const xml = [
+    '<?xml version="1.0"?>',
+    '<mat:material xmlns:mat="urn:sketchup-material" colorRed="204" colorGreen="208" colorBlue="219" trans="0.5" useTrans="1" hasTexture="1">',
+    '  <mat:texture textureFilename="Marble Carrera Floor Tile.jpg" xScale="24" yScale="12" />',
+    "</mat:material>",
+  ].join("\n");
+  const result = await sketch.extractSketchUpMaterialDefinitions(
+    asset(
+      "skb-material",
+      "building.skb",
+      storedZip("Materials/[Carrara Marble]/Material.xml", xml),
+    ),
+  );
+
+  assert.equal(result.definitions.length, 1);
+  const material = result.definitions[0];
+  assert.equal(material.name, "Carrara Marble");
+  assert.equal(material.baseColor, "#ccd0db");
+  assert.equal(material.opacity, 0.5);
+  assert.equal(material.textureName, "Marble Carrera Floor Tile.jpg");
+  assert.equal(material.xScale, 24);
+  assert.equal(material.yScale, 12);
+});
+
+test("Phase 4 SketchUp disabled transparency does not invent opacity", async () => {
+  const xml = '<mat:material xmlns:mat="urn:sketchup-material" colorRed="255" colorGreen="255" colorBlue="255" trans="0.75" useTrans="0" />';
+  const result = await sketch.extractSketchUpMaterialDefinitions(
+    asset(
+      "skb-opaque",
+      "building.skb",
+      storedZip("Materials/[Opaque]/Material.xml", xml),
+    ),
+  );
+
+  assert.equal(result.definitions.length, 1);
+  assert.equal(result.definitions[0].baseColor, "#ffffff");
+  assert.equal(result.definitions[0].opacity, undefined);
+});
+
+test("Phase 4 PDF viewport conversion executes exactly once", () => {
+  let calls = 0;
+  const point = pdfCoordinates.viewportPoint(
+    {
+      convertToViewportPoint(x, y) {
+        calls += 1;
+        return [x * 2, y * 3];
+      },
+    },
+    4,
+    5,
+  );
+
+  assert.deepEqual(point, [8, 15]);
+  assert.equal(calls, 1);
+});
+
+test("Phase 4 DRS classifies distinct PBR map roles", () => {
+  assert.equal(
+    drs.classifyDrsResourceRole("textures/ground_ao.jpg"),
+    "ambientOcclusion",
+  );
+  assert.equal(
+    drs.classifyDrsResourceRole("textures/Stone_bump.png"),
+    "height",
+  );
+  assert.equal(
+    drs.classifyDrsResourceRole("textures/sign_emissive_color.png"),
+    "emissive",
+  );
 });

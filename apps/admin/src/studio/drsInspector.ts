@@ -3,8 +3,11 @@ import type { Asset } from "./domain";
 export type DrsResourceRole =
   | "basecolor"
   | "normal"
+  | "height"
   | "roughness"
   | "metalness"
+  | "ambientOcclusion"
+  | "emissive"
   | "opacity"
   | "texture"
   | "model"
@@ -85,17 +88,37 @@ function groupName(path: string) {
 export function classifyDrsResourceRole(path: string): DrsResourceRole {
   const lower = basename(path).toLowerCase();
   const ext = extension(path);
-  if (/base.?color|diffuse|albedo|(?:^|[_ -])color(?:[_ .-]|$)/.test(lower))
-    return "basecolor";
-  if (/normal|(?:^|[_ -])nrm(?:[_ .-]|$)|bump/.test(lower)) return "normal";
+  if (/normal|(?:^|[_ -])nrm(?:[_ .-]|$)/.test(lower)) return "normal";
+  if (/bump|height|displace(?:ment)?/.test(lower)) return "height";
   if (/rough/.test(lower)) return "roughness";
   if (/metalness|metallic/.test(lower)) return "metalness";
+  if (
+    /ambient.?occlusion|occlusion|(?:^|[_ -])ao(?:[_ .-]|$)/.test(lower)
+  )
+    return "ambientOcclusion";
+  if (/emissive|emission|glow/.test(lower)) return "emissive";
   if (/opacity|alpha|transparen/.test(lower)) return "opacity";
+  if (/base.?color|diffuse|albedo|(?:^|[_ -])color(?:[_ .-]|$)/.test(lower))
+    return "basecolor";
   if (["fbx", "obj", "glb", "gltf", "skp", "skb"].includes(ext))
     return "model";
   if (ext === "pak") return "package";
   if (ext === "bin") return "binary";
-  if (["jpg", "jpeg", "png", "webp", "bmp", "tif", "tiff", "exr", "hdr", "dds", "ktx2"].includes(ext))
+  if (
+    [
+      "jpg",
+      "jpeg",
+      "png",
+      "webp",
+      "bmp",
+      "tif",
+      "tiff",
+      "exr",
+      "hdr",
+      "dds",
+      "ktx2",
+    ].includes(ext)
+  )
     return "texture";
   return "other";
 }
