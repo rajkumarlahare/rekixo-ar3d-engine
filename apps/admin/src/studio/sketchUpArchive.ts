@@ -10,6 +10,21 @@ export interface SketchUpArchiveInspection {
   issues: string[];
 }
 
+export interface ExtractedSketchUpTexture {
+  archivePath: string;
+  name: string;
+  type: string;
+  blob: Blob;
+}
+
+interface ZipEntry {
+  name: string;
+  compressionMethod: number;
+  compressedSize: number;
+  uncompressedSize: number;
+  localHeaderOffset: number;
+}
+
 const decoder = new TextDecoder();
 
 function u16(view: DataView, offset: number) {
@@ -32,6 +47,142 @@ function findEndOfCentralDirectory(bytes: Uint8Array) {
   return -1;
 }
 
+function parseZipEntries(bytes: Uint8Array) {
+  const issues: string[] = [];
+  if (bytes.length < 22)
+    return { zipLike: false, entries: [] as ZipEntry[], issues: ["SketchUp source is too small to inspect."] };
+
+  const end = findEndOfCentralDirectory(bytes);
+  if (end < 0)
+    return {
+      zipLike: false,
+      entries: [] as ZipEntry[],
+      issues: [
+        "Source is not a ZIP-style SketchUp archive; native SketchUp decoding is still required.",
+      ],
+    };
+
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const totalEntries = u16(view, end + 10);
+  const centralSize = u32(view, end + 12);
+  const centralOffset = u32(view, end + 16);
+  if (
+    totalEntries > 10_000 ||
+    centralOffset + centralSize > bytes.length
+  )
+    return {
+      zipLike: true,
+      entries: [] as ZipEntry[],
+      issues: ["SketchUp archive directory is outside safe inspection limits."],
+    };
+
+  let offset = centralOffset;
+  const entries: ZipEntry[] = [];
+  for (let entry = 0; entry < totalEntries; entry += 1) {
+    if (offset + 46 > bytes.length || u32(view, offset) !== 0x02014b50) {
+      issues.push("SketchUp archive central directory is truncated.");
+      break;
+    }
+    const compressionMethod = u16(view, offset + 10);
+    const compressedSize = u32(view, offset + 20);
+    const uncompressedSize = u32(view, offset + 24);
+    const fileNameLength = u16(view, offset + 28);
+    const extraLength = u16(view, offset + 30);
+    const commentLength = u16(view, offset + 32);
+    const localHeaderOffset = u32(view, offset + 42);
+    const start = offset + 46;
+    const finish = start + fileNameLength;
+    if (finish > bytes.length) {
+      issues.push("SketchUp archive contains an invalid file name entry.");
+      break;
+    }
+    const name = decoder
+      .decode(bytes.subarray(start, finish))
+      .replaceAll("\\", "/");
+    if (name && !name.endsWith("/"))
+      entries.push({
+        name,
+        compressionMethod,
+        compressedSize,
+        uncompressedSize,
+        localHeaderOffset,
+      });
+    offset = finish + extraLength + commentLength;
+  }
+  return { zipLike: true, entries, issues };
+}
+
+function imageMime(name: string) {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".bmp")) return "image/bmp";
+  if (lower.endsWith(".tif") || lower.endsWith(".tiff")) return "image/tiff";
+  return "image/jpeg";
+}
+
+function textureEntries(entries: readonly ZipEntry[]) {
+  const image = /\.(?:png|jpe?g|webp|bmp|tiff?)$/i;
+  return entries.filter(
+    (entry) =>
+      image.test(entry.name) &&
+      /(?:material|texture|image|resource)/i.test(entry.name),
+  );
+}
+
+async function inflateRaw(bytes: Uint8Array) {
+  if (typeof DecompressionStream === "undefined")
+    throw Error("This browser cannot decompress SketchUp archive textures.");
+  const stream = new Blob([bytes])
+    .stream()
+    .pipeThrough(new DecompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function extractEntry(
+  archive: Uint8Array,
+  entry: ZipEntry,
+): Promise<Uint8Array> {
+  if (entry.uncompressedSize > 8 * 1024 * 1024)
+    throw Error(`SketchUp texture is too large to extract safely: ${entry.name}`);
+
+  const view = new DataView(
+    archive.buffer,
+    archive.byteOffset,
+    archive.byteLength,
+  );
+  const offset = entry.localHeaderOffset;
+  if (offset + 30 > archive.length || u32(view, offset) !== 0x04034b50)
+    throw Error(`SketchUp archive local header is invalid: ${entry.name}`);
+  const nameLength = u16(view, offset + 26);
+  const extraLength = u16(view, offset + 28);
+  const start = offset + 30 + nameLength + extraLength;
+  const end = start + entry.compressedSize;
+  if (start < 0 || end > archive.length)
+    throw Error(`SketchUp archive texture bytes are truncated: ${entry.name}`);
+  const compressed = archive.subarray(start, end);
+
+  let output: Uint8Array;
+  if (entry.compressionMethod === 0) output = new Uint8Array(compressed);
+  else if (entry.compressionMethod === 8) output = await inflateRaw(compressed);
+  else
+    throw Error(
+      `Unsupported SketchUp ZIP compression method ${entry.compressionMethod}: ${entry.name}`,
+    );
+
+  if (
+    entry.uncompressedSize &&
+    output.byteLength !== entry.uncompressedSize
+  )
+    throw Error(`SketchUp texture size verification failed: ${entry.name}`);
+  return output;
+}
+
+function safeLeaf(name: string) {
+  const leaf = name.replaceAll("\\", "/").split("/").pop()?.trim() ?? "";
+  return leaf.replace(/[^a-z0-9._ -]+/gi, "_").slice(0, 180);
+}
+
 export async function inspectSketchUpArchive(
   asset: Asset,
 ): Promise<SketchUpArchiveInspection> {
@@ -47,53 +198,10 @@ export async function inspectSketchUpArchive(
   if (!/\.(skb|skp)$/i.test(asset.name)) return result;
 
   const bytes = new Uint8Array(await asset.blob.arrayBuffer());
-  if (bytes.length < 22) {
-    result.issues.push("SketchUp source is too small to inspect.");
-    return result;
-  }
-  const end = findEndOfCentralDirectory(bytes);
-  if (end < 0) {
-    result.issues.push(
-      "Source is not a ZIP-style SketchUp archive; native SketchUp decoding is still required.",
-    );
-    return result;
-  }
-
-  result.zipLike = true;
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const totalEntries = u16(view, end + 10);
-  const centralSize = u32(view, end + 12);
-  const centralOffset = u32(view, end + 16);
-  if (
-    totalEntries > 10_000 ||
-    centralOffset + centralSize > bytes.length ||
-    centralOffset < 0
-  ) {
-    result.issues.push("SketchUp archive directory is outside safe inspection limits.");
-    return result;
-  }
-
-  let offset = centralOffset;
-  const names: string[] = [];
-  for (let entry = 0; entry < totalEntries; entry += 1) {
-    if (offset + 46 > bytes.length || u32(view, offset) !== 0x02014b50) {
-      result.issues.push("SketchUp archive central directory is truncated.");
-      break;
-    }
-    const fileNameLength = u16(view, offset + 28);
-    const extraLength = u16(view, offset + 30);
-    const commentLength = u16(view, offset + 32);
-    const start = offset + 46;
-    const finish = start + fileNameLength;
-    if (finish > bytes.length) {
-      result.issues.push("SketchUp archive contains an invalid file name entry.");
-      break;
-    }
-    const name = decoder.decode(bytes.subarray(start, finish)).replaceAll("\\", "/");
-    if (name && !name.endsWith("/")) names.push(name);
-    offset = finish + extraLength + commentLength;
-  }
-
+  const parsed = parseZipEntries(bytes);
+  result.zipLike = parsed.zipLike;
+  result.issues.push(...parsed.issues);
+  const names = parsed.entries.map((entry) => entry.name);
   result.entryCount = names.length;
   const image = /\.(?:png|jpe?g|webp|bmp|tiff?)$/i;
   result.materialDefinitionFiles = names.filter(
@@ -101,10 +209,8 @@ export async function inspectSketchUpArchive(
       /(?:^|\/)(?:material|materials)(?:\/|$)/i.test(name) &&
       /\.(?:xml|json|dat)$/i.test(name),
   );
-  result.textureFiles = names.filter(
-    (name) =>
-      image.test(name) &&
-      /(?:material|texture|image|resource)/i.test(name),
+  result.textureFiles = textureEntries(parsed.entries).map(
+    (entry) => entry.name,
   );
   result.modelFiles = names.filter(
     (name) => /(?:model\.dat|\.skp$|\.skb$)/i.test(name),
@@ -113,4 +219,56 @@ export async function inspectSketchUpArchive(
     (name) => image.test(name) && /(?:thumb|preview)/i.test(name),
   );
   return result;
+}
+
+export async function extractSketchUpTextures(
+  asset: Asset,
+): Promise<{ textures: ExtractedSketchUpTexture[]; issues: string[] }> {
+  if (!/\.(skb|skp)$/i.test(asset.name))
+    return { textures: [], issues: ["Choose a SketchUp SKB/SKP archive first."] };
+
+  const archive = new Uint8Array(await asset.blob.arrayBuffer());
+  const parsed = parseZipEntries(archive);
+  if (!parsed.zipLike)
+    return { textures: [], issues: parsed.issues };
+
+  const entries = textureEntries(parsed.entries).slice(0, 250);
+  const textures: ExtractedSketchUpTexture[] = [];
+  const issues = [...parsed.issues];
+  let total = 0;
+  const names = new Map<string, number>();
+
+  for (const entry of entries) {
+    if (total + entry.uncompressedSize > 32 * 1024 * 1024) {
+      issues.push(
+        "SketchUp texture extraction stopped at the 32 MB recovered-texture safety limit.",
+      );
+      break;
+    }
+    try {
+      const bytes = await extractEntry(archive, entry);
+      total += bytes.byteLength;
+      const base = safeLeaf(entry.name) || "texture.jpg";
+      const count = (names.get(base.toLowerCase()) ?? 0) + 1;
+      names.set(base.toLowerCase(), count);
+      const name =
+        count === 1
+          ? base
+          : base.replace(/(\.[^.]+)?$/, (suffix) => `-${count}${suffix ?? ""}`);
+      textures.push({
+        archivePath: entry.name,
+        name,
+        type: imageMime(base),
+        blob: new Blob([bytes], { type: imageMime(base) }),
+      });
+    } catch (error) {
+      issues.push(
+        error instanceof Error
+          ? error.message
+          : `Could not extract SketchUp texture: ${entry.name}`,
+      );
+    }
+  }
+
+  return { textures, issues };
 }
