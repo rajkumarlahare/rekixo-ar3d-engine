@@ -538,6 +538,24 @@ test("Phase 1 auto-build prepares openings without pretending they were human-re
   assert.equal(human.scene.openings.length, 1);
   assert.equal(human.scene.openings[0].reviewed, true);
   assert.equal(human.scene.openings[0].reviewState, "human_reviewed");
+
+  const automaticRerun = openingWorkflow.applyReadyOpeningWorkflow(
+    human.scene,
+    [candidate],
+    [suggestion],
+    () => "opening-3",
+    "auto",
+  );
+  assert.equal(automaticRerun.scene.openings.length, 1);
+  assert.equal(automaticRerun.scene.openings[0].reviewed, true);
+  assert.equal(
+    automaticRerun.scene.openings[0].reviewState,
+    "human_reviewed",
+  );
+  assert.equal(
+    automaticRerun.scene.modelNodeTags[0].semanticAssignment,
+    "manual",
+  );
 });
 
 test("Phase 2 fast review UI and public sanitization are fail-closed", () => {
