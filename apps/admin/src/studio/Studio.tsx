@@ -9,6 +9,8 @@ import SceneCanvas, {
 } from "./SceneCanvas";
 import ReferenceWorkspace from "./ReferenceWorkspace";
 import FloorRoomReview from "./FloorRoomReview";
+import FurnitureShelf from "./FurnitureShelf";
+import MaterialQuickEditor from "./MaterialQuickEditor";
 import VisualRoomMapper, {
   type RoomMapAction,
 } from "./VisualRoomMapper";
@@ -69,6 +71,10 @@ import {
   type SourceFusionReport,
 } from "./sourceFusion";
 import { prepareFbxWebModel } from "./fbxWebModel";
+import {
+  findFurniturePlacement,
+  furnitureFromPlacement,
+} from "./furniturePlacement";
 import { buildSmartSceneDraft } from "./smartDraftBuilder";
 import {
   autoBuildSummaryMessage,
@@ -174,6 +180,8 @@ export default function Studio() {
   const [sectionCutFlip, setSectionCutFlip] = useState(false);
   const [modelMaterials, setModelMaterials] = useState<ModelMaterialSummary[]>([]);
   const [selectedMaterial, setSelectedMaterial] = useState("");
+  const [furniturePlacementKind, setFurniturePlacementKind] =
+    useState<Kind>();
   const [sourceAudits, setSourceAudits] = useState<FbxSourceAudit[]>([]);
   const [sourceAuditBusy, setSourceAuditBusy] = useState(false);
   const [smartAnalysis, setSmartAnalysis] = useState<SmartProjectAnalysis>();
@@ -255,6 +263,7 @@ export default function Studio() {
     setSectionCutFlip(false);
     setModelMaterials([]);
     setSelectedMaterial("");
+    setFurniturePlacementKind(undefined);
     setSourceAudits([]);
     setSmartAnalysis(undefined);
     setSourceFusion(undefined);
@@ -926,9 +935,6 @@ export default function Studio() {
     materialOverride = p.scene.materialOverrides?.find(
       (entry) => entry.materialName === selectedMaterial,
     ),
-    materialSummary = modelMaterials.find(
-      (entry) => entry.name === selectedMaterial,
-    ),
     sourceTypeCounts = files.reduce<Record<string, number>>((counts, file) => {
       const extension = file.name.toLowerCase().split(".").pop() || "file";
       counts[extension] = (counts[extension] ?? 0) + 1;
@@ -1005,6 +1011,60 @@ export default function Studio() {
         ),
       },
     });
+  }
+  function placeFurnitureOnCanvas(placement: {
+    kind: Kind;
+    roomId: string;
+    worldX: number;
+    worldZ: number;
+  }) {
+    const targetRoom = p.scene.rooms.find(
+      (candidate) => candidate.id === placement.roomId,
+    );
+    if (!targetRoom) {
+      setError("Select a room before placing furniture.");
+      return;
+    }
+    const resolved = findFurniturePlacement(
+      targetRoom,
+      placement.kind,
+      placement.worldX,
+      placement.worldZ,
+    );
+    if (!resolved) {
+      setError(
+        `${catalog[placement.kind].name} does not fit safely at this room position. Try a more open area.`,
+      );
+      return;
+    }
+    const furniture = furnitureFromPlacement(
+      targetRoom,
+      placement.kind,
+      resolved,
+      id,
+    );
+    const next: Project = {
+      ...p,
+      scene: {
+        ...p.scene,
+        furniture: [...p.scene.furniture, furniture],
+      },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      setRoomId(targetRoom.id);
+      setSelected(furniture.id);
+      setView("rooms");
+      setFurniturePlacementKind(undefined);
+      setMessage(
+        `${catalog[placement.kind].name} placed in ${targetRoom.name}. Drag it to fine-tune or rotate it.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Furniture placement failed.",
+      );
+    }
   }
   function patchAppearance(change: Partial<SceneAppearance>) {
     edit({
@@ -4122,6 +4182,19 @@ export default function Studio() {
             onRoomDraw={commitMappedRoom}
             onRoomPolygonDraw={commitMappedPolygon}
             onRoomPolygonChange={commitEditedPolygon}
+            furniturePlacement={
+              furniturePlacementKind && room
+                ? {
+                    enabled: true,
+                    kind: furniturePlacementKind,
+                    roomId: room.id,
+                  }
+                : undefined
+            }
+            onFurniturePlace={placeFurnitureOnCanvas}
+            onFurniturePlacementCancel={() =>
+              setFurniturePlacementKind(undefined)
+            }
             onWalkRoomChange={(nextRoomId) => {
               const nextRoom = scene.rooms.find(
                 (candidate) => candidate.id === nextRoomId,
@@ -4277,47 +4350,21 @@ export default function Studio() {
                     : "Select a room to furnish"}
               </small>
             </div>
-            {Object.entries(catalog).map(([kind, c]) => (
-              <button
-                key={kind}
-                disabled={
-                  !room ||
-                  legacyDraftFurnitureBlocked ||
-                  Boolean(review) ||
-                  busy
-                }
-                onClick={() => {
-                  if (!room) return;
-                  const f: Furniture = {
-                    id: id(),
-                    kind: kind as Kind,
-                    roomId: room.id,
-                    x: 0,
-                    z: 0,
-                    rotation: 0,
-                    color: c.color,
-                  };
-                  const next = {
-                    ...p,
-                    scene: { ...p.scene, furniture: [...p.scene.furniture, f] },
-                  };
-                  try {
-                    validateProject(next);
-                    edit(next);
-                    setSelected(f.id);
-                    setView("rooms");
-                  } catch (e) {
-                    setError((e as Error).message);
-                  }
-                }}
-              >
-                <span className={`furniture-icon ${kind}`} />
-                {c.name}
-                <small>
-                  {c.width} × {c.depth} m
-                </small>
-              </button>
-            ))}
+            <FurnitureShelf
+              room={room}
+              disabled={
+                !room ||
+                legacyDraftFurnitureBlocked ||
+                Boolean(review) ||
+                busy
+              }
+              activeKind={furniturePlacementKind}
+              onPick={(kind) =>
+                setFurniturePlacementKind((current) =>
+                  current === kind ? undefined : kind,
+                )
+              }
+            />
           </div>
           )}
         </section>
@@ -4578,101 +4625,15 @@ export default function Studio() {
             </details>
           </fieldset>
           {view === "building" && (
-            <details className="editor-materials editor-inspector-details">
-              <summary>Materials</summary>
-              {modelMaterials.length ? (
-                <>
-                  <label>
-                    Model material
-                    <select
-                      value={selectedMaterial}
-                      onChange={(event) => setSelectedMaterial(event.target.value)}
-                      disabled={Boolean(review) || busy}
-                    >
-                      {modelMaterials.map((material) => (
-                        <option key={material.name} value={material.name}>
-                          {material.name} · {material.meshCount} mesh
-                          {material.meshCount === 1 ? "" : "es"}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {materialSummary && (
-                    <fieldset disabled={Boolean(review) || busy}>
-                      <div className="material-color-row">
-                        <label>
-                          Base color
-                          <input
-                            type="color"
-                            value={
-                              materialOverride?.baseColor ??
-                              materialSummary.baseColor
-                            }
-                            onChange={(event) =>
-                              patchMaterial({ baseColor: event.target.value })
-                            }
-                          />
-                        </label>
-                        <label>
-                          Emissive
-                          <input
-                            type="color"
-                            value={
-                              materialOverride?.emissive ??
-                              materialSummary.emissive
-                            }
-                            onChange={(event) =>
-                              patchMaterial({ emissive: event.target.value })
-                            }
-                          />
-                        </label>
-                      </div>
-                      {field(
-                        "Roughness",
-                        materialOverride?.roughness ??
-                          materialSummary.roughness,
-                        (roughness) => patchMaterial({ roughness }),
-                        0.05,
-                      )}
-                      {field(
-                        "Metalness",
-                        materialOverride?.metalness ??
-                          materialSummary.metalness,
-                        (metalness) => patchMaterial({ metalness }),
-                        0.05,
-                      )}
-                      {field(
-                        "Opacity",
-                        materialOverride?.opacity ?? materialSummary.opacity,
-                        (opacity) => patchMaterial({ opacity }),
-                        0.05,
-                      )}
-                      {field(
-                        "Emissive intensity",
-                        materialOverride?.emissiveIntensity ??
-                          materialSummary.emissiveIntensity,
-                        (emissiveIntensity) =>
-                          patchMaterial({ emissiveIntensity }),
-                        0.1,
-                      )}
-                      <button
-                        type="button"
-                        disabled={!materialOverride}
-                        onClick={resetMaterial}
-                      >
-                        Reset material override
-                      </button>
-                      <small>
-                        Runtime material override only; imported source bytes stay
-                        unchanged.
-                      </small>
-                    </fieldset>
-                  )}
-                </>
-              ) : (
-                <small>Load the building model to inspect editable runtime materials.</small>
-              )}
-            </details>
+            <MaterialQuickEditor
+              materials={modelMaterials}
+              selected={selectedMaterial}
+              override={materialOverride}
+              disabled={Boolean(review) || busy}
+              onSelect={setSelectedMaterial}
+              onPatch={patchMaterial}
+              onReset={resetMaterial}
+            />
           )}
           {view === "building" && (
             <section className="editor-lighting" aria-label="Lighting editor">
