@@ -26,41 +26,53 @@ export function evaluateSourcePackReadiness(
   files: readonly Asset[],
   fusion?: SourceFusionReport,
 ): SourcePackReadiness {
+  const fusedNames = (kind: string) =>
+    (fusion?.items ?? [])
+      .filter((item) => item.kind === kind)
+      .map((item) => item.name);
+  const roleSource = (kind: string, fallback: RegExp) =>
+    fusion ? fusedNames(kind) : roleFiles(files, fallback);
+
   const roles: SourcePackRoleStatus[] = [
     {
       key: "model",
       label: "3D model",
-      files: roleFiles(files, /\.(?:fbx|glb)$/i),
+      files: fusion
+        ? [...fusedNames("authoring-model"), ...fusedNames("web-model")]
+        : roleFiles(files, /\.(?:fbx|glb)$/i),
       present: false,
     },
     {
       key: "cad",
       label: "CAD",
-      files: roleFiles(files, /\.(?:dwg|dxf)$/i),
+      files: roleSource("cad", /\.(?:dwg|dxf)$/i),
       present: false,
     },
     {
       key: "sketchup",
       label: "SketchUp",
-      files: roleFiles(files, /\.(?:skp|skb)$/i),
+      files: roleSource("sketchup", /\.(?:skp|skb)$/i),
       present: false,
     },
     {
       key: "drawing",
       label: "Drawing/PDF",
-      files: roleFiles(files, /\.pdf$/i),
+      files: roleSource("drawing", /\.pdf$/i),
       present: false,
     },
     {
       key: "visual",
       label: "Visual reference",
-      files: roleFiles(files, /\.(?:png|jpe?g|webp|tiff?)$/i),
+      files: roleSource(
+        "visual-reference",
+        /\.(?:png|jpe?g|webp|tiff?)$/i,
+      ),
       present: false,
     },
     {
       key: "metadata",
       label: "Render metadata",
-      files: roleFiles(files, /\.(?:drs|json)$/i),
+      files: roleSource("metadata", /\.(?:drs|json)$/i),
       present: false,
     },
   ].map((role) => ({ ...role, present: role.files.length > 0 }));
@@ -77,7 +89,9 @@ export function evaluateSourcePackReadiness(
     const selected = project.scene.modelId
       ? files.find((file) => file.id === project.scene.modelId)
       : undefined;
-    if (modelRole.files.length > 1 && !selected)
+    const selectedModel =
+      selected && /\.(?:fbx|glb)$/i.test(selected.name) ? selected : undefined;
+    if (modelRole.files.length > 1 && !selectedModel)
       blockingIssues.push(
         "Multiple 3D models are attached. Select the authoring model once.",
       );
