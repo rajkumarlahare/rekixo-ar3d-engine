@@ -81,6 +81,19 @@ function dxfUnits(rows) {
   return undefined;
 }
 
+function explicitDrawingUnit(text) {
+  const normalized = text.toLowerCase().replace(/[^a-z0-9.]+/g, " ");
+  if (/\b(?:all )?dimensions? (?:are )?in mm\b/.test(normalized))
+    return { code: 4, name: "millimetre", metres: 0.001, basis: "drawing-text" };
+  if (/\b(?:all )?dimensions? (?:are )?in cm\b/.test(normalized))
+    return { code: 5, name: "centimetre", metres: 0.01, basis: "drawing-text" };
+  if (/\b(?:all )?dimensions? (?:are )?in metres?\b/.test(normalized))
+    return { code: 6, name: "metre", metres: 1, basis: "drawing-text" };
+  if (/\b(?:all )?dimensions? (?:are )?in feet\b/.test(normalized))
+    return { code: 2, name: "foot", metres: 0.3048, basis: "drawing-text" };
+  return undefined;
+}
+
 function semanticKind(layer, blockName = "") {
   const text = (layer + " " + blockName).toLowerCase().replace(/[^a-z0-9]+/g, " ");
   if (/\b(door|doors|gate|entry|shutter)\b/.test(text)) return "door";
@@ -155,6 +168,59 @@ function segmentConfidence(kind, entityType) {
   return Math.min(0.93, confidence);
 }
 
+function inferWallThicknesses(segments) {
+  const walls = segments.filter((segment) => segment.kind === "wall");
+  for (let leftIndex = 0; leftIndex < walls.length; leftIndex += 1) {
+    const left = walls[leftIndex];
+    const lx = left.end[0] - left.start[0];
+    const ly = left.end[1] - left.start[1];
+    const leftLength = Math.hypot(lx, ly);
+    if (leftLength < 0.4) continue;
+    const ux = lx / leftLength;
+    const uy = ly / leftLength;
+    let best;
+
+    for (let rightIndex = 0; rightIndex < walls.length; rightIndex += 1) {
+      if (leftIndex === rightIndex) continue;
+      const right = walls[rightIndex];
+      if (right.layer !== left.layer) continue;
+      const rx = right.end[0] - right.start[0];
+      const ry = right.end[1] - right.start[1];
+      const rightLength = Math.hypot(rx, ry);
+      if (rightLength < 0.4) continue;
+      const rux = rx / rightLength;
+      const ruy = ry / rightLength;
+      if (Math.abs(ux * rux + uy * ruy) < 0.995) continue;
+
+      const vx = right.start[0] - left.start[0];
+      const vy = right.start[1] - left.start[1];
+      const distance = Math.abs(vx * -uy + vy * ux);
+      if (distance < 0.06 || distance > 1.2) continue;
+
+      const project = (point) =>
+        (point[0] - left.start[0]) * ux + (point[1] - left.start[1]) * uy;
+      const a = project(right.start);
+      const b = project(right.end);
+      const overlap =
+        Math.max(
+          0,
+          Math.min(leftLength, Math.max(a, b)) - Math.max(0, Math.min(a, b)),
+        );
+      const overlapRatio = overlap / Math.min(leftLength, rightLength);
+      if (overlapRatio < 0.5) continue;
+
+      const score = overlapRatio - distance * 0.02;
+      if (!best || score > best.score) best = { distance, score };
+    }
+
+    if (best) {
+      left.thickness = Number(best.distance.toFixed(4));
+      left.thicknessBasis = "paired-parallel-wall-lines";
+      left.confidence = Math.max(left.confidence, 0.91);
+    }
+  }
+}
+
 export function normalizeDxfArchitecture(text, meta = {}) {
   const result = {
     format: "rekixo-cad-architecture",
@@ -186,14 +252,25 @@ export function normalizeDxfArchitecture(text, meta = {}) {
 
   const rows = pairs(text);
   const unitCode = dxfUnits(rows);
-  const unit = unitCode !== undefined ? UNIT[unitCode] : undefined;
+  const headerUnit = unitCode !== undefined ? UNIT[unitCode] : undefined;
+  const explicitUnit = headerUnit ? undefined : explicitDrawingUnit(text);
+  const unit = headerUnit ?? explicitUnit;
   if (!unit) {
     result.issues.push(
       "DWG conversion did not preserve a supported drawing unit. Geometry remains evidence-only until scale is reviewed.",
     );
     return result;
   }
-  result.units = { code: unitCode, name: unit.name, metresPerUnit: unit.metres };
+  result.units = {
+    code: unitCode ?? explicitUnit?.code,
+    name: unit.name,
+    metresPerUnit: unit.metres,
+    basis: headerUnit ? "dxf-insunits" : explicitUnit?.basis,
+  };
+  if (!headerUnit && explicitUnit)
+    result.issues.push(
+      "Drawing units were recovered from explicit drawing text because DXF INSUNITS was missing.",
+    );
 
   const entities = entityGroups(rows);
   const floorHints = new Set();
@@ -310,6 +387,16 @@ export function normalizeDxfArchitecture(text, meta = {}) {
 
   if (truncated)
     result.issues.push("CAD segment extraction stopped at the " + MAX_SEGMENTS + " segment safety limit.");
+
+  inferWallThicknesses(result.segments);
+  const unresolvedWallThickness = result.segments.filter(
+    (segment) => segment.kind === "wall" && segment.thickness === undefined,
+  ).length;
+  if (unresolvedWallThickness)
+    result.issues.push(
+      unresolvedWallThickness +
+        " wall segment(s) have no defensible thickness evidence; no thickness was invented.",
+    );
 
   if (result.segments.length) {
     const points = result.segments.flatMap((segment) => [segment.start, segment.end]);
