@@ -205,3 +205,26 @@ test("FBX web derivative implementation is wired for binary GLB and Studio limit
   assert.match(source, /browser-fbx-to-glb-v1/);
   assert.match(source, /Generated GLB exceeds the current 64 MB Studio asset limit/);
 });
+
+
+test("Phase 1 source fusion stays project-neutral and is wired into the guided builder", () => {
+  const fusion = fs.readFileSync(
+    "apps/admin/src/studio/sourceFusion.ts",
+    "utf8",
+  );
+  const builder = fs.readFileSync(
+    "apps/admin/src/studio/SmartProjectBuilder.tsx",
+    "utf8",
+  );
+  const studio = fs.readFileSync(
+    "apps/admin/src/studio/Studio.tsx",
+    "utf8",
+  );
+
+  assert.doesNotMatch(fusion, /studio-source-profiles|sourcePackSetup|sha256.*profile/i);
+  assert.match(builder, /Source Fusion/);
+  assert.match(builder, /Prepare web GLB/);
+  assert.match(studio, /buildSourceFusionReport/);
+  assert.match(studio, /prepareSelectedWebModel/);
+  assert.match(studio, /publishModelId: publishAsset\.id/);
+});
