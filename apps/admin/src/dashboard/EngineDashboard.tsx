@@ -247,7 +247,7 @@ export default function EngineDashboard() {
             type="button"
             onClick={() => setShowCreate(true)}
           >
-            + Create project
+            + Create 3D Project
           </button>
           <button
             className="engine-button"
@@ -260,19 +260,40 @@ export default function EngineDashboard() {
       </header>
 
       <section className="engine-home__intro">
-        <div>
-          <p className="engine-kicker">ENGINE WORKFLOW</p>
-          <h1>Project se live 3D tak sab ek jagah.</h1>
+        <div className="engine-home__intro-copy">
+          <p className="engine-kicker">START HERE</p>
+          <h1>Create → Edit → Map → Live</h1>
           <p>
-            Project choose karein, Design Studio me model/editing karein, 3D Jio Mapper
-            me real location set karein, phir published experience open karein.
+            Naya 3D project yahin create hota hai. Create ke baad wahi project Design Studio
+            me khulega; publish hone ke baad 3D Jio Mapper se real location set karein.
           </p>
+          <button
+            className="engine-button engine-button--primary engine-button--hero"
+            type="button"
+            onClick={() => setShowCreate(true)}
+          >
+            + Create New 3D Project
+          </button>
         </div>
         <div className="engine-home__steps" aria-label="3D project workflow">
-          <article><span>01</span><strong>Project</strong><small>Create / select</small></article>
-          <article><span>02</span><strong>Studio</strong><small>Model + rooms + publish</small></article>
-          <article><span>03</span><strong>3D Jio</strong><small>Location + heading</small></article>
-          <article><span>04</span><strong>Live</strong><small>Customer experience</small></article>
+          <button type="button" onClick={() => setShowCreate(true)}>
+            <span>01</span><strong>Create Project</strong><small>Name + location se start karein</small>
+          </button>
+          <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
+            <span>02</span><strong>Design Studio</strong><small>GLB, rooms, material, publish</small>
+          </a>
+          <a href={selectedSlug ? projectUrl("geo-mapper", selectedSlug) : "/3Dprojects/geo-mapper"}>
+            <span>03</span><strong>3D Jio Mapper</strong><small>Real location + heading + ground</small>
+          </a>
+          {liveUrl ? (
+            <a href={liveUrl} target="_blank" rel="noreferrer">
+              <span>04</span><strong>Open Live</strong><small>Customer-facing experience</small>
+            </a>
+          ) : (
+            <div>
+              <span>04</span><strong>Go Live</strong><small>Studio se publish karne ke baad</small>
+            </div>
+          )}
         </div>
       </section>
 
@@ -287,11 +308,20 @@ export default function EngineDashboard() {
         <aside className="engine-projects">
           <div className="engine-section-title">
             <div>
-              <p className="engine-kicker">PROJECTS</p>
+              <p className="engine-kicker">YOUR PROJECTS</p>
               <h2>{projects.length} Engine project{projects.length === 1 ? "" : "s"}</h2>
+              <small>Select karke usi project ka Studio / Jio / Live open karein.</small>
             </div>
-            <button type="button" onClick={() => setShowCreate(true)}>New</button>
           </div>
+
+          <button
+            className="engine-create-callout"
+            type="button"
+            onClick={() => setShowCreate(true)}
+          >
+            <b>＋ Create New Project</b>
+            <span>Naya project banane ke liye yahin click karein</span>
+          </button>
 
           <label className="engine-project-search">
             <span>Search project</span>
@@ -334,6 +364,7 @@ export default function EngineDashboard() {
         <div className="engine-workspace">
           <section className="engine-project-hero">
             <div>
+              <p className="engine-kicker">SELECTED PROJECT</p>
               <span className={`engine-status engine-status--${status?.project.status ?? "loading"}`}>
                 {status?.project.status ?? (selectedSlug ? "Loading" : "No project")}
               </span>
@@ -352,9 +383,9 @@ export default function EngineDashboard() {
                 href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}
                 aria-disabled={!selectedSlug}
               >
-                <span>Design Studio</span>
-                <strong>Open editor</strong>
-                <small>Model upload, rooms, materials, publish</small>
+                <span>01 · DESIGN STUDIO</span>
+                <strong>Edit this project</strong>
+                <small>Model upload, rooms, materials aur publish</small>
               </a>
               <a
                 className="engine-action engine-action--geo"
@@ -365,9 +396,9 @@ export default function EngineDashboard() {
                 }
                 aria-disabled={!selectedSlug}
               >
-                <span>3D Jio Mapper</span>
-                <strong>Place on map</strong>
-                <small>Satellite anchor, heading, ground, public demo</small>
+                <span>02 · 3D JIO MAPPER</span>
+                <strong>Set real location</strong>
+                <small>Satellite anchor, heading, ground aur public demo</small>
               </a>
               {liveUrl ? (
                 <a
@@ -376,15 +407,15 @@ export default function EngineDashboard() {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  <span>Published site</span>
-                  <strong>Open live</strong>
-                  <small>Customer-facing 3D experience</small>
+                  <span>03 · LIVE SITE</span>
+                  <strong>Open customer view</strong>
+                  <small>Published customer-facing 3D experience</small>
                 </a>
               ) : (
                 <div className="engine-action engine-action--disabled">
-                  <span>Published site</span>
-                  <strong>Not live yet</strong>
-                  <small>Publish from Design Studio first.</small>
+                  <span>03 · LIVE SITE</span>
+                  <strong>Publish required</strong>
+                  <small>Design Studio se publish karne ke baad live hoga.</small>
                 </div>
               )}
             </div>
@@ -500,6 +531,13 @@ export default function EngineDashboard() {
                 placeholder="City / project location"
               />
             </label>
+
+            <div className="engine-create-next">
+              <strong>Project create hone ke baad:</strong>
+              <span>1. Design Studio open hoga</span>
+              <span>2. Model upload/edit karke Publish karein</span>
+              <span>3. 3D Jio Mapper me real location set karein</span>
+            </div>
 
             {createError ? <p className="engine-create-error">{createError}</p> : null}
 

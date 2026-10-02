@@ -790,3 +790,306 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Golden Engine identity — primary navigation/actions follow the gold favicon.
+   Green remains reserved for semantic LIVE/READY success states. */
+.engine-home {
+  --engine-gold: #f4b942;
+  --engine-gold-strong: #d99a24;
+  --engine-gold-soft: #ffe3a3;
+  --engine-gold-wash: rgba(244, 185, 66, .12);
+  --engine-gold-wash-strong: rgba(244, 185, 66, .19);
+  --engine-gold-border: rgba(244, 185, 66, .38);
+  --engine-surface: #0a1019;
+  --engine-surface-2: #0d151f;
+  width: min(1460px, calc(100% - 32px));
+}
+
+.engine-home__brand > span {
+  border-color: var(--engine-gold-border);
+  background: linear-gradient(145deg, #3a290b, #1a1409);
+  color: var(--engine-gold);
+  box-shadow: inset 0 0 0 1px rgba(255, 222, 143, .05);
+}
+
+.engine-home__brand small,
+.engine-kicker {
+  color: var(--engine-gold);
+}
+
+.engine-home__nav {
+  border-color: rgba(244, 185, 66, .16);
+  background: #090f17;
+}
+
+.engine-home__nav a:hover {
+  background: var(--engine-gold-wash);
+  color: var(--engine-gold-soft);
+}
+
+.engine-home__nav a.active {
+  background: var(--engine-gold-wash-strong);
+  color: var(--engine-gold-soft);
+  box-shadow: inset 0 0 0 1px var(--engine-gold-border);
+}
+
+.engine-button--primary,
+.engine-create-modal .engine-button--primary {
+  border-color: var(--engine-gold-strong);
+  background: linear-gradient(180deg, #f5c256, #dfa329);
+  color: #1a1204;
+  box-shadow: 0 8px 24px rgba(217, 154, 36, .12);
+}
+
+.engine-button--primary:hover:not(:disabled),
+.engine-create-modal .engine-button--primary:hover:not(:disabled) {
+  border-color: #ffcf6a;
+  background: #f7c75f;
+  color: #140d02;
+}
+
+.engine-home__intro {
+  grid-template-columns: minmax(330px, .62fr) minmax(0, 1.38fr);
+  gap: 18px;
+  padding: 20px;
+  border-color: rgba(244, 185, 66, .24);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(244, 185, 66, .11), transparent 27rem),
+    linear-gradient(135deg, #0c131c, #080e16);
+}
+
+.engine-home__intro-copy {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+}
+
+.engine-home__intro h1 {
+  font-size: clamp(27px, 3.4vw, 40px);
+}
+
+.engine-button--hero {
+  min-height: 42px;
+  margin-top: 15px;
+  padding-inline: 17px;
+}
+
+.engine-home__steps {
+  gap: 9px;
+}
+
+.engine-home__steps article,
+.engine-home__steps button,
+.engine-home__steps a,
+.engine-home__steps > div {
+  min-width: 0;
+  min-height: 118px;
+  padding: 13px;
+  display: grid;
+  align-content: space-between;
+  gap: 5px;
+  border: 1px solid #27313d;
+  border-radius: 13px;
+  background: rgba(8, 14, 22, .86);
+  color: #eaf2fa;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+
+.engine-home__steps button,
+.engine-home__steps a {
+  cursor: pointer;
+}
+
+.engine-home__steps button:hover,
+.engine-home__steps a:hover {
+  border-color: var(--engine-gold-border);
+  background: var(--engine-gold-wash);
+  transform: translateY(-1px);
+}
+
+.engine-home__steps span {
+  color: var(--engine-gold);
+}
+
+.engine-home__steps strong {
+  font-size: 13px;
+}
+
+.engine-home__steps small {
+  color: #8090a2;
+}
+
+.engine-projects,
+.engine-home__panel,
+.engine-project-hero,
+.engine-health-grid article {
+  border-color: #252f3b;
+  background: #0a111a;
+}
+
+.engine-projects {
+  min-height: 560px;
+  padding: 13px;
+  border-color: rgba(244, 185, 66, .18);
+}
+
+.engine-section-title > div > small {
+  display: block;
+  max-width: 250px;
+  margin-top: 5px;
+  color: #718093;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.engine-create-callout {
+  width: 100%;
+  margin: 13px 0 12px;
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--engine-gold-border);
+  border-radius: 11px;
+  background: linear-gradient(135deg, rgba(244, 185, 66, .17), rgba(244, 185, 66, .06));
+  color: var(--engine-gold-soft);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.engine-create-callout:hover {
+  border-color: rgba(244, 185, 66, .7);
+  background: rgba(244, 185, 66, .18);
+}
+
+.engine-create-callout b {
+  font-size: 12px;
+}
+
+.engine-create-callout span {
+  color: #ae9360;
+  font-size: 9px;
+}
+
+.engine-project-search input:focus,
+.engine-create-modal input:focus {
+  border-color: var(--engine-gold-strong);
+  box-shadow: 0 0 0 3px rgba(244, 185, 66, .10);
+}
+
+.engine-project-row--active {
+  border-color: var(--engine-gold-border);
+  background: linear-gradient(135deg, rgba(244, 185, 66, .10), #09121c);
+  box-shadow: inset 3px 0 0 var(--engine-gold);
+}
+
+.engine-project-row--active b {
+  color: var(--engine-gold);
+}
+
+.engine-project-hero {
+  grid-template-columns: minmax(240px, .7fr) minmax(520px, 1.3fr);
+  border-color: rgba(244, 185, 66, .18);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(244, 185, 66, .09), transparent 24rem),
+    #0a121c;
+}
+
+.engine-project-hero > div:first-child > .engine-kicker {
+  margin-bottom: 9px;
+}
+
+.engine-action {
+  border-color: #2a3543;
+  background: #090f18;
+}
+
+.engine-action:hover {
+  border-color: var(--engine-gold-border);
+}
+
+.engine-action--primary {
+  border-color: var(--engine-gold-border);
+  background: linear-gradient(150deg, rgba(244, 185, 66, .15), #09121b);
+}
+
+.engine-action--primary > span {
+  color: var(--engine-gold);
+}
+
+.engine-action--geo {
+  border-color: rgba(218, 158, 47, .3);
+  background: linear-gradient(150deg, rgba(162, 111, 20, .11), #09121b);
+}
+
+.engine-action--geo > span {
+  color: #edc469;
+}
+
+.engine-section-title > a {
+  color: var(--engine-gold);
+}
+
+.engine-module--ready {
+  border-color: #315240;
+  background: #0b1b15;
+}
+
+.engine-home__panel--compact dl > div,
+.engine-module,
+.engine-health-grid article {
+  border-color: #242f3b;
+}
+
+.engine-create-modal {
+  border-color: var(--engine-gold-border);
+  background: #0c131d;
+}
+
+.engine-create-next {
+  padding: 11px 12px;
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(244, 185, 66, .18);
+  border-radius: 10px;
+  background: rgba(244, 185, 66, .055);
+}
+
+.engine-create-next strong {
+  color: var(--engine-gold-soft);
+  font-size: 10px;
+}
+
+.engine-create-next span {
+  color: #9c8a67;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+@media (max-width: 1180px) {
+  .engine-home__intro {
+    grid-template-columns: 1fr;
+  }
+
+  .engine-project-hero {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .engine-home {
+    width: min(100% - 18px, 1460px);
+  }
+
+  .engine-home__intro {
+    padding: 14px;
+  }
+
+  .engine-button--hero {
+    width: 100%;
+    justify-content: center;
+  }
+}

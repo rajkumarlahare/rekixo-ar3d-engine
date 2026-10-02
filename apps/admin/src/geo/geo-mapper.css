@@ -381,3 +381,84 @@
     flex-direction: column;
   }
 }
+
+
+/* Golden 3D Jio Mapper identity. Success/error alerts keep semantic colors. */
+.geo3d-shell {
+  --geo-gold: #f4b942;
+  --geo-gold-strong: #d99a24;
+  --geo-gold-soft: #ffe4a8;
+  --geo-gold-wash: rgba(244, 185, 66, .11);
+  --geo-gold-border: rgba(244, 185, 66, .35);
+}
+
+.geo3d-topbar {
+  border-bottom-color: rgba(244, 185, 66, .18);
+}
+
+.geo3d-actions a,
+.geo3d-actions select,
+.geo3d-section-head a,
+.geo3d-section-head button,
+.geo3d-save-row button {
+  border-color: #30343b;
+  background: #0b111a;
+}
+
+.geo3d-actions a:hover,
+.geo3d-section-head a:hover,
+.geo3d-section-head button:hover:not(:disabled),
+.geo3d-save-row button:hover:not(:disabled) {
+  border-color: var(--geo-gold-border);
+  color: var(--geo-gold-soft);
+}
+
+.geo3d-actions select:focus,
+.geo3d-form-grid input:focus,
+.geo3d-key-row input:focus {
+  border-color: var(--geo-gold-strong);
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(244, 185, 66, .09);
+}
+
+.geo3d-health article,
+.geo3d-map-card,
+.geo3d-preview-card,
+.geo3d-form-card {
+  border-color: #2a3039;
+  background: #0a111a;
+}
+
+.geo3d-section-head .eyebrow,
+.geo3d-topbar .eyebrow {
+  color: var(--geo-gold);
+}
+
+.geo3d-primary,
+.geo3d-key-row button,
+.geo3d-public-link {
+  border-color: var(--geo-gold-strong) !important;
+  background: #f4b942 !important;
+  color: #1a1204 !important;
+}
+
+.geo3d-primary:hover:not(:disabled),
+.geo3d-key-row button:hover:not(:disabled),
+.geo3d-public-link:hover {
+  border-color: #ffcf6a !important;
+  background: #f7c75f !important;
+  color: #140d02 !important;
+}
+
+.geo3d-map-card,
+.geo3d-preview-card {
+  box-shadow: inset 0 1px 0 rgba(244, 185, 66, .025);
+}
+
+.geo3d-toggle {
+  border-color: rgba(244, 185, 66, .18);
+}
+
+.geo3d-preview-status strong {
+  color: #f1d79f;
+}
