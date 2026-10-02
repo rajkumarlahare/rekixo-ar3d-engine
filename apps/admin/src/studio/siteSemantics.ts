@@ -33,11 +33,11 @@ export function classifySiteSemantic(
     )
   )
     return "path";
+  if (/\b(?:lawn|grass|turf)\b/.test(text)) return "lawn";
   if (
     /\b(?:garden|landscape area|landscaping|landscape)\b/.test(text)
   )
     return "garden";
-  if (/\b(?:lawn|grass|turf)\b/.test(text)) return "lawn";
   if (/\b(?:tree|palm|coconut tree|shade tree)\b/.test(text))
     return "tree";
   if (/\b(?:plant|shrub|bush|hedge|planter)\b/.test(text))
