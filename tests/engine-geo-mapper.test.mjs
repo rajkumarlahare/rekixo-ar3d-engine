@@ -52,20 +52,26 @@ test("3D Jio Mapper is an Engine route, not a Platform dependency", () => {
   assert.doesNotMatch(mapper, /tiyansh-production|rekixo-ar3d-platform|geo_3d_placements/);
 });
 
-test("public 3D Jio demo is fail-closed on publication and active release identity", () => {
+test("public 3D Geo Experience is fail-closed on active immutable Geo release identity", () => {
   const worker = read("workers/public.mjs");
+  const runtime = read("workers/geo-release-runtime.mjs");
   const page = read("apps/public/src/geo/GeoPublicDemo.tsx");
   const main = read("apps/public/src/main.tsx");
 
   assert.match(worker, /publicGeo3DState/);
-  assert.match(worker, /g\.public_enabled=1/);
-  assert.match(worker, /p\.status='published'/);
-  assert.match(worker, /row\.releaseId !== release\.manifest\.release\.id/);
-  assert.match(worker, /row\.releaseVersion/);
-  assert.match(worker, /geoModelDerivativeForActiveRelease/);
-  assert.match(worker, /Public 3D Jio demo is not currently available/);
+  assert.match(worker, /activeGeoReleaseState/);
+  assert.match(worker, /Published 3D Geo Experience is unavailable/);
+  assert.match(worker, /Public 3D Geo Experience is not currently published/);
+  assert.doesNotMatch(worker, /FROM geo_placements_3d g/);
 
-  assert.match(page, /LIVE 3D JIO DEMO/);
+  assert.match(runtime, /geo_experience_active_releases_3d/);
+  assert.match(runtime, /geo_releases_3d/);
+  assert.match(runtime, /Active Geo release manifest checksum mismatch/);
+  assert.match(runtime, /Active Geo release Building source integrity mismatch/);
+
+  assert.match(page, /LIVE 3D GEO EXPERIENCE/);
+  assert.match(page, /GEO RELEASE/);
+  assert.match(page, /BUILDING SOURCE/);
   assert.match(page, /api\/projects\/\$\{encodeURIComponent\(slug\)\}\/geo-placement/);
   assert.match(page, /Viewer3D/);
   assert.match(page, /Satellite anchor/);
