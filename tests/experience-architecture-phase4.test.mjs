@@ -112,7 +112,7 @@ test("Geo Mapper edits the draft and no longer exposes direct live publication c
   assert.match(mapper, /saveGeoDraft\(selectedSlug/);
   assert.match(mapper, /resetGeoDraft\(selectedSlug/);
   assert.match(mapper, /Save Geo draft/);
-  assert.match(mapper, /Existing live Geo snapshot/);
+  assert.match(mapper, /Active immutable Geo Release/);
   assert.match(mapper, /sourceUpdateAvailable/);
   assert.match(mapper, /Source change sirf Geo draft me pin hota hai/);
   assert.doesNotMatch(mapper, /saveGeoPlacement|removeGeoPlacement/);
@@ -123,23 +123,25 @@ test("Geo Mapper edits the draft and no longer exposes direct live publication c
   assert.match(cloud, /export async function resetGeoDraft/);
 });
 
-test("Dashboard distinguishes editable Geo draft source from current live compatibility snapshot", () => {
+test("Dashboard distinguishes editable Geo draft source from immutable customer Geo website", () => {
   const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
 
   assert.match(dashboard, /geoDraftState/);
   assert.match(dashboard, /geoDraftSourceId/);
   assert.match(dashboard, /Geo draft source/);
-  assert.match(dashboard, /Public compatibility snapshot/);
+  assert.match(dashboard, /Customer Geo website/);
   assert.match(dashboard, /preview before draft upgrade/);
 });
 
-test("legacy public Geo runtime stays unchanged until immutable Geo release phases", () => {
+test("Phase 4 mutable Geo draft and legacy placement are not current public runtime sources", () => {
   const worker = read("workers/public.mjs");
+  const runtime = read("workers/geo-release-runtime.mjs");
 
-  assert.match(worker, /FROM geo_placements_3d g/);
-  assert.match(worker, /g\.public_enabled=1/);
-  assert.match(worker, /row\.releaseId !== release\.manifest\.release\.id/);
+  assert.doesNotMatch(worker, /FROM geo_placements_3d g/);
   assert.doesNotMatch(worker, /geo_experience_drafts_3d/);
+  assert.match(worker, /activeGeoReleaseState/);
+  assert.match(runtime, /geo_experience_active_releases_3d/);
+  assert.match(runtime, /geo_releases_3d/);
 });
 
 test("Phase 4 remains Engine-only and leaves stable Platform resources untouched", () => {

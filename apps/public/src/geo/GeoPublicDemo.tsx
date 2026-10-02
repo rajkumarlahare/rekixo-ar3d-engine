@@ -5,6 +5,18 @@ import "./geo-public-demo.css";
 type GeoPayload = {
   project: { id: string; slug: string; name: string; location?: string };
   release: { id: string; version: number };
+  buildingRelease: {
+    id: string;
+    version: number;
+    manifestSha256: string;
+  };
+  geoRelease: {
+    id: string;
+    version: number;
+    manifestSha256: string;
+    sourceDraftRevision: number;
+    createdAt?: string;
+  };
   placement: {
     longitude: number;
     latitude: number;
@@ -106,7 +118,7 @@ export default function GeoPublicDemo() {
 
   useEffect(() => {
     if (!slug) {
-      setError("3D Jio project slug missing hai.");
+      setError("3D Geo project slug missing hai.");
       return;
     }
     const controller = new AbortController();
@@ -118,7 +130,7 @@ export default function GeoPublicDemo() {
       .then(async (response) => {
         const body = (await response.json()) as GeoPayload;
         if (!response.ok)
-          throw new Error(body.error || `3D Jio demo load failed (${response.status}).`);
+          throw new Error(body.error || `3D Geo demo load failed (${response.status}).`);
         return body;
       })
       .then((body) => {
@@ -127,7 +139,7 @@ export default function GeoPublicDemo() {
       })
       .catch((reason) => {
         if (controller.signal.aborted) return;
-        setError(reason instanceof Error ? reason.message : "3D Jio demo load nahi hua.");
+        setError(reason instanceof Error ? reason.message : "3D Geo demo load nahi hua.");
       });
     return () => controller.abort();
   }, [slug]);
@@ -193,7 +205,7 @@ export default function GeoPublicDemo() {
     return (
       <main className="jio-public-state">
         <p className="eyebrow">REKIXO AR3D ENGINE</p>
-        <h1>3D Jio demo unavailable</h1>
+        <h1>3D Geo demo unavailable</h1>
         <p>{error}</p>
       </main>
     );
@@ -202,7 +214,7 @@ export default function GeoPublicDemo() {
     return (
       <main className="jio-public-state">
         <p className="eyebrow">REKIXO AR3D ENGINE</p>
-        <h1>Loading 3D Jio demo…</h1>
+        <h1>Loading 3D Geo demo…</h1>
       </main>
     );
 
@@ -215,7 +227,7 @@ export default function GeoPublicDemo() {
     <main className="jio-public-shell">
       <header className="jio-public-header">
         <div>
-          <p className="eyebrow">LIVE 3D JIO DEMO</p>
+          <p className="eyebrow">LIVE 3D GEO EXPERIENCE</p>
           <h1>{data.project.name}</h1>
           <p>{data.project.location || "Rekixo AR3D Engine placement"}</p>
         </div>
@@ -230,7 +242,16 @@ export default function GeoPublicDemo() {
       </header>
 
       <section className="jio-public-meta">
-        <article><span>RELEASE</span><strong>v{data.release.version}</strong><small>{data.release.id}</small></article>
+        <article>
+          <span>GEO RELEASE</span>
+          <strong>v{data.geoRelease.version}</strong>
+          <small>{data.geoRelease.id}</small>
+        </article>
+        <article>
+          <span>BUILDING SOURCE</span>
+          <strong>v{data.buildingRelease.version}</strong>
+          <small>{data.buildingRelease.id}</small>
+        </article>
         <article><span>MODEL</span><strong>{data.model.name}</strong><small>{data.model.variant || "source"}</small></article>
         <article><span>ANCHOR</span><strong>{data.placement.latitude.toFixed(7)}</strong><small>{data.placement.longitude.toFixed(7)}</small></article>
         <article><span>ALIGNMENT</span><strong>{data.placement.headingDeg.toFixed(1)}°</strong><small>Scale {data.placement.scale.toFixed(3)} · Ground {data.placement.altitudeM.toFixed(2)}m</small></article>
@@ -250,7 +271,7 @@ export default function GeoPublicDemo() {
             </div>
           )}
           <p className="jio-public-note">
-            Green line building heading dikhati hai. Geo anchor release ke saath pinned hai.
+            Green line building heading dikhati hai. Location aur alignment active immutable Geo Release ke saath pinned hain.
           </p>
         </article>
 
@@ -265,7 +286,7 @@ export default function GeoPublicDemo() {
             presentationView="building"
           />
           <p className="jio-public-note">
-            Drag = rotate · wheel/pinch = zoom. Public demo read-only hai; placement edit sirf Engine Admin se hota hai.
+            Drag = rotate · wheel/pinch = zoom. Public Geo Experience read-only hai; edit/publish sirf Engine Studio se hota hai.
           </p>
         </article>
       </section>

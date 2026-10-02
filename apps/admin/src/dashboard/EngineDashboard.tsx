@@ -16,11 +16,9 @@ import {
   ensureProject,
   experiences,
   geoDraft,
-  geoPlacement,
   geoReleases,
   releases,
   type CloudGeoDraftState,
-  type CloudGeoPlacementState,
   type CloudGeoReleaseState,
   type CloudReleaseSummary,
 } from "../studio/cloud";
@@ -74,7 +72,6 @@ export default function EngineDashboard() {
   const [status, setStatus] = useState<ApiStatus>();
   const [experienceItems, setExperienceItems] = useState<EngineExperienceSummary[]>([]);
   const [releaseItems, setReleaseItems] = useState<CloudReleaseSummary[]>([]);
-  const [geoState, setGeoState] = useState<CloudGeoPlacementState>();
   const [geoDraftState, setGeoDraftState] = useState<CloudGeoDraftState>();
   const [geoReleaseState, setGeoReleaseState] = useState<CloudGeoReleaseState>();
   const [experienceBusy, setExperienceBusy] = useState(false);
@@ -184,7 +181,6 @@ export default function EngineDashboard() {
     if (!selectedSlug) {
       setExperienceItems([]);
       setReleaseItems([]);
-      setGeoState(undefined);
       setGeoDraftState(undefined);
       setGeoReleaseState(undefined);
       setExperienceError("");
@@ -194,7 +190,6 @@ export default function EngineDashboard() {
     let cancelled = false;
     setExperienceItems([]);
     setReleaseItems([]);
-    setGeoState(undefined);
     setGeoDraftState(undefined);
     setGeoReleaseState(undefined);
     setExperienceError("");
@@ -202,13 +197,11 @@ export default function EngineDashboard() {
     void Promise.all([
       experiences(selectedSlug),
       releases(selectedSlug),
-      geoPlacement(selectedSlug),
     ])
-      .then(async ([experienceResult, releaseResult, placementResult]) => {
+      .then(async ([experienceResult, releaseResult]) => {
         if (cancelled) return;
         setExperienceItems(experienceResult.experiences);
         setReleaseItems(releaseResult.releases);
-        setGeoState(placementResult);
 
         const hasGeoExperience = experienceResult.experiences.some(
           (item) => item.type === "geo",
@@ -369,10 +362,10 @@ export default function EngineDashboard() {
   const geoUrl = status
     ? `https://ar3dstudio.in${geoPublicProjectPath(status.project.slug)}`
     : "";
+  const activeImmutableGeoRelease = geoReleaseState?.activeRelease;
   const geoLive = Boolean(
     geoExperience &&
-      geoState?.placement?.publicEnabled &&
-      !geoState?.placementStale &&
+      activeImmutableGeoRelease &&
       status?.project.status === "published",
   );
   const geoDraftSourceId =
@@ -387,7 +380,6 @@ export default function EngineDashboard() {
       geoDraftSourceId &&
       geoDraftSourceId !== activeBuildingRelease.id,
   );
-  const activeImmutableGeoRelease = geoReleaseState?.activeRelease;
   const assetPrefix = status
     ? `projects/${status.project.slug}`
     : "projects/{slug}";
@@ -740,8 +732,9 @@ export default function EngineDashboard() {
                           ? `GEO v${activeImmutableGeoRelease.version}`
                           : geoNeedsSourceUpgrade
                             ? "UPDATE AVAILABLE"
-                            : geoState?.placement
-                              ? "CONFIGURED"
+                            : geoDraftState?.draft?.longitude !== null &&
+                                geoDraftState?.draft?.longitude !== undefined
+                              ? "DRAFT READY"
                               : "SETUP"
                       : "NOT ADDED"}
                   </b>
@@ -786,10 +779,10 @@ export default function EngineDashboard() {
                         </dd>
                       </div>
                       <div>
-                        <dt>Public compatibility snapshot</dt>
+                        <dt>Customer Geo website</dt>
                         <dd>
-                          {geoState?.placement?.publicEnabled
-                            ? `Building Release v${geoState.placement.releaseVersion}`
+                          {geoLive
+                            ? `LIVE · Geo v${activeImmutableGeoRelease?.version}`
                             : "Not published"}
                         </dd>
                       </div>

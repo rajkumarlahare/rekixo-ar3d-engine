@@ -46,16 +46,17 @@ test("Geo source upgrades are visible but never automatic from the dashboard", (
   assert.doesNotMatch(dashboard, /createGeoExperience\(selectedSlug, activeBuildingRelease\.id\)/);
 });
 
-test("dashboard loads Experience, release, Geo draft and live snapshot state through Engine-owned APIs", () => {
+test("dashboard loads Experience, Building release, Geo draft and immutable Geo live state through Engine-owned APIs", () => {
   const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
   const cloud = read("apps/admin/src/studio/cloud.ts");
 
   assert.match(dashboard, /experiences\(selectedSlug\)/);
   assert.match(dashboard, /releases\(selectedSlug\)/);
-  assert.match(dashboard, /geoPlacement\(selectedSlug\)/);
+  assert.match(dashboard, /geoReleases\(selectedSlug\)/);
   assert.match(dashboard, /geoDraft\(selectedSlug\)/);
   assert.match(cloud, /\/experiences/);
   assert.match(cloud, /\/geo-draft/);
+  assert.match(cloud, /\/geo-releases/);
   assert.doesNotMatch(dashboard, /rekixo-ar3d-platform|tiyansh-production|tiyansh-gallery-production/);
 });
 

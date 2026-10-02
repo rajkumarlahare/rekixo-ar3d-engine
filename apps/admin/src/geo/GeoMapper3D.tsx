@@ -648,9 +648,7 @@ export default function GeoMapper3D() {
       )}`
     : null;
 
-  const legacyLive =
-    state?.legacyPlacement?.publicEnabled === true &&
-    Boolean(state.legacyPlacement.releaseId);
+  const geoLive = Boolean(geoReleaseState?.activeRelease);
 
   return (
     <main className="geo3d-shell">
@@ -762,11 +760,13 @@ export default function GeoMapper3D() {
         </section>
       ) : null}
 
-      {legacyLive ? (
+      {geoReleaseState?.activeRelease ? (
         <section className="geo3d-alert geo3d-alert--info">
-          Existing Geo live snapshot Building v
-          {state?.legacyPlacement?.releaseVersion} par available hai. Geo draft save
-          karne se current live snapshot mutate nahi hota.
+          Current Geo website immutable Geo v
+          {geoReleaseState.activeRelease.version} se serve ho rahi hai, jo Building v
+          {geoReleaseState.activeRelease.sourceBuildingReleaseVersion} par pinned hai.
+          Draft save karne se live Geo website change nahi hoti; sirf Publish ya
+          Activate / Rollback live pointer badalta hai.
         </section>
       ) : null}
 
@@ -977,7 +977,7 @@ export default function GeoMapper3D() {
             </button>
           ) : null}
 
-          {legacyLive ? (
+          {geoLive ? (
             <a
               className="geo3d-public-link"
               href={`https://ar3dstudio.in/3Dprojects/${encodeURIComponent(
@@ -986,13 +986,13 @@ export default function GeoMapper3D() {
               target="_blank"
               rel="noreferrer"
             >
-              Open current Geo Live
+              Open Geo Live
             </a>
           ) : null}
 
           <span>
-            Save editable Geo draft ko update karta hai. Existing live Geo snapshot
-            aur immutable Building release bytes change nahi hote.
+            Save editable Geo draft ko update karta hai. Active immutable Geo Release
+            aur Building release bytes change nahi hote.
           </span>
         </div>
       </section>
@@ -1073,8 +1073,9 @@ export default function GeoMapper3D() {
             Publish Geo Release
           </button>
           <span>
-            Publication immutable Geo history banata hai. Existing public Geo compatibility
-            snapshot is phase me automatically mutate nahi hota.
+            Publish verified draft se naya immutable Geo Release banta hai aur wahi
+            customer Geo website ka active source hota hai. Building Website independently
+            apne Building release par rehti hai.
           </span>
         </div>
 
