@@ -13,8 +13,8 @@ test("Engine home exposes a clear project workflow and primary destinations", ()
   assert.match(dashboard, /Create 3D Project/);
   assert.match(dashboard, /Create New 3D Project/);
   assert.match(dashboard, /Create & open Studio/);
-  assert.match(dashboard, /Place on map/);
-  assert.match(dashboard, /Open live/);
+  assert.match(dashboard, /Set real location/);
+  assert.match(dashboard, /Open customer view/);
 });
 
 test("Engine project context is carried from dashboard into Studio and 3D Jio Mapper", () => {
