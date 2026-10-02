@@ -6,6 +6,7 @@ import type { OpeningSuggestion } from "./openingAssociator";
 import type { SourceFusionReport } from "./sourceFusion";
 import { detectRepeatedFloors } from "./repeatedFloorDetector";
 import { autoBuildingReviewCounts } from "./autoBuildingReview";
+import { evaluateSourcePackReadiness } from "./sourcePackReadiness";
 
 const ROLE_LABEL: Record<SmartSourceRole, string> = {
   model: "3D model",
@@ -86,6 +87,10 @@ export default function SmartProjectBuilder({
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const modelCandidates = files.filter((file) => /\.(glb|fbx)$/i.test(file.name));
+  const packReadiness = useMemo(
+    () => evaluateSourcePackReadiness(project, files, fusion),
+    [project, files, fusion],
+  );
   const selectedModel = files.find((file) => file.id === project.scene.modelId);
   const publishModel = project.scene.publishModelId
     ? files.find((file) => file.id === project.scene.publishModelId)
@@ -360,6 +365,49 @@ export default function SmartProjectBuilder({
                   )}
                 </div>
               </div>
+              <div
+                className={
+                  packReadiness.completeSupportPack
+                    ? "builder-pack-readiness builder-pack-readiness--complete"
+                    : "builder-pack-readiness"
+                }
+                data-testid="source-pack-readiness"
+              >
+                <div>
+                  <b>{packReadiness.summary}</b>
+                  <small>
+                    {packReadiness.autoBuildReady
+                      ? "Automatic building can start from the attached sources."
+                      : "Resolve the blocking source issue before automatic building."}
+                  </small>
+                </div>
+                <div className="builder-pack-role-grid">
+                  {packReadiness.roles.map((role) => (
+                    <span
+                      key={role.key}
+                      className={role.present ? "pack-role pack-role--ready" : "pack-role"}
+                    >
+                      {role.present ? "✓" : "○"} {role.label}
+                    </span>
+                  ))}
+                </div>
+                {packReadiness.blockingIssues.length > 0 && (
+                  <div className="builder-inline-warning">
+                    {packReadiness.blockingIssues.join(" · ")}
+                  </div>
+                )}
+                {packReadiness.reviewIssues.length > 0 && (
+                  <details className="builder-draft-options">
+                    <summary>
+                      Non-blocking source review · {packReadiness.reviewIssues.length}
+                    </summary>
+                    {packReadiness.reviewIssues.map((issue) => (
+                      <p key={issue}>{issue}</p>
+                    ))}
+                  </details>
+                )}
+              </div>
+
               <div className="builder-source-fusion-stats">
                 <span>Ready <b>{fusion.readySources}</b></span>
                 <span>Partial <b>{fusion.partialSources}</b></span>
@@ -447,6 +495,7 @@ export default function SmartProjectBuilder({
           <button
             type="button"
             className="primary"
+            data-testid="analyze-project"
             disabled={busy || files.length === 0}
             onClick={onAnalyze}
           >
@@ -514,7 +563,10 @@ export default function SmartProjectBuilder({
             </div>
 
             {analysis.floorCandidates.length > 0 && (
-              <div className="builder-floor-suggestions">
+              <div
+                className="builder-floor-suggestions"
+                data-testid="detected-floor-levels"
+              >
                 <div>
                   <b>Detected floor levels</b>
                   <small>
@@ -802,13 +854,15 @@ export default function SmartProjectBuilder({
           <button
             type="button"
             className="primary"
-            disabled={busy || modelCandidates.length === 0}
+            data-testid="build-automatically"
+            disabled={busy || !packReadiness.autoBuildReady}
             onClick={onAutoBuild}
           >
             Build automatically
           </button>
           <button
             type="button"
+            data-testid="build-analyzed-draft"
             disabled={
               draftBuilt ||
               busy ||
@@ -819,7 +873,12 @@ export default function SmartProjectBuilder({
           >
             {draftBuilt ? "Draft built ✓" : "Build analyzed draft"}
           </button>
-          <button type="button" disabled={busy} onClick={onOpenEditor}>
+          <button
+            type="button"
+            data-testid="open-visual-editor"
+            disabled={busy}
+            onClick={onOpenEditor}
+          >
             Review visually
           </button>
           {draftBuilt && analysis?.modelAssetId && analysis.floorCandidates.length > 0 && (

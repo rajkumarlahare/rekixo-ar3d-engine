@@ -20,8 +20,10 @@ test("browser E2E smoke covers authoring, analysis and reload-safe autosave", ()
   const e2e = read("e2e/studio-authoring.spec.ts");
   const workflow = read(".github/workflows/deploy-cloudflare.yml");
   assert.match(config, /Desktop Chrome/);
-  assert.match(e2e, /Analyze project/);
-  assert.match(e2e, /Build analyzed draft/);
+  assert.match(e2e, /getByTestId\("analyze-project"\)/);
+  assert.match(e2e, /getByTestId\("detected-floor-levels"\)/);
+  assert.match(e2e, /getByTestId\("build-analyzed-draft"\)/);
+  assert.match(e2e, /getByTestId\("open-visual-editor"\)/);
   assert.match(e2e, /Autosaved/);
   assert.match(e2e, /More project actions/);
   assert.match(e2e, /name: "Setup"/);

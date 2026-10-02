@@ -1,6 +1,6 @@
 # Automatic Building Draft — Phase 2
 
-Status: implementation in progress on the generic Engine path.
+Status: complete on the generic Engine path; licensed native CAD/SketchUp decoding remains an optional provider integration.
 
 ## Product target
 
@@ -115,19 +115,34 @@ The rest of Phase 2 does not depend on a specific DWG vendor. FBX/GLB geometry,
 PDF evidence, SketchUp archive evidence and manual/structured review remain
 usable even when a DWG provider is unavailable.
 
-## Remaining Phase 2 work
+## Completion state
 
-- normalized licensed DWG/AEC provider adapter;
-- normalized native SketchUp component/material provider adapter where archive
-  recovery is insufficient;
-- stronger wall-to-room linking after automatic room creation;
-- cross-source conflict queue (model vs CAD vs PDF);
-- repeated-floor one-click acceptance/review UX;
-- automatic room-name mapping when trustworthy source labels can be spatially
-  associated;
-- acceptance test against the supplied six-file project pack without any
-  hardcoded project profile.
+The generic Engine now includes:
 
+- normalized ASCII-DXF architecture extraction;
+- model-derived and CAD-derived parametric wall graphs;
+- wall-to-room linking;
+- conservative closed-loop room drafting;
+- source conflict review;
+- one-click review of high-confidence walls/repeated floors/openings;
+- SketchUp archive texture recovery;
+- PDF floor-plan page scoring and alignment assistance;
+- six-role source-pack readiness diagnostics;
+- one-click generic automatic building;
+- stable browser-smoke selectors so UI wording changes do not create false CI failures.
+
+Two integrations remain provider-dependent rather than missing generic Engine logic:
+
+- native binary DWG/AEC entity decoding;
+- native SKP component/geometry decoding when archive texture recovery is insufficient.
+
+These require a commercial-compatible provider. They are intentionally isolated from
+the generic authoring model so the Engine continues to work from FBX/GLB, DXF,
+PDF, visual and metadata evidence when those providers are unavailable.
+
+Automatic room naming is applied only when spatially trustworthy normalized
+labels exist. Text-only evidence without coordinates stays review-only rather
+than being guessed.
 ## Safety invariants
 
 - no project/customer hash unlocks hidden geometry;
