@@ -22,6 +22,9 @@ const dwgUrl = asUrl(
 const conflictsUrl = asUrl(
   compile("apps/admin/src/studio/sourceConflicts.ts"),
 );
+const dwgNormalizedUrl = asUrl(
+  compile("apps/admin/src/studio/dwgNormalized.ts"),
+);
 const sourceFusionCode = compile("apps/admin/src/studio/sourceFusion.ts")
   .replace(
     /from "\.\/sketchUpArchive"/,
@@ -30,6 +33,10 @@ const sourceFusionCode = compile("apps/admin/src/studio/sourceFusion.ts")
   .replace(
     /from "\.\/dwgEvidence"/,
     `from ${JSON.stringify(dwgUrl)}`,
+  )
+  .replace(
+    /from "\.\/dwgNormalized"/,
+    `from ${JSON.stringify(dwgNormalizedUrl)}`,
   )
   .replace(
     /from "\.\/sourceConflicts"/,
