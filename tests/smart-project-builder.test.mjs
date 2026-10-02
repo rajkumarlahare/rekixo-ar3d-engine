@@ -64,13 +64,14 @@ test("architectural automation stays suggestion-first and preserves manual label
   assert.match(studio, /Review them visually before treating them as architecture/);
 });
 
-test("CAD intake keeps binary DWG fail-closed and parses ASCII DXF through the normalized architecture parser", () => {
+test("CAD intake keeps raw DWG fail-closed until its source-bound normalized derivative exists", () => {
   const analyzer = read("apps/admin/src/studio/projectAnalyzer.ts");
   const dxf = read("apps/admin/src/studio/dxfArchitecture.ts");
-  assert.match(analyzer, /extension !== "dxf"/);
-  assert.match(analyzer, /DWG is preserved as source evidence/);
-  assert.match(analyzer, /Convert\/export to ASCII DXF/);
+  assert.match(analyzer, /extension === "dwg"/);
+  assert.match(analyzer, /findDwgNormalizedDocument/);
+  assert.match(analyzer, /controlled normalized architecture derivative is not available yet/);
   assert.match(analyzer, /semanticReady: false/);
+  assert.match(analyzer, /normalizedDwg: document/);
   assert.match(analyzer, /parseAsciiDxfArchitecture\(text\)/);
   assert.match(dxf, /firstString\(entity\.rows, 8\)/);
   assert.match(dxf, /metresPerUnit/);
