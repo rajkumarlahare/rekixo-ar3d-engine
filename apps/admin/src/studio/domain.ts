@@ -84,9 +84,11 @@ export interface Opening {
   reviewState?: ReviewState;
 }
 export type VerticalConnectorKind = "stair" | "lift";
+export type VerticalConnectorOrigin = "cad-auto" | "model-auto" | "manual";
 export interface VerticalConnector {
   id: string;
   kind: VerticalConnectorKind;
+  origin: VerticalConnectorOrigin;
   floorIds: string[];
   x: number;
   z: number;
@@ -936,6 +938,7 @@ export function furnitureExtents(f: Furniture) {
     if (
       !text(connector.id, 100) ||
       !["stair", "lift"].includes(connector.kind) ||
+      !["cad-auto", "model-auto", "manual"].includes(connector.origin) ||
       !Array.isArray(connector.floorIds) ||
       !connector.floorIds.length ||
       connector.floorIds.length > 100 ||
