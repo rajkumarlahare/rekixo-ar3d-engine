@@ -1,27 +1,22 @@
-const cloudflareRuntime = await import("cloudflare:workers").catch(() => ({
-  DurableObject: class DurableObjectTestFallback {
-    constructor(ctx, env) {
-      this.ctx = ctx;
-      this.env = env;
-    }
-  },
-}));
-const DurableObjectBase = cloudflareRuntime.DurableObject;
+import { DurableObject } from "cloudflare:workers";
 
 const PROCESSOR_PORT = 8080;
-const INSTANCE_COUNT = 2;
 const START_ATTEMPTS = 100;
 const START_RETRY_MS = 200;
+const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000;
 
-function processorInstanceName(sha256) {
-  const prefix = String(sha256 || "").slice(0, 8);
-  const value = Number.parseInt(prefix, 16);
-  const index = Number.isFinite(value) ? value % INSTANCE_COUNT : 0;
-  return `dwg-${index}`;
-}
-
-export class DwgProcessor extends DurableObjectBase {
+export class DwgProcessor extends DurableObject {
   ready;
+
+  constructor(ctx, env) {
+    super(ctx, env);
+    if (ctx.container?.running) {
+      ctx.blockConcurrencyWhile(async () => {
+        await ctx.container.setInactivityTimeout(INACTIVITY_TIMEOUT_MS);
+        this.monitorContainer();
+      });
+    }
+  }
 
   async fetch(request) {
     const container = this.ctx.container;
@@ -67,25 +62,36 @@ export class DwgProcessor extends DurableObjectBase {
     return container.getTcpPort(PROCESSOR_PORT).fetch(forwarded);
   }
 
-  async startAndWaitForPort() {
+  monitorContainer() {
     const container = this.ctx.container;
-    await container.setInactivityTimeout(5 * 60 * 1000);
-    if (!container.running) container.start();
-
     this.ctx.waitUntil(
       container
         .monitor()
-        .then(() => console.log("DWG processor container stopped."))
-        .catch((error) =>
-          console.error("DWG processor container error:", error),
-        ),
+        .then(() => {
+          this.ready = undefined;
+          console.log("DWG processor container stopped.");
+        })
+        .catch((error) => {
+          this.ready = undefined;
+          console.error("DWG processor container error:", error);
+        }),
     );
+  }
+
+  async startAndWaitForPort() {
+    const container = this.ctx.container;
+    if (!container.running) container.start();
+    await container.setInactivityTimeout(INACTIVITY_TIMEOUT_MS);
+    this.monitorContainer();
 
     const port = container.getTcpPort(PROCESSOR_PORT);
     let lastError;
     for (let attempt = 0; attempt < START_ATTEMPTS; attempt += 1) {
       try {
-        const response = await port.fetch("http://container/health");
+        const response = await port.fetch("http://container/health", {
+          signal: AbortSignal.timeout(1_000),
+        });
+        await response.body?.cancel();
         if (!response.ok)
           throw Error(`DWG processor health returned HTTP ${response.status}.`);
         return;
@@ -99,10 +105,4 @@ export class DwgProcessor extends DurableObjectBase {
       cause: lastError,
     });
   }
-}
-
-export function dwgProcessorStub(env, sha256) {
-  if (!env?.DWG_PROCESSOR)
-    throw Error("DWG processor binding is not configured.");
-  return env.DWG_PROCESSOR.getByName(processorInstanceName(sha256));
 }

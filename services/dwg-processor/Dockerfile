@@ -13,6 +13,7 @@ RUN apt-get update \
     automake \
     libtool \
     pkg-config \
+    python3 \
     libxml2-dev \
     libpcre2-dev \
   && rm -rf /var/lib/apt/lists/*
