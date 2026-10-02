@@ -379,14 +379,8 @@ export default function EngineDashboard() {
           >
             Design Studio
           </a>
-          <a
-            href={
-              selectedSlug
-                ? projectUrl("geo-mapper", selectedSlug)
-                : "/3Dprojects/geo-mapper"
-            }
-          >
-            3D Jio Mapper
+          <a href={selectedSlug ? "#experiences" : "/3Dprojects"}>
+            Experiences
           </a>
         </nav>
 
