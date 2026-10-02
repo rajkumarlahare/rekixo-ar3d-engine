@@ -137,6 +137,10 @@ test("Phase 10 site elements are editable in Studio and publish only after revie
     "apps/admin/src/studio/Studio.tsx",
     "utf8",
   );
+  const siteCanvas = fs.readFileSync(
+    "apps/admin/src/studio/sceneCanvasSite.ts",
+    "utf8",
+  );
   const worker = fs.readFileSync(
     "workers/studio-draft-validation.mjs",
     "utf8",
@@ -150,9 +154,11 @@ test("Phase 10 site elements are editable in Studio and publish only after revie
     "utf8",
   );
 
-  assert.match(canvas, /addSiteElementVisual/);
-  assert.match(canvas, /kind: "siteElement"/);
+  assert.match(canvas, /renderSiteElements/);
+  assert.match(canvas, /siteElementTransformChange/);
   assert.match(canvas, /props\.scene\.siteElements/);
+  assert.match(siteCanvas, /addSiteElementVisual/);
+  assert.match(siteCanvas, /kind: "siteElement"/);
   assert.match(studio, /SITE &amp; LANDSCAPE/);
   assert.match(studio, /Accept site element/);
   assert.match(studio, /origin: "manual" as const/);
