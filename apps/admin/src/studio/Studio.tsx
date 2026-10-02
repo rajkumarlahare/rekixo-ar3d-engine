@@ -862,6 +862,7 @@ export default function Studio() {
       (p.scene.openings ?? [])
         .filter(
           (opening) =>
+            opening.reviewed &&
             opening.sourceNodeName &&
             opening.sourceOccurrence !== undefined,
         )
@@ -2432,6 +2433,10 @@ export default function Studio() {
   function applyOpeningSuggestions(
     suggestions: OpeningSuggestion[],
   ) {
+    if (!smartAnalysis) {
+      setMessage("Analyze the project before approving detected openings.");
+      return;
+    }
     const ready = suggestions.filter(
       (suggestion) =>
         suggestion.ready &&
@@ -2443,107 +2448,27 @@ export default function Studio() {
       return;
     }
 
-    const existingOpenings = p.scene.openings ?? [];
-    const existingKeys = new Set(
-      existingOpenings
-        .filter(
-          (opening) =>
-            opening.sourceNodeName &&
-            opening.sourceOccurrence !== undefined,
-        )
-        .map(
-          (opening) =>
-            `${opening.sourceNodeName}\u0000${opening.sourceOccurrence}`,
-        ),
+    const workflow = applyReadyOpeningWorkflow(
+      p.scene,
+      smartAnalysis.architecturalCandidates,
+      ready,
+      id,
+      "human",
     );
-    const nextOpenings: Opening[] = [...existingOpenings];
-    const tagByKey = new Map<string, ModelNodeTag>(
-      (p.scene.modelNodeTags ?? []).map((tag) => [
-        `${tag.nodeName}\u0000${tag.occurrence}`,
-        { ...tag },
-      ]),
-    );
-    let approved = 0;
-
-    for (const suggestion of ready) {
-      if (existingKeys.has(suggestion.key) || !suggestion.floorId) continue;
-      const opening: Opening = {
-        id: id(),
-        floorId: suggestion.floorId,
-        kind: suggestion.kind,
-        roomIds: [...suggestion.roomIds],
-        x: suggestion.position[0],
-        y: suggestion.position[1],
-        z: suggestion.position[2],
-        width: suggestion.width,
-        height: suggestion.height,
-        ...(suggestion.sillHeight !== undefined
-          ? { sillHeight: suggestion.sillHeight }
-          : {}),
-        rotationY: suggestion.rotationY,
-        reviewed: true,
-        sourceNodeName: suggestion.sourceNodeName,
-        sourceOccurrence: suggestion.sourceOccurrence,
-        confidence: suggestion.confidence,
-      };
-      nextOpenings.push(opening);
-      existingKeys.add(suggestion.key);
-
-      const current = tagByKey.get(suggestion.key) ?? {
-        nodeName: suggestion.sourceNodeName,
-        occurrence: suggestion.sourceOccurrence,
-      };
-      const associatedRooms = suggestion.roomIds
-        .map((roomId) =>
-          p.scene.rooms.find((candidate) => candidate.id === roomId),
-        )
-        .filter((candidate): candidate is Room => Boolean(candidate));
-      const sharedUnit =
-        associatedRooms.length > 0 &&
-        associatedRooms.every(
-          (candidate) => candidate.unit === associatedRooms[0].unit,
-        )
-          ? associatedRooms[0].unit
-          : undefined;
-      const reviewedTag: ModelNodeTag = {
-        ...current,
-        floorId: suggestion.floorId,
-        assignment: "manual",
-        confidence: 1,
-        semantic: suggestion.kind,
-        semanticAssignment: "manual",
-        semanticConfidence: 1,
-      };
-      if (suggestion.roomIds.length === 1) {
-        reviewedTag.roomId = suggestion.roomIds[0];
-        if (associatedRooms[0]?.unit) reviewedTag.unit = associatedRooms[0].unit;
-        else delete reviewedTag.unit;
-      } else {
-        delete reviewedTag.roomId;
-        if (sharedUnit) reviewedTag.unit = sharedUnit;
-        else delete reviewedTag.unit;
-      }
-      tagByKey.set(suggestion.key, reviewedTag);
-      approved += 1;
-    }
-
-    if (!approved) {
-      setMessage("These detected openings are already approved.");
+    if (!workflow.approved) {
+      setMessage("These detected openings are already human-reviewed.");
       return;
     }
+
     const next: Project = {
       ...p,
-      scene: {
-        ...p.scene,
-        openings: nextOpenings,
-        modelNodeTags: [...tagByKey.values()],
-      },
+      scene: workflow.scene,
     };
     try {
       validateProject(next);
       edit(next);
       setMessage(
-        `${approved} door/window opening${approved === 1 ? "" : "s"} approved and attached to mapped wall/room context.`,
+        `${workflow.approved} door/window opening${workflow.approved === 1 ? "" : "s"} human-reviewed and attached to mapped wall/room context.`,
       );
     } catch (reason) {
       setError(

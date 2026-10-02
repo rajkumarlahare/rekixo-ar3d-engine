@@ -37,6 +37,9 @@ const sourceConflicts = await import(
 const autoReview = await import(
   asUrl(compile("apps/admin/src/studio/autoBuildingReview.ts"))
 );
+const openingWorkflow = await import(
+  asUrl(compile("apps/admin/src/studio/openingWorkflow.ts"))
+);
 
 function analysisFixture() {
   return {
@@ -423,16 +426,136 @@ test("Phase 2 one-click review approves only conservative high-confidence sugges
   assert.equal(counts.readyRepeats, 1);
   assert.equal(counts.repeatReview, 1);
 
-  const walls = autoReview.approveReadyModelWalls(scene);
+  const autoWalls = autoReview.markAutoReadyModelWalls(scene);
+  assert.equal(autoWalls.prepared, 1);
+  assert.equal(
+    autoWalls.scene.walls.find((wall) => wall.id === "ready").reviewed,
+    false,
+  );
+  assert.equal(
+    autoWalls.scene.walls.find((wall) => wall.id === "ready").reviewState,
+    "auto_ready",
+  );
+
+  const autoRepeats = autoReview.markAutoReadyRepeatedFloors(autoWalls.scene);
+  assert.equal(autoRepeats.prepared, 1);
+  assert.equal(autoRepeats.scene.floors[1].repeatReviewed, false);
+  assert.equal(autoRepeats.scene.floors[1].repeatReviewState, "auto_ready");
+
+  const walls = autoReview.approveReadyModelWalls(autoRepeats.scene);
   assert.equal(walls.approved, 1);
   assert.equal(walls.scene.walls.find((wall) => wall.id === "ready").reviewed, true);
+  assert.equal(
+    walls.scene.walls.find((wall) => wall.id === "ready").reviewState,
+    "human_reviewed",
+  );
   assert.equal(walls.scene.walls.find((wall) => wall.id === "review").reviewed, false);
   assert.equal(walls.scene.walls.find((wall) => wall.id === "manual").reviewed, false);
 
   const repeats = autoReview.acceptReadyRepeatedFloors(walls.scene);
   assert.equal(repeats.accepted, 1);
   assert.equal(repeats.scene.floors[1].repeatReviewed, true);
+  assert.equal(
+    repeats.scene.floors[1].repeatReviewState,
+    "human_reviewed",
+  );
   assert.equal(repeats.scene.floors[2].repeatReviewed, false);
+});
+
+test("Phase 1 auto-build prepares openings without pretending they were human-reviewed", () => {
+  const scene = {
+    floors: [{ id: "f0", name: "Ground", elevation: 0 }],
+    rooms: [
+      {
+        id: "r0",
+        name: "Living",
+        floorId: "f0",
+        unit: "101",
+        x: 2,
+        z: 2,
+        width: 4,
+        depth: 4,
+        height: 2.8,
+        color: "#ffffff",
+        source: "fixture",
+        verified: false,
+      },
+    ],
+    furniture: [],
+    walls: [],
+    openings: [],
+    modelNodeTags: [],
+    scale: 1,
+  };
+  const candidate = {
+    nodeName: "Door 101",
+    occurrence: 1,
+    kind: "door",
+    confidence: 0.94,
+    floorIndex: 0,
+    position: [2, 1, 0],
+    size: [0.9, 2, 0.12],
+    reasons: ["source name says door"],
+  };
+  const suggestion = {
+    key: "Door 101\u00001",
+    sourceNodeName: "Door 101",
+    sourceOccurrence: 1,
+    kind: "door",
+    floorId: "f0",
+    roomIds: ["r0"],
+    position: [2, 1, 0],
+    width: 0.9,
+    height: 2,
+    rotationY: 0,
+    wallDistance: 0.05,
+    confidence: 0.94,
+    ready: true,
+    reasons: ["fixture"],
+  };
+
+  const automatic = openingWorkflow.applyReadyOpeningWorkflow(
+    scene,
+    [candidate],
+    [suggestion],
+    () => "opening-1",
+    "auto",
+  );
+  assert.equal(automatic.prepared, 1);
+  assert.equal(automatic.approved, 0);
+  assert.equal(automatic.scene.openings.length, 1);
+  assert.equal(automatic.scene.openings[0].reviewed, false);
+  assert.equal(automatic.scene.openings[0].reviewState, "auto_ready");
+
+  const human = openingWorkflow.applyReadyOpeningWorkflow(
+    automatic.scene,
+    [candidate],
+    [suggestion],
+    () => "opening-2",
+    "human",
+  );
+  assert.equal(human.approved, 1);
+  assert.equal(human.scene.openings.length, 1);
+  assert.equal(human.scene.openings[0].reviewed, true);
+  assert.equal(human.scene.openings[0].reviewState, "human_reviewed");
+
+  const automaticRerun = openingWorkflow.applyReadyOpeningWorkflow(
+    human.scene,
+    [candidate],
+    [suggestion],
+    () => "opening-3",
+    "auto",
+  );
+  assert.equal(automaticRerun.scene.openings.length, 1);
+  assert.equal(automaticRerun.scene.openings[0].reviewed, true);
+  assert.equal(
+    automaticRerun.scene.openings[0].reviewState,
+    "human_reviewed",
+  );
+  assert.equal(
+    automaticRerun.scene.modelNodeTags[0].semanticAssignment,
+    "manual",
+  );
 });
 
 test("Phase 2 fast review UI and public sanitization are fail-closed", () => {
@@ -532,10 +655,13 @@ test("Phase 2 normal builder exposes one-click generic Auto Build and no hash-pr
   assert.match(pipeline, /prepareSketchUpTextureRecovery/);
   assert.match(pipeline, /buildSmartSceneDraft/);
   assert.match(pipeline, /applyReadyOpeningWorkflow/);
-  assert.match(pipeline, /approveReadyModelWalls/);
-  assert.match(pipeline, /acceptReadyRepeatedFloors/);
-  assert.match(pipeline, /readyWallsApproved/);
-  assert.match(pipeline, /readyRepeatsAccepted/);
+  assert.match(pipeline, /markAutoReadyModelWalls/);
+  assert.match(pipeline, /markAutoReadyRepeatedFloors/);
+  assert.match(pipeline, /readyWallsPrepared/);
+  assert.match(pipeline, /readyRepeatsPrepared/);
+  assert.match(pipeline, /"auto"/);
+  assert.doesNotMatch(pipeline, /approveReadyModelWalls/);
+  assert.doesNotMatch(pipeline, /acceptReadyRepeatedFloors/);
 });
 
 test("Phase 2 six-source contract remains generic", () => {

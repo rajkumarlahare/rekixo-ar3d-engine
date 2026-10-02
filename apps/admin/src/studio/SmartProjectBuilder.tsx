@@ -380,6 +380,11 @@ export default function SmartProjectBuilder({
                       ? "Automatic building can start from the attached sources."
                       : "Resolve the blocking source issue before automatic building."}
                   </small>
+                  <small>
+                    {packReadiness.sourceIntegrityReady
+                      ? "Source records verified: project ownership, SHA-256 record and byte size are consistent."
+                      : "Source record integrity needs attention before automatic building."}
+                  </small>
                 </div>
                 <div className="builder-pack-role-grid">
                   {packReadiness.roles.map((role) => (

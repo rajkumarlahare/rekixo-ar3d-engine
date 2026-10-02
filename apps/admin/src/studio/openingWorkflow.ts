@@ -7,11 +7,14 @@ import type {
 import type { OpeningSuggestion } from "./openingAssociator";
 import type { SmartArchitecturalCandidate } from "./projectAnalyzer";
 
+export type OpeningApprovalMode = "auto" | "human";
+
 export interface OpeningWorkflowResult {
   scene: Scene;
   autoLabelsApplied: number;
   manualLabelsPreserved: number;
   readyFound: number;
+  prepared: number;
   approved: number;
   alreadyApproved: number;
   reviewRemaining: number;
@@ -86,25 +89,62 @@ function applyConfidentArchitecturalLabels(
   };
 }
 
+function reviewedTagForSuggestion(
+  current: ModelNodeTag,
+  suggestion: OpeningSuggestion,
+  associatedRooms: Room[],
+  mode: OpeningApprovalMode,
+): ModelNodeTag {
+  const sharedUnit =
+    associatedRooms.length > 0 &&
+    associatedRooms.every(
+      (candidate) => candidate.unit === associatedRooms[0].unit,
+    )
+      ? associatedRooms[0].unit
+      : undefined;
+  const human = mode === "human";
+  const next: ModelNodeTag = {
+    ...current,
+    floorId: suggestion.floorId,
+    assignment: human ? "manual" : "auto",
+    confidence: human ? 1 : suggestion.confidence,
+    semantic: suggestion.kind,
+    semanticAssignment: human ? "manual" : "auto",
+    semanticConfidence: human ? 1 : suggestion.confidence,
+  };
+  if (suggestion.roomIds.length === 1) {
+    next.roomId = suggestion.roomIds[0];
+    if (associatedRooms[0]?.unit) next.unit = associatedRooms[0].unit;
+    else delete next.unit;
+  } else {
+    delete next.roomId;
+    if (sharedUnit) next.unit = sharedUnit;
+    else delete next.unit;
+  }
+  return next;
+}
+
 export function applyReadyOpeningWorkflow(
   scene: Scene,
   candidates: readonly SmartArchitecturalCandidate[],
   suggestions: readonly OpeningSuggestion[],
   makeId: () => string = () => crypto.randomUUID(),
+  mode: OpeningApprovalMode = "human",
 ): OpeningWorkflowResult {
   const labels = applyConfidentArchitecturalLabels(scene, candidates);
   const existingOpenings = scene.openings ?? [];
-  const existingKeys = new Set(
-    existingOpenings
-      .filter(
-        (opening) =>
-          opening.sourceNodeName &&
-          opening.sourceOccurrence !== undefined,
-      )
-      .map((opening) =>
-        nodeKey(opening.sourceNodeName!, opening.sourceOccurrence!),
-      ),
-  );
+  const nextOpenings: Opening[] = existingOpenings.map((opening) => ({
+    ...opening,
+    roomIds: [...opening.roomIds],
+  }));
+  const existingByKey = new Map<string, number>();
+  nextOpenings.forEach((opening, index) => {
+    if (opening.sourceNodeName && opening.sourceOccurrence !== undefined)
+      existingByKey.set(
+        nodeKey(opening.sourceNodeName, opening.sourceOccurrence),
+        index,
+      );
+  });
 
   const tagByKey = new Map<string, ModelNodeTag>(
     labels.tags.map((tag) => [
@@ -112,7 +152,7 @@ export function applyReadyOpeningWorkflow(
       { ...tag },
     ]),
   );
-  const nextOpenings: Opening[] = [...existingOpenings];
+  let prepared = 0;
   let approved = 0;
   let alreadyApproved = 0;
   let readyFound = 0;
@@ -125,79 +165,67 @@ export function applyReadyOpeningWorkflow(
     )
       continue;
     readyFound += 1;
-    if (existingKeys.has(suggestion.key)) {
-      alreadyApproved += 1;
-      continue;
+
+    const existingIndex = existingByKey.get(suggestion.key);
+    if (existingIndex !== undefined) {
+      const existing = nextOpenings[existingIndex];
+      if (mode === "human" && !existing.reviewed) {
+        nextOpenings[existingIndex] = {
+          ...existing,
+          reviewed: true,
+          reviewState: "human_reviewed",
+        };
+        approved += 1;
+      } else if (existing.reviewed) {
+        alreadyApproved += 1;
+        if (mode === "auto") continue;
+      }
+    } else {
+      const human = mode === "human";
+      nextOpenings.push({
+        id: makeId(),
+        floorId: suggestion.floorId,
+        kind: suggestion.kind,
+        roomIds: [...suggestion.roomIds],
+        x: suggestion.position[0],
+        y: suggestion.position[1],
+        z: suggestion.position[2],
+        width: suggestion.width,
+        height: suggestion.height,
+        ...(suggestion.sillHeight !== undefined
+          ? { sillHeight: suggestion.sillHeight }
+          : {}),
+        rotationY: suggestion.rotationY,
+        reviewed: human,
+        reviewState: human ? "human_reviewed" : "auto_ready",
+        sourceNodeName: suggestion.sourceNodeName,
+        sourceOccurrence: suggestion.sourceOccurrence,
+        confidence: suggestion.confidence,
+      });
+      existingByKey.set(suggestion.key, nextOpenings.length - 1);
+      if (human) approved += 1;
+      else prepared += 1;
     }
 
-    nextOpenings.push({
-      id: makeId(),
-      floorId: suggestion.floorId,
-      kind: suggestion.kind,
-      roomIds: [...suggestion.roomIds],
-      x: suggestion.position[0],
-      y: suggestion.position[1],
-      z: suggestion.position[2],
-      width: suggestion.width,
-      height: suggestion.height,
-      ...(suggestion.sillHeight !== undefined
-        ? { sillHeight: suggestion.sillHeight }
-        : {}),
-      rotationY: suggestion.rotationY,
-      reviewed: true,
-      sourceNodeName: suggestion.sourceNodeName,
-      sourceOccurrence: suggestion.sourceOccurrence,
-      confidence: suggestion.confidence,
-    });
-    existingKeys.add(suggestion.key);
-
-    const current = tagByKey.get(suggestion.key) ?? {
-      nodeName: suggestion.sourceNodeName,
-      occurrence: suggestion.sourceOccurrence,
-    };
     const associatedRooms = suggestion.roomIds
       .map((roomId) =>
         scene.rooms.find((candidate) => candidate.id === roomId),
       )
       .filter((candidate): candidate is Room => Boolean(candidate));
-    const sharedUnit =
-      associatedRooms.length > 0 &&
-      associatedRooms.every(
-        (candidate) => candidate.unit === associatedRooms[0].unit,
-      )
-        ? associatedRooms[0].unit
-        : undefined;
-
-    const reviewedTag: ModelNodeTag = {
-      ...current,
-      floorId: suggestion.floorId,
-      assignment: "manual",
-      confidence: 1,
-      semantic: suggestion.kind,
-      semanticAssignment: "manual",
-      semanticConfidence: 1,
+    const current = tagByKey.get(suggestion.key) ?? {
+      nodeName: suggestion.sourceNodeName,
+      occurrence: suggestion.sourceOccurrence,
     };
-    if (suggestion.roomIds.length === 1) {
-      reviewedTag.roomId = suggestion.roomIds[0];
-      if (associatedRooms[0]?.unit) reviewedTag.unit = associatedRooms[0].unit;
-      else delete reviewedTag.unit;
-    } else {
-      delete reviewedTag.roomId;
-      if (sharedUnit) reviewedTag.unit = sharedUnit;
-      else delete reviewedTag.unit;
-    }
-    tagByKey.set(suggestion.key, reviewedTag);
-    approved += 1;
+    tagByKey.set(
+      suggestion.key,
+      reviewedTagForSuggestion(current, suggestion, associatedRooms, mode),
+    );
   }
 
-  const pendingKeys = new Set(
-    suggestions
-      .filter((suggestion) => !existingKeys.has(suggestion.key))
-      .map((suggestion) => suggestion.key),
-  );
+  const knownKeys = new Set(existingByKey.keys());
   const reviewRemaining = suggestions.filter(
     (suggestion) =>
-      pendingKeys.has(suggestion.key) &&
+      !knownKeys.has(suggestion.key) &&
       (!suggestion.ready ||
         !suggestion.floorId ||
         suggestion.roomIds.length === 0),
@@ -212,6 +240,7 @@ export function applyReadyOpeningWorkflow(
     autoLabelsApplied: labels.applied,
     manualLabelsPreserved: labels.preservedManual,
     readyFound,
+    prepared,
     approved,
     alreadyApproved,
     reviewRemaining,
