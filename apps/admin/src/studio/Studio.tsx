@@ -70,6 +70,7 @@ import {
 } from "./sourceFusion";
 import { prepareFbxWebModel } from "./fbxWebModel";
 import { buildSmartSceneDraft } from "./smartDraftBuilder";
+import { extractSketchUpTextures } from "./sketchUpArchive";
 import {
   suggestOpeningAssociations,
   type OpeningSuggestion,
@@ -2447,6 +2448,66 @@ export default function Studio() {
     );
   }
 
+  async function recoverSketchUpTextures() {
+    const archives = files.filter((asset) => /\.(?:skb|skp)$/i.test(asset.name));
+    if (!archives.length)
+      throw Error("Attach a SketchUp SKB/SKP source before recovering textures.");
+
+    const recoveredFiles: File[] = [];
+    const issues: string[] = [];
+    for (const archive of archives) {
+      const recovered = await extractSketchUpTextures(archive);
+      issues.push(...recovered.issues);
+      for (const texture of recovered.textures)
+        recoveredFiles.push(
+          new File([texture.blob], texture.name, {
+            type: texture.type,
+            lastModified: Date.now(),
+          }),
+        );
+    }
+    if (!recoveredFiles.length) {
+      setMessage(
+        issues.length
+          ? `No recoverable SketchUp texture was added · ${issues[0]}`
+          : "No material texture file was found inside the SketchUp source.",
+      );
+      return;
+    }
+
+    const incoming = await Promise.all(
+      recoveredFiles.map((file) => storage.makeAsset(file, p.id)),
+    );
+    const known = new Set(files.map((asset) => asset.hash.toLowerCase()));
+    const batch = new Set<string>();
+    const assets = incoming.filter((asset) => {
+      const hash = asset.hash.toLowerCase();
+      if (known.has(hash) || batch.has(hash)) return false;
+      batch.add(hash);
+      return true;
+    });
+    if (!assets.length) {
+      setMessage("SketchUp textures are already attached to this project.");
+      return;
+    }
+    const existing = new Set(p.assets);
+    const next: Project = {
+      ...p,
+      assets: [
+        ...p.assets,
+        ...assets.map((asset) => asset.id).filter((id) => !existing.has(id)),
+      ],
+    };
+    await persist(next, assets);
+    setSmartAnalysis(undefined);
+    const issueText = issues.length
+      ? ` · ${issues.length} archive item${issues.length === 1 ? "" : "s"} skipped/reviewed`
+      : "";
+    setMessage(
+      `${assets.length} SketchUp material texture${assets.length === 1 ? "" : "s"} recovered automatically${issueText}.`,
+    );
+  }
+
   async function autoSetupDetectedSourcePack() {
     let setup = await detectQuickSourceSetup(files);
     if (!setup.profile || !setup.slug)
@@ -3219,6 +3280,7 @@ export default function Studio() {
           }
           onAnalyze={() => void task(analyzeSmartProject)}
           onPrepareWebModel={() => void task(prepareSelectedWebModel)}
+          onRecoverSketchUpTextures={() => void task(recoverSketchUpTextures)}
           onSelectModel={selectBuilderModel}
           onBuildDraft={() => {
             try {
