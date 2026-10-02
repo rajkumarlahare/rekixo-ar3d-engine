@@ -19,6 +19,9 @@ const sketchUrl = asUrl(
 const dwgUrl = asUrl(
   compile("apps/admin/src/studio/dwgEvidence.ts"),
 );
+const conflictsUrl = asUrl(
+  compile("apps/admin/src/studio/sourceConflicts.ts"),
+);
 const sourceFusionCode = compile("apps/admin/src/studio/sourceFusion.ts")
   .replace(
     /from "\.\/sketchUpArchive"/,
@@ -27,6 +30,10 @@ const sourceFusionCode = compile("apps/admin/src/studio/sourceFusion.ts")
   .replace(
     /from "\.\/dwgEvidence"/,
     `from ${JSON.stringify(dwgUrl)}`,
+  )
+  .replace(
+    /from "\.\/sourceConflicts"/,
+    `from ${JSON.stringify(conflictsUrl)}`,
   );
 const { buildSourceFusionReport } = await import(asUrl(sourceFusionCode));
 
