@@ -1,6 +1,7 @@
 import { validProjectSlug as validSharedProjectSlug } from "../../../../shared/project-slug-policy.js";
 
 export type Kind = "sofa" | "bed" | "table" | "wardrobe" | "plant";
+export type ReviewState = "suggested" | "auto_ready" | "human_reviewed";
 export interface Floor {
   id: string;
   name: string;
@@ -8,7 +9,9 @@ export interface Floor {
   /** Auto-detected repeated floor relationship. Undefined means unique/unclassified. */
   repeatOfFloorId?: string;
   repeatConfidence?: number;
+  /** Human approval remains separate from algorithmic readiness. */
   repeatReviewed?: boolean;
+  repeatReviewState?: ReviewState;
 }
 export type RoomPoint = [number, number];
 export interface Room {
@@ -57,6 +60,8 @@ export interface Wall {
   sourceNodeName?: string;
   sourceOccurrence?: number;
   confidence?: number;
+  /** suggested/auto_ready never means a human reviewed this wall. */
+  reviewState?: ReviewState;
 }
 export type OpeningKind = "door" | "window" | "opening";
 export interface Opening {
@@ -75,6 +80,8 @@ export interface Opening {
   sourceNodeName?: string;
   sourceOccurrence?: number;
   confidence?: number;
+  /** suggested/auto_ready never means a human reviewed this opening. */
+  reviewState?: ReviewState;
 }
 export interface Asset {
   id: string;
@@ -480,6 +487,7 @@ export function duplicateFloor(p: Project, floorId: string): Project {
           return mapped ? [mapped] : [];
         }),
         reviewed: false,
+        reviewState: "suggested",
         sourceNodeName: undefined,
         sourceOccurrence: undefined,
         confidence: wall.origin === "manual" ? wall.confidence : undefined,
@@ -499,6 +507,7 @@ export function duplicateFloor(p: Project, floorId: string): Project {
           return mapped ? [mapped] : [];
         }),
         reviewed: false,
+        reviewState: "suggested",
         sourceNodeName: undefined,
         sourceOccurrence: undefined,
         confidence: undefined,
@@ -693,7 +702,15 @@ export function validateScene(s: Scene): void {
       (f.repeatConfidence !== undefined &&
         !number(f.repeatConfidence, 0, 1)) ||
       (f.repeatReviewed !== undefined &&
-        typeof f.repeatReviewed !== "boolean")
+        typeof f.repeatReviewed !== "boolean") ||
+      (f.repeatReviewState !== undefined &&
+        !["suggested", "auto_ready", "human_reviewed"].includes(
+          f.repeatReviewState,
+        )) ||
+      (f.repeatReviewState === "human_reviewed" && f.repeatReviewed !== true) ||
+      (f.repeatReviewed === true &&
+        f.repeatReviewState !== undefined &&
+        f.repeatReviewState !== "human_reviewed")
     )
       throw Error("Invalid floor elevation, repeat relationship or name.");
   for (const r of s.rooms)
@@ -775,7 +792,15 @@ export function validateScene(s: Scene): void {
           wall.sourceOccurrence > 100000 ||
           !wall.sourceNodeName)) ||
       (wall.confidence !== undefined &&
-        !number(wall.confidence, 0, 1))
+        !number(wall.confidence, 0, 1)) ||
+      (wall.reviewState !== undefined &&
+        !["suggested", "auto_ready", "human_reviewed"].includes(
+          wall.reviewState,
+        )) ||
+      (wall.reviewState === "human_reviewed" && wall.reviewed !== true) ||
+      (wall.reviewed === true &&
+        wall.reviewState !== undefined &&
+        wall.reviewState !== "human_reviewed")
     )
       throw Error("Invalid parametric wall.");
   }
@@ -809,7 +834,15 @@ export function validateScene(s: Scene): void {
           opening.sourceOccurrence > 100000 ||
           !opening.sourceNodeName)) ||
       (opening.confidence !== undefined &&
-        !number(opening.confidence, 0, 1))
+        !number(opening.confidence, 0, 1)) ||
+      (opening.reviewState !== undefined &&
+        !["suggested", "auto_ready", "human_reviewed"].includes(
+          opening.reviewState,
+        )) ||
+      (opening.reviewState === "human_reviewed" && opening.reviewed !== true) ||
+      (opening.reviewed === true &&
+        opening.reviewState !== undefined &&
+        opening.reviewState !== "human_reviewed")
     )
       throw Error("Invalid reviewed wall opening.");
   }
