@@ -511,6 +511,7 @@ function printableAsciiRuns(bytes: Uint8Array, limit = 1200) {
     const value = new TextDecoder("windows-1252")
       .decode(bytes.subarray(start, end))
       .replace(/\s+/g, " ")
+      .replace(/[\u0080-\uFFFF].*$/, "")
       .trim();
     if (
       value.length >= 3 &&
@@ -538,20 +539,25 @@ function printableAsciiRuns(bytes: Uint8Array, limit = 1200) {
 
 function semanticStrings(values: readonly string[]) {
   const architecture = /\b(?:wall|door|window|stair|lift|elevator|column|slab|roof|floor|room|living|kitchen|bed ?room|toilet|bath|balcony|duct|shaft|gate|parking|sidewalk|boundary|terrace|lobby|corridor)\b/i;
-  const tagLike = /^(?:layer\s*\d+|tag\b|[a-z0-9_. -]*(?:wall|door|window|stair|lift|column|slab|floor|roof|duct|sidewalk|parking)[a-z0-9_. -]*)$/i;
+  const tagLike = /^(?:layer(?:[_ .-]*[a-z0-9_. -]+)?|tag\b|[a-z0-9_. -]*(?:wall|door|window|stair|lift|column|slab|floor|roof|duct|sidewalk|parking)[a-z0-9_. -]*)$/i;
   const componentLike = /(?:component|group|instance|block|door|window|stair|lift|furniture|plant|tree|car|gate)/i;
 
   const readableStrings = values
+    .filter((value) => !value.startsWith("<"))
     .filter((value) => !/^[A-F0-9]{24,}$/i.test(value.replace(/[^A-F0-9]/gi, "")))
     .slice(0, 500);
+  const searchable = (value: string) =>
+    value.replace(/[_./:-]+/g, " ").replace(/\s+/g, " ").trim();
   return {
     readableStrings,
-    tagCandidates: readableStrings.filter((value) => tagLike.test(value)).slice(0, 180),
+    tagCandidates: readableStrings
+      .filter((value) => tagLike.test(value))
+      .slice(0, 180),
     componentCandidates: readableStrings
-      .filter((value) => componentLike.test(value))
+      .filter((value) => componentLike.test(searchable(value)))
       .slice(0, 180),
     architecturalTokens: readableStrings
-      .filter((value) => architecture.test(value))
+      .filter((value) => architecture.test(searchable(value)))
       .slice(0, 220),
   };
 }
