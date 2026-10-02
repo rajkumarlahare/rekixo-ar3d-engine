@@ -5,9 +5,9 @@
     "database_id": "43423a10-66b2-4460-af5f-f6ab9f2947dc"
   },
   "r2": {
-    "binding": "ASSETS_BUCKET",
+    "binding": "MODEL_ASSETS",
     "bucket_name": "rekixo-3d-assets",
-    "status": "not-created-yet"
+    "status": "active"
   },
   "workers": {
     "admin": "rekixo-3d-admin",
