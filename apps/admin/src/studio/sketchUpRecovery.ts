@@ -2,14 +2,21 @@ import type { Asset, Project } from "./domain";
 import * as storage from "./storage";
 import { extractSketchUpTextures } from "./sketchUpArchive";
 import { auditFbxSources } from "./sourceAudit";
+import {
+  materialNameFromArchivePath,
+  type SketchUpMaterialTextureBinding,
+} from "./sketchUpMaterialResolver";
 
 function leaf(value: string) {
   return value.replaceAll("\\", "/").split("/").pop() ?? value;
 }
 
+function stem(value: string) {
+  return leaf(value).replace(/\.[^.]+$/, "");
+}
+
 function normalizedStem(value: string) {
-  return leaf(value)
-    .replace(/\.[^.]+$/, "")
+  return stem(value)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "");
 }
@@ -62,12 +69,33 @@ function canonicalRecoveredTextureName(
   return ranked[0].expected;
 }
 
+interface RecoveredTextureRow {
+  sourceArchiveId: string;
+  archivePath: string;
+  materialName: string;
+  confidence: number;
+  file: File;
+}
+
 export interface SketchUpTextureRecoveryResult {
   assets: Asset[];
   nextProject: Project;
   issues: string[];
   archives: number;
   recoveredFiles: number;
+  materialBindings: SketchUpMaterialTextureBinding[];
+}
+
+function equivalentByHash(
+  candidates: readonly Asset[],
+  target: Asset,
+): Asset | undefined {
+  return candidates.find(
+    (candidate) =>
+      candidate.hash.toLowerCase() === target.hash.toLowerCase() &&
+      candidate.size === target.size &&
+      candidate.type === target.type,
+  );
 }
 
 export async function prepareSketchUpTextureRecovery(
@@ -78,7 +106,7 @@ export async function prepareSketchUpTextureRecovery(
   if (!archives.length)
     throw Error("Attach a SketchUp SKB/SKP source before recovering textures.");
 
-  const recoveredFiles: File[] = [];
+  const recoveredRows: RecoveredTextureRow[] = [];
   const issues: string[] = [];
   const fbxAudits = await auditFbxSources([...files]);
   const expectedTextureNames = [
@@ -88,6 +116,7 @@ export async function prepareSketchUpTextureRecovery(
       ),
     ),
   ];
+
   for (const archive of archives) {
     const recovered = await extractSketchUpTextures(archive);
     issues.push(...recovered.issues);
@@ -97,37 +126,72 @@ export async function prepareSketchUpTextureRecovery(
         texture.name,
         expectedTextureNames,
       );
-      recoveredFiles.push(
-        new File([texture.blob], canonicalName, {
+      const materialName =
+        materialNameFromArchivePath(texture.archivePath) ??
+        stem(canonicalName).trim() ??
+        stem(texture.name).trim();
+      recoveredRows.push({
+        sourceArchiveId: archive.id,
+        archivePath: texture.archivePath,
+        materialName: materialName || stem(texture.name),
+        confidence: materialNameFromArchivePath(texture.archivePath) ? 0.98 : 0.72,
+        file: new File([texture.blob], canonicalName, {
           type: texture.type,
           lastModified: Date.now(),
         }),
-      );
+      });
     }
   }
 
   const incoming = await Promise.all(
-    recoveredFiles.map((file) => storage.makeAsset(file, project.id)),
+    recoveredRows.map((row) => storage.makeAsset(row.file, project.id)),
   );
-  const known = new Set(files.map((asset) => asset.hash.toLowerCase()));
-  const batch = new Set<string>();
-  const assets = incoming.filter((asset) => {
-    const hash = asset.hash.toLowerCase();
-    if (known.has(hash) || batch.has(hash)) return false;
-    batch.add(hash);
-    return true;
+  const resolvedAssets: Asset[] = [];
+  const createdAssets: Asset[] = [];
+  const available: Asset[] = [...files];
+
+  for (const candidate of incoming) {
+    const equivalent = equivalentByHash(available, candidate);
+    const resolved = equivalent ?? candidate;
+    resolvedAssets.push(resolved);
+    if (!equivalent) {
+      available.push(candidate);
+      createdAssets.push(candidate);
+    }
+  }
+
+  const materialBindings: SketchUpMaterialTextureBinding[] = [];
+  const seenBinding = new Set<string>();
+  recoveredRows.forEach((row, index) => {
+    const asset = resolvedAssets[index];
+    if (!asset) return;
+    const key = `${row.sourceArchiveId}\u0000${row.materialName.toLowerCase()}\u0000${asset.id}`;
+    if (seenBinding.has(key)) return;
+    seenBinding.add(key);
+    materialBindings.push({
+      sourceArchiveId: row.sourceArchiveId,
+      archivePath: row.archivePath,
+      materialName: row.materialName,
+      textureAssetId: asset.id,
+      textureName: asset.name,
+      confidence: row.confidence,
+    });
   });
+
   const existing = new Set(project.assets);
   return {
-    assets,
+    assets: createdAssets,
     issues,
     archives: archives.length,
-    recoveredFiles: recoveredFiles.length,
+    recoveredFiles: recoveredRows.length,
+    materialBindings,
     nextProject: {
       ...project,
       assets: [
         ...project.assets,
-        ...assets.map((asset) => asset.id).filter((id) => !existing.has(id)),
+        ...createdAssets
+          .map((asset) => asset.id)
+          .filter((assetId) => !existing.has(assetId)),
       ],
     },
   };
