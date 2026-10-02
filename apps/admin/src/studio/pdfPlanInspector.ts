@@ -209,8 +209,7 @@ async function embeddedImageCandidates(
 
     if (
       fn !== OPS.paintImageXObject &&
-      fn !== OPS.paintInlineImageXObject &&
-      fn !== OPS.paintImageMaskXObject
+      fn !== OPS.paintInlineImageXObject
     )
       continue;
 
