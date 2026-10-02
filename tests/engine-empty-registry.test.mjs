@@ -8,7 +8,8 @@ test("production deploy is valid when Engine has zero projects", () => {
   const workflow = read(".github/workflows/deploy-cloudflare.yml");
   assert.match(workflow, /Verify empty-safe Engine production shell/);
   assert.match(workflow, /no-project-selected/);
-  assert.match(workflow, /PUBLIC_CODE" = "404"/);
+  assert.match(workflow, /retry_http "Public missing project"[\s\S]* 404/);
+  assert.match(workflow, /Production shell status summary:/);
   assert.match(workflow, /without requiring any project fixture/);
   assert.doesNotMatch(workflow, /Verify legacy Jyoti public production fixture/);
   assert.doesNotMatch(workflow, /Verify Jyoti admin shell/);
