@@ -2239,6 +2239,9 @@ export default function Studio() {
     let materialBindings: Awaited<
       ReturnType<typeof prepareSketchUpTextureRecovery>
     >["materialBindings"] = [];
+    let materialStyles: Awaited<
+      ReturnType<typeof prepareSketchUpTextureRecovery>
+    >["materialStyles"] = [];
     let recoveredCount = 0;
     const recoveryIssues: string[] = [];
 
@@ -2249,6 +2252,7 @@ export default function Studio() {
       );
       nextProject = recovery.nextProject;
       materialBindings = recovery.materialBindings;
+      materialStyles = recovery.materialStyles;
       recoveryIssues.push(...recovery.issues);
       for (const asset of recovery.assets) {
         const existing = workingFiles.find(
@@ -2267,6 +2271,7 @@ export default function Studio() {
     const prepared = await prepareFbxWebModel(source, p.id, {
       textureAssets: workingFiles,
       materialBindings,
+      materialStyles,
     });
     const existing = workingFiles.find(
       (file) =>
@@ -2296,6 +2301,9 @@ export default function Studio() {
     const fused = prepared.materialTexturesApplied
       ? ` · ${prepared.materialTexturesApplied} material texture${prepared.materialTexturesApplied === 1 ? "" : "s"} fused`
       : "";
+    const styled = prepared.materialStylesApplied
+      ? ` · ${prepared.materialStylesApplied} material style${prepared.materialStylesApplied === 1 ? "" : "s"} applied`
+      : "";
     const resolved = prepared.resolvedExternalTextures
       ? ` · ${prepared.resolvedExternalTextures} FBX texture reference${prepared.resolvedExternalTextures === 1 ? "" : "s"} resolved`
       : "";
@@ -2306,7 +2314,7 @@ export default function Studio() {
       ? ` · ${recoveryIssues.length} recovery review item${recoveryIssues.length === 1 ? "" : "s"}`
       : "";
     setMessage(
-      `Web GLB ready · ${prepared.meshCount} meshes · ${prepared.materialCount} materials · ${prepared.triangleCount.toLocaleString()} triangles${recovered}${fused}${resolved}${unresolved}${review}.`,
+      `Web GLB ready · ${prepared.meshCount} meshes · ${prepared.materialCount} materials · ${prepared.triangleCount.toLocaleString()} triangles${recovered}${fused}${styled}${resolved}${unresolved}${review}.`,
     );
   }
 
