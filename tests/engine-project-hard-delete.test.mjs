@@ -22,6 +22,7 @@ test("Engine hard delete removes all project-owned storage and project records",
   assert.match(worker, /MODEL_ASSETS\.list/);
   assert.match(worker, /MODEL_ASSETS\.delete\(keys\)/);
   assert.match(worker, /DELETE FROM geo_placements_3d WHERE project_id=\?/);
+  assert.match(worker, /DELETE FROM experiences_3d WHERE project_id=\?/);
   assert.match(worker, /DELETE FROM release_assets_3d WHERE project_id=\?/);
   assert.match(worker, /DELETE FROM studio_assets_3d WHERE project_id=\?/);
   assert.match(worker, /DELETE FROM models_3d WHERE project_id=\?/);
