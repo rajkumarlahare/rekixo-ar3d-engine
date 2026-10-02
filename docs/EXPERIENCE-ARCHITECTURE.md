@@ -124,11 +124,25 @@ tables.
   release rows.
 - No Platform database, R2, route or deployment dependency is introduced.
 
-### Phase 3 — project-centric Admin workspace
+### Phase 3 — project-centric Admin workspace ✅
 
-Replace the mandatory `Create -> Edit -> Map -> Live` presentation with
-Building-first project workflow and an optional `+ Add 3D Geo Experience` card.
-Keep current Studio and Building publish paths compatible.
+The Admin dashboard now presents the Building-first workflow:
+
+`Create -> Design -> Publish -> Building Live`
+
+- The standalone **3D Building Website** is the primary customer deliverable.
+- The top-level mandatory Geo step is removed from the project workflow.
+- Each selected project has an **Experiences** section.
+- The Building Experience card exposes the canonical Building URL and current
+  immutable Building release state.
+- **3D Geo Experience** is a separate optional add-on card.
+- Geo creation is blocked until an active immutable Building release exists.
+- Creating/managing Geo opens the existing Engine Geo Mapper with the selected
+  project context.
+- A Geo Experience displays its pinned Building source release and can surface a
+  newer Building release without switching the Geo source automatically.
+- Building and Geo canonical URLs remain independent and unchanged.
+- Existing Studio and Geo Mapper routes remain compatible.
 
 ### Phase 4 — Geo draft separation
 
