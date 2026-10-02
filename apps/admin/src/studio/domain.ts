@@ -36,6 +36,7 @@ export interface Room {
 export type FurnitureOrigin = "demo-auto" | "demo-repeat" | "source-auto";
 
 export type SiteElementKind =
+  | "garden"
   | "lawn"
   | "path"
   | "road"
@@ -944,6 +945,7 @@ export function validateScene(s: Scene): void {
   for (const site of s.siteElements ?? []) {
     if (
       ![
+        "garden",
         "lawn",
         "path",
         "road",
