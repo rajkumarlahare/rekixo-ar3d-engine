@@ -9,6 +9,7 @@ import {
 } from "./sceneCanvasModel";
 import { roomSurface } from "./sceneCanvasRooms";
 import { addFurnitureVisual } from "./furnitureVisual";
+import { addSiteElementVisual } from "./siteElementVisual";
 import {
   installCanvasFurnitureDrop,
   placeCanvasFurnitureAtPointer,
@@ -56,6 +57,16 @@ export type TransformCommit =
       x?: number;
       z?: number;
       rotation?: number;
+    }
+  | {
+      kind: "siteElement";
+      id: string;
+      x?: number;
+      z?: number;
+      rotation?: number;
+      width?: number;
+      depth?: number;
+      height?: number;
     }
   | {
       kind: "model";
@@ -151,6 +162,7 @@ export default function SceneCanvas(props: Props) {
     controls: OrbitControls;
     model: T.Group;
     rooms: T.Group;
+    site: T.Group;
     references: T.Group;
     keys: Set<string>;
     walkRoomId: string;
@@ -224,7 +236,9 @@ export default function SceneCanvas(props: Props) {
     scene.add(grid);
     const model = new T.Group(),
       rooms = new T.Group(),
+      site = new T.Group(),
       references = new T.Group();
+    site.name = "Studio site and landscape";
     references.name = "Studio reference layers";
     const roomDraft = new T.Mesh(
       new T.BoxGeometry(1, 0.06, 1),
@@ -243,7 +257,15 @@ export default function SceneCanvas(props: Props) {
     const polygonEdit = new T.Group();
     polygonEdit.name = "Room polygon edit handles";
     polygonEdit.renderOrder = 32;
-    scene.add(references, model, rooms, roomDraft, polygonDraft, polygonEdit);
+    scene.add(
+      references,
+      model,
+      site,
+      rooms,
+      roomDraft,
+      polygonDraft,
+      polygonEdit,
+    );
     const keys = new Set<string>();
     const selectables = new Map<string, T.Object3D>();
     const transform = new TransformControls(camera, renderer.domElement);
@@ -526,6 +548,7 @@ export default function SceneCanvas(props: Props) {
       controls,
       model,
       rooms,
+      site,
       references,
       keys,
       walkRoomId: props.roomId,
@@ -641,6 +664,43 @@ export default function SceneCanvas(props: Props) {
             width: Math.max(0.5, selectedRoom.width * Math.abs(target.scale.x)),
             height: Math.max(1.8, selectedRoom.height * Math.abs(target.scale.y)),
             depth: Math.max(0.5, selectedRoom.depth * Math.abs(target.scale.z)),
+          });
+        }
+        return;
+      }
+      const siteElement = current.scene.siteElements?.find(
+        (candidate) => candidate.id === current.selected,
+      );
+      if (siteElement) {
+        if (current.transformMode === "translate") {
+          current.onTransformCommit({
+            kind: "siteElement",
+            id: siteElement.id,
+            x: target.position.x,
+            z: target.position.z,
+          });
+        } else if (current.transformMode === "rotate") {
+          current.onTransformCommit({
+            kind: "siteElement",
+            id: siteElement.id,
+            rotation: T.MathUtils.radToDeg(target.rotation.y),
+          });
+        } else if (current.transformMode === "scale") {
+          current.onTransformCommit({
+            kind: "siteElement",
+            id: siteElement.id,
+            width: Math.max(
+              0.05,
+              siteElement.width * Math.abs(target.scale.x),
+            ),
+            height: Math.max(
+              0.01,
+              siteElement.height * Math.abs(target.scale.y),
+            ),
+            depth: Math.max(
+              0.05,
+              siteElement.depth * Math.abs(target.scale.z),
+            ),
           });
         }
         return;
@@ -1105,13 +1165,26 @@ export default function SceneCanvas(props: Props) {
         }
       }
       const hit = ray.intersectObjects(
-        latest.current.view === "building" ? model.children : rooms.children,
+        latest.current.view === "building"
+          ? [...site.children, ...model.children]
+          : rooms.children,
         true,
       )[0];
       if (hit) {
         if (latest.current.view === "building") {
           let n: T.Object3D | null = hit.object;
-          while (n && !n.userData.studioNodeKey && n !== model) n = n.parent;
+          while (
+            n &&
+            !n.userData.selectId &&
+            !n.userData.studioNodeKey &&
+            n !== model &&
+            n !== site
+          )
+            n = n.parent;
+          if (n?.userData.selectId) {
+            latest.current.onSelect(String(n.userData.selectId));
+            return;
+          }
           if (n?.userData.studioNodeKey) {
             const summary: ModelNodeSummary = {
               key: String(n.userData.studioNodeKey),
@@ -1623,8 +1696,13 @@ export default function SceneCanvas(props: Props) {
     r.model.rotation.y = T.MathUtils.degToRad(alignment.rotationY);
     r.model.scale.setScalar(props.scene.scale);
     r.references.visible = props.view !== "walk";
+    r.site.visible = props.view === "building";
     r.transform.detach();
     r.selectables.clear();
+    for (const n of [...r.site.children]) {
+      r.site.remove(n);
+      disposeObjectResources(n);
+    }
     for (const n of [...r.rooms.children]) {
       r.rooms.remove(n);
       disposeObjectResources(n);
@@ -1632,6 +1710,23 @@ export default function SceneCanvas(props: Props) {
     r.model.visible = props.view === "building";
     r.rooms.visible = props.view !== "building" || Boolean(props.roomMapEnabled);
     r.controls.enabled = props.view !== "walk";
+
+    if (props.view === "building") {
+      for (const element of props.scene.siteElements ?? []) {
+        const root = new T.Group();
+        root.userData.selectId = element.id;
+        root.position.set(element.x, 0, element.z);
+        root.rotation.y = T.MathUtils.degToRad(element.rotation);
+        addSiteElementVisual(root, element);
+        r.site.add(root);
+        r.selectables.set(element.id, root);
+        if (element.id === props.selected) {
+          root.updateWorldMatrix(true, true);
+          r.site.add(new T.BoxHelper(root, 0x4f9c6c));
+        }
+      }
+    }
+
     for (const room of props.scene.rooms) {
       if (props.view === "walk" && room.id !== props.roomId) continue;
       if (
@@ -1771,11 +1866,18 @@ export default function SceneCanvas(props: Props) {
     }
 
     const target = runtime.selectables.get(props.selected);
+    const isSiteElement = Boolean(
+      props.scene.siteElements?.some(
+        (element) => element.id === props.selected,
+      ),
+    );
     if (
       !target ||
       !props.transformEnabled ||
       props.view === "walk" ||
-      (props.view === "building" && !props.roomMapEnabled)
+      (props.view === "building" &&
+        !props.roomMapEnabled &&
+        !isSiteElement)
     )
       return;
 
