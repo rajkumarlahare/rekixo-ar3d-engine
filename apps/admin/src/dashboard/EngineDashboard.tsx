@@ -5,11 +5,21 @@ import {
   assertAdminStatusPayload,
   type Admin3DProjectStatus,
   type AdminProjectsResponse,
+  type EngineExperienceSummary,
   type EngineProjectSummary,
   type Scene3DType,
 } from "@rekixo/3d-contracts";
-import { publicProjectPath } from "@rekixo/3d-engine-core";
-import { deleteAllProjects, ensureProject } from "../studio/cloud";
+import { geoPublicProjectPath, publicProjectPath } from "@rekixo/3d-engine-core";
+import {
+  createGeoExperience,
+  deleteAllProjects,
+  ensureProject,
+  experiences,
+  geoPlacement,
+  releases,
+  type CloudGeoPlacementState,
+  type CloudReleaseSummary,
+} from "../studio/cloud";
 import { newProject, projectSlug } from "../studio/domain";
 import "./engine-dashboard.css";
 
@@ -58,6 +68,11 @@ export default function EngineDashboard() {
   const [projects, setProjects] = useState<EngineProjectSummary[]>([]);
   const [selectedSlug, setSelectedSlug] = useState("");
   const [status, setStatus] = useState<ApiStatus>();
+  const [experienceItems, setExperienceItems] = useState<EngineExperienceSummary[]>([]);
+  const [releaseItems, setReleaseItems] = useState<CloudReleaseSummary[]>([]);
+  const [geoState, setGeoState] = useState<CloudGeoPlacementState>();
+  const [experienceBusy, setExperienceBusy] = useState(false);
+  const [experienceError, setExperienceError] = useState("");
   const [error, setError] = useState("");
   const [refresh, setRefresh] = useState(0);
   const [search, setSearch] = useState("");
@@ -158,6 +173,47 @@ export default function EngineDashboard() {
     return () => controller.abort();
   }, [selectedSlug, refresh]);
 
+
+  useEffect(() => {
+    if (!selectedSlug) {
+      setExperienceItems([]);
+      setReleaseItems([]);
+      setGeoState(undefined);
+      setExperienceError("");
+      return;
+    }
+
+    let cancelled = false;
+    setExperienceItems([]);
+    setReleaseItems([]);
+    setGeoState(undefined);
+    setExperienceError("");
+
+    void Promise.all([
+      experiences(selectedSlug),
+      releases(selectedSlug),
+      geoPlacement(selectedSlug),
+    ])
+      .then(([experienceResult, releaseResult, placementResult]) => {
+        if (cancelled) return;
+        setExperienceItems(experienceResult.experiences);
+        setReleaseItems(releaseResult.releases);
+        setGeoState(placementResult);
+      })
+      .catch((reason: unknown) => {
+        if (cancelled) return;
+        setExperienceError(
+          reason instanceof Error
+            ? reason.message
+            : "Project Experiences load nahi ho sake.",
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSlug, refresh]);
+
   function selectProject(slug: string) {
     setSelectedSlug(slug);
     setStatus(undefined);
@@ -230,6 +286,36 @@ export default function EngineDashboard() {
     }
   }
 
+
+  async function addGeoExperience() {
+    const activeRelease = releaseItems.find((release) => release.active);
+    if (!selectedSlug || !activeRelease) {
+      setExperienceError(
+        "3D Geo Experience add karne se pehle Building ko immutable release ke roop me publish karein.",
+      );
+      return;
+    }
+
+    setExperienceBusy(true);
+    setExperienceError("");
+    try {
+      const result = await createGeoExperience(selectedSlug, activeRelease.id);
+      setExperienceItems((current) => {
+        const withoutGeo = current.filter((item) => item.type !== "geo");
+        return [...withoutGeo, result.experience];
+      });
+      window.location.assign(projectUrl("geo-mapper", selectedSlug));
+    } catch (reason) {
+      setExperienceError(
+        reason instanceof Error
+          ? reason.message
+          : "3D Geo Experience create nahi ho saka.",
+      );
+    } finally {
+      setExperienceBusy(false);
+    }
+  }
+
   const selectedProject = projects.find((item) => item.slug === selectedSlug);
   const visibleProjects = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -247,9 +333,30 @@ export default function EngineDashboard() {
     [status],
   );
   const enabledCount = status?.scenes.filter((scene) => scene.enabled).length ?? 0;
-  const liveUrl = status
+  const activeBuildingRelease = releaseItems.find((release) => release.active);
+  const buildingExperience = experienceItems.find((item) => item.type === "building");
+  const geoExperience = experienceItems.find((item) => item.type === "geo");
+  const buildingLive = Boolean(
+    status?.project.status === "published" && activeBuildingRelease,
+  );
+  const buildingUrl = status
     ? `https://ar3dstudio.in${publicProjectPath(status.project.slug)}`
     : "";
+  const geoUrl = status
+    ? `https://ar3dstudio.in${geoPublicProjectPath(status.project.slug)}`
+    : "";
+  const geoLive = Boolean(
+    geoExperience &&
+      geoState?.placement?.publicEnabled &&
+      !geoState?.placementStale &&
+      status?.project.status === "published",
+  );
+  const geoNeedsSourceUpgrade = Boolean(
+    geoExperience &&
+      activeBuildingRelease &&
+      geoExperience.sourceBuildingReleaseId &&
+      geoExperience.sourceBuildingReleaseId !== activeBuildingRelease.id,
+  );
   const assetPrefix = status
     ? `projects/${status.project.slug}`
     : "projects/{slug}";
@@ -272,14 +379,8 @@ export default function EngineDashboard() {
           >
             Design Studio
           </a>
-          <a
-            href={
-              selectedSlug
-                ? projectUrl("geo-mapper", selectedSlug)
-                : "/3Dprojects/geo-mapper"
-            }
-          >
-            3D Jio Mapper
+          <a href={selectedSlug ? "#experiences" : "/3Dprojects"}>
+            Experiences
           </a>
         </nav>
 
@@ -303,11 +404,12 @@ export default function EngineDashboard() {
 
       <section className="engine-home__intro">
         <div className="engine-home__intro-copy">
-          <p className="engine-kicker">START HERE</p>
-          <h1>Create → Edit → Map → Live</h1>
+          <p className="engine-kicker">BUILDING-FIRST WORKFLOW</p>
+          <h1>Create → Design → Publish → Building Live</h1>
           <p>
-            Naya 3D project yahin create hota hai. Create ke baad wahi project Design Studio
-            me khulega; publish hone ke baad 3D Jio Mapper se real location set karein.
+            Har Engine project ka primary deliverable standalone 3D Building Website hai.
+            3D Geo Experience optional add-on hai aur sirf customer requirement par baad me
+            existing immutable Building release ko reference karke add hota hai.
           </p>
           <button
             className="engine-button engine-button--primary engine-button--hero"
@@ -317,25 +419,31 @@ export default function EngineDashboard() {
             + Create New 3D Project
           </button>
         </div>
-        <div className="engine-home__steps" aria-label="3D project workflow">
-          <button type="button" onClick={() => setShowCreate(true)}>
-            <span>01</span><strong>Create Project</strong><small>Name + location se start karein</small>
-          </button>
-          <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
-            <span>02</span><strong>Design Studio</strong><small>GLB, rooms, material, publish</small>
-          </a>
-          <a href={selectedSlug ? projectUrl("geo-mapper", selectedSlug) : "/3Dprojects/geo-mapper"}>
-            <span>03</span><strong>3D Jio Mapper</strong><small>Real location + heading + ground</small>
-          </a>
-          {liveUrl ? (
-            <a href={liveUrl} target="_blank" rel="noreferrer">
-              <span>04</span><strong>Open Live</strong><small>Customer-facing experience</small>
+        <div>
+          <div className="engine-home__steps" aria-label="Building project workflow">
+            <button type="button" onClick={() => setShowCreate(true)}>
+              <span>01</span><strong>Create Project</strong><small>Name + location se start karein</small>
+            </button>
+            <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
+              <span>02</span><strong>Design Building</strong><small>Model, rooms, material, walkthrough</small>
             </a>
-          ) : (
-            <div>
-              <span>04</span><strong>Go Live</strong><small>Studio se publish karne ke baad</small>
-            </div>
-          )}
+            <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
+              <span>03</span><strong>Publish Building</strong><small>Immutable Building release create karein</small>
+            </a>
+            {buildingLive ? (
+              <a href={buildingUrl} target="_blank" rel="noreferrer">
+                <span>04</span><strong>Building Live</strong><small>Standalone customer-facing website</small>
+              </a>
+            ) : (
+              <div>
+                <span>04</span><strong>Building Live</strong><small>Publish ke baad customer website live hogi</small>
+              </div>
+            )}
+          </div>
+          <p className="engine-home__optional-note">
+            Map requirement baad me aaye to selected project ke Experiences section se
+            <strong> + Add 3D Geo Experience</strong> karein. Building Website uske bina bhi complete hai.
+          </p>
         </div>
       </section>
 
@@ -352,7 +460,7 @@ export default function EngineDashboard() {
             <div>
               <p className="engine-kicker">YOUR PROJECTS</p>
               <h2>{projects.length} Engine project{projects.length === 1 ? "" : "s"}</h2>
-              <small>Select karke usi project ka Studio / Jio / Live open karein.</small>
+              <small>Select karke Building workspace, releases aur optional Experiences manage karein.</small>
             </div>
           </div>
 
@@ -424,8 +532,8 @@ export default function EngineDashboard() {
               <p className="engine-kicker">CLEAN ENGINE</p>
               <h2>No 3D projects yet</h2>
               <p>
-                Engine registry ab empty hai. Naya project create karne par hi Studio,
-                3D Jio Mapper aur Live workflow start hoga.
+                Engine registry ab empty hai. Naya project create karne par Design Studio,
+                Building release aur standalone Building Website workflow start hoga.
               </p>
               <button
                 className="engine-button engine-button--primary"
@@ -439,7 +547,7 @@ export default function EngineDashboard() {
             <>
           <section className="engine-project-hero">
             <div>
-              <p className="engine-kicker">SELECTED PROJECT</p>
+              <p className="engine-kicker">PROJECT WORKSPACE</p>
               <span className={`engine-status engine-status--${status?.project.status ?? "loading"}`}>
                 {status?.project.status ?? (selectedSlug ? "Loading" : "No project")}
               </span>
@@ -447,7 +555,7 @@ export default function EngineDashboard() {
               <p>
                 {status?.project.location ??
                   selectedProject?.location ??
-                  "Project select karke editor, Jio Mapper aur live controls use karein."}
+                  "Project select karke Building design, release aur customer Experiences manage karein."}
               </p>
               <small>{selectedSlug || "No project selected"}</small>
             </div>
@@ -458,41 +566,42 @@ export default function EngineDashboard() {
                 href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}
                 aria-disabled={!selectedSlug}
               >
-                <span>01 · DESIGN STUDIO</span>
-                <strong>Edit this project</strong>
-                <small>Model upload, rooms, materials aur publish</small>
+                <span>01 · DESIGN</span>
+                <strong>Open Design Studio</strong>
+                <small>Model, rooms, materials, walkthrough aur Building publish</small>
               </a>
-              <a
-                className="engine-action engine-action--geo"
-                href={
-                  selectedSlug
-                    ? projectUrl("geo-mapper", selectedSlug)
-                    : "/3Dprojects/geo-mapper"
-                }
-                aria-disabled={!selectedSlug}
-              >
-                <span>02 · 3D JIO MAPPER</span>
-                <strong>Set real location</strong>
-                <small>Satellite anchor, heading, ground aur public demo</small>
-              </a>
-              {liveUrl ? (
+
+              {buildingLive ? (
                 <a
                   className="engine-action"
-                  href={liveUrl}
+                  href={buildingUrl}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  <span>03 · LIVE SITE</span>
-                  <strong>Open customer view</strong>
-                  <small>Published customer-facing 3D experience</small>
+                  <span>02 · BUILDING SITE</span>
+                  <strong>Open Building Website</strong>
+                  <small>Standalone customer-facing 3D Building Experience</small>
                 </a>
               ) : (
-                <div className="engine-action engine-action--disabled">
-                  <span>03 · LIVE SITE</span>
-                  <strong>Publish required</strong>
-                  <small>Design Studio se publish karne ke baad live hoga.</small>
-                </div>
+                <a
+                  className="engine-action engine-action--disabled"
+                  href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}
+                  aria-disabled={!selectedSlug}
+                >
+                  <span>02 · BUILDING SITE</span>
+                  <strong>Publish Building first</strong>
+                  <small>Immutable Building release ke baad website live hogi</small>
+                </a>
               )}
+
+              <a
+                className="engine-action engine-action--geo"
+                href={selectedSlug ? "#experiences" : "/3Dprojects"}
+              >
+                <span>03 · EXPERIENCES</span>
+                <strong>Manage deliverables</strong>
+                <small>Building primary hai; Geo sirf optional customer add-on</small>
+              </a>
             </div>
           </section>
 
@@ -521,6 +630,178 @@ export default function EngineDashboard() {
               <strong>{status?.project.status === "published" ? "Published" : "Draft"}</strong>
               <small>{status?.project.slug || selectedSlug || "Select a project"}</small>
             </article>
+          </section>
+
+          <section className="engine-home__panel engine-experiences" id="experiences">
+            <div className="engine-section-title">
+              <div>
+                <p className="engine-kicker">CUSTOMER DELIVERABLES</p>
+                <h3>Experiences</h3>
+                <small>
+                  Building Website primary product hai. Geo sirf optional add-on hai aur
+                  selected immutable Building release ko reference karta hai.
+                </small>
+              </div>
+            </div>
+
+            {experienceError ? (
+              <div className="engine-experience-alert" role="alert">
+                <strong>Experience state unavailable</strong>
+                <span>{experienceError}</span>
+              </div>
+            ) : null}
+
+            <div className="engine-experience-grid">
+              <article className="engine-experience-card engine-experience-card--building">
+                <div className="engine-experience-card__head">
+                  <span>PRIMARY PRODUCT</span>
+                  <b>{buildingLive ? "LIVE" : activeBuildingRelease ? "READY" : "DRAFT"}</b>
+                </div>
+                <div>
+                  <h4>3D Building Website</h4>
+                  <p>
+                    Standalone customer site. Building explore, floors, rooms, amenities,
+                    walkthrough aur approved project content isi Experience me live hota hai.
+                  </p>
+                </div>
+                <dl>
+                  <div>
+                    <dt>Building release</dt>
+                    <dd>
+                      {activeBuildingRelease
+                        ? `v${activeBuildingRelease.version} · immutable`
+                        : "Publish required"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Canonical URL</dt>
+                    <dd>{buildingUrl || "ar3dstudio.in/3Dprojects/{project-slug}"}</dd>
+                  </div>
+                  <div>
+                    <dt>Identity</dt>
+                    <dd>{buildingExperience ? "Building Experience ready" : "Loading…"}</dd>
+                  </div>
+                </dl>
+                <div className="engine-experience-actions">
+                  <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
+                    Design &amp; releases
+                  </a>
+                  {buildingLive ? (
+                    <a href={buildingUrl} target="_blank" rel="noreferrer">
+                      Open Building Live
+                    </a>
+                  ) : (
+                    <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
+                      Publish Building
+                    </a>
+                  )}
+                </div>
+              </article>
+
+              <article className="engine-experience-card engine-experience-card--geo">
+                <div className="engine-experience-card__head">
+                  <span>OPTIONAL ADD-ON</span>
+                  <b>
+                    {geoExperience
+                      ? geoLive
+                        ? "LIVE"
+                        : geoNeedsSourceUpgrade
+                          ? "UPDATE AVAILABLE"
+                          : geoState?.placement
+                            ? "CONFIGURED"
+                            : "SETUP"
+                      : "NOT ADDED"}
+                  </b>
+                </div>
+
+                {geoExperience ? (
+                  <>
+                    <div>
+                      <h4>3D Geo Experience</h4>
+                      <p>
+                        Building ko real-world geographic context me place karta hai.
+                        Building project copy nahi hota; source immutable release reference hota hai.
+                      </p>
+                    </div>
+                    <dl>
+                      <div>
+                        <dt>Source Building</dt>
+                        <dd>
+                          {geoExperience.sourceBuildingReleaseVersion
+                            ? `Release v${geoExperience.sourceBuildingReleaseVersion}`
+                            : geoExperience.sourceBuildingReleaseId || "Pinned release"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Canonical URL</dt>
+                        <dd>{geoUrl || "ar3dstudio.in/3Dprojects/{project-slug}/geo"}</dd>
+                      </div>
+                      <div>
+                        <dt>Source status</dt>
+                        <dd>
+                          {geoNeedsSourceUpgrade
+                            ? `New Building v${activeBuildingRelease?.version} available — preview before upgrade`
+                            : "Pinned source unchanged"}
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="engine-experience-actions">
+                      <a
+                        href={
+                          selectedSlug
+                            ? projectUrl("geo-mapper", selectedSlug)
+                            : "/3Dprojects/geo-mapper"
+                        }
+                      >
+                        Manage Geo Experience
+                      </a>
+                      {geoLive ? (
+                        <a href={geoUrl} target="_blank" rel="noreferrer">
+                          Open Geo Live
+                        </a>
+                      ) : null}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <h4>+ Add 3D Geo Experience</h4>
+                      <p>
+                        Customer ko map-based 3D site chahiye tabhi add karein. Existing
+                        Building release source rahega; Building Website independent live rahegi.
+                      </p>
+                    </div>
+                    <div className="engine-experience-requirement">
+                      <strong>
+                        {activeBuildingRelease
+                          ? `Ready to use Building Release v${activeBuildingRelease.version}`
+                          : "Building release required"}
+                      </strong>
+                      <span>
+                        {activeBuildingRelease
+                          ? "Geo add-on create karke Mapper me location aur alignment set karein."
+                          : "Pehle Design Studio se immutable Building release publish karein."}
+                      </span>
+                    </div>
+                    <div className="engine-experience-actions">
+                      {activeBuildingRelease ? (
+                        <button
+                          type="button"
+                          onClick={() => void addGeoExperience()}
+                          disabled={experienceBusy || !selectedSlug}
+                        >
+                          {experienceBusy ? "Adding…" : "+ Add 3D Geo Experience"}
+                        </button>
+                      ) : (
+                        <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
+                          Publish Building first
+                        </a>
+                      )}
+                    </div>
+                  </>
+                )}
+              </article>
+            </div>
           </section>
 
           <section className="engine-home__panel">
@@ -592,7 +873,7 @@ export default function EngineDashboard() {
                 <p className="engine-kicker">PERMANENT DELETE</p>
                 <h2 id="engine-delete-all-title">Delete all {projects.length} projects?</h2>
                 <p>
-                  D1 project data, releases, Studio drafts, 3D Jio placements aur
+                  D1 project data, Experiences, releases, Studio drafts, 3D Geo placements aur
                   project-owned R2 assets permanently delete honge.
                 </p>
               </div>
@@ -678,8 +959,8 @@ export default function EngineDashboard() {
             <div className="engine-create-next">
               <strong>Project create hone ke baad:</strong>
               <span>1. Design Studio open hoga</span>
-              <span>2. Model upload/edit karke Publish karein</span>
-              <span>3. 3D Jio Mapper me real location set karein</span>
+              <span>2. Building design karke immutable release Publish karein</span>
+              <span>3. Building Website live hogi; Geo baad me optional add-on ke roop me add karein</span>
             </div>
 
             {createError ? <p className="engine-create-error">{createError}</p> : null}

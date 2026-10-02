@@ -1202,3 +1202,238 @@
     padding: 24px 16px;
   }
 }
+
+
+/* Phase 3 — project-centric customer deliverables.
+   Building is primary; Geo is a separate optional Experience. */
+.engine-home__optional-note {
+  margin: 10px 2px 0;
+  color: #7d8998;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.engine-home__optional-note strong {
+  color: var(--engine-gold-soft);
+  font-weight: 850;
+}
+
+.engine-experiences {
+  scroll-margin-top: 18px;
+  border-color: rgba(244, 185, 66, .24);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(244, 185, 66, .06), transparent 24rem),
+    #0a111a;
+}
+
+.engine-experience-alert {
+  margin-top: 12px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 3px;
+  border: 1px solid #6d3b42;
+  border-radius: 10px;
+  background: #211216;
+}
+
+.engine-experience-alert strong {
+  color: #ffd7dc;
+  font-size: 10px;
+}
+
+.engine-experience-alert span {
+  color: #ba838b;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.engine-experience-grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.engine-experience-card {
+  min-width: 0;
+  min-height: 310px;
+  padding: 16px;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 14px;
+  border: 1px solid #293542;
+  border-radius: 14px;
+  background: #080f17;
+}
+
+.engine-experience-card--building {
+  border-color: rgba(244, 185, 66, .35);
+  background:
+    linear-gradient(150deg, rgba(244, 185, 66, .10), transparent 45%),
+    #090f17;
+}
+
+.engine-experience-card--geo {
+  border-color: rgba(117, 144, 171, .30);
+  background:
+    linear-gradient(150deg, rgba(79, 111, 143, .08), transparent 45%),
+    #090f17;
+}
+
+.engine-experience-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.engine-experience-card__head > span {
+  color: var(--engine-gold);
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: .13em;
+}
+
+.engine-experience-card--geo .engine-experience-card__head > span {
+  color: #9fb2c6;
+}
+
+.engine-experience-card__head > b {
+  padding: 4px 7px;
+  border: 1px solid #334252;
+  border-radius: 999px;
+  color: #a6b4c3;
+  font-size: 7px;
+  font-weight: 950;
+  letter-spacing: .08em;
+}
+
+.engine-experience-card h4 {
+  margin: 0 0 6px;
+  color: #f0f5fb;
+  font-size: 18px;
+}
+
+.engine-experience-card p {
+  margin: 0;
+  color: #7b8a9c;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.engine-experience-card dl {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.engine-experience-card dl > div {
+  min-width: 0;
+  padding: 9px 10px;
+  display: grid;
+  gap: 3px;
+  border: 1px solid #202c38;
+  border-radius: 9px;
+  background: rgba(5, 11, 18, .72);
+}
+
+.engine-experience-card dt {
+  color: #687b8e;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.engine-experience-card dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #cbd6e1;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.engine-experience-requirement {
+  align-self: stretch;
+  padding: 12px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  border: 1px dashed rgba(244, 185, 66, .28);
+  border-radius: 10px;
+  background: rgba(244, 185, 66, .045);
+}
+
+.engine-experience-requirement strong {
+  color: #e9d49f;
+  font-size: 10px;
+}
+
+.engine-experience-requirement span {
+  color: #887a5d;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.engine-experience-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.engine-experience-actions a,
+.engine-experience-actions button {
+  min-height: 36px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #354354;
+  border-radius: 9px;
+  background: #101923;
+  color: #dbe5ef;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 850;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.engine-experience-actions a:first-child,
+.engine-experience-actions button:first-child {
+  border-color: var(--engine-gold-border);
+  background: var(--engine-gold-wash);
+  color: var(--engine-gold-soft);
+}
+
+.engine-experience-actions a:hover,
+.engine-experience-actions button:hover:not(:disabled) {
+  border-color: rgba(244, 185, 66, .65);
+  background: rgba(244, 185, 66, .15);
+}
+
+.engine-experience-actions button:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+@media (max-width: 820px) {
+  .engine-experience-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .engine-experience-card {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 470px) {
+  .engine-experience-actions {
+    display: grid;
+  }
+
+  .engine-experience-actions a,
+  .engine-experience-actions button {
+    width: 100%;
+  }
+}

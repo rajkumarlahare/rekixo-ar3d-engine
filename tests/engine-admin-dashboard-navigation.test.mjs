@@ -4,17 +4,18 @@ import test from "node:test";
 
 const read = (path) => fs.readFileSync(path, "utf8");
 
-test("Engine home exposes a clear project workflow and primary destinations", () => {
+test("Engine home exposes a Building-first project workflow and optional Experiences", () => {
   const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
-  assert.match(dashboard, /Create → Edit → Map → Live/);
+  assert.match(dashboard, /Create → Design → Publish → Building Live/);
   assert.match(dashboard, />Projects</);
-  assert.match(dashboard, />Design Studio</);
-  assert.match(dashboard, />3D Jio Mapper</);
+  assert.match(dashboard, /Design Studio/);
+  assert.match(dashboard, /Experiences/);
   assert.match(dashboard, /Create 3D Project/);
   assert.match(dashboard, /Create New 3D Project/);
   assert.match(dashboard, /Create & open Studio/);
-  assert.match(dashboard, /Set real location/);
-  assert.match(dashboard, /Open customer view/);
+  assert.match(dashboard, /3D Building Website/);
+  assert.match(dashboard, /\+ Add 3D Geo Experience/);
+  assert.doesNotMatch(dashboard, /Create → Edit → Map → Live/);
 });
 
 test("Engine project context is carried from dashboard into Studio and 3D Jio Mapper", () => {
@@ -65,11 +66,11 @@ test("Engine Admin uses the golden favicon identity for primary UI actions", () 
   assert.match(shared, /\.eyebrow \{\s*color: #f4b942/);
 });
 
-test("project creation is visibly explained before entering Studio", () => {
+test("project creation explains Building-first delivery and keeps Geo optional", () => {
   const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
-  assert.match(dashboard, /Naya 3D project yahin create hota hai/);
+  assert.match(dashboard, /Har Engine project ka primary deliverable standalone 3D Building Website hai/);
   assert.match(dashboard, /Naya project banane ke liye yahin click karein/);
   assert.match(dashboard, /Project create hone ke baad:/);
   assert.match(dashboard, /Design Studio open hoga/);
-  assert.match(dashboard, /3D Jio Mapper me real location set karein/);
+  assert.match(dashboard, /Building Website live hogi; Geo baad me optional add-on/);
 });
