@@ -9,6 +9,21 @@ export const PLATFORM_ENGINE_CONTRACT_VERSION = 1 as const;
 
 export type Project3DStatus = "draft" | "published" | "archived";
 
+/**
+ * Customer-facing deliverables owned by the Engine.
+ *
+ * Building is the canonical/default deliverable. Geo is an optional add-on
+ * that references an immutable Building release instead of copying the
+ * Building project or its source assets.
+ */
+export type Experience3DType = "building" | "geo";
+
+export interface Experience3DIdentity {
+  projectId: string;
+  type: Experience3DType;
+  slug: string;
+}
+
 export type Scene3DType =
   | "project-navigation"
   | "section"
