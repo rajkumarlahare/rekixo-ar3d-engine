@@ -9,6 +9,7 @@ import SceneCanvas, {
 } from "./SceneCanvas";
 import ReferenceWorkspace from "./ReferenceWorkspace";
 import FloorRoomReview from "./FloorRoomReview";
+import FurnitureShelf from "./FurnitureShelf";
 import VisualRoomMapper, {
   type RoomMapAction,
 } from "./VisualRoomMapper";
@@ -69,6 +70,10 @@ import {
   type SourceFusionReport,
 } from "./sourceFusion";
 import { prepareFbxWebModel } from "./fbxWebModel";
+import {
+  findFurniturePlacement,
+  furnitureFromPlacement,
+} from "./furniturePlacement";
 import { buildSmartSceneDraft } from "./smartDraftBuilder";
 import {
   autoBuildSummaryMessage,
@@ -92,6 +97,10 @@ import {
   type QuickSourceSetup,
 } from "./sourcePackSetup";
 import { floorSkeletonStatus } from "./floorSkeleton";
+import {
+  MATERIAL_PRESETS,
+  suggestedMaterialPreset,
+} from "./materialPresets";
 import {
   APPEARANCE_PRESETS,
   activeAppearancePreset,
@@ -191,6 +200,8 @@ export default function Studio() {
   const [sectionCutFlip, setSectionCutFlip] = useState(false);
   const [modelMaterials, setModelMaterials] = useState<ModelMaterialSummary[]>([]);
   const [selectedMaterial, setSelectedMaterial] = useState("");
+  const [furniturePlacementKind, setFurniturePlacementKind] =
+    useState<Kind>();
   const [sourceAudits, setSourceAudits] = useState<FbxSourceAudit[]>([]);
   const [sourceAuditBusy, setSourceAuditBusy] = useState(false);
   const [smartAnalysis, setSmartAnalysis] = useState<SmartProjectAnalysis>();
@@ -275,6 +286,7 @@ export default function Studio() {
     setSectionCutFlip(false);
     setModelMaterials([]);
     setSelectedMaterial("");
+    setFurniturePlacementKind(undefined);
     setSourceAudits([]);
     setSmartAnalysis(undefined);
     setSourceFusion(undefined);
@@ -1172,6 +1184,61 @@ export default function Studio() {
       },
     });
   }
+  function placeFurnitureOnCanvas(placement: {
+    kind: Kind;
+    roomId: string;
+    worldX: number;
+    worldZ: number;
+  }) {
+    const targetRoom = p.scene.rooms.find(
+      (candidate) => candidate.id === placement.roomId,
+    );
+    if (!targetRoom) {
+      setError("Select a room before placing furniture.");
+      return;
+    }
+    const resolved = findFurniturePlacement(
+      targetRoom,
+      placement.kind,
+      placement.worldX,
+      placement.worldZ,
+    );
+    if (!resolved) {
+      setError(
+        `${catalog[placement.kind].name} does not fit safely at this room position. Try a more open area.`,
+      );
+      return;
+    }
+    const furniture = furnitureFromPlacement(
+      targetRoom,
+      placement.kind,
+      resolved,
+      id,
+    );
+    const next: Project = {
+      ...p,
+      scene: {
+        ...p.scene,
+        furniture: [...p.scene.furniture, furniture],
+      },
+    };
+    try {
+      validateProject(next);
+      edit(next);
+      setRoomId(targetRoom.id);
+      setSelected(furniture.id);
+      setView("rooms");
+      setFurniturePlacementKind(undefined);
+      setMessage(
+        `${catalog[placement.kind].name} placed in ${targetRoom.name}. Drag it to fine-tune or rotate it.`,
+      );
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Furniture placement failed.",
+      );
+    }
+  }
+
   function repairDemoInteriorConsistency() {
     if (!profileDemoInteriorEnabled) {
       setError("Interior automation is not enabled for this source profile.");
@@ -4556,6 +4623,19 @@ export default function Studio() {
             onRoomDraw={commitMappedRoom}
             onRoomPolygonDraw={commitMappedPolygon}
             onRoomPolygonChange={commitEditedPolygon}
+            furniturePlacement={
+              furniturePlacementKind && room
+                ? {
+                    enabled: true,
+                    kind: furniturePlacementKind,
+                    roomId: room.id,
+                  }
+                : undefined
+            }
+            onFurniturePlace={placeFurnitureOnCanvas}
+            onFurniturePlacementCancel={() =>
+              setFurniturePlacementKind(undefined)
+            }
             onWalkRoomChange={(nextRoomId) => {
               const nextRoom = scene.rooms.find(
                 (candidate) => candidate.id === nextRoomId,
@@ -4779,47 +4859,25 @@ export default function Studio() {
                   )}
                 </div>
               )}
-            {Object.entries(catalog).map(([kind, c]) => (
-              <button
-                key={kind}
-                disabled={
-                  !room ||
-                  legacyDraftFurnitureBlocked ||
-                  Boolean(review) ||
-                  busy
-                }
-                onClick={() => {
-                  if (!room) return;
-                  const f: Furniture = {
-                    id: id(),
-                    kind: kind as Kind,
-                    roomId: room.id,
-                    x: 0,
-                    z: 0,
-                    rotation: 0,
-                    color: c.color,
-                  };
-                  const next = {
-                    ...p,
-                    scene: { ...p.scene, furniture: [...p.scene.furniture, f] },
-                  };
-                  try {
-                    validateProject(next);
-                    edit(next);
-                    setSelected(f.id);
-                    setView("rooms");
-                  } catch (e) {
-                    setError((e as Error).message);
-                  }
-                }}
-              >
-                <span className={`furniture-icon ${kind}`} />
-                {c.name}
-                <small>
-                  {c.width} × {c.depth} m
-                </small>
-              </button>
-            ))}
+            <FurnitureShelf
+              room={room}
+              disabled={
+                legacyDraftFurnitureBlocked ||
+                Boolean(review) ||
+                busy
+              }
+              activeKind={furniturePlacementKind}
+              onPick={(kind) => {
+                if (!room) return;
+                setFurniturePlacementKind((current) =>
+                  current === kind ? undefined : kind,
+                );
+                setSelected(room.id);
+                setMessage(
+                  `Place ${catalog[kind].name}: tap inside ${room.name}, or drag the card onto the canvas.`,
+                );
+              }}
+            />
           </div>
           )}
         </section>
