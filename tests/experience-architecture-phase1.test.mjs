@@ -88,8 +88,9 @@ test("Engine Experience work cannot bind to stable Platform production resources
 test("Phase plan is additive and delays database changes until Phase 2", () => {
   const plan = read("docs/EXPERIENCE-ARCHITECTURE.md");
   assert.match(plan, /Phase 1 — architecture guardrails/);
-  assert.match(plan, /No database migration and no production behavior change/);
+  assert.match(plan, /No database migration or production behavior change was made in Phase 1/);
   assert.match(plan, /Phase 2 — additive Experience data model/);
-  assert.match(plan, /Do not rewrite applied migrations/);
+  assert.match(plan, /without rewriting any existing Building release/);
+  assert.match(plan, /No destructive migration or rewrite of applied migration history/);
   assert.match(plan, /No automatic Geo source upgrade when Building publishes a new release/);
 });

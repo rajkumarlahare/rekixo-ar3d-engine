@@ -18,10 +18,27 @@ export type Project3DStatus = "draft" | "published" | "archived";
  */
 export type Experience3DType = "building" | "geo";
 
+export type Experience3DLifecycle = "active" | "archived";
+
 export interface Experience3DIdentity {
   projectId: string;
   type: Experience3DType;
   slug: string;
+}
+
+export interface EngineExperienceSummary {
+  id: string;
+  projectId: string;
+  type: Experience3DType;
+  lifecycle: Experience3DLifecycle;
+  sourceBuildingReleaseId?: string;
+  sourceBuildingReleaseVersion?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminExperiencesResponse {
+  experiences: EngineExperienceSummary[];
 }
 
 export type Scene3DType =
