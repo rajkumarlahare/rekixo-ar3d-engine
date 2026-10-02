@@ -43,6 +43,7 @@ export default function SmartProjectBuilder({
   onImportFiles,
   onAnalyze,
   onPrepareWebModel,
+  onRecoverSketchUpTextures,
   onSelectModel,
   onBuildDraft,
   onApplyArchitecturalCandidates,
@@ -69,6 +70,7 @@ export default function SmartProjectBuilder({
   onImportFiles: (files: File[]) => void;
   onAnalyze: () => void;
   onPrepareWebModel: () => void;
+  onRecoverSketchUpTextures: () => void;
   onSelectModel: (assetId: string) => void;
   onBuildDraft: () => void;
   onApplyArchitecturalCandidates: () => void;
@@ -92,6 +94,7 @@ export default function SmartProjectBuilder({
       /\.fbx$/i.test(selectedModel.name) &&
       (!publishModel || !/\.glb$/i.test(publishModel.name)),
   );
+  const hasSketchUpSource = files.some((file) => /\.(?:skb|skp)$/i.test(file.name));
   const floorStatus = quickSetup.profile
     ? floorSkeletonStatus(
         project.scene,
@@ -332,18 +335,29 @@ export default function SmartProjectBuilder({
                     evidence और processing gap track होती है.
                   </small>
                 </div>
-                {needsWebModel ? (
-                  <button
-                    type="button"
-                    className="primary"
-                    disabled={busy}
-                    onClick={onPrepareWebModel}
-                  >
-                    Prepare web GLB
-                  </button>
-                ) : publishModel && /\.glb$/i.test(publishModel.name) ? (
-                  <span className="ops-pill ops-pill--ready">WEB MODEL READY</span>
-                ) : null}
+                <div className="builder-source-fusion-actions">
+                  {needsWebModel ? (
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={busy}
+                      onClick={onPrepareWebModel}
+                    >
+                      Prepare web GLB
+                    </button>
+                  ) : publishModel && /\.glb$/i.test(publishModel.name) ? (
+                    <span className="ops-pill ops-pill--ready">WEB MODEL READY</span>
+                  ) : null}
+                  {hasSketchUpSource && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={onRecoverSketchUpTextures}
+                    >
+                      Recover SKB textures
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="builder-source-fusion-stats">
                 <span>Ready <b>{fusion.readySources}</b></span>
