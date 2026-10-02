@@ -11,14 +11,15 @@ export type { ExperienceFeature, ExperienceMode, ModelProfileRuntime };
 
 export interface ExperienceRuntime {
   root: THREE.Object3D;
-  rooms: Array<{ id: string }>;
+  rooms: ExperienceFeature[];
   features: ExperienceFeature[];
   roomEntry(id: string):
-    | { point: THREE.Vector3; bounds?: THREE.Box3; boundary?: unknown }
+    | { point: THREE.Vector3; bounds: THREE.Box3; scale: number }
     | undefined;
   setWalk(enabled: boolean): void;
   setMode(mode: ExperienceMode): void;
-  focus(mode: ExperienceMode): { box: THREE.Box3 };
+  setNight(night: boolean): void;
+  focus(mode: ExperienceMode): { box: THREE.Box3; target: THREE.Vector3 };
   dispose(): void;
 }
 
