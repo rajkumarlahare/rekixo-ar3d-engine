@@ -140,3 +140,24 @@ test("Phase 2 remains additive to the current immutable public manifest boundary
   assert.match(manifest, /SCENE_MANIFEST_VERSION/);
   assert.match(doc, /does not replace the current Studio `Scene` persistence/);
 });
+
+
+test("source-pack upload is the primary auto-build trigger when a model is resolvable", () => {
+  const studio = fs.readFileSync("apps/admin/src/studio/Studio.tsx", "utf8");
+  const builder = fs.readFileSync(
+    "apps/admin/src/studio/SmartProjectBuilder.tsx",
+    "utf8",
+  );
+  const doctrine = fs.readFileSync(
+    "docs/UPLOAD-FIRST-AUTHORING.md",
+    "utf8",
+  );
+
+  assert.match(studio, /async function uploadSourcePack/);
+  assert.match(studio, /runAutoBuildPipeline\(\s*next,\s*combinedFiles/);
+  assert.match(studio, /Automatic build paused for review/);
+  assert.match(builder, /Primary workflow upload-first/);
+  assert.match(builder, /Review \/ Correct/);
+  assert.match(doctrine, /upload-first authoring as the primary workflow/);
+  assert.match(doctrine, /Manual Phase 2 wall tools are therefore a correction\/completion path/);
+});
