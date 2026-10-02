@@ -2233,36 +2233,80 @@ export default function Studio() {
     if (!source || !/\.fbx$/i.test(source.name))
       throw Error("Select an FBX authoring model before preparing the web model.");
 
-    const currentPublish = p.scene.publishModelId
-      ? files.find((file) => file.id === p.scene.publishModelId)
-      : undefined;
-    if (currentPublish && /\.glb$/i.test(currentPublish.name)) {
-      setMessage(`Web model already ready · ${currentPublish.name}.`);
-      return;
+    let nextProject = p;
+    const workingFiles = [...files];
+    const assetsToPersist: Asset[] = [];
+    let materialBindings: Awaited<
+      ReturnType<typeof prepareSketchUpTextureRecovery>
+    >["materialBindings"] = [];
+    let recoveredCount = 0;
+    const recoveryIssues: string[] = [];
+
+    if (workingFiles.some((file) => /\.(?:skb|skp)$/i.test(file.name))) {
+      const recovery = await prepareSketchUpTextureRecovery(
+        workingFiles,
+        nextProject,
+      );
+      nextProject = recovery.nextProject;
+      materialBindings = recovery.materialBindings;
+      recoveryIssues.push(...recovery.issues);
+      for (const asset of recovery.assets) {
+        const existing = workingFiles.find(
+          (candidate) =>
+            candidate.hash.toLowerCase() === asset.hash.toLowerCase() &&
+            candidate.size === asset.size &&
+            candidate.type === asset.type,
+        );
+        if (existing) continue;
+        workingFiles.push(asset);
+        assetsToPersist.push(asset);
+        recoveredCount += 1;
+      }
     }
 
-    const prepared = await prepareFbxWebModel(source, p.id);
-    const existing = files.find(
+    const prepared = await prepareFbxWebModel(source, p.id, {
+      textureAssets: workingFiles,
+      materialBindings,
+    });
+    const existing = workingFiles.find(
       (file) =>
         /\.glb$/i.test(file.name) &&
         file.hash.toLowerCase() === prepared.asset.hash.toLowerCase() &&
         file.size === prepared.asset.size,
     );
     const publishAsset = existing ?? prepared.asset;
+    if (!existing) assetsToPersist.push(publishAsset);
+
     const next: Project = {
-      ...p,
-      assets: p.assets.includes(publishAsset.id)
-        ? p.assets
-        : [...p.assets, publishAsset.id],
+      ...nextProject,
+      assets: nextProject.assets.includes(publishAsset.id)
+        ? nextProject.assets
+        : [...nextProject.assets, publishAsset.id],
       scene: {
-        ...p.scene,
+        ...nextProject.scene,
         publishModelId: publishAsset.id,
       },
     };
     validateProject(next);
-    await persist(next, existing ? [] : [publishAsset]);
+    await persist(next, assetsToPersist);
+
+    const recovered = recoveredCount
+      ? ` · ${recoveredCount} SketchUp texture${recoveredCount === 1 ? "" : "s"} recovered first`
+      : "";
+    const fused = prepared.materialTexturesApplied
+      ? ` · ${prepared.materialTexturesApplied} material texture${prepared.materialTexturesApplied === 1 ? "" : "s"} fused`
+      : "";
+    const resolved = prepared.resolvedExternalTextures
+      ? ` · ${prepared.resolvedExternalTextures} FBX texture reference${prepared.resolvedExternalTextures === 1 ? "" : "s"} resolved`
+      : "";
+    const unresolved = prepared.unresolvedExternalTextures
+      ? ` · ${prepared.unresolvedExternalTextures} unresolved texture reference${prepared.unresolvedExternalTextures === 1 ? "" : "s"} kept neutral`
+      : "";
+    const review = recoveryIssues.length
+      ? ` · ${recoveryIssues.length} recovery review item${recoveryIssues.length === 1 ? "" : "s"}`
+      : "";
     setMessage(
-      `Web GLB ready · ${prepared.meshCount} meshes · ${prepared.materialCount} materials · ${prepared.triangleCount.toLocaleString()} triangles${prepared.externalTexturesBlocked ? " · external FBX textures were not embedded; visual material recovery still needs review" : ""}.`,
+      `Web GLB ready · ${prepared.meshCount} meshes · ${prepared.materialCount} materials · ${prepared.triangleCount.toLocaleString()} triangles${recovered}${fused}${resolved}${unresolved}${review}.`,
     );
   }
 
