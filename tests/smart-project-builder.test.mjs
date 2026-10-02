@@ -17,7 +17,8 @@ test("Smart Project Builder exposes the guided source-to-draft workflow", () => 
   assert.match(studio, /buildSmartDraft/);
   assert.match(builder, /UNIVERSAL SOURCE DROP/);
   assert.match(builder, /Analyze project/);
-  assert.match(builder, /Build smart draft/);
+  assert.match(builder, /Build automatically/);
+  assert.match(builder, /Build analyzed draft/);
   assert.match(analyzer, /inferFloorCandidates/);
   assert.match(analyzer, /suggestNodeFloorAssignments/);
   assert.match(analyzer, /suggestArchitecturalCandidates/);
@@ -72,13 +73,16 @@ test("CAD intake does not pretend binary DWG is semantically parsed", () => {
 });
 
 
-test("verified publish GLB can remain the authoring model for alignment", () => {
+test("generic builder keeps web model and plan alignment independent from project profiles", () => {
   const builder = read("apps/admin/src/studio/SmartProjectBuilder.tsx");
+  const pipeline = read("apps/admin/src/studio/autoBuildPipeline.ts");
 
-  assert.match(builder, /quickSetupAuthoringModelReady/);
-  assert.match(builder, /project\.scene\.modelId === quickSetup\.primaryModelId/);
-  assert.match(builder, /project\.scene\.modelId === quickSetup\.publishModelId/);
-  assert.match(builder, /disabled=\{busy \|\| !quickSetupApplied \|\| !quickSetup\.alignment\}/);
+  assert.match(builder, /WEB MODEL READY/);
+  assert.match(builder, /Align floor plan →/);
+  assert.match(builder, /Build automatically/);
+  assert.doesNotMatch(builder, /quickSetupAuthoringModelReady/);
+  assert.match(pipeline, /scene\.publishModelId/);
+  assert.match(pipeline, /scene\.modelId/);
 });
 
 test("FBX texture warning follows the selected authoring model only", () => {
