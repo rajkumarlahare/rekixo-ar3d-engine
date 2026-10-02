@@ -9,6 +9,10 @@ import {
 } from "./sceneCanvasModel";
 import { roomSurface } from "./sceneCanvasRooms";
 import { addFurnitureVisual } from "./furnitureVisual";
+import {
+  installCanvasFurnitureDrop,
+  placeCanvasFurnitureAtPointer,
+} from "./canvasFurniturePlacement";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -1072,33 +1076,18 @@ export default function SceneCanvas(props: Props) {
       point = undefined;
       if (!small || latest.current.view === "walk") return;
 
-      const placement = latest.current.furniturePlacement;
       if (
-        placement?.enabled &&
         latest.current.view === "rooms" &&
-        placement.roomId
-      ) {
-        const placementRoom = latest.current.scene.rooms.find(
-          (candidate) => candidate.id === placement.roomId,
-        );
-        if (placementRoom) {
-          const target = pointOnFloor(
-            e.clientX,
-            e.clientY,
-            placementRoom.floorId,
-            true,
-          );
-          if (target) {
-            latest.current.onFurniturePlace?.({
-              kind: placement.kind,
-              roomId: placementRoom.id,
-              worldX: target.x,
-              worldZ: target.z,
-            });
-            return;
-          }
-        }
-      }
+        placeCanvasFurnitureAtPointer(
+          latest.current.furniturePlacement,
+          latest.current.scene.rooms,
+          e.clientX,
+          e.clientY,
+          pointOnFloor,
+          (placement) => latest.current.onFurniturePlace?.(placement),
+        )
+      )
+        return;
 
       const rect = renderer.domElement.getBoundingClientRect(),
         ray = new T.Raycaster();
@@ -1149,56 +1138,18 @@ export default function SceneCanvas(props: Props) {
         }
       }
     };
-    const furnitureMime = "application/x-rekixo-furniture";
-    const validFurnitureKinds = new Set<Kind>([
-      "sofa",
-      "bed",
-      "table",
-      "wardrobe",
-      "plant",
-    ]);
-    const dragOver = (event: DragEvent) => {
-      if (!event.dataTransfer?.types.includes(furnitureMime)) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "copy";
-    };
-    const dropFurniture = (event: DragEvent) => {
-      const raw = event.dataTransfer?.getData(furnitureMime);
-      if (!raw) return;
-      event.preventDefault();
-      let payload: { kind?: string; roomId?: string };
-      try {
-        payload = JSON.parse(raw) as { kind?: string; roomId?: string };
-      } catch {
-        return;
-      }
-      if (!payload.kind || !validFurnitureKinds.has(payload.kind as Kind)) return;
-      const roomId = payload.roomId || latest.current.roomId;
-      const targetRoom = latest.current.scene.rooms.find(
-        (room) => room.id === roomId,
-      );
-      if (!targetRoom) return;
-      const target = pointOnFloor(
-        event.clientX,
-        event.clientY,
-        targetRoom.floorId,
-        true,
-      );
-      if (!target) return;
-      latest.current.onFurniturePlace?.({
-        kind: payload.kind as Kind,
-        roomId: targetRoom.id,
-        worldX: target.x,
-        worldZ: target.z,
-      });
-    };
+    const removeFurnitureDrop = installCanvasFurnitureDrop(
+      renderer.domElement,
+      () => latest.current.scene.rooms,
+      () => latest.current.roomId,
+      pointOnFloor,
+      (placement) => latest.current.onFurniturePlace?.(placement),
+    );
 
     renderer.domElement.addEventListener("pointerdown", pointerDown);
     renderer.domElement.addEventListener("pointermove", move);
     renderer.domElement.addEventListener("pointerup", click);
     renderer.domElement.addEventListener("pointercancel", click);
-    renderer.domElement.addEventListener("dragover", dragOver);
-    renderer.domElement.addEventListener("drop", dropFurniture);
     let previous = performance.now(),
       frame = 0;
     const draw = (now: number) => {
@@ -1300,8 +1251,7 @@ export default function SceneCanvas(props: Props) {
       renderer.domElement.removeEventListener("pointermove", move);
       renderer.domElement.removeEventListener("pointerup", click);
       renderer.domElement.removeEventListener("pointercancel", click);
-      renderer.domElement.removeEventListener("dragover", dragOver);
-      renderer.domElement.removeEventListener("drop", dropFurniture);
+      removeFurnitureDrop();
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", blur);
       transform.detach();
