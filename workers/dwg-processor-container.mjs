@@ -1,4 +1,12 @@
-import { DurableObject } from "cloudflare:workers";
+const cloudflareRuntime = await import("cloudflare:workers").catch(() => ({
+  DurableObject: class DurableObjectTestFallback {
+    constructor(ctx, env) {
+      this.ctx = ctx;
+      this.env = env;
+    }
+  },
+}));
+const DurableObjectBase = cloudflareRuntime.DurableObject;
 
 const PROCESSOR_PORT = 8080;
 const INSTANCE_COUNT = 2;
@@ -12,7 +20,7 @@ function processorInstanceName(sha256) {
   return `dwg-${index}`;
 }
 
-export class DwgProcessor extends DurableObject {
+export class DwgProcessor extends DurableObjectBase {
   ready;
 
   async fetch(request) {
