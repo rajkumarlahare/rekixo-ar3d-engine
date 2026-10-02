@@ -134,11 +134,11 @@ function applySourceTexture(
     return;
   }
 
-  material.addEventListener(
-    "dispose",
-    () => disposedProfileMaterials.add(material),
-    { once: true },
-  );
+  const onMaterialDispose = () => {
+    disposedProfileMaterials.add(material);
+    material.removeEventListener("dispose", onMaterialDispose);
+  };
+  material.addEventListener("dispose", onMaterialDispose);
 
   const waiters = sourceTextureWaiters.get(key) ?? [];
   waiters.push(material);
