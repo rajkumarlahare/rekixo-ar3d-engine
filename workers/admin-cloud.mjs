@@ -6,6 +6,10 @@ import {
 import { assertDraftAssetKey, projectAssetPrefix } from "./storage-boundary.mjs";
 import { validateStudioDraft } from "./studio-draft-validation.mjs";
 import { validProjectSlug } from "../shared/project-slug-policy.js";
+import { listGeoReleases } from "./geo-release-admin.mjs";
+import { verifyGeoDraftPreview } from "./geo-release-verify.mjs";
+import { publishGeoRelease } from "./geo-release-publish.mjs";
+import { activateGeoRelease } from "./geo-release-activate.mjs";
 const BASE_PATH = "/3Dprojects";
 const CLOUD_PATH = `${BASE_PATH}/api/cloud`;
 const COOKIE = "rekixo_3d_admin";
@@ -1163,6 +1167,112 @@ async function projectReleases(request, env, actor, project, parts) {
 }
 
 
+async function projectGeoDraftVerification(request, env, actor, project) {
+  if (request.method !== "POST")
+    return json({ error: "Method not allowed." }, { status: 405 });
+  if (!sameOrigin(request))
+    return json({ error: "Invalid request origin." }, { status: 403 });
+  const body = await request.json().catch(() => ({}));
+  const expectedDraftRevision = Number(body.expectedDraftRevision);
+  if (!Number.isInteger(expectedDraftRevision) || expectedDraftRevision < 1)
+    return json({ error: "Valid Geo draft revision required." }, { status: 400 });
+  try {
+    return json({
+      verification: await verifyGeoDraftPreview(
+        env,
+        actor,
+        project,
+        expectedDraftRevision,
+      ),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Geo preview verification failed.";
+    return json({ error: message }, {
+      status: /schema is not installed/i.test(message)
+        ? 503
+        : /does not exist|does not belong/i.test(message)
+          ? 404
+          : /changed|requires|needs|must be saved|Restore/i.test(message)
+            ? 409
+            : 400,
+    });
+  }
+}
+
+async function projectGeoReleases(request, env, actor, project, parts) {
+  if (parts.length === 2) {
+    if (request.method === "GET") {
+      try {
+        return json(await listGeoReleases(env, project));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Geo release history could not be loaded.";
+        return json({ error: message }, {
+          status: /schema is not installed/i.test(message) ? 503 : 400,
+        });
+      }
+    }
+    if (request.method !== "POST")
+      return json({ error: "Method not allowed." }, { status: 405 });
+    if (!sameOrigin(request))
+      return json({ error: "Invalid request origin." }, { status: 403 });
+    const body = await request.json().catch(() => ({}));
+    if (String(body.action || "publish") !== "publish")
+      return json({ error: "Unsupported Geo release action." }, { status: 400 });
+    const expectedDraftRevision = Number(body.expectedDraftRevision);
+    if (!Number.isInteger(expectedDraftRevision) || expectedDraftRevision < 1)
+      return json({ error: "Valid Geo draft revision required." }, { status: 400 });
+    try {
+      return json({
+        release: await publishGeoRelease(
+          env,
+          actor,
+          project,
+          expectedDraftRevision,
+        ),
+      }, { status: 201 });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Geo release publish failed.";
+      return json({ error: message }, {
+        status: /schema is not installed/i.test(message)
+          ? 503
+          : /does not exist|does not belong/i.test(message)
+            ? 404
+            : /changed|Verify|Restore|needs/i.test(message)
+              ? 409
+              : 400,
+      });
+    }
+  }
+
+  if (parts.length === 4 && parts[2] && parts[3] === "activate") {
+    if (request.method !== "POST")
+      return json({ error: "Method not allowed." }, { status: 405 });
+    if (!sameOrigin(request))
+      return json({ error: "Invalid request origin." }, { status: 403 });
+    try {
+      return json({
+        release: await activateGeoRelease(
+          env,
+          actor,
+          project,
+          String(parts[2] || "").trim(),
+        ),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Geo release activation failed.";
+      return json({ error: message }, {
+        status: /schema is not installed/i.test(message)
+          ? 503
+          : /does not belong|does not exist/i.test(message)
+            ? 404
+            : 409,
+      });
+    }
+  }
+
+  return json({ error: "Geo release route not found." }, { status: 404 });
+}
+
 async function experienceSchemaReady(env) {
   try {
     const row = await env.DB.prepare(
@@ -2099,6 +2209,18 @@ async function deleteProjectRecords(env, project) {
       "DELETE FROM engine_admin_audit WHERE project_id=?",
     ).bind(project.id),
     env.DB.prepare(
+      "DELETE FROM geo_experience_active_releases_3d WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "DELETE FROM geo_release_activations_3d WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "DELETE FROM geo_releases_3d WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "DELETE FROM geo_draft_verifications_3d WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
       "DELETE FROM geo_placements_3d WHERE project_id=?",
     ).bind(project.id),
     env.DB.prepare(
@@ -2335,6 +2457,12 @@ async function routeProjects(request, env, actor, url) {
 
   if (parts[1] === "geo-draft" && parts.length === 2)
     return projectGeoDraft(request, env, actor, project);
+
+  if (parts[1] === "geo-draft" && parts.length === 3 && parts[2] === "verify")
+    return projectGeoDraftVerification(request, env, actor, project);
+
+  if (parts[1] === "geo-releases")
+    return projectGeoReleases(request, env, actor, project, parts);
 
   if (parts[1] === "geo-placement" && parts.length === 2)
     return projectGeoPlacement(request, env, actor, project);
