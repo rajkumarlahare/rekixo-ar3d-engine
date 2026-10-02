@@ -1,9 +1,9 @@
 # Rekixo AR3D Engine Architecture Contract
 
 Status: **LOCKED**
-Date: 2026-09-21
+Date: 2026-10-02
 
-This file is the source of truth for the 3D platform architecture. Future patches must preserve these boundaries unless the owner explicitly changes them.
+This file is the source of truth for the Rekixo AR3D Engine architecture. Future patches must preserve these boundaries unless the owner explicitly changes them.
 
 ## 1. Rekixo AR3D product-family boundary
 
@@ -96,6 +96,53 @@ Public examples:
 - `/3Dprojects/assets/*`
 
 No host-wide wildcard takeover is allowed.
+
+### 5.1 Canonical customer URL contract
+
+The Building Experience is the canonical/default customer deliverable:
+
+`https://ar3dstudio.in/3Dprojects/[slug]`
+
+An optional Geo Experience for the same project uses the nested route:
+
+`https://ar3dstudio.in/3Dprojects/[slug]/geo`
+
+The exact `3Dprojects` path segment remains case-sensitive with an uppercase `D`.
+Existing Building URLs must not be renamed when optional experiences are added.
+Custom domains may alias an experience later, but they do not replace the Engine
+project slug as canonical identity.
+
+### 5.2 Project versus Experience boundary
+
+A **Project** is the Engine-owned customer/job container. A customer-facing
+**Experience** is a sellable/public deliverable produced from that project.
+
+Phase 1 locks two experience identities:
+
+- `building` — default standalone 3D Building Website;
+- `geo` — optional add-on that places a selected immutable Building release in
+  geographic context.
+
+The Building Experience does **not** require Geo. A project may finish and remain
+fully valid with only the Building Experience live.
+
+The Geo Experience must reference a specific immutable Building release. It must
+not create a second customer project, duplicate the Building authoring draft, or
+silently follow a newer Building release. A future Geo release lifecycle may
+advance only after explicit preview/verification.
+
+The existing `releases_3d`, `release_assets_3d`,
+`release_activations_3d`, and `projects_3d.active_release_id` remain the
+Building release system. Phase 1 does not rename or rewrite them.
+
+### 5.3 Platform no-touch rule
+
+`rekixo-ar3d-platform` is stable and outside this Engine refactor. No phase of
+the Experience architecture may require a Platform code change, schema change,
+R2 change, Worker change, route change, or deployment change. Existing Engine
+compatibility/integration reads may remain for backward compatibility, but new
+Building/Geo product behavior must be implemented entirely inside Engine-owned
+code and Engine-owned production resources.
 
 ## 6. Data model direction
 

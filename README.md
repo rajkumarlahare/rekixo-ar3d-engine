@@ -30,8 +30,14 @@ Repository identity cleanup does not rename existing Cloudflare runtime resource
 ## Production surfaces
 
 - Admin: `https://admin.rekixo.com/3Dprojects`
-- Public: `https://ar3dstudio.in/3Dprojects/[slug]`
+- Building Experience: `https://ar3dstudio.in/3Dprojects/[slug]`
+- Optional Geo Experience: `https://ar3dstudio.in/3Dprojects/[slug]/geo`
 - Existing production compatibility fixture: `jyoti-paradise`
+
+The Building Experience is the default standalone customer deliverable. Geo is an
+optional add-on and is not required for a Building project to publish or remain
+live. Future Geo publication must reference a specific immutable Building release
+rather than copying the Building project.
 
 Jyoti Paradise is a normal 3D project/tenant. Stage 4 removed it as an application default; the generic runtime now discovers/selects projects from Engine D1 or from the requested public slug.
 
@@ -76,6 +82,11 @@ New projects are provisioned as **draft** records through the controlled GitHub 
 ## Isolation contract
 
 The sibling AR3D Platform uses its own production resources and routes. The 3D Engine must not bind directly to the platform D1/R2 resources.
+
+The Platform is a no-touch dependency for this Engine refactor: no Building/Geo
+feature may require Platform code, database, R2, Worker, route, or deployment
+changes. Existing compatibility reads may remain, but new Experience behavior is
+owned entirely by this repository and the isolated Engine resources.
 
 Later Platform ↔ Engine integration should use an explicit project-link/service contract. A shared database is not the integration boundary.
 
