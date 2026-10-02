@@ -34,6 +34,8 @@ export interface PdfEmbeddedImageCandidate {
 export interface PdfPlanPageEvidence {
   page: number;
   score: number;
+  /** Page width / height at scale 1; keeps normalized label coordinates aspect-correct. */
+  aspectRatio: number;
   roomLabels: string[];
   dimensionStrings: string[];
   hasFloorPlanLabel: boolean;
@@ -404,6 +406,9 @@ export async function inspectPdfPlans(
       result.pages.push({
         page: pageNumber,
         score: Number(score.toFixed(2)),
+        aspectRatio: Number(
+          (viewport.width / Math.max(1, viewport.height)).toFixed(6),
+        ),
         roomLabels: labels,
         dimensionStrings: dims,
         hasFloorPlanLabel,

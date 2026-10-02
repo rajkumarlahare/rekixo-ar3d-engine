@@ -25,6 +25,17 @@ import {
   markAutoReadyRepeatedFloors,
 } from "./autoBuildingReview";
 import { makeAsset } from "./storage";
+import type { PdfPlanPageEvidence } from "./pdfPlanInspector";
+import type { PdfReferenceRasterResult } from "./pdfReferenceRaster";
+import {
+  applyPdfCadPoint,
+  estimatePdfCadRegistration,
+} from "./crossSourceFusion";
+import {
+  applyCadRegistrationPoint,
+  estimateCadModelRegistration,
+} from "./sourceRegistration";
+import { resolveCadFloorIndex } from "./architectureGraph";
 
 export interface AutoBuildPipelineOptions {
   processDwgArchitecture?: DwgArchitectureProcessor;
@@ -51,6 +62,9 @@ export interface AutoBuildPipelineResult {
     pdfPlanPage?: number;
     pdfSpatialLabels: number;
     pdfEmbeddedImages: number;
+    pdfCadRegistrationConfidence: number;
+    pdfCadRegistrationMatches: number;
+    pdfReferenceAutoAligned: boolean;
     floors: number;
     walls: number;
     repeatedFloors: number;
@@ -167,6 +181,12 @@ export async function runAutoBuildPipeline(
   let pdfPlanPage: number | undefined;
   let pdfSpatialLabels = 0;
   let pdfEmbeddedImages = 0;
+  let pdfPlanEvidence: PdfPlanPageEvidence | undefined;
+  let pdfRaster: PdfReferenceRasterResult | undefined;
+  let pdfReferenceAssetId: string | undefined;
+  let pdfCadRegistrationConfidence = 0;
+  let pdfCadRegistrationMatches = 0;
+  let pdfReferenceAutoAligned = false;
   const pdfSources = workingFiles.filter((file) => /\.pdf$/i.test(file.name));
   if (pdfSources.length > 1) {
     issues.push(
@@ -181,13 +201,14 @@ export async function runAutoBuildPipeline(
         (page) => page.page === inspection.bestPage,
       );
       if (best) {
+        pdfPlanEvidence = best;
         pdfPlanPage = best.page;
         pdfSpatialLabels = best.spatialLabels.filter(
           (entry) => entry.kind !== "other",
         ).length;
         pdfEmbeddedImages = best.embeddedImages.length;
 
-        const { rasterPdfReference } = await import("./pdfReferenceRaster");
+        const { rasterPdfReferenceWithMetadata } = await import("./pdfReferenceRaster");
         const strongest = best.embeddedImages[0];
         const runnerUp = best.embeddedImages[1];
         const dominantImage =
@@ -211,14 +232,15 @@ export async function runAutoBuildPipeline(
               ),
             }
           : undefined;
-        const referenceFile = await rasterPdfReference(pdfSource, {
+        pdfRaster = await rasterPdfReferenceWithMetadata(pdfSource, {
           page: best.page,
           ...(crop ? { crop } : {}),
           label: crop ? "auto-plan-image" : "auto-plan-page",
         });
-        const candidate = await makeAsset(referenceFile, next.id);
+        const candidate = await makeAsset(pdfRaster.file, next.id);
         const equivalent = findEquivalentAsset(workingFiles, candidate);
         const referenceAsset = equivalent ?? candidate;
+        pdfReferenceAssetId = referenceAsset.id;
         if (!equivalent) {
           createdAssets.push(referenceAsset);
           workingFiles.push(referenceAsset);
@@ -338,6 +360,118 @@ export async function runAutoBuildPipeline(
   const draft = buildSmartSceneDraft(next, analysis);
   next = { ...next, scene: draft.scene };
 
+  if (pdfPlanEvidence && pdfRaster && pdfReferenceAssetId) {
+    const cadAudit = analysis.cadAudits.find(
+      (audit) =>
+        audit.kind === "dwg" &&
+        audit.geometryReady &&
+        (audit.textLabels?.length ?? 0) >= 3,
+    );
+    if (cadAudit) {
+      const pdfRegistration = estimatePdfCadRegistration(
+        pdfPlanEvidence,
+        cadAudit,
+      );
+      pdfCadRegistrationConfidence = pdfRegistration.confidence;
+      pdfCadRegistrationMatches = pdfRegistration.matches;
+      const floorIndex = resolveCadFloorIndex(
+        cadAudit,
+        next.scene.floors.length,
+      );
+      const cadRegistration =
+        floorIndex !== undefined
+          ? estimateCadModelRegistration(
+              analysis,
+              cadAudit,
+              floorIndex,
+              next.scene.scale,
+              next.scene.modelTransform,
+            )
+          : undefined;
+
+      if (
+        pdfRegistration.compatible &&
+        cadRegistration?.compatible &&
+        floorIndex !== undefined
+      ) {
+        const crop = pdfRaster.crop;
+        const sourceCentre: [number, number] = [
+          (crop.x + crop.width / 2) * pdfPlanEvidence.aspectRatio,
+          crop.y + crop.height / 2,
+        ];
+        const cadCentre = applyPdfCadPoint(
+          sourceCentre,
+          pdfRegistration,
+        );
+        const worldCentre = cadCentre
+          ? applyCadRegistrationPoint(
+              cadCentre,
+              cadRegistration.sourceCentre,
+              cadRegistration.targetCentre,
+              cadRegistration.rotationDeg,
+            )
+          : undefined;
+        const scale = pdfRegistration.scaleMetresPerPdfUnit;
+        const metresPerPixelX =
+          scale !== undefined
+            ? (scale * pdfPlanEvidence.aspectRatio * crop.width) /
+              Math.max(1, pdfRaster.widthPx)
+            : undefined;
+        const metresPerPixelY =
+          scale !== undefined
+            ? (scale * crop.height) / Math.max(1, pdfRaster.heightPx)
+            : undefined;
+        const pixelScaleAgreement =
+          metresPerPixelX &&
+          metresPerPixelY &&
+          Math.abs(metresPerPixelX - metresPerPixelY) /
+            Math.max(metresPerPixelX, metresPerPixelY);
+
+        if (
+          worldCentre &&
+          metresPerPixelX &&
+          metresPerPixelY &&
+          pixelScaleAgreement !== undefined &&
+          pixelScaleAgreement <= 0.035
+        ) {
+          const layers = next.scene.referenceLayers ?? [];
+          next = {
+            ...next,
+            scene: {
+              ...next.scene,
+              referenceLayers: layers.map((layer) =>
+                layer.assetId === pdfReferenceAssetId
+                  ? {
+                      ...layer,
+                      metresPerPixel: Number(
+                        ((metresPerPixelX + metresPerPixelY) / 2).toFixed(8),
+                      ),
+                      x: Number(worldCentre[0].toFixed(5)),
+                      y: next.scene.floors[floorIndex]?.elevation ?? layer.y,
+                      z: Number(worldCentre[1].toFixed(5)),
+                      rotation: Number(
+                        (
+                          (pdfRegistration.rotationDeg ?? 0) +
+                          cadRegistration.rotationDeg
+                        ).toFixed(4),
+                      ),
+                    }
+                  : layer,
+              ),
+            },
+          };
+          pdfReferenceAutoAligned = true;
+        } else {
+          issues.push(
+            "PDF/CAD registration was plausible, but raster scale/aspect did not agree closely enough for automatic reference placement.",
+          );
+        }
+      } else if (pdfRegistration.matches > 0) {
+        issues.push(pdfRegistration.reason);
+      }
+    }
+  }
+
   const wallReview = markAutoReadyModelWalls(next.scene);
   next = { ...next, scene: wallReview.scene };
   const repeatReview = markAutoReadyRepeatedFloors(next.scene);
@@ -384,6 +518,9 @@ export async function runAutoBuildPipeline(
       ...(pdfPlanPage !== undefined ? { pdfPlanPage } : {}),
       pdfSpatialLabels,
       pdfEmbeddedImages,
+      pdfCadRegistrationConfidence,
+      pdfCadRegistrationMatches,
+      pdfReferenceAutoAligned,
       floors: draft.summary.floors,
       walls: draft.summary.walls,
       repeatedFloors: draft.summary.repeatedFloors,
@@ -421,7 +558,7 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
     ? ` · DWG: ${summary.dwgSegments} segments · ${summary.dwgDimensions} dimensions · ${summary.dwgObjects} semantic objects${summary.dwgFloorLabels ? ` · ${summary.dwgFloorLabels} floor label${summary.dwgFloorLabels === 1 ? "" : "s"}` : ""}`
     : "";
   const pdf = summary.pdfPlanReferencesPrepared
-    ? ` · PDF plan page ${summary.pdfPlanPage ?? "?"} prepared · ${summary.pdfSpatialLabels} spatial label${summary.pdfSpatialLabels === 1 ? "" : "s"} · ${summary.pdfEmbeddedImages} embedded image candidate${summary.pdfEmbeddedImages === 1 ? "" : "s"}`
+    ? ` · PDF plan page ${summary.pdfPlanPage ?? "?"} prepared · ${summary.pdfSpatialLabels} spatial label${summary.pdfSpatialLabels === 1 ? "" : "s"} · ${summary.pdfEmbeddedImages} embedded image candidate${summary.pdfEmbeddedImages === 1 ? "" : "s"}${summary.pdfCadRegistrationMatches ? ` · PDF↔CAD ${summary.pdfCadRegistrationMatches} label match${summary.pdfCadRegistrationMatches === 1 ? "" : "es"} @ ${summary.pdfCadRegistrationConfidence.toFixed(2)}` : ""}${summary.pdfReferenceAutoAligned ? " · reference auto-aligned" : ""}`
     : "";
   const rooms = summary.autoRooms
     ? ` · ${summary.autoRooms} room draft${summary.autoRooms === 1 ? "" : "s"}`

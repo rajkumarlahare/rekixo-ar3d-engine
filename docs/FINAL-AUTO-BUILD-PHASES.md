@@ -51,7 +51,7 @@ Status: **complete — structured DRS/SKB/PDF extraction implemented; validation
 
 ## Phase 5 — Cross-source alignment and fusion
 
-Status: **partial — CAD↔model rigid registration and per-floor wall fusion are live; PDF/SKB registration still needs the remaining evidence-fusion work**
+Status: **complete — capability-specific source authority, CAD↔model rigid registration, guarded PDF↔CAD↔model registration, SketchUp↔FBX provenance linking, and review-only ambiguity handling are implemented**
 
 - Normalize units, origin, scale and orientation across FBX/DWG/SKB/PDF.
 - Fuse claims by capability and source authority instead of treating CAD as a fallback.

@@ -14,6 +14,13 @@ export interface PdfReferenceRasterOptions {
   label?: string;
 }
 
+export interface PdfReferenceRasterResult {
+  file: File;
+  widthPx: number;
+  heightPx: number;
+  crop: NormalizedCrop;
+}
+
 function clampCrop(crop?: NormalizedCrop): NormalizedCrop {
   if (!crop) return { x: 0, y: 0, width: 1, height: 1 };
   const x = Math.min(0.98, Math.max(0, crop.x));
@@ -35,10 +42,10 @@ function canvasBlob(canvas: HTMLCanvasElement) {
   });
 }
 
-export async function rasterPdfReference(
+export async function rasterPdfReferenceWithMetadata(
   source: Asset,
   options: PdfReferenceRasterOptions,
-): Promise<File> {
+): Promise<PdfReferenceRasterResult> {
   if (
     source.type !== "application/pdf" &&
     !source.name.toLowerCase().endsWith(".pdf")
@@ -97,12 +104,25 @@ export async function rasterPdfReference(
       .replace(/[^a-z0-9_-]+/gi, "-")
       .replace(/^-+|-+$/g, "")
       .toLowerCase();
-    return new File(
+    const file = new File(
       [blob],
       `${base}-page-${pageNumber}-${label || "reference"}.png`,
       { type: "image/png" },
     );
+    return {
+      file,
+      widthPx: output.width,
+      heightPx: output.height,
+      crop,
+    };
   } finally {
     await loadingTask.destroy();
   }
+}
+
+export async function rasterPdfReference(
+  source: Asset,
+  options: PdfReferenceRasterOptions,
+): Promise<File> {
+  return (await rasterPdfReferenceWithMetadata(source, options)).file;
 }
