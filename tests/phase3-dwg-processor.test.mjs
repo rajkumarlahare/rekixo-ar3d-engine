@@ -304,7 +304,7 @@ test("Phase 3 cloud boundary is authenticated, same-origin and source-bound", ()
   assert.match(route, /validSha256\(sha256\)/);
   assert.match(route, /sameOrigin\(request\)/);
   assert.match(route, /DWG_PROCESSOR\.getByName/);
-  assert.match(controller, /extends DurableObject/);
+  assert.match(controller, /extends DurableObjectBase/);
   assert.match(controller, /container\.start\(\)/);
   assert.match(controller, /getTcpPort\(PROCESSOR_PORT\)/);
   assert.match(controller, /\/health/);
