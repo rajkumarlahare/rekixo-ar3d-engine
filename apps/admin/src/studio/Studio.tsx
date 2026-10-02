@@ -4664,6 +4664,12 @@ export default function Studio() {
               layers={p.scene.referenceLayers ?? []}
               modelTransform={modelTransform}
               quickSetup={quickSourceSetup}
+              recommendedPdfPage={(() => {
+                const value = sourceFusion?.facts.find(
+                  (fact) => fact.key === "pdf.plan-page",
+                )?.value;
+                return typeof value === "number" ? value : undefined;
+              })()}
               transformMode={transformMode}
               snap={transformSnap}
               disabled={Boolean(review) || busy}
