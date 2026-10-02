@@ -24,3 +24,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_deletion_jobs_3d_one_active
 
 CREATE INDEX IF NOT EXISTS idx_engine_deletion_jobs_3d_status
   ON engine_deletion_jobs_3d(status, updated_at DESC);
+
+-- Project creation through any path (Admin API or manual provisioning SQL) is
+-- blocked while an all-project deletion job is unfinished. This prevents a
+-- retried R2 cleanup from ever deleting assets belonging to a newly recreated
+-- project with the same slug.
+CREATE TRIGGER IF NOT EXISTS trg_projects_3d_block_insert_during_delete
+BEFORE INSERT ON projects_3d
+WHEN EXISTS (
+  SELECT 1
+    FROM engine_deletion_jobs_3d
+   WHERE kind='all-projects'
+     AND status <> 'completed'
+)
+BEGIN
+  SELECT RAISE(ABORT, 'Engine project deletion cleanup in progress');
+END;
