@@ -7,9 +7,17 @@ import type { FbxSourceAudit } from "./sourceAudit";
 import { disposeObjectResources } from "./threeResources";
 import {
   parseAsciiDxfArchitecture,
+  type DxfCadAnchor,
+  type DxfCadDimension,
+  type DxfCadKind,
   type DxfSemanticSegment,
   type DxfTextLabel,
 } from "./dxfArchitecture";
+import {
+  processDwgAsset,
+  processorResultAsPlan,
+} from "./dwgProcessor";
+import { inspectDwgEvidence } from "./dwgEvidence";
 
 export type SmartSourceRole =
   | "model"
@@ -66,13 +74,17 @@ export interface SmartCadAudit {
   semanticReady: boolean;
   layerHints: Array<{
     layer: string;
-    kind: SmartArchitecturalKind;
+    kind: DxfCadKind;
   }>;
   unitName?: string;
   metresPerUnit?: number;
   geometryReady?: boolean;
   semanticSegments?: DxfSemanticSegment[];
   textLabels?: DxfTextLabel[];
+  anchors?: DxfCadAnchor[];
+  dimensions?: DxfCadDimension[];
+  floorHints?: string[];
+  processor?: string;
   note: string;
 }
 
@@ -516,12 +528,113 @@ function semanticLayerKind(layer: string): SmartArchitecturalKind | undefined {
 async function auditCadSources(files: Asset[]): Promise<SmartCadAudit[]> {
   const cad = files.filter((file) => /\.(dxf|dwg|skp|skb)$/i.test(file.name));
   const result: SmartCadAudit[] = [];
+
+  const planAudit = (
+    file: Asset,
+    kind: "dxf" | "dwg",
+    geometry: ReturnType<typeof parseAsciiDxfArchitecture>,
+    processor?: string,
+  ): SmartCadAudit => {
+    const layerHints = [
+      ...new Map(
+        geometry.segments.map((segment) => [
+          `${segment.layer}\u0000${segment.kind}`,
+          { layer: segment.layer, kind: segment.kind },
+        ]),
+      ).values(),
+    ];
+    return {
+      assetId: file.id,
+      name: file.name,
+      kind,
+      semanticReady: geometry.segments.length > 0 || geometry.labels.length > 0,
+      layerHints,
+      ...(geometry.unitName ? { unitName: geometry.unitName } : {}),
+      ...(geometry.metresPerUnit !== undefined
+        ? { metresPerUnit: geometry.metresPerUnit }
+        : {}),
+      geometryReady: geometry.geometryReady,
+      semanticSegments: geometry.segments,
+      textLabels: geometry.labels,
+      anchors: geometry.anchors ?? [],
+      dimensions: geometry.dimensions ?? [],
+      floorHints: geometry.floorHints ?? [],
+      ...(processor ? { processor } : {}),
+      note: geometry.geometryReady
+        ? `${geometry.segments.length} normalized architectural segment${geometry.segments.length === 1 ? "" : "s"} parsed in ${geometry.unitName}; geometry remains reviewable CAD evidence until floor/alignment is resolved.`
+        : geometry.issues[0] ??
+          (layerHints.length
+            ? `${layerHints.length} architectural layer hint${layerHints.length === 1 ? "" : "s"} found, but drawing scale still needs review.`
+            : "CAD source is readable, but no clearly named architectural layers were found."),
+    };
+  };
+
   for (const file of cad) {
     const extension = file.name.toLowerCase().split(".").pop() as
       | "dxf"
       | "dwg"
       | "skp"
       | "skb";
+
+    if (extension === "dwg") {
+      const evidence = await inspectDwgEvidence(file);
+      try {
+        const processed = await processDwgAsset(file);
+        const geometry = processorResultAsPlan(processed);
+        const audit = planAudit(
+          file,
+          "dwg",
+          geometry,
+          `${processed.processor.engine}@${processed.processor.engineVersion}`,
+        );
+        audit.note =
+          `${audit.note} DWG ${processed.source.dwgVersion ?? evidence.versionCode ?? "version unknown"} processed by controlled server-side CAD service.`;
+        result.push(audit);
+      } catch (error) {
+        const detail =
+          error instanceof Error ? error.message : "Controlled DWG processor failed.";
+        result.push({
+          assetId: file.id,
+          name: file.name,
+          kind: "dwg",
+          semanticReady: false,
+          layerHints: evidence.aecTokens
+            .map((token) => {
+              const normalized = token.toLowerCase();
+              const kind: DxfCadKind | undefined =
+                normalized.includes("door")
+                  ? "door"
+                  : normalized.includes("window")
+                    ? "window"
+                    : normalized.includes("stair")
+                      ? "stair"
+                      : normalized.includes("lift")
+                        ? "lift"
+                        : normalized.includes("column")
+                          ? "column"
+                          : normalized.includes("slab")
+                            ? "slab"
+                            : normalized.includes("wall")
+                              ? "wall"
+                              : undefined;
+              return kind ? { layer: token, kind } : undefined;
+            })
+            .filter(
+              (value): value is { layer: string; kind: DxfCadKind } =>
+                Boolean(value),
+            ),
+          textLabels: evidence.drawingTextHints.map((text) => ({
+            layer: "DWG-EVIDENCE",
+            text,
+            point: [0, 0] as [number, number],
+          })),
+          note:
+            `DWG binary evidence was recognized${evidence.versionLabel ? ` as ${evidence.versionLabel}` : ""}, but editable geometry is unavailable: ${detail}`,
+        });
+      }
+      continue;
+    }
+
     if (extension !== "dxf") {
       result.push({
         assetId: file.id,
@@ -530,12 +643,11 @@ async function auditCadSources(files: Asset[]): Promise<SmartCadAudit[]> {
         semanticReady: false,
         layerHints: [],
         note:
-          extension === "dwg"
-            ? "DWG is preserved as source evidence. Convert/export to ASCII DXF for safe browser-side layer detection."
-            : "SketchUp source is preserved as evidence; semantic layer extraction is not enabled in-browser.",
+          "SketchUp source is preserved as evidence; semantic layer extraction is not enabled in the CAD processor.",
       });
       continue;
     }
+
     if (file.size > 25 * 1024 * 1024) {
       result.push({
         assetId: file.id,
@@ -543,10 +655,12 @@ async function auditCadSources(files: Asset[]): Promise<SmartCadAudit[]> {
         kind: "dxf",
         semanticReady: false,
         layerHints: [],
-        note: "DXF is too large for safe in-browser semantic scanning; use a reduced/exported drawing.",
+        note:
+          "DXF is too large for safe in-browser semantic scanning; use the controlled CAD processor.",
       });
       continue;
     }
+
     const text = await file.blob.text();
     const geometry = parseAsciiDxfArchitecture(text);
     if (!geometry.ascii) {
@@ -562,34 +676,7 @@ async function auditCadSources(files: Asset[]): Promise<SmartCadAudit[]> {
       });
       continue;
     }
-    const layerHints = [
-      ...new Map(
-        geometry.segments.map((segment) => [
-          `${segment.layer}\u0000${segment.kind}`,
-          { layer: segment.layer, kind: segment.kind },
-        ]),
-      ).values(),
-    ];
-    result.push({
-      assetId: file.id,
-      name: file.name,
-      kind: "dxf",
-      semanticReady: true,
-      layerHints,
-      ...(geometry.unitName ? { unitName: geometry.unitName } : {}),
-      ...(geometry.metresPerUnit !== undefined
-        ? { metresPerUnit: geometry.metresPerUnit }
-        : {}),
-      geometryReady: geometry.geometryReady,
-      semanticSegments: geometry.segments,
-      textLabels: geometry.labels,
-      note: geometry.geometryReady
-        ? `${geometry.segments.length} normalized wall/door/window segment${geometry.segments.length === 1 ? "" : "s"} parsed in ${geometry.unitName}; geometry remains reviewable CAD evidence until floor/alignment is resolved.`
-        : geometry.issues[0] ??
-          (layerHints.length
-            ? `${layerHints.length} wall/door/window layer hint(s) found, but drawing scale still needs review.`
-            : "ASCII DXF is readable, but no clearly named wall/door/window layers were found."),
-    });
+    result.push(planAudit(file, "dxf", geometry, "browser-ascii-dxf"));
   }
   return result;
 }
