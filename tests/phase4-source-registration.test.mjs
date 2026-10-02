@@ -24,6 +24,9 @@ const graphCode = compile(
   `from "${registrationUrl}";`,
 );
 const graph = await import(asUrl(graphCode));
+const autoReview = await import(
+  asUrl(compile("apps/admin/src/studio/autoBuildingReview.ts")),
+);
 
 function baseAnalysis() {
   return {
@@ -200,6 +203,40 @@ test("Phase 4 wall fusion makes strong CAD authoritative per floor while preserv
   assert.equal(fused.suppressedModelWalls, 2);
   assert.equal(fused.walls.filter((wall) => wall.floorId === "f0").length, 4);
   assert.equal(fused.walls.filter((wall) => wall.floorId === "f1").length, 1);
+});
+
+test("Phase 4 fast review can explicitly approve registered CAD walls", () => {
+  const scene = {
+    floors: [{ id: "f0", name: "Ground", elevation: 0 }],
+    rooms: [],
+    furniture: [],
+    walls: [
+      {
+        id: "cad-ready",
+        floorId: "f0",
+        roomIds: [],
+        start: [0, 0],
+        end: [4, 0],
+        thickness: 0.2,
+        height: 2.8,
+        reviewed: false,
+        origin: "cad-auto",
+        confidence: 0.91,
+        reviewState: "auto_ready",
+      },
+    ],
+    openings: [],
+    scale: 1,
+  };
+
+  const counts = autoReview.autoBuildingReviewCounts(scene);
+  assert.equal(counts.readyWalls, 1);
+  assert.equal(counts.wallReview, 0);
+
+  const approved = autoReview.approveReadyModelWalls(scene);
+  assert.equal(approved.approved, 1);
+  assert.equal(approved.scene.walls[0].reviewed, true);
+  assert.equal(approved.scene.walls[0].reviewState, "human_reviewed");
 });
 
 test("Phase 4 Smart Draft uses source fusion instead of the old CAD fallback", () => {
