@@ -197,3 +197,88 @@ export function mergeWallGraphs(
     });
   return [...result.values()];
 }
+
+
+function boundaryPoints(room: Room): RoomPoint[] {
+  return room.polygon?.length
+    ? room.polygon
+    : [
+        [room.x - room.width / 2, room.z - room.depth / 2],
+        [room.x + room.width / 2, room.z - room.depth / 2],
+        [room.x + room.width / 2, room.z + room.depth / 2],
+        [room.x - room.width / 2, room.z + room.depth / 2],
+      ];
+}
+
+function wallRoomOverlap(
+  wall: Pick<Wall, "start" | "end" | "thickness">,
+  left: RoomPoint,
+  right: RoomPoint,
+) {
+  const wx = wall.end[0] - wall.start[0];
+  const wz = wall.end[1] - wall.start[1];
+  const wallLength = Math.hypot(wx, wz);
+  const ex = right[0] - left[0];
+  const ez = right[1] - left[1];
+  const edgeLength = Math.hypot(ex, ez);
+  if (wallLength < 0.03 || edgeLength < 0.03) return 0;
+
+  const wux = wx / wallLength;
+  const wuz = wz / wallLength;
+  const eux = ex / edgeLength;
+  const euz = ez / edgeLength;
+  const parallel = Math.abs(wux * eux + wuz * euz);
+  if (parallel < 0.985) return 0;
+
+  const edgeMidX = (left[0] + right[0]) / 2;
+  const edgeMidZ = (left[1] + right[1]) / 2;
+  const vx = edgeMidX - wall.start[0];
+  const vz = edgeMidZ - wall.start[1];
+  const perpendicular = Math.abs(vx * -wuz + vz * wux);
+  if (perpendicular > Math.max(0.16, wall.thickness * 1.5)) return 0;
+
+  const a = (left[0] - wall.start[0]) * wux + (left[1] - wall.start[1]) * wuz;
+  const b = (right[0] - wall.start[0]) * wux + (right[1] - wall.start[1]) * wuz;
+  const from = Math.max(0, Math.min(a, b));
+  const to = Math.min(wallLength, Math.max(a, b));
+  return Math.max(0, to - from);
+}
+
+export function linkWallsToRooms(
+  walls: readonly Wall[],
+  rooms: readonly Room[],
+): Wall[] {
+  return walls.map((wall) => {
+    const matches = rooms
+      .filter((room) => room.floorId === wall.floorId)
+      .map((room) => {
+        const points = boundaryPoints(room);
+        let overlap = 0;
+        for (let index = 0; index < points.length; index += 1)
+          overlap = Math.max(
+            overlap,
+            wallRoomOverlap(
+              wall,
+              points[index],
+              points[(index + 1) % points.length],
+            ),
+          );
+        return { roomId: room.id, overlap };
+      })
+      .filter((match) => match.overlap >= 0.18)
+      .sort((left, right) => right.overlap - left.overlap);
+
+    const strong = matches.filter(
+      (match) => match.overlap >= Math.max(0.18, matches[0]?.overlap * 0.35),
+    );
+    const roomIds =
+      strong.length <= 2
+        ? strong.map((match) => match.roomId)
+        : [];
+
+    return {
+      ...wall,
+      roomIds,
+    };
+  });
+}
