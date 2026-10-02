@@ -6,7 +6,6 @@ import {
   type ReferenceLayer,
 } from "./domain";
 import type { TransformMode } from "./SceneCanvas";
-import type { QuickSourceSetup } from "./sourcePackSetup";
 import {
   rasterPdfReference,
   type PdfReferenceRasterOptions,
@@ -17,7 +16,6 @@ interface Props {
   modelId?: string;
   layers: ReferenceLayer[];
   modelTransform: ModelTransform;
-  quickSetup?: QuickSourceSetup;
   recommendedPdfPage?: number;
   transformMode: TransformMode;
   snap: boolean;
@@ -62,7 +60,6 @@ export default function ReferenceWorkspace({
   modelId,
   layers,
   modelTransform,
-  quickSetup,
   recommendedPdfPage,
   transformMode,
   snap,
@@ -85,28 +82,20 @@ export default function ReferenceWorkspace({
       ),
     [files, modelId],
   );
-  const presetAssetId = quickSetup?.alignment
-    ? quickSetup.slots.find(
-        (slot) => slot.key === quickSetup.alignment?.slotKey,
-      )?.asset?.id
-    : undefined;
   const [selectedAssetId, setSelectedAssetId] = useState("");
   const [points, setPoints] = useState<Point[]>([]);
   const [knownDistance, setKnownDistance] = useState("1");
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
   const [previewZoom, setPreviewZoom] = useState(1);
   const [previewExpanded, setPreviewExpanded] = useState(false);
-  const [pdfPage, setPdfPage] = useState(
-    quickSetup?.alignment?.page ?? recommendedPdfPage ?? 1,
-  );
+  const [pdfPage, setPdfPage] = useState(recommendedPdfPage ?? 1);
   const [preparingPdf, setPreparingPdf] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const imageRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
-    if (!quickSetup?.alignment?.page && recommendedPdfPage)
-      setPdfPage(recommendedPdfPage);
-  }, [quickSetup?.alignment?.page, recommendedPdfPage]);
+    if (recommendedPdfPage) setPdfPage(recommendedPdfPage);
+  }, [recommendedPdfPage]);
 
   useEffect(() => {
     if (
@@ -118,13 +107,10 @@ export default function ReferenceWorkspace({
       layers.find((layer) =>
         candidates.some((candidate) => candidate.id === layer.assetId),
       )?.assetId ??
-        (presetAssetId &&
-        candidates.some((candidate) => candidate.id === presetAssetId)
-          ? presetAssetId
-          : candidates[0]?.id) ??
+        candidates[0]?.id ??
         "",
     );
-  }, [candidates, layers, presetAssetId, selectedAssetId]);
+  }, [candidates, layers, selectedAssetId]);
 
   useEffect(() => {
     setPoints([]);
@@ -133,11 +119,6 @@ export default function ReferenceWorkspace({
     setPreviewExpanded(false);
     setPdfError("");
   }, [selectedAssetId]);
-
-  useEffect(() => {
-    if (quickSetup?.alignment?.page)
-      setPdfPage(quickSetup.alignment.page);
-  }, [quickSetup?.alignment?.page]);
 
   useEffect(() => {
     if (!previewExpanded) return;
@@ -153,9 +134,6 @@ export default function ReferenceWorkspace({
   const asset = candidates.find((candidate) => candidate.id === selectedAssetId);
   const layer = layers.find((candidate) => candidate.assetId === selectedAssetId);
   const kind = sourceKind(asset);
-  const isPresetSource = Boolean(
-    asset && presetAssetId && asset.id === presetAssetId,
-  );
   const objectUrl = useMemo(
     () => (asset ? URL.createObjectURL(asset.blob) : ""),
     [asset],
@@ -216,12 +194,7 @@ export default function ReferenceWorkspace({
     try {
       const options: PdfReferenceRasterOptions = {
         page: pdfPage,
-        ...(isPresetSource && quickSetup?.alignment?.crop
-          ? { crop: quickSetup.alignment.crop }
-          : {}),
-        ...(isPresetSource && quickSetup?.alignment?.label
-          ? { label: quickSetup.alignment.label }
-          : { label: "alignment-plan" }),
+        label: "alignment-plan",
       };
       const file = await rasterPdfReference(asset, options);
       const derived = await onCreatePdfReference(asset, file, options);
@@ -477,13 +450,10 @@ export default function ReferenceWorkspace({
                 >
                   {preparingPdf
                     ? "Preparing plan…"
-                    : isPresetSource
+                    : recommendedPdfPage === pdfPage
                       ? "Use detected floor plan"
                       : "Use this PDF page"}
                 </button>
-                {isPresetSource && quickSetup?.alignment?.crop && (
-                  <small>Project preset will crop the useful plan area automatically.</small>
-                )}
                 {pdfError && <small className="error">{pdfError}</small>}
               </div>
             </div>
