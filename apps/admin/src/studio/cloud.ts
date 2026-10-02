@@ -1,3 +1,4 @@
+import type { EngineExperienceSummary } from "@rekixo/3d-contracts";
 import {
   projectSlug,
   validateProject,
@@ -178,6 +179,29 @@ export async function ensureProject(project: Project) {
         slug,
         name: project.name,
         location: project.location ?? "",
+      }),
+    },
+  );
+}
+
+export async function experiences(slug: string) {
+  return api<{ experiences: EngineExperienceSummary[] }>(
+    `${CLOUD_BASE}/projects/${encodeURIComponent(slug)}/experiences`,
+  );
+}
+
+export async function createGeoExperience(
+  slug: string,
+  sourceBuildingReleaseId: string,
+) {
+  return api<{ created: boolean; experience: EngineExperienceSummary }>(
+    `${CLOUD_BASE}/projects/${encodeURIComponent(slug)}/experiences`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "geo",
+        sourceBuildingReleaseId,
       }),
     },
   );
