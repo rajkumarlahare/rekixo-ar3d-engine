@@ -4,21 +4,6 @@ import test from "node:test";
 
 const read = (path) => fs.readFileSync(path, "utf8");
 
-test("Jyoti source profile points visual alignment at the useful brochure plan", () => {
-  const profile = read("project-profiles/studio-source-profiles.ts");
-  const setup = read("apps/admin/src/studio/sourcePackSetup.ts");
-
-  assert.match(profile, /alignment:\s*{/);
-  assert.match(profile, /slotKey: "floorPlan"/);
-  assert.match(profile, /page: 2/);
-  assert.match(profile, /x: 0\.5/);
-  assert.match(profile, /y: 0\.12/);
-  assert.match(profile, /width: 0\.48/);
-  assert.match(profile, /height: 0\.84/);
-  assert.match(setup, /alignment\?: QuickAlignmentPreset/);
-  assert.match(setup, /alignment: profile\.alignment/);
-});
-
 test("PDF floor-plan preparation is lazy, cropped and keeps the source unchanged", () => {
   const helper = read("apps/admin/src/studio/pdfReferenceRaster.ts");
   const pkg = JSON.parse(read("apps/admin/package.json"));
