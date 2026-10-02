@@ -135,8 +135,8 @@ function facesFromSegments(
     const vertex = {
       id: key,
       point: [
-        Number((Math.round(point[0] / snap) * snap).toFixed(4)),
-        Number((Math.round(point[1] / snap) * snap).toFixed(4)),
+        Number(point[0].toFixed(4)),
+        Number(point[1].toFixed(4)),
       ] as RoomPoint,
     };
     vertices.set(key, vertex);
