@@ -411,13 +411,13 @@ export default function Studio() {
           : current,
       );
       setMessage(
-        `Jyoti interior auto-repaired · ${result.removed.length} misplaced removed · ${result.createdTypical.length + result.createdRepeated.length} correct items restored/repeated.`,
+        `Demo interior auto-repaired · ${result.removed.length} misplaced removed · ${result.createdTypical.length + result.createdRepeated.length} correct items restored/repeated.`,
       );
     } catch (reason) {
       setError(
         reason instanceof Error
           ? reason.message
-          : "Jyoti interior automatic repair could not be applied safely.",
+          : "Demo interior automatic repair could not be applied safely.",
       );
     }
   }, [
@@ -1205,7 +1205,7 @@ export default function Studio() {
 
   function prepareTypicalDemoInterior() {
     if (!profileDemoInteriorEnabled || !typicalFloorId) {
-      setError("Jyoti typical floor is not ready for demo interior automation.");
+      setError("Typical floor is not ready for demo interior automation.");
       return;
     }
     const result = buildTypicalFloorDemoInterior(p.scene, typicalFloorId, id);
@@ -4717,7 +4717,7 @@ export default function Studio() {
             {profileDemoInteriorEnabled &&
               isolateFloorId === typicalFloorId &&
               !review && (
-                <div className="interior-auto-action" role="group" aria-label="Jyoti demo interior automation">
+                <div className="interior-auto-action" role="group" aria-label="Demo interior automation">
                   {demoInteriorIssues.length > 0 ? (
                     <>
                       <span>
