@@ -849,57 +849,7 @@ export default function Studio() {
       ),
     ).size,
     mappedSheetKeys = mappedRoomSheetKeys(p.scene.rooms),
-    typicalFloorId = quickSourceSetup.profile && quickSourceSetup.repeatPlan
-      ? floorSkeletonStatus(p.scene, quickSourceSetup.profile, quickSourceSetup.floorSkeleton)
-          .floorIdByKey[quickSourceSetup.repeatPlan.sourceFloorKey]
-      : undefined,
-    batchRepeatPreview = buildBatchRepeatPreview(
-      p.scene,
-      quickSourceSetup.profile,
-      quickSourceSetup.floorSkeleton,
-      quickSourceSetup.repeatPlan,
-    ),
-    profileDemoInteriorEnabled =
-      Boolean(quickSourceSetup.interiorAutomation?.enabled) &&
-      Boolean(typicalFloorId),
-    demoInteriorIssues = profileDemoInteriorEnabled
-      ? auditDemoInterior(p.scene)
-      : [],
-    typicalDemoInteriorPreview =
-      profileDemoInteriorEnabled && typicalFloorId
-        ? (() => {
-            let previewIndex = 0;
-            return buildTypicalFloorDemoInterior(
-              p.scene,
-              typicalFloorId,
-              () => `preview-typical-${previewIndex++}`,
-            );
-          })()
-        : { furniture: p.scene.furniture, created: [], skippedRooms: [] },
-    typicalFloorRoomIds = new Set(
-      typicalFloorId
-        ? p.scene.rooms
-            .filter((entry) => entry.floorId === typicalFloorId)
-            .map((entry) => entry.id)
-        : [],
-    ),
-    typicalFloorFurnitureCount = p.scene.furniture.filter((entry) =>
-      typicalFloorRoomIds.has(entry.roomId),
-    ).length,
-    repeatDemoInteriorPreview =
-      profileDemoInteriorEnabled &&
-      typicalFloorId &&
-      typicalDemoInteriorPreview.created.length === 0 &&
-      typicalFloorFurnitureCount > 0
-        ? (() => {
-            let previewIndex = 0;
-            return buildRepeatedDemoInterior(
-              p.scene,
-              batchRepeatPreview.rows,
-              () => `preview-repeat-${previewIndex++}`,
-            );
-          })()
-        : { furniture: p.scene.furniture, created: [], skippedRooms: [] },
+    batchRepeatPreview = buildDetectedRepeatPreview(p.scene),
     approvedOpeningKeys = new Set(
       (p.scene.openings ?? [])
         .filter(
@@ -1057,103 +1007,6 @@ export default function Studio() {
       },
     });
   }
-  function repairDemoInteriorConsistency() {
-    if (!profileDemoInteriorEnabled) {
-      setError("Interior automation is not enabled for this source profile.");
-      return;
-    }
-    const result = repairDemoInterior(p.scene);
-    if (!result.removed.length) {
-      setMessage("Interior room assignments are already consistent.");
-      return;
-    }
-    const next: Project = {
-      ...p,
-      scene: { ...p.scene, furniture: result.furniture },
-    };
-    try {
-      validateProject(next);
-      edit(next);
-      if (result.removed.some((issue) => issue.furnitureId === selected))
-        setSelected(roomId);
-      setMessage(
-        `${result.removed.length} misplaced furniture item${result.removed.length === 1 ? "" : "s"} removed from incompatible room types. Correct furniture and unsupported/custom rooms were preserved.`,
-      );
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Interior consistency repair could not be applied safely.",
-      );
-    }
-  }
-
-  function prepareTypicalDemoInterior() {
-    if (!profileDemoInteriorEnabled || !typicalFloorId) {
-      setError("Typical floor is not ready for demo interior automation.");
-      return;
-    }
-    const result = buildTypicalFloorDemoInterior(p.scene, typicalFloorId, id);
-    if (!result.created.length) {
-      setMessage("Typical-floor demo interior is already prepared.");
-      return;
-    }
-    const next: Project = {
-      ...p,
-      scene: { ...p.scene, furniture: result.furniture },
-    };
-    try {
-      validateProject(next);
-      edit(next);
-      setMessage(
-        `${result.created.length} demo furniture item${result.created.length === 1 ? "" : "s"} prepared on Floor 1. Existing furniture was preserved; unsupported rooms were left unchanged.`,
-      );
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Demo interior could not be prepared safely.",
-      );
-    }
-  }
-
-  function repeatDemoInteriorToUpperFloors() {
-    if (
-      !profileDemoInteriorEnabled ||
-      !typicalFloorId ||
-      typicalDemoInteriorPreview.created.length > 0
-    ) {
-      setError("Prepare and review the Floor 1 demo interior before repeating it.");
-      return;
-    }
-    const result = buildRepeatedDemoInterior(
-      p.scene,
-      batchRepeatPreview.rows,
-      id,
-    );
-    if (!result.created.length) {
-      setMessage("Repeated-floor demo interior is already up to date.");
-      return;
-    }
-    const next: Project = {
-      ...p,
-      scene: { ...p.scene, furniture: result.furniture },
-    };
-    try {
-      validateProject(next);
-      edit(next);
-      setMessage(
-        `${result.created.length} furniture item${result.created.length === 1 ? "" : "s"} repeated to reviewed upper-floor rooms. Existing target furniture was preserved.`,
-      );
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Upper-floor demo interior could not be repeated safely.",
-      );
-    }
-  }
-
   function patchAppearance(change: Partial<SceneAppearance>) {
     edit({
       ...p,
@@ -1991,13 +1844,7 @@ export default function Studio() {
     }
   }
   function generateBatchRepeatedUnits() {
-    const result = applyBatchRepeatPlan(
-      p.scene,
-      quickSourceSetup.profile,
-      quickSourceSetup.floorSkeleton,
-      quickSourceSetup.repeatPlan,
-      id,
-    );
+    const result = applyDetectedRepeatPlan(p.scene, id);
     if (!result.createdRooms.length) {
       const existing = result.existingTargets
         ? ` · ${result.existingTargets} existing target${result.existingTargets === 1 ? "" : "s"} preserved`
@@ -2288,7 +2135,6 @@ export default function Studio() {
     });
     const duplicateCount = incoming.length - assets.length;
     const combinedFiles = [...files, ...assets];
-    const quickSetup = await detectQuickSourceSetup(combinedFiles);
     const existing = new Set(p.assets);
     const nextAssetIds = [
       ...p.assets,
@@ -2302,11 +2148,10 @@ export default function Studio() {
     );
     const autoModel =
       p.scene.modelId ??
-      quickSetup.primaryModelId ??
-      (glbCandidates.length === 1
-        ? glbCandidates[0].id
-        : modelCandidates.length === 1
-          ? modelCandidates[0].id
+      (modelCandidates.length === 1
+        ? modelCandidates[0].id
+        : glbCandidates.length === 1
+          ? glbCandidates[0].id
           : undefined);
     const next: Project = {
       ...p,
@@ -2329,15 +2174,11 @@ export default function Studio() {
     setSmartAnalysis(undefined);
     undo.current = [];
     redo.current = [];
-    const sourceLock =
-      quickSetup.profile
-        ? ` · ${quickSetup.name ?? "project"} source lock ${quickSetup.matchedCount}/${quickSetup.requiredCount} detected`
-        : "";
     const skipped = duplicateCount
       ? ` · ${duplicateCount} duplicate checksum${duplicateCount === 1 ? "" : "s"} skipped`
       : "";
     setMessage(
-      `${assets.length} new source file${assets.length === 1 ? "" : "s"} attached${skipped}${sourceLock}${autoModel && autoModel !== p.scene.modelId ? " · primary 3D model selected automatically" : ""}.`,
+      `${assets.length} new source file${assets.length === 1 ? "" : "s"} attached${skipped}${autoModel && autoModel !== p.scene.modelId ? " · primary 3D model selected automatically" : ""}.`,
     );
   }
 
@@ -2385,58 +2226,6 @@ export default function Studio() {
     edit({ ...p, scene: result.scene });
     setMessage(
       `${result.accepted} repeated floor relationship${result.accepted === 1 ? "" : "s"} accepted. Lower-confidence repeats remain review-only.`,
-    );
-  }
-
-  async function autoSetupDetectedSourcePack() {
-    let setup = await detectQuickSourceSetup(files);
-    if (!setup.profile || !setup.slug)
-      throw Error("Attach enough verified project source files before auto setup.");
-    const slug = setup.slug;
-    const profileId = setup.profile;
-    const owner = list.find(
-      (entry) => entry.id !== p.id && projectSlug(entry) === slug,
-    );
-    if (owner)
-      throw Error(
-        `${setup.name ?? "This project"} already exists in this browser workspace. Open that project instead of creating a duplicate.`,
-      );
-
-    const prepared = await prepareQuickPublishModel(
-      setup,
-      files,
-      p.id,
-    );
-    setup = prepared.setup;
-    const next = applyQuickSourceSetup(p, setup);
-    validateProject(next);
-    await persist(next, prepared.asset ? [prepared.asset] : []);
-    if (prepared.asset)
-      setFiles((current) => [
-        ...current.filter((asset) => asset.id !== prepared.asset!.id),
-        prepared.asset!,
-      ]);
-
-    const floors = floorSkeletonStatus(
-      next.scene,
-      profileId,
-      setup.floorSkeleton,
-    );
-    if (floors.preferredFloorId) {
-      setRoomMapFloorId(floors.preferredFloorId);
-      setIsolateFloorId(floors.preferredFloorId);
-      const target = next.scene.floors.find(
-        (floor) => floor.id === floors.preferredFloorId,
-      );
-      if (target) setSectionCutOffset(target.elevation + 1.5);
-    }
-    setSmartAnalysis(undefined);
-    undo.current = [];
-    redo.current = [];
-    setMesh("");
-    setView("building");
-    setMessage(
-      `${setup.name ?? "Project"} source lock applied · ${setup.matchedCount}/${setup.requiredCount} canonical sources recognized · source authoring model selected${setup.publishModelId ? " · verified web GLB attached for publish" : ""}${setup.floorSkeleton?.length ? ` · ${floors.matched}/${floors.total} model-derived source levels ready` : ""} · project context ready.`,
     );
   }
 
@@ -4528,7 +4317,7 @@ export default function Studio() {
               roomSheetIssues={roomSheetIssues}
               onRoomSheetSelect={selectRoomSheetRow}
               onPrepareSuggestedLayout={prepareSuggestedTypicalFloor}
-              canPrepare={!quickSourceSetup.repeatPlan || roomMapFloorId === typicalFloorId}
+              canPrepare={true}
               batchRepeatPreview={batchRepeatPreview}
               onGenerateBatchRepeat={generateBatchRepeatedUnits}
               openingWorkflow={openingWorkflowStatus}
@@ -4552,7 +4341,6 @@ export default function Studio() {
               modelId={p.scene.modelId}
               layers={p.scene.referenceLayers ?? []}
               modelTransform={modelTransform}
-              quickSetup={quickSourceSetup}
               recommendedPdfPage={(() => {
                 const value = sourceFusion?.facts.find(
                   (fact) => fact.key === "pdf.plan-page",
@@ -4599,71 +4387,6 @@ export default function Studio() {
                     : "Select a room to furnish"}
               </small>
             </div>
-            {profileDemoInteriorEnabled &&
-              isolateFloorId === typicalFloorId &&
-              !review && (
-                <div className="interior-auto-action" role="group" aria-label="Demo interior automation">
-                  {demoInteriorIssues.length > 0 ? (
-                    <>
-                      <span>
-                        <b>Interior cleanup required</b>
-                        <small>
-                          {demoInteriorIssues.length} furniture item{demoInteriorIssues.length === 1 ? "" : "s"} are assigned to incompatible room types. Review-safe furniture will be preserved.
-                        </small>
-                      </span>
-                      <button
-                        type="button"
-                        className="primary"
-                        disabled={busy}
-                        onClick={repairDemoInteriorConsistency}
-                      >
-                        Fix misplaced furniture
-                      </button>
-                    </>
-                  ) : typicalDemoInteriorPreview.created.length > 0 ? (
-                    <>
-                      <span>
-                        <b>Demo interior</b>
-                        <small>
-                          Fill reviewed living, bedroom, dining and balcony rooms without replacing existing furniture.
-                        </small>
-                      </span>
-                      <button
-                        type="button"
-                        className="primary"
-                        disabled={busy}
-                        onClick={prepareTypicalDemoInterior}
-                      >
-                        Prepare demo interior
-                      </button>
-                    </>
-                  ) : repeatDemoInteriorPreview.created.length > 0 ? (
-                    <>
-                      <span>
-                        <b>Floor 1 interior ready</b>
-                        <small>
-                          Copy the reviewed typical-unit furniture to matching reviewed upper-floor rooms.
-                        </small>
-                      </span>
-                      <button
-                        type="button"
-                        className="primary"
-                        disabled={busy}
-                        onClick={repeatDemoInteriorToUpperFloors}
-                      >
-                        Repeat interior to upper floors
-                      </button>
-                    </>
-                  ) : (
-                    <span className="interior-auto-complete">
-                      <b>Demo interior ready ✓</b>
-                      <small>
-                        Typical and matching repeated floors are furnished. Manual edits remain available below.
-                      </small>
-                    </span>
-                  )}
-                </div>
-              )}
             {Object.entries(catalog).map(([kind, c]) => (
               <button
                 key={kind}
