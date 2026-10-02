@@ -182,6 +182,10 @@ test("visual mapper exposes Unmapped Rooms and exact one-click placement", () =>
     "apps/admin/src/studio/SceneCanvas.tsx",
     "utf8",
   );
+  const canvasHints = fs.readFileSync(
+    "apps/admin/src/studio/CanvasAuthoringHints.tsx",
+    "utf8",
+  );
 
   assert.match(mapper, /Unmapped Rooms/);
   assert.match(mapper, /Place exact room/);
@@ -196,7 +200,7 @@ test("visual mapper exposes Unmapped Rooms and exact one-click placement", () =>
   assert.match(canvas, /roomStamp\?:/);
   assert.match(canvas, /latest\.current\.roomStamp\?\.enabled/);
   assert.match(canvas, /width: Number\(stamp\.width\.toFixed\(3\)\)/);
-  assert.match(canvas, /Click or tap once to place the exact room-sheet size/);
+  assert.match(canvasHints, /Click or tap once to place the exact room-sheet size/);
 });
 
 
