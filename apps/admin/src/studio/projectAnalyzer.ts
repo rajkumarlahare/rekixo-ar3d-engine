@@ -50,7 +50,12 @@ export interface SmartMeshAnalysis {
   materialNames: string[];
 }
 
-export type SmartArchitecturalKind = "wall" | "door" | "window";
+export type SmartArchitecturalKind =
+  | "wall"
+  | "door"
+  | "window"
+  | "stair"
+  | "lift";
 
 export interface SmartArchitecturalCandidate {
   nodeName: string;
@@ -413,11 +418,15 @@ export function suggestArchitecturalCandidates(
       wall: 0,
       door: 0,
       window: 0,
+      stair: 0,
+      lift: 0,
     };
     const reasons: Record<SmartArchitecturalKind, string[]> = {
       wall: [],
       door: [],
       window: [],
+      stair: [],
+      lift: [],
     };
 
     if (/\b(wall|partition|parapet|masonry|brick)\b/.test(text)) {
@@ -431,6 +440,14 @@ export function suggestArchitecturalCandidates(
     if (/\b(window|windows|glazing|glazed|fenestration)\b/.test(text)) {
       scores.window += 0.94;
       reasons.window.push("source name/material says window");
+    }
+    if (/\b(stair|stairs|staircase|stair flight|landing)\b/.test(text)) {
+      scores.stair += 0.96;
+      reasons.stair.push("source name/material says stair");
+    }
+    if (/\b(lift|elevator|fire lift|elevator shaft)\b/.test(text)) {
+      scores.lift += 0.96;
+      reasons.lift.push("source name/material says lift");
     }
     if (/\b(glass|glazing)\b/.test(text) && !/\b(railing|balustrade|balcony)\b/.test(text)) {
       scores.window += 0.28;
@@ -474,7 +491,7 @@ export function suggestArchitecturalCandidates(
       reasons.window.push("opening-sized geometry has a sill");
     }
 
-    if (/\b(column|beam|slab|floor|ceiling|roof|stair|railing|balustrade)\b/.test(text)) {
+    if (/\b(column|beam|slab|floor|ceiling|roof|stair|railing|balustrade|lift|elevator)\b/.test(text)) {
       scores.door *= 0.35;
       scores.window *= 0.35;
     }
@@ -487,7 +504,10 @@ export function suggestArchitecturalCandidates(
     const second = ranked[1]?.[1] ?? 0;
     if (rawScore < 0.55 || rawScore - second < 0.08) continue;
     const floorFactor =
-      kind === "wall" || assignment?.floorIndex !== undefined ? 1 : 0.82;
+      ["wall", "stair", "lift"].includes(kind) ||
+      assignment?.floorIndex !== undefined
+        ? 1
+        : 0.82;
     candidates.push({
       nodeName: node.name,
       occurrence: node.occurrence,
