@@ -13,7 +13,7 @@ test("V9 renders the supplied exterior model without detached facade cages", () 
 });
 
 test("V9 reference palette is warm and material-driven", () => {
-  const profile = read("apps/public/src/viewer/referenceSourceV9Materials.ts");
+  const profile = read("packages/model-profiles/src/referenceMaterials.ts");
   const realism = read("apps/public/src/viewer/realism.ts");
   for (const token of [
     "frontcolor: 0xdcd5cc",

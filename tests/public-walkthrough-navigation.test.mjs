@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import ts from "typescript";
+import * as THREE from "three";
 
 const compile = (source) =>
   ts.transpileModule(source, {
@@ -69,4 +70,37 @@ test("walk start stays inside concave reviewed rooms", () => {
     walkthrough.publicRoomContains(lRoom, point.x, point.z, 0.18),
     true,
   );
+});
+
+
+test("walk collision broad phase excludes distant meshes before raycast", () => {
+  const root = new THREE.Group();
+  const near = new THREE.Mesh(
+    new THREE.BoxGeometry(1, 2, 1),
+    new THREE.MeshBasicMaterial(),
+  );
+  near.position.set(0, 1, -2);
+  const far = new THREE.Mesh(
+    new THREE.BoxGeometry(1, 2, 1),
+    new THREE.MeshBasicMaterial(),
+  );
+  far.position.set(50, 1, -2);
+  root.add(near, far);
+
+  const colliders = walkthrough.collectWalkColliders(root);
+  assert.equal(colliders.length, 2);
+
+  const candidates = walkthrough.walkRaycastCandidates(
+    colliders,
+    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(0, 0, -1),
+    4,
+    0.35,
+  );
+  assert.deepEqual(candidates, [near]);
+
+  near.geometry.dispose();
+  near.material.dispose();
+  far.geometry.dispose();
+  far.material.dispose();
 });

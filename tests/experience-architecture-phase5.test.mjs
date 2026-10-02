@@ -132,7 +132,7 @@ test("dashboard distinguishes immutable Geo release from customer Geo website", 
 });
 
 test("project hard-delete removes immutable Geo release state before Experiences and Building releases", () => {
-  const worker = read("workers/admin-cloud.mjs");
+  const worker = read("workers/project-deletion.mjs");
 
   const activeAt = worker.indexOf(
     '"DELETE FROM geo_experience_active_releases_3d WHERE project_id=?"',

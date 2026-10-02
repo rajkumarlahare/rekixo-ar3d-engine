@@ -85,7 +85,7 @@ test("legacy Geo placement can self-register identity but cannot overwrite a pin
 });
 
 test("hard delete removes Experience rows before immutable Building releases", () => {
-  const worker = read("workers/admin-cloud.mjs");
+  const worker = read("workers/project-deletion.mjs");
   const experienceAt = worker.indexOf(
     '"DELETE FROM experiences_3d WHERE project_id=?"',
   );

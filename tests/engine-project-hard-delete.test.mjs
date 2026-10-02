@@ -5,7 +5,7 @@ import test from "node:test";
 const read = (path) => fs.readFileSync(path, "utf8");
 
 test("Engine hard delete is authenticated, same-origin and exact-confirmation gated", () => {
-  const worker = read("workers/admin-cloud.mjs");
+  const worker = read("workers/project-deletion.mjs");
 
   assert.match(worker, /async function hardDeleteAllProjects/);
   assert.match(worker, /request\.method !== "DELETE"/);
@@ -16,7 +16,7 @@ test("Engine hard delete is authenticated, same-origin and exact-confirmation ga
 });
 
 test("permanent deletion uses a persistent resumable job before touching R2", () => {
-  const worker = read("workers/admin-cloud.mjs");
+  const worker = read("workers/project-deletion.mjs");
   const migration = read(
     "database/migrations/0027_resumable_project_deletion_v1.sql",
   );
@@ -48,7 +48,7 @@ test("permanent deletion uses a persistent resumable job before touching R2", ()
 });
 
 test("R2 cleanup is retryable and database records are deleted only after storage cleanup", () => {
-  const worker = read("workers/admin-cloud.mjs");
+  const worker = read("workers/project-deletion.mjs");
   const runStart = worker.indexOf("async function runDeletionJob");
   const startJob = worker.indexOf("async function startDeletionJob", runStart);
   assert.ok(runStart >= 0 && startJob > runStart);
@@ -69,7 +69,7 @@ test("R2 cleanup is retryable and database records are deleted only after storag
 });
 
 test("Engine hard delete removes all project-owned records after R2 cleanup", () => {
-  const worker = read("workers/admin-cloud.mjs");
+  const worker = read("workers/project-deletion.mjs");
 
   assert.match(worker, /projectAssetPrefix\(slug\)/);
   assert.match(worker, /MODEL_ASSETS\.list/);
@@ -90,7 +90,7 @@ test("Engine hard delete removes all project-owned records after R2 cleanup", ()
 });
 
 test("pending deletion freezes project recreation and project mutations", () => {
-  const worker = read("workers/admin-cloud.mjs");
+  const admin = read("workers/admin-cloud.mjs");
   const migration = read(
     "database/migrations/0027_resumable_project_deletion_v1.sql",
   );
@@ -100,11 +100,11 @@ test("pending deletion freezes project recreation and project mutations", () => 
     /RAISE\(ABORT, 'Engine project deletion cleanup in progress'\)/,
   );
   assert.match(
-    worker,
+    admin,
     /Permanent project cleanup is in progress\. Finish that cleanup before creating another project\./,
   );
   assert.match(
-    worker,
+    admin,
     /Project mutations are frozen until it finishes\./,
   );
 });
@@ -124,13 +124,21 @@ test("Dashboard can discover and resume a cleanup after reload", () => {
 });
 
 test("delete-all does not mutate global Engine settings or authentication state", () => {
-  const worker = read("workers/admin-cloud.mjs");
-  const start = worker.indexOf("async function deleteProjectOwnedObjects");
-  const end = worker.indexOf("async function patchProject", start);
-  assert.ok(start >= 0 && end > start);
-  const block = worker.slice(start, end);
+  const worker = read("workers/project-deletion.mjs");
 
-  assert.doesNotMatch(block, /DELETE FROM engine_settings_3d/);
-  assert.doesNotMatch(block, /DELETE FROM engine_admin_security/);
-  assert.doesNotMatch(block, /DELETE FROM engine_admin_login_attempts/);
+  assert.doesNotMatch(worker, /DELETE FROM engine_settings_3d/);
+  assert.doesNotMatch(worker, /DELETE FROM engine_admin_security/);
+  assert.doesNotMatch(worker, /DELETE FROM engine_admin_login_attempts/);
+});
+
+
+test("Admin cloud worker delegates destructive cleanup to a focused module", () => {
+  const admin = read("workers/admin-cloud.mjs");
+  const deletion = read("workers/project-deletion.mjs");
+
+  assert.match(admin, /from "\.\/project-deletion\.mjs"/);
+  assert.doesNotMatch(admin, /^async function deleteProjectOwnedObjects/m);
+  assert.doesNotMatch(admin, /^async function deleteProjectRecords/m);
+  assert.match(deletion, /export async function hardDeleteAllProjects/);
+  assert.match(deletion, /export async function deletionStatus/);
 });

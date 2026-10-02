@@ -10,15 +10,18 @@ test("generic viewer and Studio depend on the profile registry, not a customer i
 
   assert.match(viewer, /\.\/projectProfiles/);
   assert.doesNotMatch(viewer, /jyotiReferenceExterior|createProjectExperience|101-living/);
-  assert.match(studio, /modelProfiles/);
+  assert.match(studio, /@rekixo\/3d-model-profiles/);
+  assert.doesNotMatch(studio, /\.\.\/\.\.\/\.\.\/public\/src\/viewer\/modelProfiles/);
   assert.doesNotMatch(studio, /jyotiReferenceExterior/);
 });
 
 test("project-specific reconstructed interiors are source-profile gated and lazy-loaded", () => {
-  const exteriorRegistry = read("apps/public/src/viewer/modelProfiles.ts");
+  const exteriorRegistry = read("packages/model-profiles/src/index.ts");
+  const publicWrapper = read("apps/public/src/viewer/modelProfiles.ts");
   const experienceRegistry = read("apps/public/src/viewer/projectProfiles.ts");
 
   assert.match(exteriorRegistry, /if \(!matched\) return undefined/);
+  assert.match(publicWrapper, /@rekixo\/3d-model-profiles/);
   assert.match(experienceRegistry, /loadProfileExperience/);
   assert.match(experienceRegistry, /profile\?\.id !== "reference-source-v9"/);
   assert.match(experienceRegistry, /await import\("\.\/projectExperience"\)/);
@@ -40,8 +43,8 @@ test("premium shell reads floors and units from project scene data", () => {
 test("generic realism cannot inherit Reference Source V9 customer textures or tints", () => {
   const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
   const generic = read("apps/public/src/viewer/realism.ts");
-  const profile = read("apps/public/src/viewer/referenceSourceV9Materials.ts");
-  const registry = read("apps/public/src/viewer/modelProfiles.ts");
+  const profile = read("packages/model-profiles/src/referenceMaterials.ts");
+  const registry = read("packages/model-profiles/src/index.ts");
 
   assert.match(viewer, /loadModelProfileMaterialEnhancer/);
   assert.doesNotMatch(generic, /sourceTextureData|sourceMaterialTint|referenceFacadeTint/);
@@ -56,10 +59,10 @@ test("generic realism cannot inherit Reference Source V9 customer textures or ti
   assert.match(profile, /disposedProfileMaterials/);
   assert.match(profile, /sourceMaterialTint/);
   assert.match(profile, /referenceFacadeTint/);
-  assert.match(registry, /await import\("\.\/referenceSourceV9Materials"\)/);
+  assert.match(registry, /await import\("\.\/referenceMaterials"\)/);
   assert.doesNotMatch(
     registry,
-    /import\s*\{[^}]*enhanceReferenceSourceV9Model[^}]*\}\s*from\s*"\.\/referenceSourceV9Materials"/s,
+    /import\s*\{[^}]*enhanceReferenceSourceV9Model[^}]*\}\s*from\s*"\.\/referenceMaterials"/s,
   );
 });
 
@@ -109,4 +112,17 @@ test("bundle budgets guard public entry and project-profile payloads", () => {
   assert.match(budget, /Admin profile material JS/);
   assert.match(budget, /Reference source texture asset/);
   assert.match(budget, /sourceTextureData/i);
+});
+
+
+test("model profile implementation is shared instead of crossing app source boundaries", () => {
+  const admin = read("apps/admin/src/studio/SceneCanvas.tsx");
+  const publicWrapper = read("apps/public/src/viewer/modelProfiles.ts");
+  const shared = read("packages/model-profiles/src/index.ts");
+
+  assert.match(admin, /from "@rekixo\/3d-model-profiles"/);
+  assert.doesNotMatch(admin, /public\/src\/viewer\/modelProfiles/);
+  assert.match(publicWrapper, /@rekixo\/3d-model-profiles/);
+  assert.match(shared, /applyModelProfileExterior/);
+  assert.match(shared, /loadModelProfileMaterialEnhancer/);
 });

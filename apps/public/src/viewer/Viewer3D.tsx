@@ -20,6 +20,7 @@ import {
   clampWalkPosition,
   collectWalkColliders,
   publicWalkConnections,
+  walkRaycastCandidates,
   publicWalkStart,
   resolvePublicWalkStep,
   walkDelta,
@@ -578,7 +579,17 @@ export function Viewer3D({
             collisionRay.set(origin, collisionDirection);
             collisionRay.near = 0;
             collisionRay.far = Math.abs(amount) + radius;
-            if (collisionRay.intersectObjects(obstacles, false).length) { blocked = true; break; }
+            const candidates = walkRaycastCandidates(
+              obstacles,
+              origin,
+              collisionDirection,
+              Math.abs(amount) + radius,
+              radius,
+            );
+            if (collisionRay.intersectObjects(candidates, false).length) {
+              blocked = true;
+              break;
+            }
           }
           if (blocked) break;
         }
