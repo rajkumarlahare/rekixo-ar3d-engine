@@ -194,11 +194,36 @@ runtime.
 - Public `/[slug]/geo` still reads the compatibility snapshot in this phase;
   immutable Geo releases become public source of truth in Phase 6.
 
-### Phase 6 — public runtime separation
+### Phase 6 — public runtime separation ✅
 
-Keep the Building URL stable. Make `/[slug]/geo` read only an active immutable
-Geo release instead of mutable admin placement state. Separate Building and Geo
-public modules/bundles behind stable interfaces.
+The canonical Geo customer route now reads only the active immutable Geo release.
+Mutable Geo draft state and legacy `geo_placements_3d` are no longer public
+runtime sources.
+
+- `/[slug]/geo` keeps the same canonical URL.
+- The public Geo API resolves
+  `geo_experience_active_releases_3d -> geo_releases_3d` and validates the
+  active Geo manifest SHA-256 before returning customer data.
+- The Geo manifest's pinned Building release is loaded by immutable release ID,
+  not by `projects_3d.active_release_id`. Therefore Building Website v2 may be
+  live while Geo v1 safely remains pinned to Building v1.
+- The referenced Building release manifest and SHA-256 must match the source
+  identity frozen inside the active Geo release. Any mismatch fails closed.
+- Only the model asset of a Building release that is either the active Building
+  release or the source of the active Geo Experience is publicly authorized.
+- Optional Geo-optimized model derivatives follow the same active-Geo
+  authorization and otherwise fall back to the frozen Building source GLB.
+- Geo rollback changes only the active Geo release pointer. The next public Geo
+  read follows that rollback immediately without changing the Building Website.
+- Geo public payloads expose both `geoRelease` and `buildingRelease`; the old
+  `release` field remains as a backward-compatible Building-release alias.
+- Engine Dashboard and Geo Mapper now derive customer Geo LIVE status from the
+  active immutable Geo release, not from the legacy placement snapshot.
+- No new project, duplicated Building data, custom domain, or route rename is
+  required for Geo publication.
+- This phase changes only Rekixo AR3D Engine resources. The separate AR3D
+  Platform admin, projects, database, storage, routes and deployment remain
+  outside the change boundary.
 
 ### Phase 7 — code modularization
 
