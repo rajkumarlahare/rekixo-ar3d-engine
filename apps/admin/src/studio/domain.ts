@@ -475,9 +475,10 @@ export function duplicateFloor(p: Project, floorId: string): Project {
         ...wall,
         id: id(),
         floorId: newFloor.id,
-        roomIds: wall.roomIds
-          .map((roomId) => remap.get(roomId))
-          .filter((roomId): roomId is string => Boolean(roomId)),
+        roomIds: wall.roomIds.flatMap((roomId) => {
+          const mapped = remap.get(roomId);
+          return mapped ? [mapped] : [];
+        }),
         reviewed: false,
         sourceNodeName: undefined,
         sourceOccurrence: undefined,
@@ -493,9 +494,10 @@ export function duplicateFloor(p: Project, floorId: string): Project {
         ...opening,
         id: id(),
         floorId: newFloor.id,
-        roomIds: opening.roomIds
-          .map((roomId) => remap.get(roomId))
-          .filter((roomId): roomId is string => Boolean(roomId)),
+        roomIds: opening.roomIds.flatMap((roomId) => {
+          const mapped = remap.get(roomId);
+          return mapped ? [mapped] : [];
+        }),
         reviewed: false,
         sourceNodeName: undefined,
         sourceOccurrence: undefined,
