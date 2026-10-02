@@ -18,15 +18,17 @@
     "test": "npm run typecheck && npm run build && node --test tests/*.test.mjs"
   },
   "devDependencies": {
+    "@gltf-transform/core": "4.5.1",
+    "@gltf-transform/functions": "4.5.1",
+    "@playwright/test": "1.55.1",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
     "fake-indexeddb": "6.2.4",
+    "meshoptimizer": "0.25.0",
     "typescript": "5.9.3",
     "vite": "8.0.13",
-    "@gltf-transform/core": "4.5.1",
-    "@gltf-transform/functions": "4.5.1",
-    "meshoptimizer": "0.25.0"
+    "wrangler": "4.146.0"
   },
   "overrides": {
     "source-map-js": "1.2.1"
