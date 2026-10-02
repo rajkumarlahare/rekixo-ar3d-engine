@@ -6,7 +6,7 @@ const read = (file) => fs.readFileSync(file, "utf8");
 
 test("V8 history remains additive and reference calibration stays isolated", () => {
   const migration = read("database/migrations/0015_jyoti_visual_match_v8.sql");
-  const realism = read("apps/public/src/viewer/referenceSourceV9Materials.ts");
+  const realism = read("packages/model-profiles/src/referenceMaterials.ts");
   assert.match(migration, /visual-match-v8/);
   assert.match(migration, /zoomed visual comparison/i);
   assert.match(realism, /referenceVisual = false/);
