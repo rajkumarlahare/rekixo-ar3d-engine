@@ -27,6 +27,15 @@ export interface ExtractedSketchUpMaterialDefinition {
   yScale?: number;
 }
 
+export interface SketchUpSemanticEvidence {
+  modelDataFiles: string[];
+  readableStrings: string[];
+  tagCandidates: string[];
+  componentCandidates: string[];
+  architecturalTokens: string[];
+  issues: string[];
+}
+
 interface ZipEntry {
   name: string;
   compressionMethod: number;
@@ -488,4 +497,126 @@ export async function extractSketchUpTextures(
   }
 
   return { textures, issues };
+}
+
+
+function printableAsciiRuns(bytes: Uint8Array, limit = 1200) {
+  const values: string[] = [];
+  let start = -1;
+  const flush = (end: number) => {
+    if (start < 0 || end - start < 3) {
+      start = -1;
+      return;
+    }
+    const value = new TextDecoder("windows-1252")
+      .decode(bytes.subarray(start, end))
+      .replace(/\s+/g, " ")
+      .trim();
+    if (
+      value.length >= 3 &&
+      value.length <= 180 &&
+      /[a-z]/i.test(value) &&
+      !/^[0-9 .,:;_+-]+$/.test(value)
+    )
+      values.push(value);
+    start = -1;
+  };
+
+  for (let index = 0; index <= bytes.length; index += 1) {
+    const value = index < bytes.length ? bytes[index] : 0;
+    const printable =
+      (value >= 32 && value <= 126) || (value >= 160 && value <= 255);
+    if (printable) {
+      if (start < 0) start = index;
+    } else {
+      flush(index);
+      if (values.length >= limit) break;
+    }
+  }
+  return [...new Set(values)].slice(0, limit);
+}
+
+function semanticStrings(values: readonly string[]) {
+  const architecture = /\b(?:wall|door|window|stair|lift|elevator|column|slab|roof|floor|room|living|kitchen|bed ?room|toilet|bath|balcony|duct|shaft|gate|parking|sidewalk|boundary|terrace|lobby|corridor)\b/i;
+  const tagLike = /^(?:layer\s*\d+|tag\b|[a-z0-9_. -]*(?:wall|door|window|stair|lift|column|slab|floor|roof|duct|sidewalk|parking)[a-z0-9_. -]*)$/i;
+  const componentLike = /(?:component|group|instance|block|door|window|stair|lift|furniture|plant|tree|car|gate)/i;
+
+  const readableStrings = values
+    .filter((value) => !/^[A-F0-9]{24,}$/i.test(value.replace(/[^A-F0-9]/gi, "")))
+    .slice(0, 500);
+  return {
+    readableStrings,
+    tagCandidates: readableStrings.filter((value) => tagLike.test(value)).slice(0, 180),
+    componentCandidates: readableStrings
+      .filter((value) => componentLike.test(value))
+      .slice(0, 180),
+    architecturalTokens: readableStrings
+      .filter((value) => architecture.test(value))
+      .slice(0, 220),
+  };
+}
+
+export async function inspectSketchUpSemanticEvidence(
+  asset: Asset,
+): Promise<SketchUpSemanticEvidence> {
+  const result: SketchUpSemanticEvidence = {
+    modelDataFiles: [],
+    readableStrings: [],
+    tagCandidates: [],
+    componentCandidates: [],
+    architecturalTokens: [],
+    issues: [],
+  };
+  if (!/\.(?:skb|skp)$/i.test(asset.name)) return result;
+
+  const archive = new Uint8Array(await asset.blob.arrayBuffer());
+  const parsed = parseZipEntries(archive);
+  result.issues.push(...parsed.issues);
+  if (!parsed.zipLike) return result;
+
+  const modelEntries = parsed.entries
+    .filter((entry) => /(?:^|\/)model\.dat$/i.test(entry.name))
+    .slice(0, 4);
+  result.modelDataFiles = modelEntries.map((entry) => entry.name);
+  if (!modelEntries.length) {
+    result.issues.push(
+      "SketchUp archive contains no readable model.dat semantic evidence.",
+    );
+    return result;
+  }
+
+  const runs: string[] = [];
+  let total = 0;
+  for (const entry of modelEntries) {
+    if (entry.uncompressedSize > 24 * 1024 * 1024) {
+      result.issues.push(
+        `SketchUp model data is too large for safe literal-semantic inspection: ${entry.name}`,
+      );
+      continue;
+    }
+    if (total + entry.uncompressedSize > 32 * 1024 * 1024) {
+      result.issues.push(
+        "SketchUp semantic inspection stopped at the 32 MB model-data safety limit.",
+      );
+      break;
+    }
+    try {
+      const bytes = await extractEntry(archive, entry);
+      total += bytes.byteLength;
+      runs.push(...printableAsciiRuns(bytes));
+    } catch (error) {
+      result.issues.push(
+        error instanceof Error
+          ? error.message
+          : `Could not inspect SketchUp model data: ${entry.name}`,
+      );
+    }
+  }
+
+  const semantic = semanticStrings([...new Set(runs)]);
+  result.readableStrings = semantic.readableStrings;
+  result.tagCandidates = semantic.tagCandidates;
+  result.componentCandidates = semantic.componentCandidates;
+  result.architecturalTokens = semantic.architecturalTokens;
+  return result;
 }
