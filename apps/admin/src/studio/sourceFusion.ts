@@ -443,6 +443,63 @@ export async function buildSourceFusionReport(
     item.warnings.push(...inspection.issues);
   }
 
+  for (const asset of files.filter((entry) => /\.pdf$/i.test(entry.name))) {
+    if (asset.size < 8) continue;
+    const item = items.find((entry) => entry.assetId === asset.id);
+    if (!item) continue;
+    try {
+      const { inspectPdfPlans } = await import("./pdfPlanInspector");
+      const inspection = await inspectPdfPlans(asset);
+      const best = inspection.pages.find(
+        (page) => page.page === inspection.bestPage,
+      );
+      if (best) {
+        item.findings.push(
+          `PDF page ${best.page} is the strongest floor-plan candidate (score ${best.score}).`,
+        );
+        facts.push(
+          fact(
+            asset.id,
+            "pdf.plan-page",
+            best.page,
+            Math.min(0.95, 0.55 + best.score / 40),
+            "PDF text-layer floor-plan/room/dimension evidence",
+            "suggested",
+          ),
+        );
+        if (best.roomLabels.length)
+          facts.push(
+            fact(
+              asset.id,
+              "pdf.room-labels",
+              best.roomLabels,
+              0.72,
+              `PDF page ${best.page} text layer`,
+              "suggested",
+            ),
+          );
+        if (best.dimensionStrings.length)
+          facts.push(
+            fact(
+              asset.id,
+              "pdf.dimension-text",
+              best.dimensionStrings,
+              0.7,
+              `PDF page ${best.page} text layer`,
+              "suggested",
+            ),
+          );
+      }
+      item.warnings.push(...inspection.issues);
+    } catch (error) {
+      item.warnings.push(
+        error instanceof Error
+          ? `PDF plan inspection skipped: ${error.message}`
+          : "PDF plan inspection skipped.",
+      );
+    }
+  }
+
   const recommendedActions: string[] = [];
   const selected = analysis?.modelAssetId
     ? files.find((file) => file.id === analysis.modelAssetId)
@@ -459,6 +516,11 @@ export async function buildSourceFusionReport(
   if (items.some((item) => item.kind === "sketchup"))
     recommendedActions.push(
       "Run the controlled SketchUp processor to recover component/material metadata.",
+    );
+  const planFact = facts.find((entry) => entry.key === "pdf.plan-page");
+  if (planFact && typeof planFact.value === "number")
+    recommendedActions.push(
+      `Use PDF page ${planFact.value} as the first visual-alignment candidate.`,
     );
   if (analysis?.floorCandidates.length)
     recommendedActions.push(
