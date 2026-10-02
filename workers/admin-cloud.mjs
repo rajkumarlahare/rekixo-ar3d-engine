@@ -2276,7 +2276,7 @@ async function geoMapsSettings(request, env, actor) {
   return json({ ok: true, apiKey });
 }
 
-async function deleteProjectOwnedObjects(env, slug) {
+async function deleteProjectOwnedObjects(env, slug, onDeleted) {
   const prefix = projectAssetPrefix(slug);
   let cursor;
   let deleted = 0;
@@ -2291,6 +2291,7 @@ async function deleteProjectOwnedObjects(env, slug) {
     if (keys.length) {
       await env.MODEL_ASSETS.delete(keys);
       deleted += keys.length;
+      if (onDeleted) await onDeleted(keys.length);
     }
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor);
@@ -2400,17 +2401,21 @@ async function runDeletionJob(env, actor, row) {
 
   if (status === "running" || status === "cleanup_pending") {
     try {
-      for (const project of projects) {
-        const removed = await deleteProjectOwnedObjects(env, project.slug);
-        deletedR2Objects += removed;
-        await setDeletionJobState(
+      for (const project of projects)
+        await deleteProjectOwnedObjects(
           env,
-          row.id,
-          "running",
-          deletedProjects,
-          deletedR2Objects,
+          project.slug,
+          async (removed) => {
+            deletedR2Objects += removed;
+            await setDeletionJobState(
+              env,
+              row.id,
+              "running",
+              deletedProjects,
+              deletedR2Objects,
+            );
+          },
         );
-      }
       status = "db_cleanup_pending";
       await setDeletionJobState(
         env,
