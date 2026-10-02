@@ -46,7 +46,7 @@ jobs:
 
       - name: Provision draft project in isolated Engine D1
         run: >-
-          npx --yes wrangler@4 d1 execute rekixo-3d-production
+          npx --yes wrangler@4.146.0 d1 execute rekixo-3d-production
           --remote
           --config wrangler.infra.jsonc
           --file /tmp/rekixo-3d-project.sql

@@ -429,20 +429,18 @@ async function login(request, env) {
       { headers: { "Set-Cookie": sessionCookie(token) } },
     );
   } catch (error) {
+    const requestId = crypto.randomUUID();
     console.error("Engine Admin login request failed", {
+      requestId,
       stage,
       name: error instanceof Error ? error.name : "UnknownError",
       message: error instanceof Error ? error.message : String(error),
     });
-    const reason =
-      error instanceof Error
-        ? `${error.name}: ${String(error.message || "").slice(0, 220)}`
-        : "UnknownError";
     return json(
       {
         error: "Engine Admin sign-in temporarily unavailable.",
         diagnostic: `login-stage:${stage}`,
-        reason,
+        requestId,
       },
       { status: 503 },
     );
@@ -661,6 +659,19 @@ async function createCloudProject(request, env, actor) {
   );
 }
 
+export function resolveDraftProjectLocation(draft, project) {
+  if (
+    draft &&
+    typeof draft === "object" &&
+    Object.prototype.hasOwnProperty.call(draft, "location")
+  ) {
+    const requested = String(draft.location ?? "").trim();
+    return requested || null;
+  }
+  const existing = String(project?.location ?? "").trim();
+  return existing || null;
+}
+
 async function cloudDraft(request, env, actor, project, slug) {
   if (request.method === "GET") {
     const row = await env.DB.prepare(
@@ -778,7 +789,7 @@ async function cloudDraft(request, env, actor, project, slug) {
       "UPDATE projects_3d SET name=?,location=?,updated_at=? WHERE id=?",
     ).bind(
       body.draft.name,
-      String(body.draft.location || project.location || "").trim() || null,
+      resolveDraftProjectLocation(body.draft, project),
       now,
       project.id,
     ),

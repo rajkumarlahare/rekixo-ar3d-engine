@@ -93,7 +93,7 @@ jobs:
           (github.event_name == 'workflow_dispatch' && inputs.deployment_scope != 'admin-only') ||
           (github.event_name == 'push' && steps.public_runtime.outputs.migrations_changed == 'true')
         run: >-
-          npx --yes wrangler@4
+          npx --yes wrangler@4.146.0
           d1 migrations apply rekixo-3d-production
           --remote
           --config wrangler.infra.jsonc
@@ -103,11 +103,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BUCKETS="$(npx --yes wrangler@4 r2 bucket list)"
+          BUCKETS="$(npx --yes wrangler@4.146.0 r2 bucket list)"
           if printf '%s\n' "$BUCKETS" | grep -Fq "rekixo-3d-assets"; then
             echo "R2 bucket already exists: rekixo-3d-assets"
           else
-            npx --yes wrangler@4 r2 bucket create rekixo-3d-assets
+            npx --yes wrangler@4.146.0 r2 bucket create rekixo-3d-assets
           fi
 
       - name: Verify remote Engine Admin secret names
@@ -115,7 +115,7 @@ jobs:
         run: |
           set -euo pipefail
           OUT="$(mktemp)"
-          npx --yes wrangler@4 secret list --config wrangler.admin.jsonc --format json > "$OUT"
+          npx --yes wrangler@4.146.0 secret list --config wrangler.admin.jsonc --format json > "$OUT"
           node - "$OUT" <<'NODE'
           const fs = require("fs");
           const path = process.argv[2];
@@ -176,11 +176,11 @@ jobs:
             META_KEY="$(node -e 'const m=require(process.argv[1]); process.stdout.write(m.metadataR2Key)' "$OUT/metadata.json")"
             GEO_SHA="$(node -e 'const m=require(process.argv[1]); process.stdout.write(m.geoSha256)' "$OUT/metadata.json")"
 
-            npx --yes wrangler@4 r2 object put "rekixo-3d-assets/$GEO_KEY"               --remote               --force               --file "$OUT/model.glb"               --content-type "model/gltf-binary"               --cache-control "public,max-age=31536000,immutable"
+            npx --yes wrangler@4.146.0 r2 object put "rekixo-3d-assets/$GEO_KEY"               --remote               --force               --file "$OUT/model.glb"               --content-type "model/gltf-binary"               --cache-control "public,max-age=31536000,immutable"
 
-            npx --yes wrangler@4 r2 object put "rekixo-3d-assets/$META_KEY"               --remote               --force               --file "$OUT/metadata.json"               --content-type "application/json"               --cache-control "public,max-age=31536000,immutable"
+            npx --yes wrangler@4.146.0 r2 object put "rekixo-3d-assets/$META_KEY"               --remote               --force               --file "$OUT/metadata.json"               --content-type "application/json"               --cache-control "public,max-age=31536000,immutable"
 
-            npx --yes wrangler@4 r2 object get "rekixo-3d-assets/$GEO_KEY"               --remote               --file "$OUT/verify.glb"
+            npx --yes wrangler@4.146.0 r2 object get "rekixo-3d-assets/$GEO_KEY"               --remote               --file "$OUT/verify.glb"
             ACTUAL_SHA="$(sha256sum "$OUT/verify.glb" | awk '{print $1}')"
             if [ "$ACTUAL_SHA" != "$GEO_SHA" ]; then
               echo "::error::Uploaded Geo derivative checksum mismatch for $SLUG"
@@ -195,7 +195,7 @@ jobs:
         # Preparation above must succeed before deploying this Worker.
         id: admin-deploy
         run: >-
-          npx --yes wrangler@4
+          npx --yes wrangler@4.146.0
           deploy
           --config wrangler.admin.jsonc
 
@@ -255,7 +255,7 @@ jobs:
           (github.event_name == 'workflow_dispatch' && inputs.deployment_scope == 'engine-all') ||
           (github.event_name == 'push' && steps.public_runtime.outputs.changed == 'true')
         run: >-
-          npx --yes wrangler@4
+          npx --yes wrangler@4.146.0
           deploy
           --config wrangler.public.jsonc
 
