@@ -345,12 +345,15 @@ export function estimatePdfCadRegistration(
     };
 
   const normalizedRms = fit.rms / Math.max(1, targetSpan);
-  const coverage = Math.min(1, matches.length / 6);
+  const matchEvidence = Math.min(0.25, matches.length * 0.05);
+  const residualEvidence = Math.max(
+    0,
+    Math.min(0.3, (1 - normalizedRms / 0.12) * 0.3),
+  );
   const confidence = Number(
-    Math.max(
-      0,
-      Math.min(0.98, coverage * 0.35 + (1 - normalizedRms / 0.12) * 0.65),
-    ).toFixed(3),
+    Math.max(0, Math.min(0.98, 0.45 + matchEvidence + residualEvidence)).toFixed(
+      3,
+    ),
   );
   const compatible =
     matches.length >= 3 && normalizedRms <= 0.055 && confidence >= 0.72;
