@@ -24,6 +24,7 @@ import {
   markAutoReadyModelWalls,
   markAutoReadyRepeatedFloors,
 } from "./autoBuildingReview";
+import { makeAsset } from "./storage";
 
 export interface AutoBuildPipelineOptions {
   processDwgArchitecture?: DwgArchitectureProcessor;
@@ -46,6 +47,10 @@ export interface AutoBuildPipelineResult {
     dwgDimensions: number;
     dwgObjects: number;
     dwgFloorLabels: number;
+    pdfPlanReferencesPrepared: number;
+    pdfPlanPage?: number;
+    pdfSpatialLabels: number;
+    pdfEmbeddedImages: number;
     floors: number;
     walls: number;
     repeatedFloors: number;
@@ -154,6 +159,97 @@ export async function runAutoBuildPipeline(
     } else {
       issues.push(
         "DWG architecture processor is unavailable in this session; raw DWG remains source evidence and is not guessed into geometry.",
+      );
+    }
+  }
+
+  let pdfPlanReferencesPrepared = 0;
+  let pdfPlanPage: number | undefined;
+  let pdfSpatialLabels = 0;
+  let pdfEmbeddedImages = 0;
+  const pdfSources = workingFiles.filter((file) => /\.pdf$/i.test(file.name));
+  if (pdfSources.length > 1) {
+    issues.push(
+      "Multiple PDF drawings are attached. Automatic plan extraction stays reviewable instead of guessing which PDF is authoritative.",
+    );
+  } else if (pdfSources.length === 1) {
+    try {
+      const pdfSource = pdfSources[0];
+      const { inspectPdfPlans } = await import("./pdfPlanInspector");
+      const inspection = await inspectPdfPlans(pdfSource);
+      const best = inspection.pages.find(
+        (page) => page.page === inspection.bestPage,
+      );
+      if (best) {
+        pdfPlanPage = best.page;
+        pdfSpatialLabels = best.spatialLabels.filter(
+          (entry) => entry.kind !== "other",
+        ).length;
+        pdfEmbeddedImages = best.embeddedImages.length;
+
+        const { rasterPdfReference } = await import("./pdfReferenceRaster");
+        const strongest = best.embeddedImages[0];
+        const crop =
+          strongest &&
+          strongest.confidence >= 0.62 &&
+          strongest.area >= 0.02
+            ? {
+                x: Math.max(0, strongest.x - 0.01),
+                y: Math.max(0, strongest.y - 0.01),
+                width: Math.min(
+                  1 - Math.max(0, strongest.x - 0.01),
+                  strongest.width + 0.02,
+                ),
+                height: Math.min(
+                  1 - Math.max(0, strongest.y - 0.01),
+                  strongest.height + 0.02,
+                ),
+              }
+            : undefined;
+        const referenceFile = await rasterPdfReference(pdfSource, {
+          page: best.page,
+          ...(crop ? { crop } : {}),
+          label: crop ? "auto-plan-image" : "auto-plan-page",
+        });
+        const candidate = await makeAsset(referenceFile, next.id);
+        const equivalent = findEquivalentAsset(workingFiles, candidate);
+        const referenceAsset = equivalent ?? candidate;
+        if (!equivalent) {
+          createdAssets.push(referenceAsset);
+          workingFiles.push(referenceAsset);
+        }
+        next = appendAsset(next, referenceAsset);
+
+        const layers = next.scene.referenceLayers ?? [];
+        if (!layers.some((layer) => layer.assetId === referenceAsset.id)) {
+          next = {
+            ...next,
+            scene: {
+              ...next.scene,
+              referenceLayers: [
+                ...layers,
+                {
+                  id: id(),
+                  assetId: referenceAsset.id,
+                  visible: false,
+                  opacity: 0.35,
+                  x: 0,
+                  y: next.scene.floors[0]?.elevation ?? 0,
+                  z: 0,
+                  rotation: 0,
+                },
+              ],
+            },
+          };
+        }
+        pdfPlanReferencesPrepared = 1;
+      }
+      issues.push(...inspection.issues);
+    } catch (error) {
+      issues.push(
+        error instanceof Error
+          ? `PDF plan extraction: ${error.message}`
+          : "PDF plan extraction could not complete.",
       );
     }
   }
@@ -279,6 +375,10 @@ export async function runAutoBuildPipeline(
         (dwgDocument?.objects.length ?? 0) +
         (dwgDocument?.inserts.length ?? 0),
       dwgFloorLabels: dwgDocument?.floors.length ?? 0,
+      pdfPlanReferencesPrepared,
+      ...(pdfPlanPage !== undefined ? { pdfPlanPage } : {}),
+      pdfSpatialLabels,
+      pdfEmbeddedImages,
       floors: draft.summary.floors,
       walls: draft.summary.walls,
       repeatedFloors: draft.summary.repeatedFloors,
@@ -315,6 +415,9 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   const dwg = summary.dwgSegments || summary.dwgDimensions || summary.dwgObjects
     ? ` · DWG: ${summary.dwgSegments} segments · ${summary.dwgDimensions} dimensions · ${summary.dwgObjects} semantic objects${summary.dwgFloorLabels ? ` · ${summary.dwgFloorLabels} floor label${summary.dwgFloorLabels === 1 ? "" : "s"}` : ""}`
     : "";
+  const pdf = summary.pdfPlanReferencesPrepared
+    ? ` · PDF plan page ${summary.pdfPlanPage ?? "?"} prepared · ${summary.pdfSpatialLabels} spatial label${summary.pdfSpatialLabels === 1 ? "" : "s"} · ${summary.pdfEmbeddedImages} embedded image candidate${summary.pdfEmbeddedImages === 1 ? "" : "s"}`
+    : "";
   const rooms = summary.autoRooms
     ? ` · ${summary.autoRooms} room draft${summary.autoRooms === 1 ? "" : "s"}`
     : "";
@@ -341,5 +444,5 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
     summary.readyWallsPrepared +
     summary.readyRepeatsPrepared +
     summary.readyOpeningsPrepared;
-  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${topology}${walls}${repeats}${openings}${web}${textures}${materialFusion}${materialStyles}${resolvedTextures}${dwg}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
+  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${topology}${walls}${repeats}${openings}${web}${textures}${materialFusion}${materialStyles}${resolvedTextures}${dwg}${pdf}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
 }
