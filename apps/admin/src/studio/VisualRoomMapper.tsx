@@ -353,14 +353,28 @@ export default function VisualRoomMapper({
                 {selectedWall.thickness.toFixed(2)} m thick ·{" "}
                 {selectedWall.height.toFixed(2)} m high
               </span>
-              <button type="button" disabled={disabled} onClick={onWallApplySize}>
+              <button
+                type="button"
+                disabled={disabled || selectedWall.origin !== "manual"}
+                onClick={onWallApplySize}
+                title={
+                  selectedWall.origin === "manual"
+                    ? "Apply the thickness and height values above"
+                    : "Imported/derived walls stay evidence-controlled"
+                }
+              >
                 Apply size
               </button>
               <button
                 type="button"
                 className="danger"
-                disabled={disabled}
+                disabled={disabled || selectedWall.origin !== "manual"}
                 onClick={onWallDelete}
+                title={
+                  selectedWall.origin === "manual"
+                    ? "Delete this manually drawn wall"
+                    : "Imported/derived walls cannot be deleted from Architect mode"
+                }
               >
                 Delete wall
               </button>
