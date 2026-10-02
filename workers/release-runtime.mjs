@@ -99,7 +99,11 @@ function validManifestScene(scene, projectId) {
   );
 }
 
-function validateManifestShape(manifest, row) {
+function validateManifestShape(
+  manifest,
+  row,
+  expectedReleaseId = row.active_release_id,
+) {
   if (
     !manifest ||
     typeof manifest !== "object" ||
@@ -112,7 +116,7 @@ function validateManifestShape(manifest, row) {
     !Array.isArray(manifest.experience.scenes) ||
     !Array.isArray(manifest.experience.mediaFiles) ||
     !Array.isArray(manifest.assets) ||
-    manifest.release.id !== row.active_release_id ||
+    manifest.release.id !== expectedReleaseId ||
     manifest.release.projectId !== row.project_id ||
     manifest.release.projectSlug !== row.slug ||
     Number(manifest.release.version) !== Number(row.release_version) ||
@@ -257,6 +261,63 @@ export async function activeReleaseState(env, slug) {
         error instanceof Error
           ? error.message
           : "Active release manifest is invalid.",
+    };
+  }
+
+  return {
+    state: "ok",
+    project: row,
+    manifest,
+    manifestSha256: actualHash,
+  };
+}
+
+export async function releaseStateById(env, slug, releaseId) {
+  if (!validProjectSlug(slug)) return { state: "invalid-slug" };
+  if (!validToken(releaseId)) return { state: "invalid-release" };
+  if (!(await releaseSchemaReady(env))) return { state: "schema-missing" };
+
+  const row = await env.DB.prepare(
+    `SELECT p.id AS project_id,p.slug,p.name,p.status,p.active_release_id,
+            r.id AS release_id,r.version AS release_version,
+            r.manifest_json,r.manifest_sha256,
+            r.created_at AS release_created_at
+       FROM projects_3d p
+       JOIN releases_3d r
+         ON r.project_id=p.id
+      WHERE p.slug=? AND r.id=?
+      LIMIT 1`,
+  ).bind(slug, releaseId).first();
+
+  if (!row) return { state: "release-missing" };
+  if (row.status !== "published") return { state: "unpublished", project: row };
+  if (!row.manifest_json || !row.manifest_sha256)
+    return {
+      state: "corrupt",
+      project: row,
+      reason: "Immutable release row is missing.",
+    };
+
+  const actualHash = await digestHex(row.manifest_json);
+  if (actualHash !== String(row.manifest_sha256).toLowerCase())
+    return {
+      state: "corrupt",
+      project: row,
+      reason: "Immutable release manifest checksum mismatch.",
+    };
+
+  let manifest;
+  try {
+    manifest = JSON.parse(row.manifest_json);
+    validateManifestShape(manifest, row, row.release_id);
+  } catch (error) {
+    return {
+      state: "corrupt",
+      project: row,
+      reason:
+        error instanceof Error
+          ? error.message
+          : "Immutable release manifest is invalid.",
     };
   }
 
@@ -655,7 +716,7 @@ async function readGeoDerivativeMetadata(
   return { metadata, modelKey };
 }
 
-export async function geoModelDerivativeForActiveRelease(env, state) {
+export async function geoModelDerivativeForReleaseState(env, state) {
   if (state?.state !== "ok") return undefined;
   const model = state.manifest?.experience?.model;
   if (!model?.id || !model.releaseAssetId) return undefined;
@@ -697,6 +758,10 @@ export async function geoModelDerivativeForActiveRelease(env, state) {
   };
 }
 
+export async function geoModelDerivativeForActiveRelease(env, state) {
+  return geoModelDerivativeForReleaseState(env, state);
+}
+
 async function serveGeoModelDerivative(
   env,
   releaseId,
@@ -716,10 +781,28 @@ async function serveGeoModelDerivative(
     `SELECT a.r2_key,a.sha256,p.status,p.slug
        FROM release_assets_3d a
        JOIN releases_3d r ON r.id=a.release_id AND r.project_id=a.project_id
-       JOIN projects_3d p
-         ON p.id=r.project_id
-        AND p.active_release_id=r.id
-      WHERE a.release_id=? AND a.kind='model' AND a.logical_id=?
+       JOIN projects_3d p ON p.id=r.project_id
+      WHERE a.release_id=?
+        AND a.kind='model'
+        AND a.logical_id=?
+        AND (
+          p.active_release_id=r.id
+          OR EXISTS (
+            SELECT 1
+              FROM geo_experience_active_releases_3d gar
+              JOIN geo_releases_3d gr
+                ON gr.id=gar.geo_release_id
+               AND gr.experience_id=gar.experience_id
+               AND gr.project_id=gar.project_id
+              JOIN experiences_3d e
+                ON e.id=gar.experience_id
+               AND e.project_id=gar.project_id
+               AND e.type='geo'
+               AND e.lifecycle='active'
+             WHERE gar.project_id=r.project_id
+               AND gr.source_building_release_id=r.id
+          )
+        )
       LIMIT 1`,
   ).bind(releaseId, logicalId).first();
 
@@ -791,12 +874,33 @@ export async function serveReleaseAsset(env, releaseId, pathKind, logicalId, req
             p.status,p.slug
        FROM release_assets_3d a
        JOIN releases_3d r ON r.id=a.release_id AND r.project_id=a.project_id
-       JOIN projects_3d p
-         ON p.id=r.project_id
-        AND p.active_release_id=r.id
-      WHERE a.release_id=? AND a.kind=? AND a.logical_id=?
+       JOIN projects_3d p ON p.id=r.project_id
+      WHERE a.release_id=?
+        AND a.kind=?
+        AND a.logical_id=?
+        AND (
+          p.active_release_id=r.id
+          OR (
+            ?='model'
+            AND EXISTS (
+              SELECT 1
+                FROM geo_experience_active_releases_3d gar
+                JOIN geo_releases_3d gr
+                  ON gr.id=gar.geo_release_id
+                 AND gr.experience_id=gar.experience_id
+                 AND gr.project_id=gar.project_id
+                JOIN experiences_3d e
+                  ON e.id=gar.experience_id
+                 AND e.project_id=gar.project_id
+                 AND e.type='geo'
+                 AND e.lifecycle='active'
+               WHERE gar.project_id=r.project_id
+                 AND gr.source_building_release_id=r.id
+            )
+          )
+        )
       LIMIT 1`,
-  ).bind(releaseId, kind, logicalId).first();
+  ).bind(releaseId, kind, logicalId, kind).first();
 
   if (!row || row.status !== "published")
     return json({ error: "Release asset not found." }, { status: 404 });
@@ -932,7 +1036,11 @@ export async function handleReleaseReadRequest(
   return json({ error: "Release route not found." }, { status: 404 });
 }
 
-export function experienceFromActiveReleaseState(state) {
+export function experienceFromReleaseState(state) {
   if (state?.state !== "ok") return undefined;
   return publicExperience(state.manifest, state.manifestSha256);
+}
+
+export function experienceFromActiveReleaseState(state) {
+  return experienceFromReleaseState(state);
 }
