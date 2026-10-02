@@ -9,8 +9,8 @@ import { buildSmartSceneDraft } from "./smartDraftBuilder";
 import { suggestOpeningAssociations } from "./openingAssociator";
 import { applyReadyOpeningWorkflow } from "./openingWorkflow";
 import {
-  acceptReadyRepeatedFloors,
-  approveReadyModelWalls,
+  markAutoReadyModelWalls,
+  markAutoReadyRepeatedFloors,
 } from "./autoBuildingReview";
 
 export interface AutoBuildPipelineResult {
@@ -25,9 +25,9 @@ export interface AutoBuildPipelineResult {
     walls: number;
     repeatedFloors: number;
     autoRooms: number;
-    readyWallsApproved: number;
-    readyRepeatsAccepted: number;
-    readyOpeningsApproved: number;
+    readyWallsPrepared: number;
+    readyRepeatsPrepared: number;
+    readyOpeningsPrepared: number;
     openingReviewRemaining: number;
   };
   issues: string[];
@@ -147,12 +147,12 @@ export async function runAutoBuildPipeline(
   const draft = buildSmartSceneDraft(next, analysis);
   next = { ...next, scene: draft.scene };
 
-  const wallReview = approveReadyModelWalls(next.scene);
+  const wallReview = markAutoReadyModelWalls(next.scene);
   next = { ...next, scene: wallReview.scene };
-  const repeatReview = acceptReadyRepeatedFloors(next.scene);
+  const repeatReview = markAutoReadyRepeatedFloors(next.scene);
   next = { ...next, scene: repeatReview.scene };
 
-  let readyOpeningsApproved = 0;
+  let readyOpeningsPrepared = 0;
   let openingReviewRemaining = 0;
   if (next.scene.rooms.length && analysis.architecturalCandidates.length) {
     const suggestions = suggestOpeningAssociations(analysis, next.scene);
@@ -161,9 +161,10 @@ export async function runAutoBuildPipeline(
       analysis.architecturalCandidates,
       suggestions,
       id,
+      "auto",
     );
     next = { ...next, scene: workflow.scene };
-    readyOpeningsApproved = workflow.approved;
+    readyOpeningsPrepared = workflow.prepared;
     openingReviewRemaining = workflow.reviewRemaining;
   }
 
@@ -181,9 +182,9 @@ export async function runAutoBuildPipeline(
       walls: draft.summary.walls,
       repeatedFloors: draft.summary.repeatedFloors,
       autoRooms: draft.summary.autoRooms,
-      readyWallsApproved: wallReview.approved,
-      readyRepeatsAccepted: repeatReview.accepted,
-      readyOpeningsApproved,
+      readyWallsPrepared: wallReview.prepared,
+      readyRepeatsPrepared: repeatReview.prepared,
+      readyOpeningsPrepared,
       openingReviewRemaining,
     },
     issues: [...new Set([...issues, ...analysis.issues])],
@@ -200,15 +201,20 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   const rooms = summary.autoRooms
     ? ` · ${summary.autoRooms} room draft${summary.autoRooms === 1 ? "" : "s"}`
     : "";
-  const walls = summary.readyWallsApproved
-    ? ` · ${summary.readyWallsApproved} high-confidence wall${summary.readyWallsApproved === 1 ? "" : "s"} accepted`
+  const walls = summary.readyWallsPrepared
+    ? ` · ${summary.readyWallsPrepared} high-confidence wall${summary.readyWallsPrepared === 1 ? "" : "s"} ready for review`
     : "";
-  const repeats = summary.readyRepeatsAccepted
-    ? ` · ${summary.readyRepeatsAccepted} repeated floor${summary.readyRepeatsAccepted === 1 ? "" : "s"} accepted`
+  const repeats = summary.readyRepeatsPrepared
+    ? ` · ${summary.readyRepeatsPrepared} repeated floor${summary.readyRepeatsPrepared === 1 ? "" : "s"} ready for review`
     : "";
-  const openings = summary.readyOpeningsApproved
-    ? ` · ${summary.readyOpeningsApproved} ready opening${summary.readyOpeningsApproved === 1 ? "" : "s"} prepared`
+  const openings = summary.readyOpeningsPrepared
+    ? ` · ${summary.readyOpeningsPrepared} opening${summary.readyOpeningsPrepared === 1 ? "" : "s"} ready for review`
     : "";
-  const review = result.issues.length + summary.openingReviewRemaining;
+  const review =
+    result.issues.length +
+    summary.openingReviewRemaining +
+    summary.readyWallsPrepared +
+    summary.readyRepeatsPrepared +
+    summary.readyOpeningsPrepared;
   return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${walls}${repeats}${openings}${web}${textures}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
 }
