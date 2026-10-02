@@ -13,9 +13,9 @@
   --rkx-text-soft: #c8d2e3;
   --rkx-muted: #8c99b0;
   --rkx-dim: #64738a;
-  --rkx-violet: #8d84ff;
-  --rkx-violet-strong: #6e65ff;
-  --rkx-violet-wash: rgba(105, 95, 255, 0.18);
+  --rkx-violet: #f4b942;
+  --rkx-violet-strong: #d99a24;
+  --rkx-violet-wash: rgba(244, 185, 66, 0.14);
   --rkx-green: #20c983;
   --rkx-green-strong: #159b66;
   --rkx-green-wash: rgba(32, 201, 131, 0.12);
@@ -73,7 +73,7 @@
 }
 
 .studio-brand > span {
-  color: #b0aaff;
+  color: #f4b942;
 }
 
 .studio-brand small,
@@ -94,18 +94,18 @@
 .studio-actions button:first-child,
 .studio .primary,
 .studio .ops-primary {
-  border-color: var(--rkx-green-strong);
-  background: var(--rkx-green);
-  color: #04120d;
+  border-color: #d99a24;
+  background: #f4b942;
+  color: #1a1204;
   font-weight: 850;
 }
 
 .studio-actions button:first-child:hover:not(:disabled),
 .studio .primary:hover:not(:disabled),
 .studio .ops-primary:hover:not(:disabled) {
-  border-color: #35dda0;
-  background: #2fd596;
-  color: #03110c;
+  border-color: #ffcf6a;
+  background: #f7c75f;
+  color: #140d02;
 }
 
 .storage-banner {
@@ -239,9 +239,9 @@
 /* Cloud / release controls */
 .studio .cloud-signin-link,
 .studio-cloud-login {
-  border-color: rgba(141, 132, 255, 0.42);
+  border-color: rgba(244, 185, 66, 0.42);
   background: var(--rkx-violet-wash);
-  color: #e3e0ff;
+  color: #ffe6ad;
 }
 
 .cloud-workspace {
@@ -258,7 +258,7 @@
 .cloud-filter button.active {
   border-color: var(--rkx-violet-strong);
   background: var(--rkx-violet-wash);
-  color: #e5e2ff;
+  color: #ffe8b3;
 }
 
 .release-panel {
@@ -319,7 +319,7 @@
 /* Overview / Sources / Evidence / Publish */
 .studio-ops-view {
   background:
-    radial-gradient(circle at 100% 0%, rgba(105, 95, 255, 0.08), transparent 30rem),
+    radial-gradient(circle at 100% 0%, rgba(244, 185, 66, 0.07), transparent 30rem),
     var(--rkx-bg);
 }
 
@@ -371,7 +371,7 @@
 
 .ops-workflow button > b {
   background: var(--rkx-violet-wash);
-  color: #b8b2ff;
+  color: #f6ce76;
 }
 
 .ops-workflow button i,
@@ -538,9 +538,9 @@
 
 .studio-primary-nav button.active {
   border: 0 !important;
-  background: rgba(110, 101, 255, .18) !important;
-  color: #f2f0ff !important;
-  box-shadow: inset 0 0 0 1px rgba(141, 132, 255, .4);
+  background: rgba(244, 185, 66, .14) !important;
+  color: #ffe9b7 !important;
+  box-shadow: inset 0 0 0 1px rgba(244, 185, 66, .38);
 }
 
 .studio-primary-nav button small {
@@ -608,9 +608,9 @@
 
 .studio-more-menu > summary:hover,
 .studio-more-menu[open] > summary {
-  border-color: #5a55ba;
-  background: #151d35;
-  color: #f0efff;
+  border-color: #a9781c;
+  background: #2a210f;
+  color: #ffe7af;
 }
 
 .studio-more-popover {
@@ -672,10 +672,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #315f50;
+  border: 1px solid rgba(244, 185, 66, .32);
   border-radius: 8px;
-  background: rgba(32, 201, 131, .08);
-  color: #8ee4bd;
+  background: rgba(244, 185, 66, .07);
+  color: #e9c36d;
   text-decoration: none;
   font-size: 9px;
   font-weight: 850;
@@ -775,4 +775,34 @@
   .studio-more-links {
     grid-template-columns: 1fr;
   }
+}
+
+
+/* Golden Engine identity bridge. Success/error colors remain semantic. */
+.studio .eyebrow,
+.studio .ops-eyebrow {
+  color: #f4b942;
+}
+
+.studio-primary-nav {
+  border-color: rgba(244, 185, 66, .18);
+  background: #090f17;
+}
+
+.studio-primary-nav button:hover:not(:disabled) {
+  background: rgba(244, 185, 66, .08);
+  color: #ffe8b3;
+}
+
+.studio-more-menu > summary {
+  border-color: rgba(244, 185, 66, .18);
+}
+
+.studio-more-popover {
+  border-color: rgba(244, 185, 66, .24);
+}
+
+.studio .cloud-signin-link,
+.studio-cloud-login {
+  background: rgba(244, 185, 66, .10);
 }
