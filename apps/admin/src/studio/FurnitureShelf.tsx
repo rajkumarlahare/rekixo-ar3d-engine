@@ -1,7 +1,6 @@
 import type { DragEvent } from "react";
 import { catalog, type Kind, type Room } from "./domain";
-
-export const REKIXO_FURNITURE_MIME = "application/x-rekixo-furniture";
+import { REKIXO_FURNITURE_MIME } from "./canvasFurniturePlacement";
 
 export default function FurnitureShelf({
   room,
