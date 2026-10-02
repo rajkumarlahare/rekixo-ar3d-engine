@@ -126,4 +126,3 @@ export async function rasterPdfReference(
 ): Promise<File> {
   return (await rasterPdfReferenceWithMetadata(source, options)).file;
 }
-
