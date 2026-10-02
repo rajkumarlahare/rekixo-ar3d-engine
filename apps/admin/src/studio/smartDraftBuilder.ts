@@ -1,6 +1,6 @@
 import { id, type ModelNodeTag, type Project, type Scene } from "./domain";
 import type { SmartProjectAnalysis } from "./projectAnalyzer";
-import { deriveModelWallGraph } from "./architectureGraph";
+import { deriveModelWallGraph, linkWallsToRooms } from "./architectureGraph";
 import { detectRepeatedFloors } from "./repeatedFloorDetector";
 import { deriveAutoRoomDrafts } from "./autoRoomDraft";
 
@@ -156,11 +156,12 @@ export function buildSmartSceneDraft(
       ? project.scene.rooms
       : autoRoomDraft.rooms;
 
+  const linkedWalls = linkWallsToRooms(walls, rooms);
   const scene: Scene = {
     ...project.scene,
     floors,
     rooms,
-    walls,
+    walls: linkedWalls,
     modelNodeTags: [...byKey.values()],
   };
 
@@ -169,7 +170,7 @@ export function buildSmartSceneDraft(
     summary: {
       floors: floors.length,
       autoTagged,
-      walls: walls.length,
+      walls: linkedWalls.length,
       repeatedFloors: floors.filter((floor) => floor.repeatOfFloorId).length,
       autoRooms: autoRoomDraft.rooms.length,
       skippedRoomFloors: autoRoomDraft.skippedFloors.length,
