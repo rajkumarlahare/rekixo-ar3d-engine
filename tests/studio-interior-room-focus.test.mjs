@@ -19,15 +19,20 @@ test("Interior defaults to a selected-room focus with an explicit floor overview
 
 test("Scene canvas excludes neighboring rooms and unrelated openings in room-focus mode", () => {
   const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+  const roomObjects = read(
+    "apps/admin/src/studio/sceneCanvasRoomObjects.ts",
+  );
 
   assert.match(canvas, /soloRoomId\?: string/);
   assert.match(
     canvas,
     /props\.view === "rooms"[\s\S]*?props\.soloRoomId[\s\S]*?room\.id !== props\.soloRoomId/,
   );
+  assert.match(canvas, /renderReviewedOpeningMarkers/);
+  assert.match(canvas, /soloRoomId: props\.soloRoomId/);
   assert.match(
-    canvas,
-    /props\.view === "rooms"[\s\S]*?props\.soloRoomId[\s\S]*?!opening\.roomIds\.includes\(props\.soloRoomId\)/,
+    roomObjects,
+    /options\.view === "rooms"[\s\S]*?options\.soloRoomId[\s\S]*?!opening\.roomIds\.includes\(options\.soloRoomId\)/,
   );
 });
 
