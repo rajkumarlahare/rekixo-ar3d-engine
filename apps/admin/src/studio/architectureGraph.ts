@@ -424,8 +424,7 @@ export function deriveCadWallGraph(
     };
 
   const floorIndex = cadFloorIndex(audit, floors.length);
-  const floor = floorIndex !== undefined ? floors[floorIndex] : undefined;
-  if (!floor)
+  if (floorIndex === undefined || !floors[floorIndex])
     return {
       walls: [],
       auditAssetId: audit.assetId,
@@ -434,6 +433,7 @@ export function deriveCadWallGraph(
       reason:
         "CAD floor identity is ambiguous; keep normalized geometry as review evidence.",
     };
+  const floor = floors[floorIndex];
 
   const wallSegments = (audit.semanticSegments ?? []).filter(
     (segment) => segment.kind === "wall",
