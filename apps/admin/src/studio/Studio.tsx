@@ -70,7 +70,10 @@ import {
 } from "./sourceFusion";
 import { prepareFbxWebModel } from "./fbxWebModel";
 import { buildSmartSceneDraft } from "./smartDraftBuilder";
-import { runAutoBuildPipeline } from "./autoBuildPipeline";
+import {
+  autoBuildSummaryMessage,
+  runAutoBuildPipeline,
+} from "./autoBuildPipeline";
 import { prepareSketchUpTextureRecovery } from "./sketchUpRecovery";
 import {
   acceptReadyRepeatedFloors,
@@ -2638,22 +2641,7 @@ export default function Studio() {
     await persist(result.project, result.assets);
     setSmartAnalysis(result.analysis);
     setView("building");
-
-    const summary = result.summary;
-    const web = summary.webModelPrepared ? " · web GLB prepared" : "";
-    const textures = summary.sketchUpTexturesRecovered
-      ? ` · ${summary.sketchUpTexturesRecovered} SketchUp texture${summary.sketchUpTexturesRecovered === 1 ? "" : "s"} recovered`
-      : "";
-    const rooms = summary.autoRooms
-      ? ` · ${summary.autoRooms} room draft${summary.autoRooms === 1 ? "" : "s"}`
-      : "";
-    const openings = summary.readyOpeningsApproved
-      ? ` · ${summary.readyOpeningsApproved} ready opening${summary.readyOpeningsApproved === 1 ? "" : "s"} prepared`
-      : "";
-    const review = result.issues.length + summary.openingReviewRemaining;
-    setMessage(
-      `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${openings}${web}${textures}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`,
-    );
+    setMessage(autoBuildSummaryMessage(result));
   }
 
   function buildSmartDraft() {
