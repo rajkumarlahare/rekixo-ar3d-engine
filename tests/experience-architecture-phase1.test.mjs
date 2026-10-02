@@ -53,7 +53,7 @@ test("Phase 1 preserves the existing immutable Building release system", () => {
   assert.match(publish, /UPDATE projects_3d[\s\S]*active_release_id=/);
   assert.match(
     architecture,
-    /existing `releases_3d`, `release_assets_3d`,[\s\S]*remain the Building release system/,
+    /The existing `releases_3d`, `release_assets_3d`,[\s\S]*remain the Building release system/,
   );
 });
 
