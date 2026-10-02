@@ -9,6 +9,13 @@ import {
 } from "./sceneCanvasModel";
 import { roomSurface } from "./sceneCanvasRooms";
 import { addFurnitureVisual } from "./furnitureVisual";
+import {
+  installCanvasFurnitureDrop,
+  placeCanvasFurnitureAtPointer,
+  type CanvasFurniturePlacement,
+  type CanvasFurnitureResult,
+} from "./canvasFurniturePlacement";
+import CanvasAuthoringHints from "./CanvasAuthoringHints";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -121,6 +128,9 @@ interface Props {
   onRoomDraw?: (result: RoomDrawResult) => void;
   onRoomPolygonDraw?: (points: RoomPoint[]) => void;
   onRoomPolygonChange?: (roomId: string, points: RoomPoint[]) => void;
+  furniturePlacement?: CanvasFurniturePlacement;
+  onFurniturePlace?: (placement: CanvasFurnitureResult) => void;
+  onFurniturePlacementCancel?: () => void;
   onWalkRoomChange?: (roomId: string, openingId: string) => void;
   isolateFloorId?: string;
   sectionCut?: {
@@ -541,6 +551,15 @@ export default function SceneCanvas(props: Props) {
     });
     resize.observe(el);
     const down = (e: KeyboardEvent) => {
+      if (
+        e.key === "Escape" &&
+        latest.current.furniturePlacement?.enabled
+      ) {
+        e.preventDefault();
+        latest.current.onFurniturePlacementCancel?.();
+        setStatus("");
+        return;
+      }
       if (latest.current.roomPolygonDraw?.enabled) {
         if (e.key === "Enter") {
           e.preventDefault();
@@ -713,6 +732,33 @@ export default function SceneCanvas(props: Props) {
       return best;
     };
 
+    const pointOnFloor = (
+      clientX: number,
+      clientY: number,
+      floorId: string,
+      snap: boolean,
+      excludeRoomId?: string,
+    ) => {
+      const floor = latest.current.scene.floors.find(
+        (entry) => entry.id === floorId,
+      );
+      if (!floor) return undefined;
+      const rect = renderer.domElement.getBoundingClientRect();
+      const raycaster = new T.Raycaster();
+      raycaster.setFromCamera(
+        new T.Vector2(
+          ((clientX - rect.left) / rect.width) * 2 - 1,
+          (-(clientY - rect.top) / rect.height) * 2 + 1,
+        ),
+        camera,
+      );
+      const target = new T.Vector3();
+      const plane = new T.Plane(new T.Vector3(0, 1, 0), -floor.elevation);
+      if (!raycaster.ray.intersectPlane(plane, target)) return undefined;
+      target.y = floor.elevation + 0.04;
+      return snapRoomPoint(target, floor.id, snap, excludeRoomId);
+    };
+
     const roomPlanePoint = (
       event: PointerEvent,
       excludeRoomId?: string,
@@ -738,24 +784,13 @@ export default function SceneCanvas(props: Props) {
               }
             : undefined;
       if (!config?.enabled || !config.floorId) return undefined;
-      const floor = latest.current.scene.floors.find(
-        (entry) => entry.id === config.floorId,
+      return pointOnFloor(
+        event.clientX,
+        event.clientY,
+        config.floorId,
+        config.snap,
+        excludeRoomId,
       );
-      if (!floor) return undefined;
-      const rect = renderer.domElement.getBoundingClientRect();
-      const raycaster = new T.Raycaster();
-      raycaster.setFromCamera(
-        new T.Vector2(
-          ((event.clientX - rect.left) / rect.width) * 2 - 1,
-          (-(event.clientY - rect.top) / rect.height) * 2 + 1,
-        ),
-        camera,
-      );
-      const target = new T.Vector3();
-      const plane = new T.Plane(new T.Vector3(0, 1, 0), -floor.elevation);
-      if (!raycaster.ray.intersectPlane(plane, target)) return undefined;
-      target.y = floor.elevation + 0.04;
-      return snapRoomPoint(target, floor.id, config.snap, excludeRoomId);
     };
 
     const updateRoomDraft = (start: T.Vector3, end: T.Vector3) => {
@@ -1033,6 +1068,20 @@ export default function SceneCanvas(props: Props) {
       const small = Math.hypot(e.clientX - point.ox, e.clientY - point.oy) < 5;
       point = undefined;
       if (!small || latest.current.view === "walk") return;
+
+      if (
+        latest.current.view === "rooms" &&
+        placeCanvasFurnitureAtPointer(
+          latest.current.furniturePlacement,
+          latest.current.scene.rooms,
+          e.clientX,
+          e.clientY,
+          pointOnFloor,
+          (placement) => latest.current.onFurniturePlace?.(placement),
+        )
+      )
+        return;
+
       const rect = renderer.domElement.getBoundingClientRect(),
         ray = new T.Raycaster();
       ray.setFromCamera(
@@ -1082,6 +1131,14 @@ export default function SceneCanvas(props: Props) {
         }
       }
     };
+    const removeFurnitureDrop = installCanvasFurnitureDrop(
+      renderer.domElement,
+      () => latest.current.scene.rooms,
+      () => latest.current.roomId,
+      pointOnFloor,
+      (placement) => latest.current.onFurniturePlace?.(placement),
+    );
+
     renderer.domElement.addEventListener("pointerdown", pointerDown);
     renderer.domElement.addEventListener("pointermove", move);
     renderer.domElement.addEventListener("pointerup", click);
@@ -1187,6 +1244,7 @@ export default function SceneCanvas(props: Props) {
       renderer.domElement.removeEventListener("pointermove", move);
       renderer.domElement.removeEventListener("pointerup", click);
       renderer.domElement.removeEventListener("pointercancel", click);
+      removeFurnitureDrop();
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", blur);
       transform.detach();
@@ -1932,38 +1990,22 @@ export default function SceneCanvas(props: Props) {
     runtime.controls.enablePan = false;
     runtime.focus();
   }, [props.alignmentMode]);
+  const authoringActive = Boolean(props.roomDraw?.enabled || props.roomStamp?.enabled ||
+    props.roomPolygonDraw?.enabled || props.furniturePlacement?.enabled);
   return (
-    <div
-      className={
-        props.roomDraw?.enabled ||
-        props.roomStamp?.enabled ||
-        props.roomPolygonDraw?.enabled
-          ? "canvas-wrap room-draw-active"
-          : "canvas-wrap"
-      }
-    >
+    <div className={authoringActive ? "canvas-wrap room-draw-active" : "canvas-wrap"}>
       <div className="studio-canvas" ref={host} />
       {status && (
         <div className="canvas-status" role="status">
           {status}
         </div>
       )}
-      {props.roomStamp?.enabled && (
-        <div className="room-draw-hint">
-          Click or tap once to place the exact room-sheet size · drag later to fine-tune
-        </div>
-      )}
-      {props.roomDraw?.enabled && (
-        <div className="room-draw-hint">
-          Drag from one room corner to the opposite corner · release to map
-        </div>
-      )}
-      {props.roomPolygonDraw?.enabled && (
-        <div className="room-draw-hint">
-          Click room corners · wall/vertex snap is active · click first corner
-          or press Enter to finish · Esc cancels
-        </div>
-      )}
+      <CanvasAuthoringHints
+        furniture={Boolean(props.furniturePlacement?.enabled)}
+        stamp={Boolean(props.roomStamp?.enabled)}
+        room={Boolean(props.roomDraw?.enabled)}
+        polygon={Boolean(props.roomPolygonDraw?.enabled)}
+      />
       {props.alignmentMode && (
         <div className="alignment-canvas-legend" aria-label="Alignment canvas legend">
           <span className="model-key">3D MODEL</span>
