@@ -4,6 +4,10 @@ import type { SmartProjectAnalysis } from "./projectAnalyzer";
 import type { RoomSheetRow } from "./roomSheet";
 import { inspectSketchUpArchive } from "./sketchUpArchive";
 import { inspectDwgEvidence } from "./dwgEvidence";
+import {
+  detectSourceFusionConflicts,
+  type SourceFusionConflict,
+} from "./sourceConflicts";
 
 export type SourceFusionKind =
   | "authoring-model"
@@ -64,6 +68,7 @@ export interface SourceFusionReport {
   evidenceOnlySources: number;
   needsConversionSources: number;
   reviewCount: number;
+  conflicts: SourceFusionConflict[];
   recommendedActions: string[];
 }
 
@@ -531,17 +536,21 @@ export async function buildSourceFusionReport(
       "Use the parsed room sheet to place exact-size rooms with mouse/touch.",
     );
 
+  const conflicts = detectSourceFusionConflicts(files, items, facts, audits);
+
   return {
     createdAt: new Date().toISOString(),
     items,
     facts,
+    conflicts,
     readySources: items.filter((item) => item.support === "ready").length,
     partialSources: items.filter((item) => item.support === "partial").length,
     evidenceOnlySources: items.filter((item) => item.support === "evidence-only").length,
     needsConversionSources: items.filter((item) => item.support === "needs-conversion").length,
     reviewCount:
       items.reduce((sum, item) => sum + item.warnings.length, 0) +
-      (analysis?.issues.length ?? 0),
+      (analysis?.issues.length ?? 0) +
+      conflicts.length,
     recommendedActions,
   };
 }
