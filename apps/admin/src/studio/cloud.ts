@@ -124,6 +124,40 @@ export interface CloudGeoDraftState {
   mapsConfigured: boolean;
 }
 
+export interface CloudGeoPreviewVerification {
+  draftRevision: number;
+  sourceBuildingReleaseId: string;
+  sourceBuildingReleaseVersion: number;
+  verifiedBy: string;
+  verifiedAt: string;
+  unchanged?: boolean;
+}
+
+export interface CloudGeoReleaseSummary {
+  id: string;
+  experienceId: string;
+  projectId: string;
+  version: number;
+  manifestSha256: string;
+  sourceDraftRevision: number;
+  sourceBuildingReleaseId: string;
+  sourceBuildingReleaseVersion: number;
+  createdBy: string;
+  createdAt: string;
+  active: boolean;
+  unchanged?: boolean;
+}
+
+export interface CloudGeoReleaseState {
+  schemaReady: boolean;
+  experienceId: string | null;
+  draftRevision: number | null;
+  previewVerified: boolean;
+  previewVerification: CloudGeoPreviewVerification | null;
+  activeRelease: CloudGeoReleaseSummary | null;
+  releases: CloudGeoReleaseSummary[];
+}
+
 export interface CloudAssetSummary {
   id: string;
   projectId: string;
@@ -545,6 +579,56 @@ export async function resetGeoDraft(slug: string, expectedRevision: number) {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ expectedRevision }),
+    },
+  );
+}
+
+export async function geoReleases(slug: string) {
+  return api<CloudGeoReleaseState>(
+    `${CLOUD_BASE}/projects/${encodeURIComponent(slug)}/geo-releases`,
+  );
+}
+
+export async function verifyGeoPreview(
+  slug: string,
+  expectedDraftRevision: number,
+) {
+  return api<{ verification: CloudGeoPreviewVerification }>(
+    `${CLOUD_BASE}/projects/${encodeURIComponent(slug)}/geo-draft/verify`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedDraftRevision }),
+    },
+  );
+}
+
+export async function publishGeoRelease(
+  slug: string,
+  expectedDraftRevision: number,
+) {
+  return api<{ release: CloudGeoReleaseSummary }>(
+    `${CLOUD_BASE}/projects/${encodeURIComponent(slug)}/geo-releases`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "publish", expectedDraftRevision }),
+    },
+  );
+}
+
+export async function activateGeoRelease(
+  slug: string,
+  geoReleaseId: string,
+) {
+  return api<{ release: CloudGeoReleaseSummary }>(
+    `${CLOUD_BASE}/projects/${encodeURIComponent(
+      slug,
+    )}/geo-releases/${encodeURIComponent(geoReleaseId)}/activate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
     },
   );
 }
