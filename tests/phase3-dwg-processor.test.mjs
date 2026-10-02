@@ -271,9 +271,11 @@ test("Phase 3 controlled DWG processor is isolated, pinned and bounded", () => {
   assert.match(notices, /GNU LibreDWG/);
   assert.match(notices, /General Public License/);
 
+  assert.match(wrangler, /"main": "\.\/workers\/admin-entry\.mjs"/);
   assert.match(wrangler, /"class_name": "DwgProcessor"/);
   assert.match(wrangler, /"name": "DWG_PROCESSOR"/);
   assert.match(wrangler, /"new_sqlite_classes": \["DwgProcessor"\]/);
+  assert.match(wrangler, /"image_build_context": "\."/);
   assert.match(wrangler, /"instance_type": "basic"/);
   assert.match(wrangler, /"max_instances": 2/);
 });
@@ -304,7 +306,7 @@ test("Phase 3 cloud boundary is authenticated, same-origin and source-bound", ()
   assert.match(route, /validSha256\(sha256\)/);
   assert.match(route, /sameOrigin\(request\)/);
   assert.match(route, /DWG_PROCESSOR\.getByName/);
-  assert.match(controller, /extends DurableObjectBase/);
+  assert.match(controller, /extends DurableObject/);
   assert.match(controller, /container\.start\(\)/);
   assert.match(controller, /getTcpPort\(PROCESSOR_PORT\)/);
   assert.match(controller, /\/health/);
