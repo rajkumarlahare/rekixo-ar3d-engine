@@ -129,7 +129,7 @@ test("Dashboard distinguishes editable Geo draft source from current live compat
   assert.match(dashboard, /geoDraftState/);
   assert.match(dashboard, /geoDraftSourceId/);
   assert.match(dashboard, /Geo draft source/);
-  assert.match(dashboard, /Current live snapshot/);
+  assert.match(dashboard, /Public compatibility snapshot/);
   assert.match(dashboard, /preview before draft upgrade/);
 });
 
