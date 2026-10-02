@@ -7,7 +7,8 @@ export interface DxfSemanticSegment {
   layer: string;
   start: DxfPoint;
   end: DxfPoint;
-  sourceEntity: "LINE" | "LWPOLYLINE";
+  sourceEntity: string;
+  widthM?: number;
 }
 
 export interface DxfTextLabel {
