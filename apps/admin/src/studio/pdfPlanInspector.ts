@@ -377,10 +377,20 @@ export async function inspectPdfPlans(
         // PDF text evidence stays usable if image operator inspection fails.
       }
       const strongestImage = images[0];
+      const hasTextPlanEvidence =
+        hasFloorPlanLabel || labels.length > 0 || dims.length > 0;
+      const imageOnlyPlanBonus =
+        images.length >= 2
+          ? Math.min(5, images.length * 1.15 + (strongestImage?.confidence ?? 0))
+          : strongestImage &&
+              (strongestImage.pixelWidth ?? 0) >= 700 &&
+              (strongestImage.pixelHeight ?? 0) >= 500
+            ? 1.5
+            : 0;
       const imagePlanBonus =
-        strongestImage && (hasFloorPlanLabel || labels.length || dims.length)
+        strongestImage && hasTextPlanEvidence
           ? Math.min(6, strongestImage.area * 10 + strongestImage.confidence * 2)
-          : 0;
+          : imageOnlyPlanBonus;
       const spatialEvidence = spatial.filter(
         (entry) => entry.kind !== "other",
       ).length;
