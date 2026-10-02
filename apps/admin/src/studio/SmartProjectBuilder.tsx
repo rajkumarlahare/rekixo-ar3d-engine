@@ -184,11 +184,12 @@ export default function SmartProjectBuilder({
       <div className="builder-hero">
         <div>
           <span className="ops-eyebrow">SMART PROJECT BUILDER V1</span>
-          <h2>Files दीजिए, Rekixo draft structure तैयार करेगा</h2>
+          <h2>Files upload कीजिए, Rekixo automatic draft बनाएगा</h2>
           <p>
-            Normal workflow में coordinates, floor heights और hundreds of mesh
-            tags type करने की जरूरत नहीं होनी चाहिए. Rekixo source files analyze
-            करेगा; आप visual result review और mouse से correction करेंगे.
+            Primary workflow upload-first है: Rekixo source pack को analyze करके
+            model, floors, walls, repeated floors, room drafts और confident
+            openings जितना safely संभव हो उतना खुद बनाएगा. Manual editor का काम
+            correction/review है, शुरुआत से drawing करना नहीं.
           </p>
         </div>
         <div className="builder-hero-actions">
@@ -204,10 +205,10 @@ export default function SmartProjectBuilder({
       <div className="builder-progress" aria-label="Project builder flow">
         {[
           ["1", "Project", Boolean(project.name.trim())],
-          ["2", "Sources", files.length > 0],
-          ["3", "Analyze", Boolean(analysis)],
-          ["4", "Build Draft", draftBuilt],
-          ["5", "Review", false],
+          ["2", "Upload Sources", files.length > 0],
+          ["3", "Auto Analyze", Boolean(analysis)],
+          ["4", "Auto Build", draftBuilt],
+          ["5", "Review / Correct", false],
         ].map(([index, label, complete]) => (
           <div className={complete ? "complete" : ""} key={String(label)}>
             <span>{String(index)}</span>
