@@ -115,7 +115,8 @@ test("Geo Mapper edits the draft and no longer exposes direct live publication c
   assert.match(mapper, /Existing live Geo snapshot/);
   assert.match(mapper, /sourceUpdateAvailable/);
   assert.match(mapper, /Source change sirf Geo draft me pin hota hai/);
-  assert.doesNotMatch(mapper, /saveGeoPlacement|removeGeoPlacement|publicEnabled/);
+  assert.doesNotMatch(mapper, /saveGeoPlacement|removeGeoPlacement/);
+  assert.doesNotMatch(mapper, /Public 3D Jio demo|type="checkbox"/);
 
   assert.match(cloud, /export async function geoDraft/);
   assert.match(cloud, /export async function saveGeoDraft/);
