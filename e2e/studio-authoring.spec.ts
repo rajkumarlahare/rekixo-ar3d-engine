@@ -70,6 +70,13 @@ function fourFloorGltf() {
   });
 }
 
+function onePixelPng() {
+  return Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZgK0AAAAASUVORK5CYII=",
+    "base64",
+  );
+}
+
 test.beforeEach(async ({ page }) => {
   await isolateCloud(page);
   await page.goto("/3Dprojects/studio");
@@ -165,6 +172,76 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
     "aria-pressed",
     "true",
   );
+});
+
+test("six-role source pack reaches one-click automatic building in the browser", async ({
+  page,
+}) => {
+  const sourceInput = page.locator(".smart-builder input[type=file]").first();
+  await sourceInput.setInputFiles([
+    {
+      name: "building.glb",
+      mimeType: "model/gltf-binary",
+      buffer: Buffer.from(fourFloorGltf()),
+    },
+    {
+      name: "architectural-plan.dwg",
+      mimeType: "image/vnd.dwg",
+      buffer: Buffer.from(
+        "AC1015\0AEC_WALL\0AEC_DOOR\0FIRST FLOOR PLAN\0BEDROOM\0KITCHEN\0",
+      ),
+    },
+    {
+      name: "design-backup.skb",
+      mimeType: "application/octet-stream",
+      buffer: Buffer.from("portable-sketch-support"),
+    },
+    {
+      name: "brochure.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4\n%%EOF\n"),
+    },
+    {
+      name: "exterior-reference.png",
+      mimeType: "image/png",
+      buffer: onePixelPng(),
+    },
+    {
+      name: "render-scene.drs",
+      mimeType: "application/json",
+      buffer: Buffer.from(
+        JSON.stringify({
+          model: "building.glb",
+          texture: "exterior-reference.png",
+        }),
+      ),
+    },
+  ]);
+
+  const readiness = page.getByTestId("source-pack-readiness");
+  await expect(readiness).toContainText("Complete six-role source pack attached.");
+  await expect(readiness).toContainText(
+    "Automatic building can start from the attached sources.",
+  );
+  for (const role of [
+    "3D model",
+    "CAD",
+    "SketchUp",
+    "Drawing/PDF",
+    "Visual reference",
+    "Render metadata",
+  ])
+    await expect(readiness).toContainText(role);
+
+  const autoBuild = page.getByTestId("build-automatically");
+  await expect(autoBuild).toBeEnabled();
+  await autoBuild.click();
+
+  await expect(page.locator(".studio-feedback")).toContainText(
+    "Automatic build complete",
+    { timeout: 20_000 },
+  );
+  await expect(page.getByTestId("open-visual-editor")).toBeEnabled();
 });
 
 test("local autosave survives hard reload without pressing Save local", async ({
