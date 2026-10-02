@@ -23,6 +23,7 @@ import { applyReadyOpeningWorkflow } from "./openingWorkflow";
 import {
   markAutoReadyModelWalls,
   markAutoReadyRepeatedFloors,
+  markAutoReadyVerticalConnectors,
 } from "./autoBuildingReview";
 import { makeAsset } from "./storage";
 import type { PdfPlanPageEvidence } from "./pdfPlanInspector";
@@ -36,6 +37,7 @@ import {
   estimateCadModelRegistration,
 } from "./sourceRegistration";
 import { resolveCadFloorIndex } from "./architectureGraph";
+import { reconstructBuildingSemantics } from "./buildingReconstruction";
 
 export interface AutoBuildPipelineOptions {
   processDwgArchitecture?: DwgArchitectureProcessor;
@@ -65,6 +67,13 @@ export interface AutoBuildPipelineResult {
     pdfCadRegistrationConfidence: number;
     pdfCadRegistrationMatches: number;
     pdfReferenceAutoAligned: boolean;
+    unitsDetected: number;
+    roomsAssignedToUnits: number;
+    verticalConnectors: number;
+    stairConnectors: number;
+    liftConnectors: number;
+    modelBoundConnectors: number;
+    readyConnectorsPrepared: number;
     floors: number;
     walls: number;
     repeatedFloors: number;
@@ -187,6 +196,7 @@ export async function runAutoBuildPipeline(
   let pdfCadRegistrationConfidence = 0;
   let pdfCadRegistrationMatches = 0;
   let pdfReferenceAutoAligned = false;
+  let pdfSourceAssetId: string | undefined;
   const pdfSources = workingFiles.filter((file) => /\.pdf$/i.test(file.name));
   if (pdfSources.length > 1) {
     issues.push(
@@ -195,6 +205,7 @@ export async function runAutoBuildPipeline(
   } else if (pdfSources.length === 1) {
     try {
       const pdfSource = pdfSources[0];
+      pdfSourceAssetId = pdfSource.id;
       const { inspectPdfPlans } = await import("./pdfPlanInspector");
       const inspection = await inspectPdfPlans(pdfSource);
       const best = inspection.pages.find(
@@ -472,10 +483,23 @@ export async function runAutoBuildPipeline(
     }
   }
 
+  const reconstruction = reconstructBuildingSemantics(
+    next.scene,
+    analysis,
+    {
+      ...(pdfPlanEvidence ? { pdfPlanEvidence } : {}),
+      ...(pdfSourceAssetId ? { pdfAssetId: pdfSourceAssetId } : {}),
+    },
+  );
+  next = { ...next, scene: reconstruction.scene };
+  issues.push(...reconstruction.issues);
+
   const wallReview = markAutoReadyModelWalls(next.scene);
   next = { ...next, scene: wallReview.scene };
   const repeatReview = markAutoReadyRepeatedFloors(next.scene);
   next = { ...next, scene: repeatReview.scene };
+  const connectorReview = markAutoReadyVerticalConnectors(next.scene);
+  next = { ...next, scene: connectorReview.scene };
 
   let readyOpeningsPrepared = 0;
   let openingReviewRemaining = 0;
@@ -521,6 +545,13 @@ export async function runAutoBuildPipeline(
       pdfCadRegistrationConfidence,
       pdfCadRegistrationMatches,
       pdfReferenceAutoAligned,
+      unitsDetected: reconstruction.summary.unitsDetected,
+      roomsAssignedToUnits: reconstruction.summary.roomsAssignedToUnits,
+      verticalConnectors: reconstruction.summary.verticalConnectors,
+      stairConnectors: reconstruction.summary.stairConnectors,
+      liftConnectors: reconstruction.summary.liftConnectors,
+      modelBoundConnectors: reconstruction.summary.modelBoundConnectors,
+      readyConnectorsPrepared: connectorReview.prepared,
       floors: draft.summary.floors,
       walls: draft.summary.walls,
       repeatedFloors: draft.summary.repeatedFloors,
@@ -560,6 +591,10 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   const pdf = summary.pdfPlanReferencesPrepared
     ? ` · PDF plan page ${summary.pdfPlanPage ?? "?"} prepared · ${summary.pdfSpatialLabels} spatial label${summary.pdfSpatialLabels === 1 ? "" : "s"} · ${summary.pdfEmbeddedImages} embedded image candidate${summary.pdfEmbeddedImages === 1 ? "" : "s"}${summary.pdfCadRegistrationMatches ? ` · PDF↔CAD ${summary.pdfCadRegistrationMatches} label match${summary.pdfCadRegistrationMatches === 1 ? "" : "es"} @ ${summary.pdfCadRegistrationConfidence.toFixed(2)}` : ""}${summary.pdfReferenceAutoAligned ? " · reference auto-aligned" : ""}`
     : "";
+  const hierarchy =
+    summary.unitsDetected || summary.verticalConnectors
+      ? ` · hierarchy: ${summary.unitsDetected} unit${summary.unitsDetected === 1 ? "" : "s"} · ${summary.stairConnectors} stair · ${summary.liftConnectors} lift${summary.modelBoundConnectors ? ` · ${summary.modelBoundConnectors} 3D-bound` : ""}`
+      : "";
   const rooms = summary.autoRooms
     ? ` · ${summary.autoRooms} room draft${summary.autoRooms === 1 ? "" : "s"}`
     : "";
