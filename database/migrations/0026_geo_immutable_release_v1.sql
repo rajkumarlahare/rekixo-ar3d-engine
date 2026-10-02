@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS geo_releases_3d (
   FOREIGN KEY (project_id) REFERENCES projects_3d(id) ON DELETE CASCADE,
   FOREIGN KEY (source_building_release_id) REFERENCES releases_3d(id) ON DELETE RESTRICT,
   UNIQUE (experience_id, version),
+  UNIQUE (experience_id, source_draft_revision),
   UNIQUE (experience_id, manifest_sha256)
 );
 
