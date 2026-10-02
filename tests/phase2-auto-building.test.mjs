@@ -25,6 +25,9 @@ const sketch = await import(
 const dwg = await import(
   asUrl(compile("apps/admin/src/studio/dwgEvidence.ts"))
 );
+const autoRooms = await import(
+  asUrl(compile("apps/admin/src/studio/autoRoomDraft.ts"))
+);
 
 function analysisFixture() {
   return {
@@ -202,4 +205,37 @@ test("reviewed openings cut real procedural wall pieces and wall graph is cloud-
   assert.match(worker, /Invalid Studio parametric wall/);
   assert.match(domain, /origin: WallOrigin/);
   assert.match(domain, /repeatOfFloorId/);
+});
+
+
+test("Phase 2 auto room draft creates only closed-wall-loop rooms", () => {
+  const floor = { id: "f0", name: "Ground", elevation: 0 };
+  const wall = (id, start, end) => ({
+    id,
+    floorId: "f0",
+    roomIds: [],
+    start,
+    end,
+    thickness: 0.12,
+    height: 2.8,
+    reviewed: false,
+    origin: "model-auto",
+    confidence: 0.95,
+  });
+  const closed = [
+    wall("w1", [0, 0], [4, 0]),
+    wall("w2", [4, 0], [4, 3]),
+    wall("w3", [4, 3], [0, 3]),
+    wall("w4", [0, 3], [0, 0]),
+  ];
+  const result = autoRooms.deriveAutoRoomDrafts(closed, [floor], "model");
+  assert.equal(result.rooms.length, 1);
+  assert.equal(result.rooms[0].verified, false);
+  assert.equal(result.rooms[0].width, 4);
+  assert.equal(result.rooms[0].depth, 3);
+  assert.equal(result.rooms[0].sourceAssetId, "model");
+
+  const open = closed.slice(0, 3);
+  const openResult = autoRooms.deriveAutoRoomDrafts(open, [floor], "model");
+  assert.equal(openResult.rooms.length, 0);
 });
