@@ -21,6 +21,7 @@ test("production smoke is valid with an empty project registry", () => {
   const workflow = read(".github/workflows/deploy-cloudflare.yml");
   assert.match(workflow, /Verify empty-safe Engine production shell/);
   assert.match(workflow, /no-project-selected/);
-  assert.match(workflow, /PUBLIC_CODE" = "404"/);
+  assert.match(workflow, /retry_http "Public missing project"[\s\S]* 404/);
+  assert.match(workflow, /Production shell status summary:/);
   assert.doesNotMatch(workflow, /jyoti-live-model\.glb/);
 });

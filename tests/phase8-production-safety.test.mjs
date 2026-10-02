@@ -91,3 +91,14 @@ test("production deployment fails closed for direct pushes to main", () => {
     /Production deploy blocked: main commit is not associated with a merged PR\./,
   );
 });
+
+
+test("production shell smoke retries bounded edge propagation and logs diagnostics", () => {
+  const workflow = read(".github/workflows/deploy-cloudflare.yml");
+  assert.match(workflow, /retry_http\(\)/);
+  assert.match(workflow, /for attempt in 1 2 3 4 5 6/);
+  assert.match(workflow, /Production shell status summary: admin=\$PAGE_CODE status=\$STATUS_CODE public=\$PUBLIC_CODE/);
+  assert.match(workflow, /Public missing project/);
+  assert.match(workflow, /Admin asset attempt \$attempt\/6/);
+  assert.match(workflow, /Admin JavaScript asset did not become ready/);
+});

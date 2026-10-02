@@ -363,22 +363,64 @@ jobs:
           STATUS_BODY="$(mktemp)"
           PUBLIC_BODY="$(mktemp)"
 
-          PAGE_CODE="$(curl --location --silent --show-error --output "$PAGE" --write-out '%{http_code}' "$ADMIN_ORIGIN/3Dprojects" || true)"
-          STATUS_CODE="$(curl --location --silent --show-error --output "$STATUS_BODY" --write-out '%{http_code}' "$ADMIN_ORIGIN/3Dprojects/api/status?slug=no-project-selected" || true)"
-          PUBLIC_CODE="$(curl --location --silent --show-error --output "$PUBLIC_BODY" --write-out '%{http_code}' "$PUBLIC_ORIGIN/3Dprojects/api/projects/no-project-selected" || true)"
+          retry_http() {
+            local label="$1"
+            local url="$2"
+            local output="$3"
+            shift 3
+            local attempt expected
+            HTTP_CODE="000"
+            for attempt in 1 2 3 4 5 6; do
+              HTTP_CODE="$(curl --location --silent --show-error --output "$output" --write-out '%{http_code}' "$url" || true)"
+              echo "$label attempt $attempt/6 -> HTTP $HTTP_CODE" >&2
+              for expected in "$@"; do
+                if [ "$HTTP_CODE" = "$expected" ]; then
+                  return 0
+                fi
+              done
+              if [ "$attempt" != "6" ]; then sleep 2; fi
+            done
+            echo "::error::$label never reached an expected HTTP status. Last status: $HTTP_CODE"
+            head -c 1000 "$output" || true
+            return 1
+          }
 
-          [ "$PAGE_CODE" = "200" ]
-          grep -Fq '<title>Rekixo 3D Projects</title>' "$PAGE"
-          { [ "$STATUS_CODE" = "401" ] || [ "$STATUS_CODE" = "503" ]; }
-          [ "$PUBLIC_CODE" = "404" ]
+          retry_http "Admin project shell" "$ADMIN_ORIGIN/3Dprojects" "$PAGE" 200
+          PAGE_CODE="$HTTP_CODE"
+          retry_http "Admin empty status" "$ADMIN_ORIGIN/3Dprojects/api/status?slug=no-project-selected" "$STATUS_BODY" 401 503
+          STATUS_CODE="$HTTP_CODE"
+          retry_http "Public missing project" "$PUBLIC_ORIGIN/3Dprojects/api/projects/no-project-selected" "$PUBLIC_BODY" 404
+          PUBLIC_CODE="$HTTP_CODE"
+
+          echo "Production shell status summary: admin=$PAGE_CODE status=$STATUS_CODE public=$PUBLIC_CODE"
+          if ! grep -Fq '<title>Rekixo 3D Projects</title>' "$PAGE"; then
+            echo "::error::Admin shell returned HTTP 200 without the expected Rekixo 3D Projects title."
+            head -c 1000 "$PAGE" || true
+            exit 1
+          fi
 
           ASSET_PATH="$(grep -oE 'src="/3Dprojects/assets/[^"]+\.js"' "$PAGE" | head -n1 | cut -d'"' -f2 || true)"
-          test -n "$ASSET_PATH"
-          ASSET_META="$(curl --location --silent --show-error --output /dev/null --write-out '%{http_code}|%{content_type}' "$ADMIN_ORIGIN$ASSET_PATH" || true)"
-          ASSET_CODE="${ASSET_META%%|*}"
-          ASSET_TYPE="${ASSET_META#*|}"
-          [ "$ASSET_CODE" = "200" ]
-          [[ "$ASSET_TYPE" == *javascript* ]]
+          if [ -z "$ASSET_PATH" ]; then
+            echo "::error::Admin shell did not expose a 3Dprojects JavaScript asset path."
+            head -c 1000 "$PAGE" || true
+            exit 1
+          fi
+
+          ASSET_META=""
+          for attempt in 1 2 3 4 5 6; do
+            ASSET_META="$(curl --location --silent --show-error --output /dev/null --write-out '%{http_code}|%{content_type}' "$ADMIN_ORIGIN$ASSET_PATH" || true)"
+            ASSET_CODE="${ASSET_META%%|*}"
+            ASSET_TYPE="${ASSET_META#*|}"
+            echo "Admin asset attempt $attempt/6 -> $ASSET_CODE | $ASSET_TYPE"
+            if [ "$ASSET_CODE" = "200" ] && [[ "$ASSET_TYPE" == *javascript* ]]; then
+              break
+            fi
+            if [ "$attempt" != "6" ]; then sleep 2; fi
+          done
+          if [ "$ASSET_CODE" != "200" ] || [[ "$ASSET_TYPE" != *javascript* ]]; then
+            echo "::error::Admin JavaScript asset did not become ready: $ASSET_META"
+            exit 1
+          fi
 
           rm -f "$PAGE" "$STATUS_BODY" "$PUBLIC_BODY"
           echo "Engine production shell verified without requiring any project fixture."
