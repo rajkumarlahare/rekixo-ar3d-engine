@@ -1,4 +1,4 @@
-import type { Asset, Project } from "./domain";
+import type { Asset, Project, ReferenceLightingMood } from "./domain";
 import { id, validateProject } from "./domain";
 import type { FbxSourceAudit } from "./sourceAudit";
 import { auditFbxSources } from "./sourceAudit";
@@ -43,6 +43,10 @@ import {
 } from "./roomSemanticBinding";
 import { buildSourceAutoInterior } from "./autoInteriorDraft";
 import { fuseCadOpeningEvidence } from "./cadOpeningFusion";
+import {
+  inspectReferenceImage,
+  looksLikeGeneratedPlanReference,
+} from "./referenceImageInspector";
 
 export interface AutoBuildPipelineOptions {
   processDwgArchitecture?: DwgArchitectureProcessor;
@@ -96,6 +100,12 @@ export interface AutoBuildPipelineResult {
     autoFurnishedRooms: number;
     autoFurnitureRepaired: number;
     autoFurnitureSkippedRooms: number;
+    referenceImageEvidenceReady: boolean;
+    referencePaletteColors: number;
+    referenceLightingMood: ReferenceLightingMood | "";
+    referenceImageConfidence: number;
+    referenceVerticalEdgeStrength: number;
+    referenceHorizontalEdgeStrength: number;
   };
   issues: string[];
 }
@@ -376,6 +386,47 @@ export async function runAutoBuildPipeline(
   );
   if (!analysis.modelAssetId)
     throw Error("Automatic analysis could not resolve the authoring model.");
+
+  const visualSourceIds = new Set(
+    analysis.sources
+      .filter((source) => source.role === "visual")
+      .map((source) => source.assetId),
+  );
+  const visualReferences = workingFiles.filter(
+    (file) =>
+      visualSourceIds.has(file.id) &&
+      !looksLikeGeneratedPlanReference(file.name) &&
+      /\.(?:png|jpe?g|webp|bmp)$/i.test(file.name),
+  );
+  if (visualReferences.length === 1) {
+    try {
+      const evidence = await inspectReferenceImage(visualReferences[0]);
+      if (evidence.confidence >= 0.55) {
+        next = {
+          ...next,
+          scene: {
+            ...next.scene,
+            referenceImageEvidence: evidence,
+          },
+        };
+      } else {
+        issues.push(
+          "Reference image was decoded, but visual evidence confidence is too low to store as automatic project evidence.",
+        );
+      }
+    } catch (error) {
+      issues.push(
+        error instanceof Error
+          ? `Reference image analysis: ${error.message}`
+          : "Reference image analysis could not complete.",
+      );
+    }
+  } else if (visualReferences.length > 1) {
+    issues.push(
+      "Multiple visual reference images are attached. Rekixo kept image palette/lighting analysis review-only instead of guessing one authoritative facade image.",
+    );
+  }
+
   const draft = buildSmartSceneDraft(next, analysis);
   next = { ...next, scene: draft.scene };
 
@@ -833,6 +884,19 @@ export async function runAutoBuildPipeline(
       autoFurnishedRooms: autoInterior.furnishedRooms,
       autoFurnitureRepaired: autoInterior.removedInvalidAutomatic,
       autoFurnitureSkippedRooms: autoInterior.skippedRooms.length,
+      referenceImageEvidenceReady: Boolean(
+        next.scene.referenceImageEvidence,
+      ),
+      referencePaletteColors:
+        next.scene.referenceImageEvidence?.renderedPalette.length ?? 0,
+      referenceLightingMood:
+        next.scene.referenceImageEvidence?.lightingMood ?? "",
+      referenceImageConfidence:
+        next.scene.referenceImageEvidence?.confidence ?? 0,
+      referenceVerticalEdgeStrength:
+        next.scene.referenceImageEvidence?.verticalEdgeStrength ?? 0,
+      referenceHorizontalEdgeStrength:
+        next.scene.referenceImageEvidence?.horizontalEdgeStrength ?? 0,
     },
     issues: [...new Set([...issues, ...analysis.issues])],
   };
@@ -892,6 +956,9 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   const interior = summary.autoFurniturePrepared
     ? ` · interior draft: ${summary.autoFurniturePrepared} item${summary.autoFurniturePrepared === 1 ? "" : "s"} across ${summary.autoFurnishedRooms} room${summary.autoFurnishedRooms === 1 ? "" : "s"}`
     : "";
+  const referenceImage = summary.referenceImageEvidenceReady
+    ? ` · reference image: ${summary.referenceLightingMood || "unknown"} · ${summary.referencePaletteColors} rendered palette color${summary.referencePaletteColors === 1 ? "" : "s"} · visual structure evidence ready`
+    : "";
   const review =
     result.issues.length +
     summary.openingReviewRemaining +
@@ -899,5 +966,5 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
     summary.readyRepeatsPrepared +
     summary.readyOpeningsPrepared +
     summary.roomSemanticReviewRemaining;
-  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${topology}${walls}${repeats}${openings}${cadOpenings}${semantics}${interior}${web}${textures}${materialFusion}${materialStyles}${resolvedTextures}${dwg}${pdf}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
+  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${topology}${walls}${repeats}${openings}${cadOpenings}${semantics}${interior}${referenceImage}${web}${textures}${materialFusion}${materialStyles}${resolvedTextures}${dwg}${pdf}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
 }
