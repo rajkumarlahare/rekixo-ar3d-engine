@@ -65,16 +65,23 @@ test("Experience API is authenticated, project-scoped and explicit about Geo sou
   assert.match(worker, /Source upgrades require the Geo workflow/);
 });
 
-test("legacy Geo placement save self-registers Geo identity and pins the explicit Building release", () => {
+test("legacy Geo placement can self-register identity but cannot overwrite a pinned Geo source", () => {
   const worker = read("workers/admin-cloud.mjs");
+  const start = worker.indexOf("async function projectGeoPlacement");
+  const end = worker.indexOf("async function geoMapsSettings", start);
+  assert.ok(start >= 0 && end > start);
+  const placementBlock = worker.slice(start, end);
 
-  assert.match(
-    worker,
-    /INSERT INTO experiences_3d[\s\S]*ON CONFLICT\(project_id,type\) DO UPDATE SET[\s\S]*source_building_release_id=excluded\.source_building_release_id/,
+  assert.match(placementBlock, /INSERT INTO experiences_3d/);
+  assert.match(placementBlock, /ON CONFLICT\(project_id,type\) DO UPDATE SET/);
+  assert.match(placementBlock, /lifecycle='active'/);
+  assert.doesNotMatch(
+    placementBlock,
+    /ON CONFLICT\(project_id,type\) DO UPDATE SET[\s\S]{0,220}source_building_release_id=excluded/,
   );
-  assert.match(worker, /release\.id/);
-  assert.match(worker, /experience_geo_\$\{project\.id\}/);
-  assert.match(worker, /geo\.placement_saved/);
+  assert.match(placementBlock, /release\.id/);
+  assert.match(placementBlock, /experience_geo_\$\{project\.id\}/);
+  assert.match(placementBlock, /geo\.placement_saved/);
 });
 
 test("hard delete removes Experience rows before immutable Building releases", () => {
