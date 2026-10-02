@@ -275,9 +275,9 @@ function xmlAttributeValue(source: string, names: readonly string[]) {
     const safeName = name.replace(/[^a-z0-9_-]/gi, "\\$&");
     const match = source.match(
       new RegExp(
-        '(?:^|[\\s<])(?:[a-z0-9_-]+:)?' +
+        "(?:^|[\\s<])(?:[a-z0-9_-]+:)?" +
           safeName +
-          '\\s*=\\s*["\\\']([^"\\\']+)["\\\']',
+          "\\s*=\\s*[\"\']([^\"\']+)[\"\']",
         "i",
       ),
     );
