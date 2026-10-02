@@ -17,10 +17,10 @@ test("Jyoti PBR v2 publishes a versioned immutable asset", () => {
   assert.match(migration, /46cde07ba8a59e04e198c778189f24eff89f05eb73e823369fcc7594cbf05bf2/);
 });
 
-test("production smoke requires a real available model", () => {
+test("production smoke is valid with an empty project registry", () => {
   const workflow = read(".github/workflows/deploy-cloudflare.yml");
-  assert.match(workflow, /'"available":true'/);
-  assert.match(workflow, /'"version":2'/);
-  assert.match(workflow, /jyoti-live-model\.glb/);
-  assert.match(workflow, /head -c 4/);
+  assert.match(workflow, /Verify empty-safe Engine production shell/);
+  assert.match(workflow, /no-project-selected/);
+  assert.match(workflow, /PUBLIC_CODE" = "404"/);
+  assert.doesNotMatch(workflow, /jyoti-live-model\.glb/);
 });

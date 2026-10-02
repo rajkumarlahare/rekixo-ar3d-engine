@@ -266,7 +266,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for API_URL in             "https://admin.rekixo.com/3Dprojects/api/projects"             "https://admin.rekixo.com/3Dprojects/api/status?slug=jyoti-paradise"; do
+          for API_URL in             "https://admin.rekixo.com/3Dprojects/api/projects"             "https://admin.rekixo.com/3Dprojects/api/status?slug=no-project-selected"; do
             BODY="$(mktemp)"
             STATUS="$(curl --location --silent --show-error --output "$BODY" --write-out '%{http_code}' "$API_URL" || true)"
             if [ "$STATUS" != "401" ] && [ "$STATUS" != "503" ]; then
@@ -279,122 +279,32 @@ jobs:
           done
           echo "Sensitive Engine Admin read surfaces are fail-closed."
 
-      - name: Verify Platform integration contract
+      - name: Verify empty-safe Engine production shell
         shell: bash
         run: |
           set -euo pipefail
-          API_URL="https://admin.rekixo.com/3Dprojects/api/integration/projects/jyoti-paradise"
-          HEADERS="$(mktemp)"
-          STATUS="$(curl --location --silent --show-error --dump-header "$HEADERS" --output /tmp/engine-integration.json --write-out '%{http_code}' "$API_URL" || true)"
-          [ "$STATUS" = "200" ]
-          grep -Fqi 'x-rekixo-ar3d-contract: 1' "$HEADERS"
-          grep -Fq '"contractVersion":1' /tmp/engine-integration.json
-          grep -Fq '"slug":"jyoti-paradise"' /tmp/engine-integration.json
-          echo "Platform ↔ Engine contract v1 verified."
+          ADMIN_ORIGIN="https://admin.rekixo.com"
+          PUBLIC_ORIGIN="https://ar3dstudio.in"
+          PAGE="$(mktemp)"
+          STATUS_BODY="$(mktemp)"
+          PUBLIC_BODY="$(mktemp)"
 
-      # Jyoti Paradise is the existing live compatibility fixture, not an Engine default.
-      - name: Verify legacy Jyoti public production fixture
-        shell: bash
-        run: |
-          set -euo pipefail
-          FIXTURE_SLUG="jyoti-paradise"
-          PAGE_URL="https://ar3dstudio.in/3Dprojects/${FIXTURE_SLUG}"
-          API_URL="https://ar3dstudio.in/3Dprojects/api/projects/${FIXTURE_SLUG}"
-          ORIGIN="https://ar3dstudio.in"
-          for attempt in 1 2 3 4 5; do
-            PAGE="$(mktemp)"
-            API="$(mktemp)"
-            PAGE_STATUS="$(curl --location --silent --show-error --output "$PAGE" --write-out '%{http_code}' "$PAGE_URL" || true)"
-            API_STATUS="$(curl --location --silent --show-error --output "$API" --write-out '%{http_code}' "$API_URL" || true)"
-            ASSET_PATH="$(grep -oE 'src="/3Dprojects/assets/[^"]+\.js"' "$PAGE" | head -n1 | cut -d'"' -f2 || true)"
-            ASSET_STATUS="000"
-            ASSET_TYPE=""
-            if [ -n "$ASSET_PATH" ]; then
-              ASSET_META="$(curl --location --silent --show-error --output /dev/null --write-out '%{http_code}|%{content_type}' "${ORIGIN}${ASSET_PATH}" || true)"
-              ASSET_STATUS="${ASSET_META%%|*}"
-              ASSET_TYPE="${ASSET_META#*|}"
-            fi
-            if [ "$PAGE_STATUS" = "200" ] \
-              && grep -Fq '<title>AR3D Studio 3D Project</title>' "$PAGE" \
-              && [ "$API_STATUS" = "200" ] \
-              && grep -Fq '"slug":"jyoti-paradise"' "$API" \
-              && grep -Fq '"id":"model_jyoti_exterior_v1"' "$API" \
-              && grep -Fq '"available":true' "$API" \
-              && grep -Fq '"version":2' "$API" \
-              && grep -Fq '"type":"wing-distance"' "$API" \
-              && grep -Fq '"type":"typical-floor"' "$API" \
-              && grep -Fq '"type":"amenity"' "$API" \
-              && grep -Fq '"type":"section"' "$API" \
-              && grep -Fq '"type":"balcony"' "$API" \
-              && [ "$ASSET_STATUS" = "200" ] \
-              && [[ "$ASSET_TYPE" == *javascript* ]]; then
-              MODEL_PATH="$(python -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('model',{}).get('url',''))" "$API")"
-              MODEL_STATUS="000"
-              MODEL_TYPE=""
-              if [ -n "$MODEL_PATH" ]; then
-                MODEL_META="$(curl --location --silent --show-error --output /tmp/jyoti-live-model.glb --write-out '%{http_code}|%{content_type}' "${ORIGIN}${MODEL_PATH}" || true)"
-                MODEL_STATUS="${MODEL_META%%|*}"
-                MODEL_TYPE="${MODEL_META#*|}"
-              fi
-              [ "$MODEL_STATUS" = "200" ]
-              [[ "$MODEL_TYPE" == *model/gltf-binary* || "$MODEL_TYPE" == *application/octet-stream* ]]
-              test "$(head -c 4 /tmp/jyoti-live-model.glb)" = "glTF"
-              echo "Public 3D project data, modules, JavaScript and live model verified."
-              rm -f "$PAGE" "$API" /tmp/jyoti-live-model.glb
-              exit 0
-            fi
-            echo "Attempt $attempt/5: page=$PAGE_STATUS api=$API_STATUS js=$ASSET_STATUS js_type=$ASSET_TYPE path=$ASSET_PATH"
-            echo "API preview:"
-            head -c 1000 "$API" || true
-            echo
-            rm -f "$PAGE" "$API"
-            sleep 5
-          done
-          echo "::error::Public 3D production surface did not verify."
-          exit 1
+          PAGE_CODE="$(curl --location --silent --show-error --output "$PAGE" --write-out '%{http_code}' "$ADMIN_ORIGIN/3Dprojects" || true)"
+          STATUS_CODE="$(curl --location --silent --show-error --output "$STATUS_BODY" --write-out '%{http_code}' "$ADMIN_ORIGIN/3Dprojects/api/status?slug=no-project-selected" || true)"
+          PUBLIC_CODE="$(curl --location --silent --show-error --output "$PUBLIC_BODY" --write-out '%{http_code}' "$PUBLIC_ORIGIN/3Dprojects/api/projects/no-project-selected" || true)"
 
-      # Jyoti remains a compatibility fixture; sensitive Admin data is no longer public.
-      - name: Verify Jyoti admin shell and protected status boundary
-        shell: bash
-        run: |
-          set -euo pipefail
-          FIXTURE_SLUG="jyoti-paradise"
-          PAGE_URL="https://admin.rekixo.com/3Dprojects"
-          STATUS_URL="https://admin.rekixo.com/3Dprojects/api/status?slug=${FIXTURE_SLUG}"
-          INTEGRATION_URL="https://admin.rekixo.com/3Dprojects/api/integration/projects/${FIXTURE_SLUG}"
-          ORIGIN="https://admin.rekixo.com"
-          for attempt in 1 2 3 4 5; do
-            PAGE="$(mktemp)"
-            STATUS_BODY="$(mktemp)"
-            INTEGRATION="$(mktemp)"
-            PAGE_STATUS="$(curl --location --silent --show-error --output "$PAGE" --write-out '%{http_code}' "$PAGE_URL" || true)"
-            STATUS_CODE="$(curl --location --silent --show-error --output "$STATUS_BODY" --write-out '%{http_code}' "$STATUS_URL" || true)"
-            INTEGRATION_CODE="$(curl --location --silent --show-error --output "$INTEGRATION" --write-out '%{http_code}' "$INTEGRATION_URL" || true)"
-            ASSET_PATH="$(grep -oE 'src="/3Dprojects/assets/[^"]+\.js"' "$PAGE" | head -n1 | cut -d'"' -f2 || true)"
-            ASSET_STATUS="000"
-            ASSET_TYPE=""
-            if [ -n "$ASSET_PATH" ]; then
-              ASSET_META="$(curl --location --silent --show-error --output /dev/null --write-out '%{http_code}|%{content_type}' "${ORIGIN}${ASSET_PATH}" || true)"
-              ASSET_STATUS="${ASSET_META%%|*}"
-              ASSET_TYPE="${ASSET_META#*|}"
-            fi
-            if [ "$PAGE_STATUS" = "200" ] \
-              && grep -Fq '<title>Rekixo 3D Projects</title>' "$PAGE" \
-              && { [ "$STATUS_CODE" = "401" ] || [ "$STATUS_CODE" = "503" ]; } \
-              && [ "$INTEGRATION_CODE" = "200" ] \
-              && grep -Fq '"slug":"jyoti-paradise"' "$INTEGRATION" \
-              && [ "$ASSET_STATUS" = "200" ] \
-              && [[ "$ASSET_TYPE" == *javascript* ]]; then
-              echo "3D Admin shell, protected status boundary and public integration contract verified."
-              rm -f "$PAGE" "$STATUS_BODY" "$INTEGRATION"
-              exit 0
-            fi
-            echo "Attempt $attempt/5: page=$PAGE_STATUS status=$STATUS_CODE integration=$INTEGRATION_CODE js=$ASSET_STATUS js_type=$ASSET_TYPE"
-            echo "Protected status preview:"
-            head -c 800 "$STATUS_BODY" || true
-            echo
-            rm -f "$PAGE" "$STATUS_BODY" "$INTEGRATION"
-            sleep 5
-          done
-          echo "::error::3D Admin protected production surface did not verify."
-          exit 1
+          [ "$PAGE_CODE" = "200" ]
+          grep -Fq '<title>Rekixo 3D Projects</title>' "$PAGE"
+          { [ "$STATUS_CODE" = "401" ] || [ "$STATUS_CODE" = "503" ]; }
+          [ "$PUBLIC_CODE" = "404" ]
+
+          ASSET_PATH="$(grep -oE 'src="/3Dprojects/assets/[^"]+\.js"' "$PAGE" | head -n1 | cut -d'"' -f2 || true)"
+          test -n "$ASSET_PATH"
+          ASSET_META="$(curl --location --silent --show-error --output /dev/null --write-out '%{http_code}|%{content_type}' "$ADMIN_ORIGIN$ASSET_PATH" || true)"
+          ASSET_CODE="${ASSET_META%%|*}"
+          ASSET_TYPE="${ASSET_META#*|}"
+          [ "$ASSET_CODE" = "200" ]
+          [[ "$ASSET_TYPE" == *javascript* ]]
+
+          rm -f "$PAGE" "$STATUS_BODY" "$PUBLIC_BODY"
+          echo "Engine production shell verified without requiring any project fixture."
