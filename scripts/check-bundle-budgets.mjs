@@ -43,14 +43,14 @@ atMost(publicEntry, 980 * KiB, "Public entry JS");
 
 const publicProfile = one(
   publicAssets,
-  /^referenceSourceV9Materials-[^.]+\.js$/,
+  /^(?:referenceSourceV9Materials|referenceMaterials)-[^.]+\.js$/,
   "Public Reference Source V9 material chunk",
 );
 atMost(publicProfile, 40 * KiB, "Public profile material JS");
 
 const adminProfile = one(
   adminAssets,
-  /^referenceSourceV9Materials-[^.]+\.js$/,
+  /^(?:referenceSourceV9Materials|referenceMaterials)-[^.]+\.js$/,
   "Admin Reference Source V9 material chunk",
 );
 atMost(adminProfile, 40 * KiB, "Admin profile material JS");
