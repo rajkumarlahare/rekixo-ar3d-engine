@@ -2345,14 +2345,42 @@ export default function Studio() {
           : {}),
       },
     };
-    await persist(next, assets);
-    setSmartAnalysis(undefined);
-    historyRef.current.clear();
     const skipped = duplicateCount
       ? ` · ${duplicateCount} duplicate checksum${duplicateCount === 1 ? "" : "s"} skipped`
       : "";
+    if (autoModel) {
+      try {
+        const automatic = await runAutoBuildPipeline(
+          next,
+          combinedFiles,
+          sourceAudits,
+        );
+        await persist(automatic.project, [...assets, ...automatic.assets]);
+        setSmartAnalysis(automatic.analysis);
+        historyRef.current.clear();
+        setView("building");
+        setMessage(
+          `${assets.length} new source file${assets.length === 1 ? "" : "s"} uploaded${skipped} · ${autoBuildSummaryMessage(automatic)}`,
+        );
+        return;
+      } catch (reason) {
+        await persist(next, assets);
+        setSmartAnalysis(undefined);
+        historyRef.current.clear();
+        const detail =
+          reason instanceof Error ? reason.message : "automatic build could not complete";
+        setMessage(
+          `${assets.length} new source file${assets.length === 1 ? "" : "s"} attached${skipped}. Automatic build paused for review: ${detail}`,
+        );
+        return;
+      }
+    }
+
+    await persist(next, assets);
+    setSmartAnalysis(undefined);
+    historyRef.current.clear();
     setMessage(
-      `${assets.length} new source file${assets.length === 1 ? "" : "s"} attached${skipped}${autoModel && autoModel !== p.scene.modelId ? " · primary 3D model selected automatically" : ""}.`,
+      `${assets.length} new source file${assets.length === 1 ? "" : "s"} attached${skipped}. Rekixo analyzed the source pack, but no unambiguous FBX/GLB authoring model is available yet; CAD/SketchUp conversion stays queued for the source processors.`,
     );
   }
 
