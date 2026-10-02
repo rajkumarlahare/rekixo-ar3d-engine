@@ -71,6 +71,23 @@ export async function publishGeoRelease(
   if (!verification)
     throw Error("Verify the current Geo preview before publishing.");
 
+  const existing = await env.DB.prepare(
+    `SELECT id,version
+       FROM geo_releases_3d
+      WHERE experience_id=?
+        AND project_id=?
+        AND source_draft_revision=?
+      LIMIT 1`,
+  ).bind(
+    context.experienceId,
+    project.id,
+    Number(context.revision),
+  ).first();
+  if (existing)
+    throw Error(
+      `Geo Release v${Number(existing.version)} already exists for this draft. Activate it from release history if needed.`,
+    );
+
   const source = await assertGeoBuildingSource(env, project, context);
   const next = await env.DB.prepare(
     `SELECT COALESCE(MAX(version),0)+1 AS version
