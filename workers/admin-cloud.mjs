@@ -3,7 +3,7 @@ import {
   buildAndActivateRelease,
   listProjectReleases,
 } from "./release-publish.mjs";
-import { assertDraftAssetKey } from "./storage-boundary.mjs";
+import { assertDraftAssetKey, projectAssetPrefix } from "./storage-boundary.mjs";
 import { validateStudioDraft } from "./studio-draft-validation.mjs";
 import { validProjectSlug } from "../shared/project-slug-policy.js";
 const BASE_PATH = "/3Dprojects";
@@ -1470,6 +1470,149 @@ async function geoMapsSettings(request, env, actor) {
   return json({ ok: true, apiKey });
 }
 
+async function deleteProjectOwnedObjects(env, slug) {
+  const prefix = projectAssetPrefix(slug);
+  let cursor;
+  let deleted = 0;
+
+  do {
+    const page = await env.MODEL_ASSETS.list({
+      prefix,
+      ...(cursor ? { cursor } : {}),
+      limit: 1000,
+    });
+    const keys = (page.objects || []).map((item) => item.key);
+    if (keys.length) {
+      await env.MODEL_ASSETS.delete(keys);
+      deleted += keys.length;
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+
+  return deleted;
+}
+
+async function deleteProjectRecords(env, project) {
+  await env.DB.batch([
+    env.DB.prepare(
+      "DELETE FROM engine_admin_audit WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "DELETE FROM geo_placements_3d WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "DELETE FROM release_activations_3d WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "DELETE FROM release_assets_3d WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "DELETE FROM releases_3d WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "DELETE FROM studio_assets_3d WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "DELETE FROM studio_drafts_3d WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "DELETE FROM publish_versions_3d WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "DELETE FROM scenes_3d WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "DELETE FROM camera_presets_3d WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "DELETE FROM models_3d WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "UPDATE projects_3d SET active_release_id=NULL WHERE id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "DELETE FROM projects_3d WHERE id=?",
+    ).bind(project.id),
+  ]);
+}
+
+async function hardDeleteAllProjects(request, env, actor) {
+  if (request.method !== "DELETE")
+    return json({ error: "Method not allowed." }, { status: 405 });
+  if (!sameOrigin(request))
+    return json({ error: "Invalid request origin." }, { status: 403 });
+
+  const body = await request.json().catch(() => ({}));
+  if (String(body.confirm || "") !== "DELETE ALL PROJECTS")
+    return json(
+      { error: "Type DELETE ALL PROJECTS to confirm permanent deletion." },
+      { status: 400 },
+    );
+
+  const rows = await env.DB.prepare(
+    `SELECT id,slug,name,status
+       FROM projects_3d
+      ORDER BY created_at ASC,slug ASC`,
+  ).all();
+  const projectRows = rows.results || [];
+  const expectedProjectCount = Number(body.expectedProjectCount);
+  if (
+    !Number.isInteger(expectedProjectCount) ||
+    expectedProjectCount < 0 ||
+    expectedProjectCount !== projectRows.length
+  )
+    return json(
+      {
+        error:
+          "Project list changed. Refresh before permanent deletion.",
+        actualProjectCount: projectRows.length,
+      },
+      { status: 409 },
+    );
+
+  let deletedR2Objects = 0;
+  for (const project of projectRows)
+    deletedR2Objects += await deleteProjectOwnedObjects(env, project.slug);
+
+  for (const project of projectRows)
+    await deleteProjectRecords(env, project);
+
+  const remaining = await env.DB.prepare(
+    "SELECT COUNT(*) AS total FROM projects_3d",
+  ).first();
+  if (Number(remaining?.total || 0) !== 0)
+    return json(
+      { error: "Project cleanup did not reach an empty registry." },
+      { status: 500 },
+    );
+
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    `INSERT INTO engine_admin_audit
+      (id,actor_email,action,project_id,target_id,details_json,created_at)
+      VALUES (?,?,?,?,?,?,?)`,
+  ).bind(
+    crypto.randomUUID(),
+    actor.email,
+    "projects.all_deleted",
+    null,
+    "all-projects",
+    JSON.stringify({
+      projectCount: projectRows.length,
+      deletedR2Objects,
+      slugs: projectRows.map((project) => project.slug),
+    }),
+    now,
+  ).run();
+
+  return json({
+    ok: true,
+    deletedProjects: projectRows.length,
+    deletedR2Objects,
+    remainingProjects: 0,
+  });
+}
+
 async function patchProject(request, env, actor, project) {
   if (request.method !== "PATCH")
     return json({ error: "Method not allowed." }, { status: 405 });
@@ -1547,6 +1690,8 @@ async function routeProjects(request, env, actor, url) {
     if (request.method === "GET") return listCloudProjects(env, url);
     if (request.method === "POST")
       return createCloudProject(request, env, actor);
+    if (request.method === "DELETE")
+      return hardDeleteAllProjects(request, env, actor);
     return json({ error: "Method not allowed." }, { status: 405 });
   }
 
