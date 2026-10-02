@@ -1,5 +1,6 @@
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { Asset } from "./domain";
+import { viewportPoint } from "./pdfCoordinates";
 
 export type PdfSpatialLabelKind =
   | "room"
@@ -145,14 +146,7 @@ function transformPoint(matrix: Matrix, x: number, y: number) {
   ] as const;
 }
 
-function viewportPoint(
-  viewport: { convertToViewportPoint(x: number, y: number): number[] },
-  x: number,
-  y: number,
-): [number, number] {
-  const value = viewportPoint(viewport, x, y);
-  return [Number(value[0] ?? 0), Number(value[1] ?? 0)];
-}
+
 
 function imagePixels(args: unknown[]) {
   const directWidth = typeof args[1] === "number" ? args[1] : undefined;

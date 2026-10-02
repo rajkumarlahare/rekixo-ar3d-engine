@@ -257,12 +257,44 @@ function xmlTextValue(source: string, names: readonly string[]) {
   for (const name of names) {
     const match = source.match(
       new RegExp(
-        `<(?:[a-z0-9_]+:)?${name}\\b[^>]*>\\s*([^<]+?)\\s*<\\/(?:[a-z0-9_]+:)?${name}>`,
+        "<(?:[a-z0-9_]+:)?" +
+          name +
+          "\\b[^>]*>\\s*([^<]+?)\\s*<\\/(?:[a-z0-9_]+:)?" +
+          name +
+          ">",
         "i",
       ),
     );
     if (match?.[1]) return match[1].trim();
   }
+  return undefined;
+}
+
+function xmlAttributeValue(source: string, names: readonly string[]) {
+  for (const name of names) {
+    const safeName = name.replace(/[^a-z0-9_-]/gi, "\\$&");
+    const match = source.match(
+      new RegExp(
+        '(?:^|[\\s<])(?:[a-z0-9_-]+:)?' +
+          safeName +
+          '\\s*=\\s*["\\\']([^"\\\']+)["\\\']',
+        "i",
+      ),
+    );
+    if (match?.[1]) return match[1].trim();
+  }
+  return undefined;
+}
+
+function xmlValue(source: string, names: readonly string[]) {
+  return xmlTextValue(source, names) ?? xmlAttributeValue(source, names);
+}
+
+function booleanValue(value: string | undefined) {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
   return undefined;
 }
 
@@ -284,18 +316,17 @@ function rgbHex(red: number, green: number, blue: number) {
 }
 
 function materialColor(source: string) {
-  const direct = source.match(
-    /<(?:[a-z0-9_]+:)?color\b[^>]*>\s*#([0-9a-f]{6})\s*</i,
-  );
-  if (direct?.[1]) return `#${direct[1].toLowerCase()}`;
+  const direct = xmlValue(source, ["color", "baseColor", "base_color"]);
+  const hex = direct?.match(/^#?([0-9a-f]{6})$/i);
+  if (hex?.[1]) return "#" + hex[1].toLowerCase();
 
-  const red = finiteValue(xmlTextValue(source, ["red", "r"]));
-  const green = finiteValue(xmlTextValue(source, ["green", "g"]));
-  const blue = finiteValue(xmlTextValue(source, ["blue", "b"]));
+  const red = finiteValue(xmlValue(source, ["colorRed", "red", "r"]));
+  const green = finiteValue(xmlValue(source, ["colorGreen", "green", "g"]));
+  const blue = finiteValue(xmlValue(source, ["colorBlue", "blue", "b"]));
   if (red !== undefined && green !== undefined && blue !== undefined)
     return rgbHex(red, green, blue);
 
-  const triplet = xmlTextValue(source, ["color", "rgb"])?.match(
+  const triplet = xmlValue(source, ["color", "rgb", "baseColor"])?.match(
     /(-?\d+(?:\.\d+)?)\D+(-?\d+(?:\.\d+)?)\D+(-?\d+(?:\.\d+)?)/,
   );
   if (triplet)
@@ -308,11 +339,17 @@ function materialColor(source: string) {
 }
 
 function materialOpacity(source: string) {
-  const opacity = finiteValue(xmlTextValue(source, ["opacity", "alpha"]));
+  const opacity = finiteValue(xmlValue(source, ["opacity", "alpha"]));
   if (opacity !== undefined)
     return Math.max(0, Math.min(1, opacity > 1 ? opacity / 255 : opacity));
+
+  const useTransparency = booleanValue(
+    xmlValue(source, ["useTrans", "useTransparency"]),
+  );
+  if (useTransparency === false) return undefined;
+
   const transparency = finiteValue(
-    xmlTextValue(source, ["transparency", "transparent"]),
+    xmlValue(source, ["transparency", "trans"]),
   );
   if (transparency !== undefined) {
     const normalized = transparency > 1 ? transparency / 255 : transparency;
@@ -323,8 +360,14 @@ function materialOpacity(source: string) {
 
 function materialTextureName(source: string) {
   const candidates = [
-    xmlTextValue(source, ["texture", "textureFile", "texture_file", "filename"]),
-    ...[...source.matchAll(/(?:texture|filename)[^<>"']*["']([^"']+)["']/gi)].map(
+    xmlValue(source, [
+      "textureFilename",
+      "textureFile",
+      "texture_file",
+      "filename",
+      "texture",
+    ]),
+    ...[...source.matchAll(/(?:texture|filename)[^<>"\']*["\']([^"\']+)["\']/gi)].map(
       (match) => match[1],
     ),
   ].filter((value): value is string => Boolean(value));
@@ -421,10 +464,10 @@ export async function extractSketchUpMaterialDefinitions(
       const baseColor = materialColor(source);
       const opacity = materialOpacity(source);
       const xScale = finiteValue(
-        xmlTextValue(source, ["xScale", "xscale", "textureWidth"]),
+        xmlValue(source, ["xScale", "xscale", "textureWidth"]),
       );
       const yScale = finiteValue(
-        xmlTextValue(source, ["yScale", "yscale", "textureHeight"]),
+        xmlValue(source, ["yScale", "yscale", "textureHeight"]),
       );
       definitions.push({
         archivePath: entry.name,
