@@ -319,7 +319,11 @@ export async function buildSourceFusionReport(
     }
   }
 
-  const roomSourceIds = unique(roomSheetRows.map((row) => row.assetId));
+  const roomSourceIds = unique(
+    roomSheetRows
+      .map((row) => row.assetId)
+      .filter((assetId): assetId is string => Boolean(assetId)),
+  );
   for (const assetId of roomSourceIds) {
     const rows = roomSheetRows.filter((row) => row.assetId === assetId);
     facts.push(
