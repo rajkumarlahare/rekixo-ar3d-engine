@@ -105,7 +105,7 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
   await expect(page.getByText("Selected for analysis")).toBeVisible();
   await expect(page.getByText("Detected floor levels", { exact: true })).toBeVisible();
 
-  const build = page.getByRole("button", { name: "Build smart draft" });
+  const build = page.getByRole("button", { name: "Build analyzed draft" });
   await expect(build).toBeEnabled();
   await build.click();
 
