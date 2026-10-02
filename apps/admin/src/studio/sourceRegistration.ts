@@ -238,12 +238,14 @@ export function estimateCadModelRegistration(
     ((analysis.bounds.min[0] + analysis.bounds.max[0]) / 2) * scale,
     ((analysis.bounds.min[2] + analysis.bounds.max[2]) / 2) * scale,
   ];
-  const targetCentre = worldModelPoint(
-    modelCentreLocal[0] / Math.max(scale, 1e-12),
-    modelCentreLocal[1] / Math.max(scale, 1e-12),
-    scale,
-    transform,
+  const rotatedModelCentre = rotatePoint(
+    modelCentreLocal,
+    transform?.rotationY ?? 0,
   );
+  const targetCentre: RoomPoint = [
+    rotatedModelCentre[0] + (transform?.x ?? 0),
+    rotatedModelCentre[1] + (transform?.z ?? 0),
+  ];
   const sourceCentre: RoomPoint = [(minX + maxX) / 2, (minZ + maxZ) / 2];
   const normalizer = Math.max(
     1,
@@ -306,7 +308,7 @@ export function estimateCadModelRegistration(
       (best.semanticError ?? 0) * (hasSemanticEvidence ? 0.8 : 0),
   );
   if (!hasSemanticEvidence) confidence = Math.min(confidence, 0.72);
-  if (ambiguous) confidence = Math.min(confidence, 0.7);
+  if (ambiguous) confidence = Math.min(confidence, 0.65);
   confidence = Number(confidence.toFixed(3));
 
   return {
