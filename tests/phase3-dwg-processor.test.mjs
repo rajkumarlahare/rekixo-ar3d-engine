@@ -233,17 +233,20 @@ test("Phase 3 refuses to assign one CAD graph when multiple floor identities con
 
 test("Phase 3 keeps DWG processing behind the authenticated Admin proxy", () => {
   const worker = fs.readFileSync("workers/admin-cloud.mjs", "utf8");
+  const proxy = fs.readFileSync("workers/cad-processor-proxy.mjs", "utf8");
   const client = fs.readFileSync("apps/admin/src/studio/dwgProcessor.ts", "utf8");
   const builder = fs.readFileSync("apps/admin/src/studio/smartDraftBuilder.ts", "utf8");
   const service = fs.readFileSync("services/cad-processor/server.mjs", "utf8");
 
-  assert.match(worker, /CAD_PROCESSOR_URL/);
-  assert.match(worker, /CAD_PROCESSOR_TOKEN/);
-  assert.match(worker, /sameOrigin\(request\)/);
-  assert.match(worker, /cad\.dwg_processed/);
+  assert.match(worker, /from "\.\/cad-processor-proxy\.mjs"/);
+  assert.match(worker, /processCadDwg\(request, env, actor, url\)/);
+  assert.match(proxy, /CAD_PROCESSOR_URL/);
+  assert.match(proxy, /CAD_PROCESSOR_TOKEN/);
+  assert.match(proxy, /sameOrigin\(request\)/);
+  assert.match(proxy, /cad\.dwg_processed/);
   assert.match(client, /\/3Dprojects\/api\/cloud\/cad\/process/);
   assert.doesNotMatch(client, /CAD_PROCESSOR_TOKEN/);
-  assert.match(service, /Authorization|authorization/);
+  assert.match(service, /authorization/);
   assert.match(service, /32 MB processor limit/);
   assert.match(builder, /preferMeasuredDwg/);
   assert.match(builder, /wall\.origin !== "cad-auto"/);
