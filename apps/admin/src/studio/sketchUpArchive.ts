@@ -130,10 +130,17 @@ function textureEntries(entries: readonly ZipEntry[]) {
   );
 }
 
+function blobBuffer(bytes: Uint8Array) {
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+}
+
 async function inflateRaw(bytes: Uint8Array) {
   if (typeof DecompressionStream === "undefined")
     throw Error("This browser cannot decompress SketchUp archive textures.");
-  const stream = new Blob([bytes])
+  const stream = new Blob([blobBuffer(bytes)])
     .stream()
     .pipeThrough(new DecompressionStream("deflate-raw"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
@@ -259,7 +266,7 @@ export async function extractSketchUpTextures(
         archivePath: entry.name,
         name,
         type: imageMime(base),
-        blob: new Blob([bytes], { type: imageMime(base) }),
+        blob: new Blob([blobBuffer(bytes)], { type: imageMime(base) }),
       });
     } catch (error) {
       issues.push(
