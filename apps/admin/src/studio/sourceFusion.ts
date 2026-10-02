@@ -5,6 +5,7 @@ import type { RoomSheetRow } from "./roomSheet";
 import { inspectSketchUpArchive } from "./sketchUpArchive";
 import { inspectDwgEvidence } from "./dwgEvidence";
 import { isDwgNormalizedAsset } from "./dwgNormalized";
+import { inspectDrsMetadata } from "./drsMetadata";
 import {
   detectSourceFusionConflicts,
   type SourceFusionConflict,
@@ -215,22 +216,6 @@ function fact(
     basis,
     status,
   };
-}
-
-async function inspectMetadataAsset(asset: Asset) {
-  if (asset.size > 8 * 1024 * 1024) return { resourceRefs: [] as string[], json: false };
-  const text = await asset.blob.text();
-  let json = false;
-  try {
-    JSON.parse(text);
-    json = true;
-  } catch {}
-  const refs = unique(
-    [...text.matchAll(/(?:[A-Za-z]:)?[^\s"'<>]+\.(?:png|jpe?g|webp|tiff?|exr|hdr|dds|ktx2|fbx|obj|glb|gltf|skp|skb)/gi)]
-      .map((match) => match[0].replaceAll("\\", "/"))
-      .slice(0, 500),
-  );
-  return { resourceRefs: refs, json };
 }
 
 export async function buildSourceFusionReport(
@@ -473,10 +458,50 @@ export async function buildSourceFusionReport(
   }
 
   for (const asset of files.filter((entry) => /\.(drs|json)$/i.test(entry.name))) {
-    const inspection = await inspectMetadataAsset(asset);
+    const inspection = await inspectDrsMetadata(asset);
     const item = items.find((entry) => entry.assetId === asset.id);
     if (!item) continue;
+
     if (inspection.json) item.findings.push("Readable JSON metadata detected.");
+    if (inspection.format === "d5-design") {
+      item.findings.push("Structured D5 Design metadata detected.");
+      item.support = "partial";
+    }
+    item.warnings.push(...inspection.issues);
+
+    if (inspection.title)
+      facts.push(
+        fact(
+          asset.id,
+          "metadata.title",
+          inspection.title,
+          1,
+          "Literal metadata title",
+        ),
+      );
+    if (inspection.source)
+      facts.push(
+        fact(
+          asset.id,
+          "metadata.authoring-source",
+          inspection.source,
+          1,
+          "Literal metadata authoring source",
+        ),
+      );
+    if (inspection.sketchUpRef) {
+      item.findings.push("Metadata links a SketchUp design source.");
+      facts.push(
+        fact(
+          asset.id,
+          "metadata.sketchup-ref",
+          inspection.sketchUpRef,
+          1,
+          "Literal SketchUp package reference from metadata",
+        ),
+      );
+    }
+
     if (inspection.resourceRefs.length) {
       item.findings.push(
         `${inspection.resourceRefs.length} resource reference(s) discovered.`,
@@ -484,13 +509,153 @@ export async function buildSourceFusionReport(
       facts.push(
         fact(
           asset.id,
+          "metadata.resource-count",
+          inspection.resourceRefs.length,
+          1,
+          "Structured/literal metadata resource references",
+        ),
+        fact(
+          asset.id,
           "metadata.resource-refs",
           inspection.resourceRefs,
-          0.9,
-          "Literal resource paths found in metadata",
+          inspection.format === "d5-design" ? 0.99 : 0.9,
+          inspection.format === "d5-design"
+            ? "D5 dependency list and literal metadata resource paths"
+            : "Literal resource paths found in metadata",
         ),
       );
     }
+    if (inspection.resourceRoots.length)
+      facts.push(
+        fact(
+          asset.id,
+          "metadata.resource-roots",
+          inspection.resourceRoots,
+          0.98,
+          "Top-level resource namespaces observed in metadata",
+        ),
+      );
+    if (inspection.productIds.length) {
+      item.findings.push(
+        `${inspection.productIds.length} dependent product reference(s) discovered.`,
+      );
+      facts.push(
+        fact(
+          asset.id,
+          "metadata.product-count",
+          inspection.productIds.length,
+          1,
+          "Structured metadata product dependency list",
+        ),
+      );
+    }
+    if (inspection.pluginVersions.length)
+      facts.push(
+        fact(
+          asset.id,
+          "metadata.plugin-versions",
+          inspection.pluginVersions,
+          1,
+          "Literal DCC plugin version metadata",
+        ),
+      );
+    if (inspection.clientVersions.length)
+      facts.push(
+        fact(
+          asset.id,
+          "metadata.client-versions",
+          inspection.clientVersions,
+          1,
+          "Literal client version metadata",
+        ),
+      );
+    if (inspection.maxLength !== undefined)
+      facts.push(
+        fact(
+          asset.id,
+          "metadata.max-length",
+          inspection.maxLength,
+          0.95,
+          "Literal metadata detail_Info value; not geometry truth",
+        ),
+      );
+    if (inspection.startLocation)
+      facts.push(
+        fact(
+          asset.id,
+          "metadata.start-location",
+          [
+            inspection.startLocation.x,
+            inspection.startLocation.y,
+            inspection.startLocation.z,
+          ],
+          0.95,
+          "Literal D5 start location; coordinate-system evidence only",
+        ),
+      );
+    if (inspection.floorCenter)
+      facts.push(
+        fact(
+          asset.id,
+          "metadata.floor-center",
+          [
+            inspection.floorCenter.x,
+            inspection.floorCenter.y,
+            inspection.floorCenter.z,
+          ],
+          0.95,
+          "Literal D5 floor center; coordinate-system evidence only",
+        ),
+      );
+    inspection.roomCenters.forEach((centre, index) =>
+      facts.push(
+        fact(
+          asset.id,
+          `metadata.room-center.${index + 1}`,
+          [centre.x, centre.y, centre.z],
+          0.9,
+          "Literal D5 room center; semantic metadata, not room geometry",
+          "suggested",
+        ),
+      ),
+    );
+    if (inspection.floorReference)
+      facts.push(
+        fact(
+          asset.id,
+          "metadata.floor-reference",
+          [
+            inspection.floorReference.width,
+            inspection.floorReference.height,
+            inspection.floorReference.angle,
+          ],
+          0.95,
+          "Literal floor-reference width/height/angle metadata",
+        ),
+      );
+
+    const attachedLeaves = new Set(
+      files
+        .filter((candidate) => candidate.id !== asset.id)
+        .map((candidate) =>
+          candidate.name.replaceAll("\\", "/").split("/").pop()?.toLowerCase(),
+        )
+        .filter((value): value is string => Boolean(value)),
+    );
+    const attachedResourceRefs = inspection.resourceRefs.filter((value) => {
+      const leaf = value.replaceAll("\\", "/").split("/").pop()?.toLowerCase();
+      return Boolean(leaf && attachedLeaves.has(leaf));
+    });
+    if (attachedResourceRefs.length)
+      facts.push(
+        fact(
+          asset.id,
+          "metadata.attached-resource-refs",
+          attachedResourceRefs,
+          1,
+          "Metadata dependency leaf matches an attached project source",
+        ),
+      );
   }
 
   for (const asset of files.filter((entry) => /\.dwg$/i.test(entry.name))) {
