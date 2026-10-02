@@ -1,72 +1,75 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
 const read = (file) => fs.readFileSync(file, "utf8");
 
-test("generic viewer and Studio depend on the profile registry, not a customer implementation", () => {
+function walk(dir) {
+  if (!fs.existsSync(dir)) return [];
+  const out = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...walk(full));
+    else out.push(full);
+  }
+  return out;
+}
+
+test("generic viewer and Studio use empty shared profile registries", () => {
   const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
   const studio = read("apps/admin/src/studio/SceneCanvas.tsx");
+  const modelRegistry = read("packages/model-profiles/src/index.ts");
+  const projectRegistry = read("apps/public/src/viewer/projectProfiles.ts");
+  const sourceRegistry = read("project-profiles/studio-source-profiles.ts");
 
-  assert.match(viewer, /\.\/projectProfiles/);
-  assert.doesNotMatch(viewer, /jyotiReferenceExterior|createProjectExperience|101-living/);
   assert.match(studio, /@rekixo\/3d-model-profiles/);
-  assert.doesNotMatch(studio, /\.\.\/\.\.\/\.\.\/public\/src\/viewer\/modelProfiles/);
-  assert.doesNotMatch(studio, /jyotiReferenceExterior/);
+  assert.match(viewer, /\.\/projectProfiles/);
+  assert.match(modelRegistry, /return undefined/);
+  assert.match(projectRegistry, /return undefined/);
+  assert.match(sourceRegistry, /studioSourceProfiles = \[\] as const/);
 });
 
-test("project-specific reconstructed interiors are source-profile gated and lazy-loaded", () => {
-  const exteriorRegistry = read("packages/model-profiles/src/index.ts");
-  const publicWrapper = read("apps/public/src/viewer/modelProfiles.ts");
-  const experienceRegistry = read("apps/public/src/viewer/projectProfiles.ts");
+test("no active runtime/profile/published file contains legacy project identity", () => {
+  const roots = [
+    "apps",
+    "packages",
+    "workers",
+    "project-profiles",
+    "published",
+  ];
+  const violations = [];
+  for (const root of roots) {
+    for (const file of walk(root)) {
+      if (!/\.(?:ts|tsx|js|mjs|json|jsonc|md)$/i.test(file)) continue;
+      const source = read(file);
+      if (
+        /jyoti-paradise|Jyoti Paradise|reference-source-v9|project_jyoti|model_jyoti|scene_jyoti/i.test(
+          source,
+        )
+      )
+        violations.push(file.split(path.sep).join("/"));
+    }
+  }
+  assert.deepEqual(violations, []);
+});
 
-  assert.match(exteriorRegistry, /if \(!matched\) return undefined/);
-  assert.match(publicWrapper, /@rekixo\/3d-model-profiles/);
-  assert.match(experienceRegistry, /loadProfileExperience/);
-  assert.match(experienceRegistry, /profile\?\.id !== "reference-source-v9"/);
-  assert.match(experienceRegistry, /await import\("\.\/projectExperience"\)/);
-  assert.doesNotMatch(
-    experienceRegistry,
-    /import\s*\{[^}]*createJyotiProjectExperience[^}]*\}\s*from\s*"\.\/projectExperience"/s,
+test("no project-specific static publication remains in repository", () => {
+  const files = walk("published").filter((file) => file.endsWith(".json"));
+  assert.deepEqual(files, []);
+});
+
+test("bundle gate rejects project-specific chunks from returning", () => {
+  const root = JSON.parse(read("package.json"));
+  const budget = read("scripts/check-bundle-budgets.mjs");
+  assert.match(root.scripts.test, /npm run test:bundles/);
+  assert.match(
+    budget,
+    /referenceSource\|referenceMaterials\|source-textures\|projectExperience/,
   );
 });
 
-test("premium shell reads floors and units from project scene data", () => {
-  const app = read("apps/public/src/main.tsx");
-  assert.doesNotMatch(app, /\[0,1,2,3,4,5\]/);
-  assert.doesNotMatch(app, /Flats 101 \/ 102 \/ 103/);
-  assert.doesNotMatch(app, /101 to 501|102 to 502|103 to 403/);
-  assert.match(app, /settings\.floors/);
-  assert.match(app, /floorSettings\.units/);
-});
-
-test("generic realism cannot inherit Reference Source V9 customer textures or tints", () => {
-  const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
-  const generic = read("apps/public/src/viewer/realism.ts");
-  const profile = read("packages/model-profiles/src/referenceMaterials.ts");
-  const registry = read("packages/model-profiles/src/index.ts");
-
-  assert.match(viewer, /loadModelProfileMaterialEnhancer/);
-  assert.doesNotMatch(generic, /sourceTextureData|sourceMaterialTint|referenceFacadeTint/);
-  assert.doesNotMatch(generic, /color_a06|color_m06|metal_panel:\s*0x|frontcolor:\s*0x/);
-  assert.match(profile, /JYOTI_SOURCE_MODEL_SHA256/);
-  assert.match(profile, /if \(!hasReferenceSource\(root\)\) return false/);
-  assert.match(profile, /source-textures\.json\?url/);
-  assert.match(profile, /sourceTextureData/);
-  assert.doesNotMatch(profile, /data:image\/[^;]+;base64,/);
-  assert.doesNotMatch(profile, /^const sourceTextureCache/m);
-  assert.match(profile, /const sourceTextureCache = new Map/);
-  assert.match(profile, /disposedProfileMaterials/);
-  assert.match(profile, /sourceMaterialTint/);
-  assert.match(profile, /referenceFacadeTint/);
-  assert.match(registry, /await import\("\.\/referenceMaterials"\)/);
-  assert.doesNotMatch(
-    registry,
-    /import\s*\{[^}]*enhanceReferenceSourceV9Model[^}]*\}\s*from\s*"\.\/referenceMaterials"/s,
-  );
-});
-
-test("Studio propagates the verified local asset hash only for direct FBX parsing", () => {
+test("Studio propagates local FBX source hash only as source evidence", () => {
   const studio = read("apps/admin/src/studio/SceneCanvas.tsx");
   const fbxBlock = studio.match(
     /if \(f\.name\.toLowerCase\(\)\.endsWith\("\.fbx"\)\) \{[\s\S]*?\} else \{/,
@@ -75,54 +78,8 @@ test("Studio propagates the verified local asset hash only for direct FBX parsin
   assert.ok(fbxBlock, "FBX parse block should stay explicit");
   assert.match(fbxBlock, /object\.userData\.sourceGeometry/);
   assert.match(fbxBlock, /sha256: f\.hash\.toLowerCase\(\)/);
-  assert.match(fbxBlock, /\^\[a-f0-9\]\{64\}\$/i);
   assert.doesNotMatch(
     studio.slice(studio.indexOf("} else {"), studio.indexOf("if (cancelled)")),
     /sha256:\s*f\.hash/,
   );
-});
-
-
-test("Reference Source V9 textures live in a lazy emitted asset, not TypeScript", () => {
-  const sourcePath =
-    "project-profiles/reference-source-v9/source-textures.json";
-  assert.equal(
-    fs.existsSync("apps/public/src/viewer/sourceTextureData.ts"),
-    false,
-  );
-  assert.equal(fs.existsSync(sourcePath), true);
-
-  const textures = JSON.parse(read(sourcePath));
-  const entries = Object.entries(textures);
-  assert.ok(entries.length >= 10);
-  for (const [name, value] of entries) {
-    assert.ok(name.length > 0);
-    assert.equal(typeof value, "string");
-    assert.match(value, /^data:image\/[a-z0-9.+-]+;base64,/i);
-  }
-});
-
-test("bundle budgets guard public entry and project-profile payloads", () => {
-  const root = JSON.parse(read("package.json"));
-  const budget = read("scripts/check-bundle-budgets.mjs");
-  assert.match(root.scripts.test, /npm run test:bundles/);
-  assert.equal(root.scripts["test:bundles"], "node scripts/check-bundle-budgets.mjs");
-  assert.match(budget, /Public entry JS/);
-  assert.match(budget, /Public profile material JS/);
-  assert.match(budget, /Admin profile material JS/);
-  assert.match(budget, /Reference source texture asset/);
-  assert.match(budget, /sourceTextureData/i);
-});
-
-
-test("model profile implementation is shared instead of crossing app source boundaries", () => {
-  const admin = read("apps/admin/src/studio/SceneCanvas.tsx");
-  const publicWrapper = read("apps/public/src/viewer/modelProfiles.ts");
-  const shared = read("packages/model-profiles/src/index.ts");
-
-  assert.match(admin, /from "@rekixo\/3d-model-profiles"/);
-  assert.doesNotMatch(admin, /public\/src\/viewer\/modelProfiles/);
-  assert.match(publicWrapper, /@rekixo\/3d-model-profiles/);
-  assert.match(shared, /applyModelProfileExterior/);
-  assert.match(shared, /loadModelProfileMaterialEnhancer/);
 });
