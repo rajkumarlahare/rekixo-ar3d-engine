@@ -10,6 +10,7 @@ import SceneCanvas, {
 import ReferenceWorkspace from "./ReferenceWorkspace";
 import FloorRoomReview from "./FloorRoomReview";
 import FurnitureShelf from "./FurnitureShelf";
+import MaterialQuickEditor from "./MaterialQuickEditor";
 import VisualRoomMapper, {
   type RoomMapAction,
 } from "./VisualRoomMapper";
@@ -97,10 +98,6 @@ import {
   type QuickSourceSetup,
 } from "./sourcePackSetup";
 import { floorSkeletonStatus } from "./floorSkeleton";
-import {
-  MATERIAL_PRESETS,
-  suggestedMaterialPreset,
-} from "./materialPresets";
 import {
   APPEARANCE_PRESETS,
   activeAppearancePreset,
@@ -1107,9 +1104,6 @@ export default function Studio() {
     materialSummary = modelMaterials.find(
       (entry) => entry.name === selectedMaterial,
     ),
-    suggestedFinishPreset = selectedMaterial
-      ? suggestedMaterialPreset(selectedMaterial)
-      : undefined,
     sourceTypeCounts = files.reduce<Record<string, number>>((counts, file) => {
       const extension = file.name.toLowerCase().split(".").pop() || "file";
       counts[extension] = (counts[extension] ?? 0) + 1;
@@ -1385,15 +1379,6 @@ export default function Studio() {
       },
     });
   }
-  function applyMaterialPreset(presetId: string) {
-    const preset = MATERIAL_PRESETS.find((entry) => entry.id === presetId);
-    if (!preset || !selectedMaterial) return;
-    patchMaterial(preset.override);
-    setMessage(
-      `${preset.label} applied to ${selectedMaterial}. Source material bytes remain unchanged.`,
-    );
-  }
-
   function resetMaterial() {
     if (!selectedMaterial) return;
     edit({
@@ -5150,138 +5135,15 @@ export default function Studio() {
             </details>
           </fieldset>
           {view === "building" && (
-            <details className="editor-materials editor-inspector-details">
-              <summary>Materials</summary>
-              {modelMaterials.length ? (
-                <>
-                  <label>
-                    Model material
-                    <select
-                      value={selectedMaterial}
-                      onChange={(event) => setSelectedMaterial(event.target.value)}
-                      disabled={Boolean(review) || busy}
-                    >
-                      {modelMaterials.map((material) => (
-                        <option key={material.name} value={material.name}>
-                          {material.name} · {material.meshCount} mesh
-                          {material.meshCount === 1 ? "" : "es"}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {materialSummary && (
-                    <fieldset disabled={Boolean(review) || busy}>
-                      <div
-                        className="material-preset-grid"
-                        role="group"
-                        aria-label="Quick material finishes"
-                      >
-                        {MATERIAL_PRESETS.map((preset) => {
-                          const recommended =
-                            suggestedFinishPreset?.id === preset.id;
-                          return (
-                            <button
-                              key={preset.id}
-                              type="button"
-                              className={
-                                recommended
-                                  ? "material-preset recommended"
-                                  : "material-preset"
-                              }
-                              title={preset.detail}
-                              onClick={() => applyMaterialPreset(preset.id)}
-                            >
-                              <span
-                                className={`material-preset-swatch material-preset-swatch--${preset.id}`}
-                                aria-hidden="true"
-                              />
-                              <span>
-                                <b>{preset.label}</b>
-                                <small>
-                                  {recommended ? "Suggested" : preset.detail}
-                                </small>
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <details className="material-fine-tune">
-                        <summary>Fine tune material</summary>
-                      <div className="material-color-row">
-                        <label>
-                          Base color
-                          <input
-                            type="color"
-                            value={
-                              materialOverride?.baseColor ??
-                              materialSummary.baseColor
-                            }
-                            onChange={(event) =>
-                              patchMaterial({ baseColor: event.target.value })
-                            }
-                          />
-                        </label>
-                        <label>
-                          Emissive
-                          <input
-                            type="color"
-                            value={
-                              materialOverride?.emissive ??
-                              materialSummary.emissive
-                            }
-                            onChange={(event) =>
-                              patchMaterial({ emissive: event.target.value })
-                            }
-                          />
-                        </label>
-                      </div>
-                      {field(
-                        "Roughness",
-                        materialOverride?.roughness ??
-                          materialSummary.roughness,
-                        (roughness) => patchMaterial({ roughness }),
-                        0.05,
-                      )}
-                      {field(
-                        "Metalness",
-                        materialOverride?.metalness ??
-                          materialSummary.metalness,
-                        (metalness) => patchMaterial({ metalness }),
-                        0.05,
-                      )}
-                      {field(
-                        "Opacity",
-                        materialOverride?.opacity ?? materialSummary.opacity,
-                        (opacity) => patchMaterial({ opacity }),
-                        0.05,
-                      )}
-                      {field(
-                        "Emissive intensity",
-                        materialOverride?.emissiveIntensity ??
-                          materialSummary.emissiveIntensity,
-                        (emissiveIntensity) =>
-                          patchMaterial({ emissiveIntensity }),
-                        0.1,
-                      )}
-                      <button
-                        type="button"
-                        disabled={!materialOverride}
-                        onClick={resetMaterial}
-                      >
-                        Reset material override
-                      </button>
-                      </details>
-                      <small>
-                        Quick finishes change only the runtime look; imported source
-                        bytes stay unchanged.
-                      </small>
-                    </fieldset>
-                  )}
-                </>
-              ) : (
-                <small>Load the building model to inspect editable runtime materials.</small>
-              )}
-            </details>
+            <MaterialQuickEditor
+              materials={modelMaterials}
+              selected={selectedMaterial}
+              override={materialOverride}
+              disabled={Boolean(review) || busy}
+              onSelect={setSelectedMaterial}
+              onPatch={patchMaterial}
+              onReset={resetMaterial}
+            />
           )}
           {view === "building" && (
             <section className="editor-lighting" aria-label="Lighting editor">
