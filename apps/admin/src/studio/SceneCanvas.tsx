@@ -12,7 +12,10 @@ import { addFurnitureVisual } from "./furnitureVisual";
 import {
   installCanvasFurnitureDrop,
   placeCanvasFurnitureAtPointer,
+  type CanvasFurniturePlacement,
+  type CanvasFurnitureResult,
 } from "./canvasFurniturePlacement";
+import CanvasAuthoringHints from "./CanvasAuthoringHints";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -126,17 +129,8 @@ interface Props {
   onRoomDraw?: (result: RoomDrawResult) => void;
   onRoomPolygonDraw?: (points: RoomPoint[]) => void;
   onRoomPolygonChange?: (roomId: string, points: RoomPoint[]) => void;
-  furniturePlacement?: {
-    enabled: boolean;
-    kind: Kind;
-    roomId: string;
-  };
-  onFurniturePlace?: (placement: {
-    kind: Kind;
-    roomId: string;
-    worldX: number;
-    worldZ: number;
-  }) => void;
+  furniturePlacement?: CanvasFurniturePlacement;
+  onFurniturePlace?: (placement: CanvasFurnitureResult) => void;
   onFurniturePlacementCancel?: () => void;
   onWalkRoomChange?: (roomId: string, openingId: string) => void;
   isolateFloorId?: string;
@@ -2014,27 +2008,12 @@ export default function SceneCanvas(props: Props) {
           {status}
         </div>
       )}
-      {props.furniturePlacement?.enabled && (
-        <div className="room-draw-hint">
-          Tap inside the room to place · desktop: drag a furniture card onto the canvas · Esc cancels
-        </div>
-      )}
-      {props.roomStamp?.enabled && (
-        <div className="room-draw-hint">
-          Click or tap once to place the exact room-sheet size · drag later to fine-tune
-        </div>
-      )}
-      {props.roomDraw?.enabled && (
-        <div className="room-draw-hint">
-          Drag from one room corner to the opposite corner · release to map
-        </div>
-      )}
-      {props.roomPolygonDraw?.enabled && (
-        <div className="room-draw-hint">
-          Click room corners · wall/vertex snap is active · click first corner
-          or press Enter to finish · Esc cancels
-        </div>
-      )}
+      <CanvasAuthoringHints
+        furniture={Boolean(props.furniturePlacement?.enabled)}
+        stamp={Boolean(props.roomStamp?.enabled)}
+        room={Boolean(props.roomDraw?.enabled)}
+        polygon={Boolean(props.roomPolygonDraw?.enabled)}
+      />
       {props.alignmentMode && (
         <div className="alignment-canvas-legend" aria-label="Alignment canvas legend">
           <span className="model-key">3D MODEL</span>
