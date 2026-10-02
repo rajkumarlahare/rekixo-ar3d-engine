@@ -143,6 +143,15 @@ function transformPoint(matrix: Matrix, x: number, y: number) {
   ] as const;
 }
 
+function viewportPoint(
+  viewport: { convertToViewportPoint(x: number, y: number): number[] },
+  x: number,
+  y: number,
+): [number, number] {
+  const value = viewportPoint(viewport, x, y);
+  return [Number(value[0] ?? 0), Number(value[1] ?? 0)];
+}
+
 function imagePixels(args: unknown[]) {
   const directWidth = typeof args[1] === "number" ? args[1] : undefined;
   const directHeight = typeof args[2] === "number" ? args[2] : undefined;
@@ -169,7 +178,7 @@ async function embeddedImageCandidates(
     getViewport(options: { scale: number }): {
       width: number;
       height: number;
-      convertToViewportPoint(x: number, y: number): [number, number];
+      convertToViewportPoint(x: number, y: number): number[];
     };
   },
   OPS: Record<string, number>,
@@ -210,7 +219,7 @@ async function embeddedImageCandidates(
       transformPoint(current, 1, 0),
       transformPoint(current, 0, 1),
       transformPoint(current, 1, 1),
-    ].map(([x, y]) => viewport.convertToViewportPoint(x, y));
+    ].map(([x, y]) => viewportPoint(viewport, x, y));
     const xs = corners.map((point) => point[0]);
     const ys = corners.map((point) => point[1]);
     const minX = Math.min(...xs);
@@ -262,7 +271,7 @@ function spatialLabels(
   viewport: {
     width: number;
     height: number;
-    convertToViewportPoint(x: number, y: number): [number, number];
+    convertToViewportPoint(x: number, y: number): number[];
   },
 ) {
   const labels: PdfSpatialLabel[] = [];
@@ -279,7 +288,7 @@ function spatialLabels(
     const tx = Number(row.transform[4]);
     const ty = Number(row.transform[5]);
     if (!Number.isFinite(tx) || !Number.isFinite(ty)) continue;
-    const [vx, vy] = viewport.convertToViewportPoint(tx, ty);
+    const [vx, vy] = viewportPoint(viewport, tx, ty);
     const width =
       typeof row.width === "number" && Number.isFinite(row.width)
         ? Math.abs(row.width) / Math.max(1, viewport.width)
