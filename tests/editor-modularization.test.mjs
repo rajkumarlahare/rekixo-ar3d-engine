@@ -16,6 +16,8 @@ test("large editor shells delegate focused responsibilities to modules", () => {
   assert.match(canvas, /from "\.\/sceneCanvasModel"/);
   assert.match(canvas, /from "\.\/sceneCanvasRooms"/);
   assert.match(canvas, /from "\.\/threeResources"/);
+  assert.match(canvas, /from "@rekixo\/3d-model-profiles"/);
+  assert.doesNotMatch(canvas, /public\/src\/viewer\/modelProfiles/);
   assert.doesNotMatch(canvas, /^function summarizeModelMaterials/m);
   assert.doesNotMatch(canvas, /^function roomSurface/m);
 
