@@ -90,7 +90,7 @@ test("Engine hard delete removes all project-owned records after R2 cleanup", ()
 });
 
 test("pending deletion freezes project recreation and project mutations", () => {
-  const worker = read("workers/project-deletion.mjs");
+  const admin = read("workers/admin-cloud.mjs");
   const migration = read(
     "database/migrations/0027_resumable_project_deletion_v1.sql",
   );
@@ -100,11 +100,11 @@ test("pending deletion freezes project recreation and project mutations", () => 
     /RAISE\(ABORT, 'Engine project deletion cleanup in progress'\)/,
   );
   assert.match(
-    worker,
+    admin,
     /Permanent project cleanup is in progress\. Finish that cleanup before creating another project\./,
   );
   assert.match(
-    worker,
+    admin,
     /Project mutations are frozen until it finishes\./,
   );
 });
