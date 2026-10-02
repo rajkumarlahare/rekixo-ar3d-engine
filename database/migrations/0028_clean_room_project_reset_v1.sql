@@ -1,4 +1,5 @@
 -- Clean-room reset for Rekixo AR3D Engine.
+-- Re-triggered after the pre-migration browser gate blocked the first deployment attempt.
 -- Removes all project-owned runtime data while preserving Engine authentication,
 -- global settings, schema, and migration history.
 
