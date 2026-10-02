@@ -9,7 +9,7 @@ import {
   type Scene3DType,
 } from "@rekixo/3d-contracts";
 import { publicProjectPath } from "@rekixo/3d-engine-core";
-import { ensureProject } from "../studio/cloud";
+import { deleteAllProjects, ensureProject } from "../studio/cloud";
 import { newProject, projectSlug } from "../studio/domain";
 import "./engine-dashboard.css";
 
@@ -66,6 +66,11 @@ export default function EngineDashboard() {
   const [createLocation, setCreateLocation] = useState("");
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState("");
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
+  const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -92,6 +97,7 @@ export default function EngineDashboard() {
         assertAdminProjectsPayload(body);
         const items = body.projects ?? [];
         setProjects(items);
+        setProjectsLoaded(true);
         const requested = requestedProjectSlug();
         setSelectedSlug((current) => {
           if (current && items.some((item) => item.slug === current)) return current;
@@ -104,6 +110,7 @@ export default function EngineDashboard() {
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return;
+        setProjectsLoaded(true);
         setError(
           reason instanceof Error ? reason.message : "Could not load 3D projects.",
         );
@@ -157,6 +164,41 @@ export default function EngineDashboard() {
     const url = new URL(window.location.href);
     url.searchParams.set("project", slug);
     window.history.replaceState({}, "", url);
+  }
+
+  async function deleteEveryProject() {
+    if (deleteConfirm !== "DELETE ALL PROJECTS") {
+      setDeleteError("DELETE ALL PROJECTS exactly type karein.");
+      return;
+    }
+
+    setDeleteBusy(true);
+    setDeleteError("");
+    try {
+      const result = await deleteAllProjects(projects.length, deleteConfirm);
+      if (result.remainingProjects !== 0)
+        throw new Error("Project registry empty nahi hua.");
+
+      setProjects([]);
+      setSelectedSlug("");
+      setStatus(undefined);
+      setSearch("");
+      setDeleteConfirm("");
+      setShowDeleteAll(false);
+      setProjectsLoaded(true);
+
+      const url = new URL(window.location.href);
+      url.searchParams.delete("project");
+      window.history.replaceState({}, "", url);
+    } catch (reason) {
+      setDeleteError(
+        reason instanceof Error
+          ? reason.message
+          : "Projects permanently delete nahi ho sake.",
+      );
+    } finally {
+      setDeleteBusy(false);
+    }
   }
 
   async function createProject() {
@@ -359,9 +401,42 @@ export default function EngineDashboard() {
               </div>
             ) : null}
           </div>
+
+          {projects.length > 0 ? (
+            <button
+              className="engine-delete-all"
+              type="button"
+              onClick={() => {
+                setDeleteError("");
+                setDeleteConfirm("");
+                setShowDeleteAll(true);
+              }}
+            >
+              Delete all projects
+            </button>
+          ) : null}
         </aside>
 
         <div className="engine-workspace">
+          {projectsLoaded && projects.length === 0 ? (
+            <section className="engine-empty-workspace">
+              <div className="engine-empty-workspace__icon">R</div>
+              <p className="engine-kicker">CLEAN ENGINE</p>
+              <h2>No 3D projects yet</h2>
+              <p>
+                Engine registry ab empty hai. Naya project create karne par hi Studio,
+                3D Jio Mapper aur Live workflow start hoga.
+              </p>
+              <button
+                className="engine-button engine-button--primary"
+                type="button"
+                onClick={() => setShowCreate(true)}
+              >
+                + Create First 3D Project
+              </button>
+            </section>
+          ) : (
+            <>
           <section className="engine-project-hero">
             <div>
               <p className="engine-kicker">SELECTED PROJECT</p>
@@ -499,8 +574,76 @@ export default function EngineDashboard() {
               <div><dt>Media</dt><dd>{assetPrefix}/media/</dd></div>
             </dl>
           </section>
+            </>
+          )}
         </div>
       </section>
+
+      {showDeleteAll ? (
+        <div className="engine-modal-backdrop" role="presentation">
+          <section
+            className="engine-create-modal engine-delete-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="engine-delete-all-title"
+          >
+            <div className="engine-create-modal__head">
+              <div>
+                <p className="engine-kicker">PERMANENT DELETE</p>
+                <h2 id="engine-delete-all-title">Delete all {projects.length} projects?</h2>
+                <p>
+                  D1 project data, releases, Studio drafts, 3D Jio placements aur
+                  project-owned R2 assets permanently delete honge.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDeleteAll(false)}
+                aria-label="Close delete all projects"
+                disabled={deleteBusy}
+              >
+                ×
+              </button>
+            </div>
+
+            <label>
+              <span>Confirmation</span>
+              <input
+                autoFocus
+                value={deleteConfirm}
+                onChange={(event) => setDeleteConfirm(event.target.value)}
+                placeholder="DELETE ALL PROJECTS"
+                autoComplete="off"
+              />
+            </label>
+
+            <div className="engine-delete-warning">
+              <strong>Ye undo nahi hoga.</strong>
+              <span>Existing public 3D URLs bhi project delete hote hi unavailable ho jayenge.</span>
+            </div>
+
+            {deleteError ? <p className="engine-create-error">{deleteError}</p> : null}
+
+            <div className="engine-create-modal__actions">
+              <button
+                type="button"
+                onClick={() => setShowDeleteAll(false)}
+                disabled={deleteBusy}
+              >
+                Cancel
+              </button>
+              <button
+                className="engine-delete-confirm"
+                type="button"
+                onClick={() => void deleteEveryProject()}
+                disabled={deleteBusy || deleteConfirm !== "DELETE ALL PROJECTS"}
+              >
+                {deleteBusy ? "Deleting everything…" : "Permanently delete all projects"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {showCreate ? (
         <div className="engine-modal-backdrop" role="presentation">
