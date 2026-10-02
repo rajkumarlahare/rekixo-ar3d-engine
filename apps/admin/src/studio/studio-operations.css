@@ -1210,7 +1210,8 @@
 
 
 /* Architectural source candidate review */
-.builder-architecture-review {
+.builder-architecture-review,
+.builder-auto-review {
   display: grid;
   gap: 10px;
   padding: 12px;
