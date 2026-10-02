@@ -3,6 +3,7 @@ import type { SmartProjectAnalysis } from "./projectAnalyzer";
 import {
   deriveCadWallGraph,
   deriveModelWallGraph,
+  fuseSourceWallGraphs,
   linkWallsToRooms,
 } from "./architectureGraph";
 import { detectRepeatedFloors } from "./repeatedFloorDetector";
@@ -143,23 +144,17 @@ export function buildSmartSceneDraft(
     project.scene.scale,
     project.scene.modelTransform,
   );
-  const cadFallback =
-    modelWalls.length < 3
-      ? deriveCadWallGraph(
-          analysis,
-          floors,
-          project.scene.scale,
-          project.scene.modelTransform,
-        )
-      : {
-          walls: [],
-          quarterTurn: false,
-          compatible: false,
-        };
-  const generatedWalls =
-    modelWalls.length >= 3 ? modelWalls : cadFallback.walls;
+  const cadGraph = deriveCadWallGraph(
+    analysis,
+    floors,
+    project.scene.scale,
+    project.scene.modelTransform,
+  );
+  const fusedWalls = fuseSourceWallGraphs(cadGraph.walls, modelWalls);
+  const generatedWalls = fusedWalls.walls;
   const retainedWalls = (project.scene.walls ?? []).filter(
-    (wall) => wall.origin !== "model-auto" || wall.reviewed,
+    (wall) =>
+      !["model-auto", "cad-auto"].includes(wall.origin) || wall.reviewed,
   );
   const retainedIds = new Set(retainedWalls.map((wall) => wall.id));
   const walls = [
@@ -191,10 +186,7 @@ export function buildSmartSceneDraft(
       floors: floors.length,
       autoTagged,
       walls: linkedWalls.length,
-      cadWalls:
-        modelWalls.length >= 3
-          ? 0
-          : generatedWalls.filter((wall) => wall.origin === "cad-auto").length,
+      cadWalls: generatedWalls.filter((wall) => wall.origin === "cad-auto").length,
       repeatedFloors: floors.filter((floor) => floor.repeatOfFloorId).length,
       autoRooms: autoRoomDraft.rooms.length,
       skippedRoomFloors: autoRoomDraft.skippedFloors.length,
