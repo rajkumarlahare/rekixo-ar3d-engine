@@ -487,7 +487,7 @@ export function duplicateFloor(p: Project, floorId: string): Project {
           return mapped ? [mapped] : [];
         }),
         reviewed: false,
-        reviewState: "suggested",
+        reviewState: "suggested" as const,
         sourceNodeName: undefined,
         sourceOccurrence: undefined,
         confidence: wall.origin === "manual" ? wall.confidence : undefined,
@@ -507,7 +507,7 @@ export function duplicateFloor(p: Project, floorId: string): Project {
           return mapped ? [mapped] : [];
         }),
         reviewed: false,
-        reviewState: "suggested",
+        reviewState: "suggested" as const,
         sourceNodeName: undefined,
         sourceOccurrence: undefined,
         confidence: undefined,
