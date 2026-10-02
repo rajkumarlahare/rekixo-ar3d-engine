@@ -373,6 +373,7 @@ export function deriveCadWallGraph(
       reason: "No normalized CAD wall geometry is ready.",
     };
 
+  const auditKind: "dwg" | "dxf" = auditKind === "dwg" ? "dwg" : "dxf";
   const floorIndex = cadFloorIndex(audit, floors.length);
   const floor = floorIndex !== undefined ? floors[floorIndex] : undefined;
   if (!floor)
@@ -482,7 +483,7 @@ export function deriveCadWallGraph(
         segment.thickness <= 1.2
           ? segment.thickness
           : undefined;
-      if (audit.kind === "dwg" && measuredThickness === undefined)
+      if (auditKind === "dwg" && measuredThickness === undefined)
         return undefined;
       if (measuredThickness !== undefined) measuredWallCount += 1;
 
@@ -526,12 +527,12 @@ export function deriveCadWallGraph(
   return {
     walls,
     auditAssetId: audit.assetId,
-    auditKind: audit.kind,
+    auditKind,
     measuredWallCount,
     floorIndex,
     quarterTurn,
     compatible: walls.length > 0,
-    ...(!walls.length && audit.kind === "dwg"
+    ...(!walls.length && auditKind === "dwg"
       ? {
           reason:
             "DWG wall evidence is present, but no measured wall centerlines are safe enough to author automatically.",
