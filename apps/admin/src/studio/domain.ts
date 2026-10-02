@@ -83,6 +83,22 @@ export interface Opening {
   /** suggested/auto_ready never means a human reviewed this opening. */
   reviewState?: ReviewState;
 }
+export type VerticalConnectorKind = "stair" | "lift";
+export interface VerticalConnector {
+  id: string;
+  kind: VerticalConnectorKind;
+  floorIds: string[];
+  x: number;
+  z: number;
+  reviewed: boolean;
+  /** suggested/auto_ready never means a human reviewed this connector. */
+  reviewState?: ReviewState;
+  confidence?: number;
+  sourceAssetId?: string;
+  sourceEntity?: string;
+  sourceNodeName?: string;
+  sourceOccurrence?: number;
+}
 export interface Asset {
   id: string;
   projectId: string;
@@ -140,6 +156,8 @@ export type ModelNodeSemantic =
   | "door"
   | "window"
   | "opening"
+  | "stair"
+  | "lift"
   | "ignore";
 export interface ModelNodeTag {
   nodeName: string;
@@ -159,6 +177,7 @@ export interface Scene {
   furniture: Furniture[];
   walls?: Wall[];
   openings?: Opening[];
+  verticalConnectors?: VerticalConnector[];
   /** Source/authoring model used for analysis, mesh tags and Studio editing. */
   modelId?: string;
   /** Web-safe model frozen into customer releases. Falls back to modelId. */
@@ -566,6 +585,9 @@ export function validateScene(s: Scene): void {
       (!Array.isArray(s.walls) || s.walls.length > 10000)) ||
     (s.openings !== undefined &&
       (!Array.isArray(s.openings) || s.openings.length > 5000)) ||
+    (s.verticalConnectors !== undefined &&
+      (!Array.isArray(s.verticalConnectors) ||
+        s.verticalConnectors.length > 1000)) ||
     !number(s.scale, 0.0001, 10000)
   )
     throw Error("Invalid scene or scene limits exceeded.");
@@ -574,7 +596,8 @@ export function validateScene(s: Scene): void {
     !unique(s.rooms) ||
     !unique(s.furniture) ||
     (s.walls !== undefined && !unique(s.walls)) ||
-    (s.openings !== undefined && !unique(s.openings))
+    (s.openings !== undefined && !unique(s.openings)) ||
+    (s.verticalConnectors !== undefined && !unique(s.verticalConnectors))
   )
     throw Error("Duplicate or invalid object IDs.");
   if (s.modelId !== undefined && !text(s.modelId, 100))
@@ -674,9 +697,15 @@ export function validateScene(s: Scene): void {
         (tag.confidence !== undefined &&
           !number(tag.confidence, 0, 1)) ||
         (tag.semantic !== undefined &&
-          !["wall", "door", "window", "opening", "ignore"].includes(
-            tag.semantic,
-          )) ||
+          ![
+            "wall",
+            "door",
+            "window",
+            "opening",
+            "stair",
+            "lift",
+            "ignore",
+          ].includes(tag.semantic)) ||
         (tag.semanticAssignment !== undefined &&
           !["auto", "manual"].includes(tag.semanticAssignment)) ||
         (tag.semanticConfidence !== undefined &&
@@ -902,6 +931,48 @@ export function furnitureExtents(f: Furniture) {
     x: (Math.abs(Math.cos(a)) * c.width + Math.abs(Math.sin(a)) * c.depth) / 2,
     z: (Math.abs(Math.sin(a)) * c.width + Math.abs(Math.cos(a)) * c.depth) / 2,
   };
+
+  for (const connector of s.verticalConnectors ?? []) {
+    if (
+      !text(connector.id, 100) ||
+      !["stair", "lift"].includes(connector.kind) ||
+      !Array.isArray(connector.floorIds) ||
+      !connector.floorIds.length ||
+      connector.floorIds.length > 100 ||
+      new Set(connector.floorIds).size !== connector.floorIds.length ||
+      connector.floorIds.some(
+        (floorId) =>
+          !text(floorId, 100) ||
+          !s.floors.some((floor) => floor.id === floorId),
+      ) ||
+      !number(connector.x, -10000, 10000) ||
+      !number(connector.z, -10000, 10000) ||
+      typeof connector.reviewed !== "boolean" ||
+      (connector.reviewState !== undefined &&
+        !["suggested", "auto_ready", "human_reviewed"].includes(
+          connector.reviewState,
+        )) ||
+      (connector.reviewState === "human_reviewed" &&
+        connector.reviewed !== true) ||
+      (connector.reviewed === true &&
+        connector.reviewState !== undefined &&
+        connector.reviewState !== "human_reviewed") ||
+      (connector.confidence !== undefined &&
+        !number(connector.confidence, 0, 1)) ||
+      (connector.sourceAssetId !== undefined &&
+        !text(connector.sourceAssetId, 100)) ||
+      (connector.sourceEntity !== undefined &&
+        !text(connector.sourceEntity, 200)) ||
+      (connector.sourceNodeName !== undefined &&
+        !text(connector.sourceNodeName, 500)) ||
+      (connector.sourceOccurrence !== undefined &&
+        (!Number.isInteger(connector.sourceOccurrence) ||
+          connector.sourceOccurrence < 1 ||
+          connector.sourceOccurrence > 100000 ||
+          !connector.sourceNodeName))
+    )
+      throw Error("Invalid stair/lift connector.");
+  }
 }
 export function validateProject(p: Project): void {
   if (
@@ -956,6 +1027,12 @@ export function validateProject(p: Project): void {
     for (const room of s.rooms)
       if (room.sourceAssetId && !p.assets.includes(room.sourceAssetId))
         throw Error("Room source asset is missing.");
+    for (const connector of s.verticalConnectors ?? [])
+      if (
+        connector.sourceAssetId &&
+        !p.assets.includes(connector.sourceAssetId)
+      )
+        throw Error("Stair/lift source asset is missing.");
   }
 }
 export function snapshot(p: Project, name: string): Project {
