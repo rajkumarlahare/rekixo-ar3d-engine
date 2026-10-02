@@ -15,7 +15,60 @@ test("Engine hard delete is authenticated, same-origin and exact-confirmation ga
   assert.match(worker, /Project list changed\. Refresh before permanent deletion/);
 });
 
-test("Engine hard delete removes all project-owned storage and project records", () => {
+test("permanent deletion uses a persistent resumable job before touching R2", () => {
+  const worker = read("workers/admin-cloud.mjs");
+  const migration = read(
+    "database/migrations/0027_resumable_project_deletion_v1.sql",
+  );
+
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS engine_deletion_jobs_3d/);
+  assert.match(
+    migration,
+    /status IN \('running','cleanup_pending','db_cleanup_pending','completed'\)/,
+  );
+  assert.match(
+    migration,
+    /CREATE UNIQUE INDEX IF NOT EXISTS idx_engine_deletion_jobs_3d_one_active/,
+  );
+  assert.match(
+    migration,
+    /CREATE TRIGGER IF NOT EXISTS trg_projects_3d_block_insert_during_delete/,
+  );
+
+  assert.match(worker, /async function startDeletionJob/);
+  assert.match(worker, /"projects\.delete_started"/);
+  assert.match(
+    worker,
+    /UPDATE projects_3d SET status='archived',updated_at=\? WHERE id=\?/,
+  );
+  assert.match(
+    worker,
+    /UPDATE experiences_3d SET lifecycle='archived',updated_at=\? WHERE project_id=\?/,
+  );
+});
+
+test("R2 cleanup is retryable and database records are deleted only after storage cleanup", () => {
+  const worker = read("workers/admin-cloud.mjs");
+  const runStart = worker.indexOf("async function runDeletionJob");
+  const startJob = worker.indexOf("async function startDeletionJob", runStart);
+  assert.ok(runStart >= 0 && startJob > runStart);
+  const block = worker.slice(runStart, startJob);
+
+  const r2Index = block.indexOf("deleteProjectOwnedObjects");
+  const dbIndex = block.indexOf("deleteProjectRecords");
+  assert.ok(r2Index >= 0 && dbIndex > r2Index);
+
+  assert.match(block, /"cleanup_pending"/);
+  assert.match(block, /"db_cleanup_pending"/);
+  assert.match(block, /retryable: true/);
+  assert.match(
+    block,
+    /Retry permanent deletion to resume/,
+  );
+  assert.match(block, /status='completed'/);
+});
+
+test("Engine hard delete removes all project-owned records after R2 cleanup", () => {
   const worker = read("workers/admin-cloud.mjs");
 
   assert.match(worker, /projectAssetPrefix\(slug\)/);
@@ -32,26 +85,47 @@ test("Engine hard delete removes all project-owned storage and project records",
   assert.match(worker, /DELETE FROM studio_assets_3d WHERE project_id=\?/);
   assert.match(worker, /DELETE FROM models_3d WHERE project_id=\?/);
   assert.match(worker, /DELETE FROM projects_3d WHERE id=\?/);
-  assert.match(worker, /projects\.all_deleted/);
+  assert.match(worker, /"projects\.all_deleted"/);
   assert.match(worker, /remainingProjects: 0/);
 });
 
-test("Dashboard requires typed destructive confirmation and renders a true empty state", () => {
+test("pending deletion freezes project recreation and project mutations", () => {
+  const worker = read("workers/admin-cloud.mjs");
+  const migration = read(
+    "database/migrations/0027_resumable_project_deletion_v1.sql",
+  );
+
+  assert.match(
+    migration,
+    /RAISE\(ABORT, 'Engine project deletion cleanup in progress'\)/,
+  );
+  assert.match(
+    worker,
+    /Permanent project cleanup is in progress\. Finish that cleanup before creating another project\./,
+  );
+  assert.match(
+    worker,
+    /Project mutations are frozen until it finishes\./,
+  );
+});
+
+test("Dashboard can discover and resume a cleanup after reload", () => {
   const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
   const cloud = read("apps/admin/src/studio/cloud.ts");
 
-  assert.match(cloud, /export async function deleteAllProjects/);
-  assert.match(dashboard, /Delete all projects/);
+  assert.match(cloud, /export interface CloudDeletionJob/);
+  assert.match(cloud, /export async function deletionStatus/);
+  assert.match(cloud, /deletion-status/);
+  assert.match(dashboard, /Finish project cleanup/);
+  assert.match(dashboard, /Finish permanent cleanup/);
+  assert.match(dashboard, /deletionJob\?\.expectedProjectCount \?\? projects\.length/);
+  assert.match(dashboard, /CLEANUP PENDING/);
   assert.match(dashboard, /DELETE ALL PROJECTS/);
-  assert.match(dashboard, /Permanently delete all projects/);
-  assert.match(dashboard, /No 3D projects yet/);
-  assert.match(dashboard, /Engine registry ab empty hai/);
-  assert.match(dashboard, /projectsLoaded && projects\.length === 0/);
 });
 
 test("delete-all does not mutate global Engine settings or authentication state", () => {
   const worker = read("workers/admin-cloud.mjs");
-  const start = worker.indexOf("async function hardDeleteAllProjects");
+  const start = worker.indexOf("async function deleteProjectOwnedObjects");
   const end = worker.indexOf("async function patchProject", start);
   assert.ok(start >= 0 && end > start);
   const block = worker.slice(start, end);

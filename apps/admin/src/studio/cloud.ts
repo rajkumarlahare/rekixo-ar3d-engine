@@ -27,6 +27,17 @@ export interface CloudProjectSummary {
   assetCount: number;
 }
 
+export interface CloudDeletionJob {
+  id: string;
+  status: "running" | "cleanup_pending" | "db_cleanup_pending";
+  expectedProjectCount: number;
+  deletedProjects: number;
+  deletedR2Objects: number;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CloudReleaseSummary {
   id: string;
   version: number;
@@ -234,12 +245,18 @@ export async function projects(
   }>(`${CLOUD_BASE}/projects?${params}`);
 }
 
+export async function deletionStatus() {
+  return api<{ job: CloudDeletionJob | null }>(`${CLOUD_BASE}/deletion-status`);
+}
+
 export async function deleteAllProjects(
   expectedProjectCount: number,
   confirm: string,
 ) {
   return api<{
     ok: true;
+    jobId?: string;
+    status: "completed";
     deletedProjects: number;
     deletedR2Objects: number;
     remainingProjects: number;
