@@ -43,6 +43,7 @@ export default function SmartProjectBuilder({
   onProjectMeta,
   onImportFiles,
   onAnalyze,
+  onAutoBuild,
   onPrepareWebModel,
   onRecoverSketchUpTextures,
   onApproveReadyWalls,
@@ -72,6 +73,7 @@ export default function SmartProjectBuilder({
   ) => void;
   onImportFiles: (files: File[]) => void;
   onAnalyze: () => void;
+  onAutoBuild: () => void;
   onPrepareWebModel: () => void;
   onRecoverSketchUpTextures: () => void;
   onApproveReadyWalls: () => void;
@@ -893,6 +895,13 @@ export default function SmartProjectBuilder({
           <button
             type="button"
             className="primary"
+            disabled={busy || modelCandidates.length === 0}
+            onClick={onAutoBuild}
+          >
+            Build automatically
+          </button>
+          <button
+            type="button"
             disabled={
               draftBuilt ||
               busy ||
@@ -901,7 +910,7 @@ export default function SmartProjectBuilder({
             }
             onClick={onBuildDraft}
           >
-            {draftBuilt ? "Draft built ✓" : "Build smart draft"}
+            {draftBuilt ? "Draft built ✓" : "Build analyzed draft"}
           </button>
           <button type="button" disabled={busy} onClick={onOpenEditor}>
             Review visually
