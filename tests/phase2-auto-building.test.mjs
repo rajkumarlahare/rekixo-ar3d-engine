@@ -28,6 +28,9 @@ const dwg = await import(
 const autoRooms = await import(
   asUrl(compile("apps/admin/src/studio/autoRoomDraft.ts"))
 );
+const autoReview = await import(
+  asUrl(compile("apps/admin/src/studio/autoBuildingReview.ts"))
+);
 
 function analysisFixture() {
   return {
@@ -335,4 +338,110 @@ test("Phase 2 PDF plan evidence and auto-orientation are wired into alignment", 
   assert.match(reference, /recommendedPdfPage/);
   assert.match(canvas, /score90 \+ 0\.08 < score0 \? 90 : 0/);
   assert.match(canvas, /90° plan orientation selected automatically/);
+});
+
+
+test("Phase 2 one-click review approves only conservative high-confidence suggestions", () => {
+  const scene = {
+    floors: [
+      { id: "f0", name: "Ground", elevation: 0 },
+      {
+        id: "f1",
+        name: "Floor 1",
+        elevation: 3,
+        repeatOfFloorId: "f0",
+        repeatConfidence: 0.95,
+        repeatReviewed: false,
+      },
+      {
+        id: "f2",
+        name: "Floor 2",
+        elevation: 6,
+        repeatOfFloorId: "f0",
+        repeatConfidence: 0.88,
+        repeatReviewed: false,
+      },
+    ],
+    rooms: [],
+    furniture: [],
+    walls: [
+      {
+        id: "ready",
+        floorId: "f0",
+        roomIds: [],
+        start: [0, 0],
+        end: [4, 0],
+        thickness: 0.12,
+        height: 2.8,
+        reviewed: false,
+        origin: "model-auto",
+        confidence: 0.94,
+      },
+      {
+        id: "review",
+        floorId: "f0",
+        roomIds: [],
+        start: [0, 1],
+        end: [4, 1],
+        thickness: 0.12,
+        height: 2.8,
+        reviewed: false,
+        origin: "model-auto",
+        confidence: 0.84,
+      },
+      {
+        id: "manual",
+        floorId: "f0",
+        roomIds: [],
+        start: [0, 2],
+        end: [4, 2],
+        thickness: 0.12,
+        height: 2.8,
+        reviewed: false,
+        origin: "manual",
+        confidence: 1,
+      },
+    ],
+    openings: [],
+    scale: 1,
+  };
+
+  const counts = autoReview.autoBuildingReviewCounts(scene);
+  assert.equal(counts.readyWalls, 1);
+  assert.equal(counts.wallReview, 2);
+  assert.equal(counts.readyRepeats, 1);
+  assert.equal(counts.repeatReview, 1);
+
+  const walls = autoReview.approveReadyModelWalls(scene);
+  assert.equal(walls.approved, 1);
+  assert.equal(walls.scene.walls.find((wall) => wall.id === "ready").reviewed, true);
+  assert.equal(walls.scene.walls.find((wall) => wall.id === "review").reviewed, false);
+  assert.equal(walls.scene.walls.find((wall) => wall.id === "manual").reviewed, false);
+
+  const repeats = autoReview.acceptReadyRepeatedFloors(walls.scene);
+  assert.equal(repeats.accepted, 1);
+  assert.equal(repeats.scene.floors[1].repeatReviewed, true);
+  assert.equal(repeats.scene.floors[2].repeatReviewed, false);
+});
+
+test("Phase 2 fast review UI and public sanitization are fail-closed", () => {
+  const builder = fs.readFileSync(
+    "apps/admin/src/studio/SmartProjectBuilder.tsx",
+    "utf8",
+  );
+  const studio = fs.readFileSync(
+    "apps/admin/src/studio/Studio.tsx",
+    "utf8",
+  );
+  const worker = fs.readFileSync(
+    "workers/studio-draft-validation.mjs",
+    "utf8",
+  );
+
+  assert.match(builder, /Approve \{autoReview\.readyWalls\} ready walls/);
+  assert.match(builder, /Accept \{autoReview\.readyRepeats\} repeated floors/);
+  assert.match(studio, /approveReadyModelWalls/);
+  assert.match(studio, /acceptReadyRepeatedFloors/);
+  assert.match(worker, /wall\?\.reviewed === true/);
+  assert.match(worker, /floor\.repeatReviewed === true/);
 });
