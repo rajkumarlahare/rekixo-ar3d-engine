@@ -9,7 +9,10 @@ import {
 } from "./sceneCanvasModel";
 import { roomSurface } from "./sceneCanvasRooms";
 import { addFurnitureVisual } from "./furnitureVisual";
-import { addSiteElementVisual } from "./siteElementVisual";
+import {
+  renderSiteElements,
+  siteElementTransformChange,
+} from "./sceneCanvasSite";
 import {
   installCanvasFurnitureDrop,
   placeCanvasFurnitureAtPointer,
@@ -672,37 +675,13 @@ export default function SceneCanvas(props: Props) {
         (candidate) => candidate.id === current.selected,
       );
       if (siteElement) {
-        if (current.transformMode === "translate") {
-          current.onTransformCommit({
-            kind: "siteElement",
-            id: siteElement.id,
-            x: target.position.x,
-            z: target.position.z,
-          });
-        } else if (current.transformMode === "rotate") {
-          current.onTransformCommit({
-            kind: "siteElement",
-            id: siteElement.id,
-            rotation: T.MathUtils.radToDeg(target.rotation.y),
-          });
-        } else if (current.transformMode === "scale") {
-          current.onTransformCommit({
-            kind: "siteElement",
-            id: siteElement.id,
-            width: Math.max(
-              0.05,
-              siteElement.width * Math.abs(target.scale.x),
-            ),
-            height: Math.max(
-              0.01,
-              siteElement.height * Math.abs(target.scale.y),
-            ),
-            depth: Math.max(
-              0.05,
-              siteElement.depth * Math.abs(target.scale.z),
-            ),
-          });
-        }
+        current.onTransformCommit(
+          siteElementTransformChange(
+            siteElement,
+            target,
+            current.transformMode ?? "translate",
+          ),
+        );
         return;
       }
       const furniture = current.scene.furniture.find(
@@ -1699,10 +1678,6 @@ export default function SceneCanvas(props: Props) {
     r.site.visible = props.view === "building";
     r.transform.detach();
     r.selectables.clear();
-    for (const n of [...r.site.children]) {
-      r.site.remove(n);
-      disposeObjectResources(n);
-    }
     for (const n of [...r.rooms.children]) {
       r.rooms.remove(n);
       disposeObjectResources(n);
@@ -1711,21 +1686,12 @@ export default function SceneCanvas(props: Props) {
     r.rooms.visible = props.view !== "building" || Boolean(props.roomMapEnabled);
     r.controls.enabled = props.view !== "walk";
 
-    if (props.view === "building") {
-      for (const element of props.scene.siteElements ?? []) {
-        const root = new T.Group();
-        root.userData.selectId = element.id;
-        root.position.set(element.x, 0, element.z);
-        root.rotation.y = T.MathUtils.degToRad(element.rotation);
-        addSiteElementVisual(root, element);
-        r.site.add(root);
-        r.selectables.set(element.id, root);
-        if (element.id === props.selected) {
-          root.updateWorldMatrix(true, true);
-          r.site.add(new T.BoxHelper(root, 0x4f9c6c));
-        }
-      }
-    }
+    renderSiteElements(
+      r.site,
+      props.view === "building" ? props.scene.siteElements ?? [] : [],
+      props.selected,
+      r.selectables,
+    );
 
     for (const room of props.scene.rooms) {
       if (props.view === "walk" && room.id !== props.roomId) continue;
