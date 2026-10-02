@@ -33,49 +33,46 @@ export function evaluateSourcePackReadiness(
   const roleSource = (kind: string, fallback: RegExp) =>
     fusion ? fusedNames(kind) : roleFiles(files, fallback);
 
+  const role = (
+    key: SourcePackRoleStatus["key"],
+    label: string,
+    sourceFiles: string[],
+  ): SourcePackRoleStatus => ({
+    key,
+    label,
+    files: sourceFiles,
+    present: sourceFiles.length > 0,
+  });
+
   const roles: SourcePackRoleStatus[] = [
-    {
-      key: "model",
-      label: "3D model",
-      files: fusion
+    role(
+      "model",
+      "3D model",
+      fusion
         ? [...fusedNames("authoring-model"), ...fusedNames("web-model")]
         : roleFiles(files, /\.(?:fbx|glb)$/i),
-      present: false,
-    },
-    {
-      key: "cad",
-      label: "CAD",
-      files: roleSource("cad", /\.(?:dwg|dxf)$/i),
-      present: false,
-    },
-    {
-      key: "sketchup",
-      label: "SketchUp",
-      files: roleSource("sketchup", /\.(?:skp|skb)$/i),
-      present: false,
-    },
-    {
-      key: "drawing",
-      label: "Drawing/PDF",
-      files: roleSource("drawing", /\.pdf$/i),
-      present: false,
-    },
-    {
-      key: "visual",
-      label: "Visual reference",
-      files: roleSource(
+    ),
+    role("cad", "CAD", roleSource("cad", /\.(?:dwg|dxf)$/i)),
+    role(
+      "sketchup",
+      "SketchUp",
+      roleSource("sketchup", /\.(?:skp|skb)$/i),
+    ),
+    role("drawing", "Drawing/PDF", roleSource("drawing", /\.pdf$/i)),
+    role(
+      "visual",
+      "Visual reference",
+      roleSource(
         "visual-reference",
         /\.(?:png|jpe?g|webp|tiff?)$/i,
       ),
-      present: false,
-    },
-    {
-      key: "metadata",
-      label: "Render metadata",
-      files: roleSource("metadata", /\.(?:drs|json)$/i),
-      present: false,
-    },
-  ].map((role) => ({ ...role, present: role.files.length > 0 }));
+    ),
+    role(
+      "metadata",
+      "Render metadata",
+      roleSource("metadata", /\.(?:drs|json)$/i),
+    ),
+  ];
 
   const blockingIssues: string[] = [];
   const reviewIssues: string[] = [];
