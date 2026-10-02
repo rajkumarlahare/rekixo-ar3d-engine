@@ -553,6 +553,7 @@ async function auditCadSources(files: Asset[]): Promise<SmartCadAudit[]> {
           ...(segment.widthM !== undefined
             ? { widthM: segment.widthM }
             : {}),
+          confidence: segment.confidence,
         }),
       );
       const textLabels: DxfTextLabel[] = document.texts.map((entry) => ({

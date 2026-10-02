@@ -16,9 +16,16 @@ const asUrl = (code) =>
 const normalized = await import(
   asUrl(compile("apps/admin/src/studio/dwgNormalized.ts")),
 );
-const graph = await import(
-  asUrl(compile("apps/admin/src/studio/architectureGraph.ts")),
+const registrationUrl = asUrl(
+  compile("apps/admin/src/studio/sourceRegistration.ts"),
 );
+const graphCode = compile(
+  "apps/admin/src/studio/architectureGraph.ts",
+).replace(
+  /from "\.\/sourceRegistration";/,
+  `from "${registrationUrl}";`,
+);
+const graph = await import(asUrl(graphCode));
 
 function documentFixture() {
   return {
@@ -233,8 +240,10 @@ test("Phase 3 normalized DWG walls can feed the CAD graph with decoded width", (
   assert.equal(result.walls.length, 4);
   assert.ok(result.walls.every((wall) => wall.origin === "cad-auto"));
   assert.ok(result.walls.every((wall) => wall.thickness === 0.24));
-  assert.ok(result.walls.every((wall) => wall.confidence === 0.92));
+  assert.ok(result.walls.every((wall) => wall.confidence > 0.7));
+  assert.ok(result.walls.every((wall) => wall.confidence <= 0.92));
   assert.ok(result.walls.every((wall) => wall.reviewed === false));
+  assert.ok(result.walls.every((wall) => wall.reviewState !== "human_reviewed"));
 });
 
 test("Phase 3 controlled DWG processor is isolated, pinned and bounded", () => {

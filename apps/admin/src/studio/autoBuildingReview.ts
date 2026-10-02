@@ -12,10 +12,14 @@ export interface AutoBuildingReviewCounts {
   acceptedRepeats: number;
 }
 
+function automaticWall(wall: Wall) {
+  return wall.origin === "model-auto" || wall.origin === "cad-auto";
+}
+
 function wallIsAutoReady(wall: Wall) {
   return (
     !wall.reviewed &&
-    wall.origin === "model-auto" &&
+    automaticWall(wall) &&
     (wall.reviewState === "auto_ready" ||
       (wall.reviewState === undefined &&
         (wall.confidence ?? 0) >= READY_WALL_CONFIDENCE))
@@ -54,8 +58,10 @@ export function autoBuildingReviewCounts(
 }
 
 /**
- * Marks conservative algorithmic wall suggestions as ready for a person to
+ * Marks conservative model/CAD wall suggestions as ready for a person to
  * approve. This function never turns machine confidence into human review.
+ *
+ * The legacy function name is retained because Studio already imports it.
  */
 export function markAutoReadyModelWalls(scene: Scene): {
   scene: Scene;
@@ -65,7 +71,7 @@ export function markAutoReadyModelWalls(scene: Scene): {
   const walls = (scene.walls ?? []).map((wall) => {
     if (
       wall.reviewed ||
-      wall.origin !== "model-auto" ||
+      !automaticWall(wall) ||
       (wall.confidence ?? 0) < READY_WALL_CONFIDENCE
     )
       return { ...wall, roomIds: [...wall.roomIds] };
@@ -87,9 +93,9 @@ export function markAutoReadyModelWalls(scene: Scene): {
 }
 
 /**
- * Explicit user action: converts ready wall suggestions into human-reviewed
- * architecture. Legacy high-confidence drafts without reviewState remain
- * approvable for backwards compatibility.
+ * Explicit user action: converts ready model/CAD wall suggestions into
+ * human-reviewed architecture. Legacy high-confidence drafts without
+ * reviewState remain approvable for backwards compatibility.
  */
 export function approveReadyModelWalls(scene: Scene): {
   scene: Scene;

@@ -9,6 +9,7 @@ export interface DxfSemanticSegment {
   end: DxfPoint;
   sourceEntity: string;
   widthM?: number;
+  confidence?: number;
 }
 
 export interface DxfTextLabel {
