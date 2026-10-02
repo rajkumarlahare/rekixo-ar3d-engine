@@ -128,12 +128,20 @@ export function resolvePlanSnap(
     sourceId?: string,
   ) => {
     const candidateDistance = distance(point, candidate);
+    const candidatePriority = snapPriority(kind);
+    const bestPriority = snapPriority(best.kind);
+    const meaningfullyCloser = candidateDistance + 0.03 < best.distance;
+    const closerAtSameOrHigherPriority =
+      candidatePriority >= bestPriority &&
+      candidateDistance + 1e-9 < best.distance;
     const preferredSemanticSnap =
-      snapPriority(kind) > snapPriority(best.kind) &&
+      candidatePriority > bestPriority &&
       candidateDistance <= best.distance + 0.03;
     if (
       candidateDistance <= tolerance &&
-      (candidateDistance + 1e-9 < best.distance || preferredSemanticSnap)
+      (meaningfullyCloser ||
+        closerAtSameOrHigherPriority ||
+        preferredSemanticSnap)
     )
       best = {
         point: [candidate[0], candidate[1]],
