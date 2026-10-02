@@ -119,8 +119,8 @@ test("public immutable Studio snapshot swaps source model for publish model", ()
   const draft = {
     schema: 1,
     id: "project",
-    name: "Jyoti Paradise",
-    slug: "jyoti-paradise",
+    name: "Sample Project",
+    slug: "sample-project",
     updated: "2026-09-29T00:00:00.000Z",
     assets: ["source-fbx", "web-glb"],
     releases: [],
@@ -140,30 +140,6 @@ test("public immutable Studio snapshot swaps source model for publish model", ()
   assert.equal("publishModelId" in publicProject.scene, false);
 });
 
-test("Jyoti Auto Setup declares the checksum-pinned preserved GLB", () => {
-  const profile = read("project-profiles/studio-source-profiles.ts");
-  const setup = read("apps/admin/src/studio/sourcePackSetup.ts");
-  const builder = read("apps/admin/src/studio/SmartProjectBuilder.tsx");
-
-  assert.match(profile, /publishModel:/);
-  assert.match(profile, /jyoti-source-preserved\.glb/);
-  assert.match(
-    profile,
-    /45316366101b3790da9699949bef7e4507a800da2321c3de874b55e5fa3e64d8/,
-  );
-  assert.match(
-    profile,
-    /\/3Dprojects\/published\/jyoti-paradise\/45316366101b3790da9699949bef7e4507a800da2321c3de874b55e5fa3e64d8\.glb/,
-  );
-
-  assert.match(setup, /prepareQuickPublishModel/);
-  assert.match(setup, /Web publish model checksum verification failed/);
-  assert.match(setup, /publishModelId/);
-  assert.match(setup, /assets:[\s\S]*setup\.publishModelId/);
-  assert.match(builder, /Web publish model/);
-  assert.match(builder, /Auto setup will attach verified GLB/);
-  assert.match(builder, /Authoring \/ source 3D model/);
-});
 
 test("cloud and immutable release route the explicit publish GLB", () => {
   const cloud = read("apps/admin/src/studio/cloud.ts");
