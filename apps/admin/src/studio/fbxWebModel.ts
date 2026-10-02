@@ -24,7 +24,7 @@ function sha256Hex(bytes: ArrayBuffer) {
   );
 }
 
-function standardizeMaterial(source: T.Material) {
+function standardizeMaterial(source: T.Material, stripTextures: boolean) {
   if (source instanceof T.MeshStandardMaterial) return source.clone();
 
   const candidate = source as T.Material & {
@@ -45,8 +45,8 @@ function standardizeMaterial(source: T.Material) {
     side: candidate.side ?? T.FrontSide,
     roughness: 0.72,
     metalness: 0,
-    map: candidate.map ?? null,
-    normalMap: candidate.normalMap ?? null,
+    map: stripTextures ? null : candidate.map ?? null,
+    normalMap: stripTextures ? null : candidate.normalMap ?? null,
     emissive: candidate.emissive?.clone() ?? new T.Color("#000000"),
     emissiveIntensity: candidate.emissiveIntensity ?? 1,
   });
@@ -54,7 +54,7 @@ function standardizeMaterial(source: T.Material) {
   return material;
 }
 
-function standardizeModel(root: T.Object3D) {
+function standardizeModel(root: T.Object3D, stripTextures: boolean) {
   let meshCount = 0;
   let triangleCount = 0;
   const materialNames = new Set<string>();
@@ -69,7 +69,7 @@ function standardizeModel(root: T.Object3D) {
       ? node.material
       : [node.material];
     const converted = sourceMaterials.map((material) => {
-      const next = standardizeMaterial(material);
+      const next = standardizeMaterial(material, stripTextures);
       materialNames.add(next.name || next.uuid);
       return next;
     });
@@ -114,7 +114,7 @@ export async function prepareFbxWebModel(
       externalTexturesBlocked,
     };
 
-    const summary = standardizeModel(root);
+    const summary = standardizeModel(root, externalTexturesBlocked);
     root.updateMatrixWorld(true);
 
     const exporter = new GLTFExporter();
