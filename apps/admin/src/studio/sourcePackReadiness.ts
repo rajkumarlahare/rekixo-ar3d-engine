@@ -155,7 +155,7 @@ export function evaluateSourcePackReadiness(
       item.support === "needs-conversion"
     )
       reviewIssues.push(
-        "SketchUp archive textures can be recovered now; native component geometry remains provider-assisted.",
+        "SketchUp textures/material metadata and literal semantic hints can be recovered now; native component geometry remains provider-assisted.",
       );
   }
 
