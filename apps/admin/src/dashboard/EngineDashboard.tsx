@@ -17,9 +17,11 @@ import {
   experiences,
   geoDraft,
   geoPlacement,
+  geoReleases,
   releases,
   type CloudGeoDraftState,
   type CloudGeoPlacementState,
+  type CloudGeoReleaseState,
   type CloudReleaseSummary,
 } from "../studio/cloud";
 import { newProject, projectSlug } from "../studio/domain";
@@ -74,6 +76,7 @@ export default function EngineDashboard() {
   const [releaseItems, setReleaseItems] = useState<CloudReleaseSummary[]>([]);
   const [geoState, setGeoState] = useState<CloudGeoPlacementState>();
   const [geoDraftState, setGeoDraftState] = useState<CloudGeoDraftState>();
+  const [geoReleaseState, setGeoReleaseState] = useState<CloudGeoReleaseState>();
   const [experienceBusy, setExperienceBusy] = useState(false);
   const [experienceError, setExperienceError] = useState("");
   const [error, setError] = useState("");
@@ -183,6 +186,7 @@ export default function EngineDashboard() {
       setReleaseItems([]);
       setGeoState(undefined);
       setGeoDraftState(undefined);
+      setGeoReleaseState(undefined);
       setExperienceError("");
       return;
     }
@@ -192,6 +196,7 @@ export default function EngineDashboard() {
     setReleaseItems([]);
     setGeoState(undefined);
     setGeoDraftState(undefined);
+    setGeoReleaseState(undefined);
     setExperienceError("");
 
     void Promise.all([
@@ -210,8 +215,14 @@ export default function EngineDashboard() {
         );
         if (!hasGeoExperience) return;
 
-        const draftState = await geoDraft(selectedSlug);
-        if (!cancelled) setGeoDraftState(draftState);
+        const [draftState, immutableGeoState] = await Promise.all([
+          geoDraft(selectedSlug),
+          geoReleases(selectedSlug),
+        ]);
+        if (!cancelled) {
+          setGeoDraftState(draftState);
+          setGeoReleaseState(immutableGeoState);
+        }
       })
       .catch((reason: unknown) => {
         if (cancelled) return;
@@ -376,6 +387,7 @@ export default function EngineDashboard() {
       geoDraftSourceId &&
       geoDraftSourceId !== activeBuildingRelease.id,
   );
+  const activeImmutableGeoRelease = geoReleaseState?.activeRelease;
   const assetPrefix = status
     ? `projects/${status.project.slug}`
     : "projects/{slug}";
@@ -724,11 +736,13 @@ export default function EngineDashboard() {
                     {geoExperience
                       ? geoLive
                         ? "LIVE"
-                        : geoNeedsSourceUpgrade
-                          ? "UPDATE AVAILABLE"
-                          : geoState?.placement
-                            ? "CONFIGURED"
-                            : "SETUP"
+                        : activeImmutableGeoRelease
+                          ? `GEO v${activeImmutableGeoRelease.version}`
+                          : geoNeedsSourceUpgrade
+                            ? "UPDATE AVAILABLE"
+                            : geoState?.placement
+                              ? "CONFIGURED"
+                              : "SETUP"
                       : "NOT ADDED"}
                   </b>
                 </div>
@@ -764,7 +778,15 @@ export default function EngineDashboard() {
                         </dd>
                       </div>
                       <div>
-                        <dt>Current live snapshot</dt>
+                        <dt>Active immutable Geo release</dt>
+                        <dd>
+                          {activeImmutableGeoRelease
+                            ? `Geo v${activeImmutableGeoRelease.version} · Building v${activeImmutableGeoRelease.sourceBuildingReleaseVersion}`
+                            : "Not published yet"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Public compatibility snapshot</dt>
                         <dd>
                           {geoState?.placement?.publicEnabled
                             ? `Building Release v${geoState.placement.releaseVersion}`
