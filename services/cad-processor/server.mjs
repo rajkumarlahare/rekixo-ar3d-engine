@@ -24,7 +24,7 @@ function sendJson(response, status, value) {
 }
 
 function authorized(request) {
-  if (!PROCESSOR_TOKEN) return true;
+  if (!PROCESSOR_TOKEN || PROCESSOR_TOKEN.length < 24) return false;
   return request.headers.authorization === "Bearer " + PROCESSOR_TOKEN;
 }
 
@@ -47,7 +47,7 @@ function dwgVersion(bytes) {
   return head.match(/AC10\d{2}/)?.[0];
 }
 
-async function processDwg(bytes, sourceName) {
+async function processDwg(bytes, sourceName, expectedSha256) {
   const version = dwgVersion(bytes);
   if (!version)
     throw Object.assign(Error("Input does not contain a recognized DWG version header."), { status: 400 });
@@ -64,6 +64,13 @@ async function processDwg(bytes, sourceName) {
     );
     const dxf = await readFile(output, "utf8");
     const sha256 = crypto.createHash("sha256").update(bytes).digest("hex");
+    if (
+      expectedSha256 &&
+      !/^[a-f0-9]{64}$/i.test(expectedSha256)
+    )
+      throw Object.assign(Error("Invalid forwarded source checksum."), { status: 400 });
+    if (expectedSha256 && expectedSha256.toLowerCase() !== sha256)
+      throw Object.assign(Error("Forwarded source checksum does not match DWG bytes."), { status: 409 });
     return normalizeDxfArchitecture(dxf, {
       sourceName,
       sha256,
@@ -103,7 +110,10 @@ const server = http.createServer(async (request, response) => {
 
     const bytes = await readBoundedBody(request);
     const sourceName = String(url.searchParams.get("name") || "source.dwg").slice(0, 500);
-    const result = await processDwg(bytes, sourceName);
+    const expectedSha256 = String(
+      request.headers["x-rekixo-source-sha256"] || "",
+    ).trim().toLowerCase();
+    const result = await processDwg(bytes, sourceName, expectedSha256);
     sendJson(response, 200, result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "DWG processing failed.";
