@@ -280,6 +280,10 @@ test("Phase 3 controlled DWG processor is isolated, pinned and bounded", () => {
 
 test("Phase 3 cloud boundary is authenticated, same-origin and source-bound", () => {
   const worker = fs.readFileSync("workers/admin-cloud.mjs", "utf8");
+  const route = fs.readFileSync(
+    "workers/dwg-processor-route.mjs",
+    "utf8",
+  );
   const controller = fs.readFileSync(
     "workers/dwg-processor-container.mjs",
     "utf8",
@@ -297,8 +301,9 @@ test("Phase 3 cloud boundary is authenticated, same-origin and source-bound", ()
   assert.match(worker, /CLOUD_PATH}\/processors\/dwg/);
   assert.match(worker, /processDwgArchitecture/);
   assert.match(worker, /sameOrigin\(request\)/);
-  assert.match(worker, /validSha256\(sha256\)/);
-  assert.match(worker, /DWG_PROCESSOR\.getByName/);
+  assert.match(route, /validSha256\(sha256\)/);
+  assert.match(route, /sameOrigin\(request\)/);
+  assert.match(route, /DWG_PROCESSOR\.getByName/);
   assert.match(controller, /extends DurableObject/);
   assert.match(controller, /container\.start\(\)/);
   assert.match(controller, /getTcpPort\(PROCESSOR_PORT\)/);
