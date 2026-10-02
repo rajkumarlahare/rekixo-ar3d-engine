@@ -513,6 +513,23 @@ export function validateStudioDraft(draft, project) {
   return draft.assets;
 }
 
+function publicFloor(floor) {
+  return {
+    id: floor.id,
+    name: floor.name,
+    elevation: floor.elevation,
+    ...(floor.repeatReviewed === true && floor.repeatOfFloorId
+      ? {
+          repeatOfFloorId: floor.repeatOfFloorId,
+          ...(floor.repeatConfidence !== undefined
+            ? { repeatConfidence: floor.repeatConfidence }
+            : {}),
+          repeatReviewed: true,
+        }
+      : {}),
+  };
+}
+
 function publicRoom(room) {
   return {
     id: room.id,
@@ -600,9 +617,12 @@ export function publicStudioSnapshot(draft) {
         : {}),
       referenceLayers: [],
       modelNodeTags: [],
-      floors: structuredClone(scene.floors),
+      floors: (scene.floors ?? []).map(publicFloor),
       rooms: (scene.rooms ?? []).map(publicRoom),
       furniture: structuredClone(scene.furniture ?? []),
+      walls: (scene.walls ?? [])
+        .filter((wall) => wall?.reviewed === true)
+        .map(publicWall),
       openings: (scene.openings ?? [])
         .filter((opening) => opening?.reviewed === true)
         .map(publicOpening),
