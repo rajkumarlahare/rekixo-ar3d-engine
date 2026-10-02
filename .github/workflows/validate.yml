@@ -29,6 +29,13 @@ jobs:
       - name: Verify
         run: npm test
 
+      - name: Validate Admin Worker bundle and Wrangler config
+        run: >-
+          npx --no-install wrangler deploy
+          --dry-run
+          --config wrangler.admin.jsonc
+          --outdir .wrangler-admin-dry-run
+
       - name: Install browser E2E runner
         run: npx --no-install playwright install --with-deps chromium
 
