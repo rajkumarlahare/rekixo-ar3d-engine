@@ -529,6 +529,10 @@ test("Phase 2 normal builder exposes one-click generic Auto Build and no hash-pr
   assert.match(pipeline, /prepareSketchUpTextureRecovery/);
   assert.match(pipeline, /buildSmartSceneDraft/);
   assert.match(pipeline, /applyReadyOpeningWorkflow/);
+  assert.match(pipeline, /approveReadyModelWalls/);
+  assert.match(pipeline, /acceptReadyRepeatedFloors/);
+  assert.match(pipeline, /readyWallsApproved/);
+  assert.match(pipeline, /readyRepeatsAccepted/);
 });
 
 test("Phase 2 six-source contract remains generic", () => {
