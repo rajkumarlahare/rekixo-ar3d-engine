@@ -26,7 +26,7 @@ function asset(id, name, type = "application/octet-stream") {
     name,
     type,
     size: blob.size,
-    hash: id.padEnd(64, "a").slice(0, 64),
+    hash: "a".repeat(64),
     blob,
   };
 }
@@ -141,11 +141,25 @@ test("six-role customer source pack is ready for generic automatic building", ()
 
   const result = evaluateSourcePackReadiness(project("fbx"), files, fusion);
   assert.equal(result.completeSupportPack, true);
+  assert.equal(result.sourceIntegrityReady, true);
+  assert.equal(result.pipelineState, "ready");
   assert.equal(result.autoBuildReady, true);
   assert.equal(result.blockingIssues.length, 0);
   assert.equal(result.roles.filter((role) => role.present).length, 6);
   assert.ok(result.reviewIssues.some((issue) => /DWG/.test(issue)));
   assert.ok(result.reviewIssues.some((issue) => /SketchUp/.test(issue)));
+});
+
+test("source-record integrity failure blocks automatic building", () => {
+  const model = asset("fbx", "building.fbx");
+  model.hash = "not-a-sha256";
+  const result = evaluateSourcePackReadiness(project("fbx"), [model]);
+  assert.equal(result.sourceIntegrityReady, false);
+  assert.equal(result.pipelineState, "blocked");
+  assert.equal(result.autoBuildReady, false);
+  assert.ok(
+    result.blockingIssues.some((issue) => /integrity checks/.test(issue)),
+  );
 });
 
 test("multiple unselected 3D sources block one-click automatic building without guessing", () => {
