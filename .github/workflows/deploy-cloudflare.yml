@@ -260,6 +260,29 @@ jobs:
       - name: Verify deployed Design Admin entry and editor bundle
         run: node scripts/verify-design-admin.mjs
 
+      - name: Verify report-only browser security policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          for PAGE_URL in             "https://admin.rekixo.com/3Dprojects"             "https://ar3dstudio.in/3Dprojects"; do
+            HEADERS="$(mktemp)"
+            curl --location --silent --show-error --dump-header "$HEADERS" --output /dev/null "$PAGE_URL"
+            if ! grep -Eiq '^content-security-policy-report-only:' "$HEADERS"; then
+              echo "::error::Missing Content-Security-Policy-Report-Only on $PAGE_URL"
+              cat "$HEADERS"
+              rm -f "$HEADERS"
+              exit 1
+            fi
+            if grep -Eiq '^content-security-policy:' "$HEADERS"; then
+              echo "::error::Enforcing CSP appeared before report-only validation was completed: $PAGE_URL"
+              cat "$HEADERS"
+              rm -f "$HEADERS"
+              exit 1
+            fi
+            rm -f "$HEADERS"
+          done
+          echo "Report-only browser security policy verified on Admin and Public."
+
       - name: Verify sensitive Admin reads are protected
         shell: bash
         run: |
