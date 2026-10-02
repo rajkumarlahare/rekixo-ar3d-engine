@@ -17,6 +17,7 @@ export interface DxfSemanticSegment {
   sourceEntity: "LINE" | "LWPOLYLINE" | "POLYLINE" | "DWG";
   confidence?: number;
   thickness?: number;
+  thicknessBasis?: string;
   height?: number;
   floorLabel?: string;
 }
