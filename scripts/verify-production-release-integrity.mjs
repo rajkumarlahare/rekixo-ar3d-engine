@@ -79,7 +79,9 @@ for (const item of catalog.releases) {
     if (
       geo?.project?.slug !== item.slug ||
       !geo?.release ||
-      !geo?.sourceBuilding
+      !geo?.buildingRelease ||
+      !geo?.geoRelease ||
+      geo.buildingRelease.id !== item.releaseId
     )
       throw new Error(`Active Geo runtime identity is invalid for ${item.slug}.`);
     checkedGeo += 1;
