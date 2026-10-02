@@ -1,6 +1,10 @@
 import { id, type ModelNodeTag, type Project, type Scene } from "./domain";
 import type { SmartProjectAnalysis } from "./projectAnalyzer";
-import { deriveModelWallGraph, linkWallsToRooms } from "./architectureGraph";
+import {
+  deriveCadWallGraph,
+  deriveModelWallGraph,
+  linkWallsToRooms,
+} from "./architectureGraph";
 import { detectRepeatedFloors } from "./repeatedFloorDetector";
 import { deriveAutoRoomDrafts } from "./autoRoomDraft";
 
@@ -10,6 +14,7 @@ export interface SmartDraftBuildResult {
     floors: number;
     autoTagged: number;
     walls: number;
+    cadWalls: number;
     repeatedFloors: number;
     autoRooms: number;
     skippedRoomFloors: number;
@@ -132,12 +137,27 @@ export function buildSmartSceneDraft(
     autoTagged += 1;
   }
 
-  const generatedWalls = deriveModelWallGraph(
+  const modelWalls = deriveModelWallGraph(
     analysis,
     floors,
     project.scene.scale,
     project.scene.modelTransform,
   );
+  const cadFallback =
+    modelWalls.length < 3
+      ? deriveCadWallGraph(
+          analysis,
+          floors,
+          project.scene.scale,
+          project.scene.modelTransform,
+        )
+      : {
+          walls: [],
+          quarterTurn: false,
+          compatible: false,
+        };
+  const generatedWalls =
+    modelWalls.length >= 3 ? modelWalls : cadFallback.walls;
   const retainedWalls = (project.scene.walls ?? []).filter(
     (wall) => wall.origin !== "model-auto" || wall.reviewed,
   );
@@ -171,6 +191,10 @@ export function buildSmartSceneDraft(
       floors: floors.length,
       autoTagged,
       walls: linkedWalls.length,
+      cadWalls:
+        modelWalls.length >= 3
+          ? 0
+          : generatedWalls.filter((wall) => wall.origin === "cad-auto").length,
       repeatedFloors: floors.filter((floor) => floor.repeatOfFloorId).length,
       autoRooms: autoRoomDraft.rooms.length,
       skippedRoomFloors: autoRoomDraft.skippedFloors.length,

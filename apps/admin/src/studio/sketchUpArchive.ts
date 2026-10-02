@@ -47,6 +47,19 @@ function findEndOfCentralDirectory(bytes: Uint8Array) {
   return -1;
 }
 
+function findFirstLocalHeader(bytes: Uint8Array) {
+  const limit = Math.min(bytes.length - 4, 1024 * 1024);
+  for (let index = 0; index <= limit; index += 1)
+    if (
+      bytes[index] === 0x50 &&
+      bytes[index + 1] === 0x4b &&
+      bytes[index + 2] === 0x03 &&
+      bytes[index + 3] === 0x04
+    )
+      return index;
+  return -1;
+}
+
 function parseZipEntries(bytes: Uint8Array) {
   const issues: string[] = [];
   if (bytes.length < 22)
@@ -65,9 +78,33 @@ function parseZipEntries(bytes: Uint8Array) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const totalEntries = u16(view, end + 10);
   const centralSize = u32(view, end + 12);
-  const centralOffset = u32(view, end + 16);
+  const relativeCentralOffset = u32(view, end + 16);
+  const firstLocalHeader = findFirstLocalHeader(bytes);
+  // ZIP offsets are relative to the start of the ZIP payload, not necessarily
+  // byte zero of an SKB container. Infer the payload base from the EOCD first;
+  // fall back to a discovered local header/zero only when needed.
+  const inferredZipBase = end - centralSize - relativeCentralOffset;
+  const candidateBases = [
+    inferredZipBase,
+    firstLocalHeader,
+    0,
+  ].filter(
+    (value, index, values) =>
+      value >= 0 && values.indexOf(value) === index,
+  );
+  const zipBase =
+    candidateBases.find((base) => {
+      const offset = base + relativeCentralOffset;
+      return (
+        offset + 4 <= bytes.length &&
+        u32(view, offset) === 0x02014b50
+      );
+    }) ?? inferredZipBase;
+  const centralOffset = zipBase + relativeCentralOffset;
   if (
     totalEntries > 10_000 ||
+    zipBase < 0 ||
+    centralOffset < zipBase ||
     centralOffset + centralSize > bytes.length
   )
     return {
@@ -89,7 +126,7 @@ function parseZipEntries(bytes: Uint8Array) {
     const fileNameLength = u16(view, offset + 28);
     const extraLength = u16(view, offset + 30);
     const commentLength = u16(view, offset + 32);
-    const localHeaderOffset = u32(view, offset + 42);
+    const localHeaderOffset = zipBase + u32(view, offset + 42);
     const start = offset + 46;
     const finish = start + fileNameLength;
     if (finish > bytes.length) {

@@ -15,8 +15,8 @@ test("visual room mapper is mouse-first and keeps exact numbers as advanced fall
   assert.match(mapper, /REPEAT TYPICAL FLOOR · PREVIEW FIRST/);
   assert.match(mapper, /batchRepeatPreview\.roomsToCreate/);
   assert.match(mapper, /Manual single-unit repeat fallback/);
-  assert.match(mapper, /Prepare suggested floor/);
-  assert.match(mapper, /reconstructed placements ready/);
+  assert.match(mapper, /◎ Place exact room/);
+  assert.match(mapper, /One-click opening preparation/);
   assert.match(mapper, /Reshape selected/);
   assert.match(mapper, /Clone \+ drag/);
   assert.match(mapper, /Mirror X/);
@@ -39,11 +39,15 @@ test("room drawing happens on the selected floor and derives geometry from a dra
 
 test("visual room mapping preserves evidence discipline", () => {
   const studio = read("apps/admin/src/studio/Studio.tsx");
+  const autoBuild = read("apps/admin/src/studio/autoBuildPipeline.ts");
+  const autoRooms = read("apps/admin/src/studio/autoRoomDraft.ts");
 
   assert.match(studio, /Visual Room Mapper draft/);
   assert.match(studio, /roomSheetMarker\(sheetRow\)/);
-  assert.match(studio, /createSuggestedRoomDrafts/);
-  assert.match(studio, /existing\/mapped room/);
+  assert.match(studio, /runAutoBuildPipeline/);
+  assert.match(autoBuild, /buildSmartSceneDraft/);
+  assert.match(autoBuild, /applyReadyOpeningWorkflow/);
+  assert.match(autoRooms, /verified: false/);
   assert.match(studio, /verified: false/);
   assert.match(studio, /sourceAssetId: undefined/);
   assert.match(studio, /sourcePackSourceId: undefined/);
@@ -65,20 +69,22 @@ test("polygon mapper snaps to existing room walls and exports polygon callbacks"
   assert.match(studio, /roomGeometryFromPolygon/);
   assert.match(studio, /repeatMappedUnit/);
   assert.match(studio, /generateBatchRepeatedUnits/);
-  assert.match(studio, /applyBatchRepeatPlan/);
+  assert.match(studio, /buildDetectedRepeatPreview/);
+  assert.match(studio, /applyDetectedRepeatPlan/);
 });
 
 
-test("selected floor can prepare profile rooms without manual mapping", () => {
+test("selected floor review stays profile-free and resets stale selections", () => {
   const studio = read("apps/admin/src/studio/Studio.tsx");
+  const review = read("apps/admin/src/studio/FloorRoomReview.tsx");
 
-  assert.match(studio, /function prepareSuggestedTypicalFloor\([\s\S]*openMapper = true/);
-  assert.match(studio, /setShowRoomMapper\(openMapper\)/);
-  assert.match(studio, /editor-prepare-floor-action/);
-  assert.match(studio, /prepareSuggestedTypicalFloor\(isolateFloorId, false\)/);
-  assert.match(studio, /Prepare\{" "\}/);
+  assert.match(studio, /buildDetectedRepeatPreview/);
+  assert.match(studio, /applyDetectedRepeatPlan/);
   assert.match(studio, /setRoomMapFloorId\(next\)/);
   assert.match(studio, /if \(room\?\.floorId !== next\)/);
   assert.ok(studio.includes('setSelected("");'));
   assert.ok(studio.includes('setRoomId("");'));
+  assert.match(review, /Source floor reviewed/);
+  assert.match(review, /Generate repeated floors/);
+  assert.doesNotMatch(studio, /prepareSuggestedTypicalFloor|quickSourceSetup|detectQuickSourceSetup/);
 });

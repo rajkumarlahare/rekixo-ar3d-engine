@@ -8,6 +8,10 @@ import { analyzeProjectFiles, type SmartProjectAnalysis } from "./projectAnalyze
 import { buildSmartSceneDraft } from "./smartDraftBuilder";
 import { suggestOpeningAssociations } from "./openingAssociator";
 import { applyReadyOpeningWorkflow } from "./openingWorkflow";
+import {
+  acceptReadyRepeatedFloors,
+  approveReadyModelWalls,
+} from "./autoBuildingReview";
 
 export interface AutoBuildPipelineResult {
   project: Project;
@@ -21,6 +25,8 @@ export interface AutoBuildPipelineResult {
     walls: number;
     repeatedFloors: number;
     autoRooms: number;
+    readyWallsApproved: number;
+    readyRepeatsAccepted: number;
     readyOpeningsApproved: number;
     openingReviewRemaining: number;
   };
@@ -141,6 +147,11 @@ export async function runAutoBuildPipeline(
   const draft = buildSmartSceneDraft(next, analysis);
   next = { ...next, scene: draft.scene };
 
+  const wallReview = approveReadyModelWalls(next.scene);
+  next = { ...next, scene: wallReview.scene };
+  const repeatReview = acceptReadyRepeatedFloors(next.scene);
+  next = { ...next, scene: repeatReview.scene };
+
   let readyOpeningsApproved = 0;
   let openingReviewRemaining = 0;
   if (next.scene.rooms.length && analysis.architecturalCandidates.length) {
@@ -170,6 +181,8 @@ export async function runAutoBuildPipeline(
       walls: draft.summary.walls,
       repeatedFloors: draft.summary.repeatedFloors,
       autoRooms: draft.summary.autoRooms,
+      readyWallsApproved: wallReview.approved,
+      readyRepeatsAccepted: repeatReview.accepted,
       readyOpeningsApproved,
       openingReviewRemaining,
     },
@@ -187,9 +200,15 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   const rooms = summary.autoRooms
     ? ` · ${summary.autoRooms} room draft${summary.autoRooms === 1 ? "" : "s"}`
     : "";
+  const walls = summary.readyWallsApproved
+    ? ` · ${summary.readyWallsApproved} high-confidence wall${summary.readyWallsApproved === 1 ? "" : "s"} accepted`
+    : "";
+  const repeats = summary.readyRepeatsAccepted
+    ? ` · ${summary.readyRepeatsAccepted} repeated floor${summary.readyRepeatsAccepted === 1 ? "" : "s"} accepted`
+    : "";
   const openings = summary.readyOpeningsApproved
     ? ` · ${summary.readyOpeningsApproved} ready opening${summary.readyOpeningsApproved === 1 ? "" : "s"} prepared`
     : "";
   const review = result.issues.length + summary.openingReviewRemaining;
-  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${openings}${web}${textures}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
+  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${walls}${repeats}${openings}${web}${textures}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
 }

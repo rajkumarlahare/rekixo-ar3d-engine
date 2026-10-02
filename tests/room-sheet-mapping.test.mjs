@@ -188,9 +188,9 @@ test("visual mapper exposes Unmapped Rooms and exact one-click placement", () =>
   assert.match(mapper, /Click\/tap once on the plan to place exact size/);
   assert.match(studio, /roomMapAction === "stamp"/);
   assert.match(studio, /roomSheetMarker\(sheetRow\)/);
-  assert.match(mapper, /Prepare suggested floor/);
-  assert.match(studio, /prepareSuggestedTypicalFloor/);
-  assert.match(studio, /createSuggestedRoomDrafts/);
+  assert.match(studio, /buildDetectedRepeatPreview/);
+  assert.match(studio, /generateBatchRepeatedUnits/);
+  assert.match(studio, /applyDetectedRepeatPlan/);
   assert.match(studio, /nextMappedKeys/);
   assert.match(studio, /nextRow/);
   assert.match(canvas, /roomStamp\?:/);
