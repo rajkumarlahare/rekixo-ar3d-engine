@@ -187,6 +187,8 @@ function validateScene(scene, assetIds) {
     !scene.floors.length ||
     !uniqueIds(scene.rooms ?? [], 500) ||
     !uniqueIds(scene.furniture ?? [], 2000) ||
+    (scene.siteElements !== undefined &&
+      !uniqueIds(scene.siteElements, 5000)) ||
     (scene.walls !== undefined && !uniqueIds(scene.walls, 10000)) ||
     (scene.openings !== undefined && !uniqueIds(scene.openings, 5000)) ||
     !number(scene.scale, 0.0001, 10000)
@@ -309,6 +311,44 @@ function validateScene(scene, assetIds) {
         throw Error("Studio room polygon bounds do not match room geometry.");
     }
     rooms.set(room.id, room);
+  }
+
+  for (const site of scene.siteElements ?? []) {
+    if (
+      ![
+        "garden",
+        "lawn",
+        "path",
+        "road",
+        "parking",
+        "tree",
+        "plant",
+        "gate",
+        "outdoor-light",
+      ].includes(site.kind) ||
+      !number(site.x, -10000, 10000) ||
+      !number(site.z, -10000, 10000) ||
+      !number(site.width, 0.05, 1000) ||
+      !number(site.depth, 0.05, 1000) ||
+      !number(site.height, 0.01, 100) ||
+      !number(site.rotation, -3600, 3600) ||
+      !color(site.color) ||
+      typeof site.reviewed !== "boolean" ||
+      !["cad-auto", "manual"].includes(site.origin) ||
+      (site.reviewState !== undefined &&
+        !["suggested", "auto_ready", "human_reviewed"].includes(
+          site.reviewState,
+        )) ||
+      (site.reviewState === "human_reviewed" && site.reviewed !== true) ||
+      (site.reviewed === true &&
+        site.reviewState !== undefined &&
+        site.reviewState !== "human_reviewed") ||
+      (site.confidence !== undefined && !number(site.confidence, 0, 1)) ||
+      (site.sourceAssetId !== undefined &&
+        !assetIds.has(site.sourceAssetId)) ||
+      (site.sourceRef !== undefined && !text(site.sourceRef, 500))
+    )
+      throw Error("Invalid Studio site/landscape element.");
   }
 
   for (const item of scene.furniture ?? []) {
@@ -628,6 +668,22 @@ function publicWall(wall) {
   };
 }
 
+function publicSiteElement(site) {
+  return {
+    id: site.id,
+    kind: site.kind,
+    x: site.x,
+    z: site.z,
+    width: site.width,
+    depth: site.depth,
+    height: site.height,
+    rotation: site.rotation,
+    color: site.color,
+    reviewed: true,
+    origin: site.origin,
+  };
+}
+
 function publicOpening(opening) {
   return {
     id: opening.id,
@@ -685,6 +741,9 @@ export function publicStudioSnapshot(draft) {
       floors: (scene.floors ?? []).map(publicFloor),
       rooms: (scene.rooms ?? []).map(publicRoom),
       furniture: structuredClone(scene.furniture ?? []),
+      siteElements: (scene.siteElements ?? [])
+        .filter((site) => site?.reviewed === true)
+        .map(publicSiteElement),
       walls: (scene.walls ?? [])
         .filter((wall) => wall?.reviewed === true)
         .map(publicWall),
