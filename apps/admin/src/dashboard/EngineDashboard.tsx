@@ -5,11 +5,21 @@ import {
   assertAdminStatusPayload,
   type Admin3DProjectStatus,
   type AdminProjectsResponse,
+  type EngineExperienceSummary,
   type EngineProjectSummary,
   type Scene3DType,
 } from "@rekixo/3d-contracts";
-import { publicProjectPath } from "@rekixo/3d-engine-core";
-import { deleteAllProjects, ensureProject } from "../studio/cloud";
+import { geoPublicProjectPath, publicProjectPath } from "@rekixo/3d-engine-core";
+import {
+  createGeoExperience,
+  deleteAllProjects,
+  ensureProject,
+  experiences,
+  geoPlacement,
+  releases,
+  type CloudGeoPlacementState,
+  type CloudReleaseSummary,
+} from "../studio/cloud";
 import { newProject, projectSlug } from "../studio/domain";
 import "./engine-dashboard.css";
 
