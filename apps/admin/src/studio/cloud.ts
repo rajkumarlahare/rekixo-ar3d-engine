@@ -149,6 +149,22 @@ export async function projects(
   }>(`${CLOUD_BASE}/projects?${params}`);
 }
 
+export async function deleteAllProjects(
+  expectedProjectCount: number,
+  confirm: string,
+) {
+  return api<{
+    ok: true;
+    deletedProjects: number;
+    deletedR2Objects: number;
+    remainingProjects: number;
+  }>(`${CLOUD_BASE}/projects`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedProjectCount, confirm }),
+  });
+}
+
 export async function ensureProject(project: Project) {
   validateProject(project);
   const slug = projectSlug(project);
