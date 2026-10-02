@@ -189,23 +189,28 @@ export async function runAutoBuildPipeline(
 
         const { rasterPdfReference } = await import("./pdfReferenceRaster");
         const strongest = best.embeddedImages[0];
-        const crop =
+        const runnerUp = best.embeddedImages[1];
+        const dominantImage =
           strongest &&
           strongest.confidence >= 0.62 &&
-          strongest.area >= 0.02
-            ? {
-                x: Math.max(0, strongest.x - 0.01),
-                y: Math.max(0, strongest.y - 0.01),
-                width: Math.min(
-                  1 - Math.max(0, strongest.x - 0.01),
-                  strongest.width + 0.02,
-                ),
-                height: Math.min(
-                  1 - Math.max(0, strongest.y - 0.01),
-                  strongest.height + 0.02,
-                ),
-              }
+          strongest.area >= 0.02 &&
+          (!runnerUp || strongest.area >= runnerUp.area * 2.5)
+            ? strongest
             : undefined;
+        const crop = dominantImage
+          ? {
+              x: Math.max(0, dominantImage.x - 0.01),
+              y: Math.max(0, dominantImage.y - 0.01),
+              width: Math.min(
+                1 - Math.max(0, dominantImage.x - 0.01),
+                dominantImage.width + 0.02,
+              ),
+              height: Math.min(
+                1 - Math.max(0, dominantImage.y - 0.01),
+                dominantImage.height + 0.02,
+              ),
+            }
+          : undefined;
         const referenceFile = await rasterPdfReference(pdfSource, {
           page: best.page,
           ...(crop ? { crop } : {}),
