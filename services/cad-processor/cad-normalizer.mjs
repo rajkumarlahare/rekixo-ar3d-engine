@@ -168,20 +168,30 @@ function segmentConfidence(kind, entityType) {
   return Math.min(0.93, confidence);
 }
 
-function inferWallThicknesses(segments) {
+function pairWallBoundaries(segments) {
   const walls = segments.filter((segment) => segment.kind === "wall");
+  const others = segments.filter((segment) => segment.kind !== "wall");
+  const used = new Set();
+  const normalizedWalls = [];
+
   for (let leftIndex = 0; leftIndex < walls.length; leftIndex += 1) {
+    if (used.has(leftIndex)) continue;
     const left = walls[leftIndex];
     const lx = left.end[0] - left.start[0];
     const ly = left.end[1] - left.start[1];
     const leftLength = Math.hypot(lx, ly);
-    if (leftLength < 0.4) continue;
+    if (leftLength < 0.4) {
+      normalizedWalls.push(left);
+      continue;
+    }
     const ux = lx / leftLength;
     const uy = ly / leftLength;
+    const nx = -uy;
+    const ny = ux;
     let best;
 
-    for (let rightIndex = 0; rightIndex < walls.length; rightIndex += 1) {
-      if (leftIndex === rightIndex) continue;
+    for (let rightIndex = leftIndex + 1; rightIndex < walls.length; rightIndex += 1) {
+      if (used.has(rightIndex)) continue;
       const right = walls[rightIndex];
       if (right.layer !== left.layer) continue;
       const rx = right.end[0] - right.start[0];
@@ -194,31 +204,85 @@ function inferWallThicknesses(segments) {
 
       const vx = right.start[0] - left.start[0];
       const vy = right.start[1] - left.start[1];
-      const distance = Math.abs(vx * -uy + vy * ux);
+      const signedDistance = vx * nx + vy * ny;
+      const distance = Math.abs(signedDistance);
       if (distance < 0.06 || distance > 1.2) continue;
 
       const project = (point) =>
         (point[0] - left.start[0]) * ux + (point[1] - left.start[1]) * uy;
       const a = project(right.start);
       const b = project(right.end);
-      const overlap =
-        Math.max(
-          0,
-          Math.min(leftLength, Math.max(a, b)) - Math.max(0, Math.min(a, b)),
-        );
+      const overlapStart = Math.max(0, Math.min(a, b));
+      const overlapEnd = Math.min(leftLength, Math.max(a, b));
+      const overlap = Math.max(0, overlapEnd - overlapStart);
       const overlapRatio = overlap / Math.min(leftLength, rightLength);
-      if (overlapRatio < 0.5) continue;
+      if (overlapRatio < 0.65) continue;
 
       const score = overlapRatio - distance * 0.02;
-      if (!best || score > best.score) best = { distance, score };
+      if (!best || score > best.score)
+        best = {
+          rightIndex,
+          distance,
+          signedDistance,
+          overlapStart,
+          overlapEnd,
+          score,
+        };
     }
 
-    if (best) {
-      left.thickness = Number(best.distance.toFixed(4));
-      left.thicknessBasis = "paired-parallel-wall-lines";
-      left.confidence = Math.max(left.confidence, 0.91);
+    if (!best) {
+      normalizedWalls.push(left);
+      continue;
     }
+
+    used.add(leftIndex);
+    used.add(best.rightIndex);
+    normalizedWalls.push({
+      ...left,
+      id: undefined,
+      start: [
+        Number(
+          (
+            left.start[0] +
+            ux * best.overlapStart +
+            nx * (best.signedDistance / 2)
+          ).toFixed(5),
+        ),
+        Number(
+          (
+            left.start[1] +
+            uy * best.overlapStart +
+            ny * (best.signedDistance / 2)
+          ).toFixed(5),
+        ),
+      ],
+      end: [
+        Number(
+          (
+            left.start[0] +
+            ux * best.overlapEnd +
+            nx * (best.signedDistance / 2)
+          ).toFixed(5),
+        ),
+        Number(
+          (
+            left.start[1] +
+            uy * best.overlapEnd +
+            ny * (best.signedDistance / 2)
+          ).toFixed(5),
+        ),
+      ],
+      sourceEntity: "DWG",
+      thickness: Number(best.distance.toFixed(4)),
+      thicknessBasis: "paired-parallel-wall-boundaries",
+      confidence: Math.max(left.confidence || 0, 0.94),
+    });
   }
+
+  return [...normalizedWalls, ...others].map((segment, index) => ({
+    ...segment,
+    id: "cad-segment-" + (index + 1),
+  }));
 }
 
 export function normalizeDxfArchitecture(text, meta = {}) {
@@ -388,7 +452,7 @@ export function normalizeDxfArchitecture(text, meta = {}) {
   if (truncated)
     result.issues.push("CAD segment extraction stopped at the " + MAX_SEGMENTS + " segment safety limit.");
 
-  inferWallThicknesses(result.segments);
+  result.segments = pairWallBoundaries(result.segments);
   const unresolvedWallThickness = result.segments.filter(
     (segment) => segment.kind === "wall" && segment.thickness === undefined,
   ).length;
