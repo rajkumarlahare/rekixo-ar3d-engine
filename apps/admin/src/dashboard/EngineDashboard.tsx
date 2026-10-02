@@ -362,6 +362,7 @@ export default function EngineDashboard() {
   const geoUrl = status
     ? `https://ar3dstudio.in${geoPublicProjectPath(status.project.slug)}`
     : "";
+  const activeImmutableGeoRelease = geoReleaseState?.activeRelease;
   const geoLive = Boolean(
     geoExperience &&
       activeImmutableGeoRelease &&
@@ -379,7 +380,6 @@ export default function EngineDashboard() {
       geoDraftSourceId &&
       geoDraftSourceId !== activeBuildingRelease.id,
   );
-  const activeImmutableGeoRelease = geoReleaseState?.activeRelease;
   const assetPrefix = status
     ? `projects/${status.project.slug}`
     : "projects/{slug}";
@@ -732,8 +732,9 @@ export default function EngineDashboard() {
                           ? `GEO v${activeImmutableGeoRelease.version}`
                           : geoNeedsSourceUpgrade
                             ? "UPDATE AVAILABLE"
-                            : geoState?.placement
-                              ? "CONFIGURED"
+                            : geoDraftState?.draft?.longitude !== null &&
+                                geoDraftState?.draft?.longitude !== undefined
+                              ? "DRAFT READY"
                               : "SETUP"
                       : "NOT ADDED"}
                   </b>
