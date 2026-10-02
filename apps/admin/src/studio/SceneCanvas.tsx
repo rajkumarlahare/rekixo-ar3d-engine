@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import * as T from "three";
+import {
+  isPointerTap,
+  resolvePlanSnap,
+  type PlanSegment,
+} from "@rekixo/3d-engine-core";
 import { disposeObjectResources } from "./threeResources";
 import {
   applyModelMaterialOverrides,
@@ -689,47 +694,30 @@ export default function SceneCanvas(props: Props) {
       excludeRoomId?: string,
     ) => {
       if (!enabled) return point;
-      const grid = new T.Vector3(
-        Math.round(point.x * 10) / 10,
-        point.y,
-        Math.round(point.z * 10) / 10,
-      );
-      let best = grid;
-      let bestDistance = Math.hypot(grid.x - point.x, grid.z - point.z);
+      const segments: PlanSegment[] = [];
       for (const room of latest.current.scene.rooms) {
         if (room.floorId !== floorId || room.id === excludeRoomId) continue;
         const boundary = roomBoundaryPoints(room);
         for (let index = 0; index < boundary.length; index += 1) {
-          const [vx, vz] = boundary[index];
-          const vertexDistance = Math.hypot(vx - point.x, vz - point.z);
-          if (vertexDistance <= 0.24 && vertexDistance < bestDistance) {
-            best = new T.Vector3(vx, point.y, vz);
-            bestDistance = vertexDistance;
-          }
           const [ax, az] = boundary[index];
           const [bx, bz] = boundary[(index + 1) % boundary.length];
-          const dx = bx - ax;
-          const dz = bz - az;
-          const lengthSquared = dx * dx + dz * dz;
-          const t =
-            lengthSquared > 0
-              ? T.MathUtils.clamp(
-                  ((point.x - ax) * dx + (point.z - az) * dz) /
-                    lengthSquared,
-                  0,
-                  1,
-                )
-              : 0;
-          const px = ax + t * dx;
-          const pz = az + t * dz;
-          const edgeDistance = Math.hypot(px - point.x, pz - point.z);
-          if (edgeDistance <= 0.18 && edgeDistance < bestDistance) {
-            best = new T.Vector3(px, point.y, pz);
-            bestDistance = edgeDistance;
-          }
+          segments.push({
+            id: `${room.id}:${index}`,
+            start: [ax, az],
+            end: [bx, bz],
+          });
         }
       }
-      return best;
+      const snapped = resolvePlanSnap([point.x, point.z], {
+        enabled: true,
+        gridSize: 0.1,
+        vertexTolerance: 0.24,
+        midpointTolerance: 0.18,
+        edgeTolerance: 0.18,
+        intersectionTolerance: 0.18,
+        segments,
+      });
+      return new T.Vector3(snapped.point[0], point.y, snapped.point[1]);
     };
 
     const pointOnFloor = (
@@ -988,7 +976,10 @@ export default function SceneCanvas(props: Props) {
       }
       if (latest.current.roomPolygonDraw?.enabled) {
         if (!point) return;
-        const small = Math.hypot(e.clientX - point.ox, e.clientY - point.oy) < 5;
+        const small = isPointerTap(
+          { clientX: point.ox, clientY: point.oy },
+          e,
+        );
         point = undefined;
         controls.enabled = latest.current.view !== "walk";
         try {
@@ -1065,7 +1056,10 @@ export default function SceneCanvas(props: Props) {
         return;
       }
       if (!point) return;
-      const small = Math.hypot(e.clientX - point.ox, e.clientY - point.oy) < 5;
+      const small = isPointerTap(
+          { clientX: point.ox, clientY: point.oy },
+          e,
+        );
       point = undefined;
       if (!small || latest.current.view === "walk") return;
 
