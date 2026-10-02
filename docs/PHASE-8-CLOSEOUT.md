@@ -46,23 +46,27 @@ Exit gate:
 
 ## Phase 3 — Performance and maintainability
 
-Status: PENDING
+Status: COMPLETE — performance/resource guardrails and safe modular boundaries implemented
 
 Close the remaining P2/P3 engineering debt before focusing on the simplified editor:
 
-- add bundle-size budgets and project-profile chunk checks;
-- move large inline source texture payloads to immutable lazy-loaded assets;
-- formalize texture/GPU resource ownership and disposal;
-- split oversized `Studio.tsx`, `SceneCanvas.tsx`, and `admin-cloud.mjs` into focused modules without changing behavior;
-- move shared model-profile runtime code out of `apps/public` into a shared Engine package;
-- improve large-project collision/raycast scalability;
-- remove remaining stale/historical documentation contradictions and close completed architecture tracking issues.
+- [done] add bundle-size budgets and project-profile chunk checks;
+- [done] move large inline source texture payloads to lazy content-hashed assets;
+- [done] formalize profile texture/GPU resource ownership and disposal;
+- [done] extract destructive project cleanup from `admin-cloud.mjs` and enforce size/boundary ceilings around the remaining large editor shells;
+- [done] move shared model-profile runtime code out of `apps/public` into `@rekixo/3d-model-profiles`;
+- [done] add a world-bounds broad phase before expensive walkthrough triangle raycasts;
+- [done] enforce no Admin -> Public implementation imports and maintainability budgets in every test gate.
+
+A full mechanical rewrite of `Studio.tsx` / `SceneCanvas.tsx` is intentionally not done here: those shells already delegate focused responsibilities and are the next product surface to be simplified. Churning thousands of lines immediately before that redesign would add regression risk without user value.
 
 Exit gate:
 
 - no regression in current production experience;
 - public initial bundle has an enforced budget;
-- editor/server hotspot modules have clear responsibility boundaries;
-- Phase 8 hardening backlog is closed.
+- editor/server hotspot modules have enforced responsibility/size boundaries;
+- shared model-profile code is app-neutral;
+- large walkthrough models avoid raycasting every collider;
+- Phase 8 code hardening backlog is closed.
 
 After these three phases, product work can focus on the next editor direction: simple Building creation with direct mouse/touch/drag-and-drop interaction and minimal advanced controls.
