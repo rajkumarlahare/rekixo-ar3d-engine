@@ -70,6 +70,7 @@ import {
 } from "./sourceFusion";
 import { prepareFbxWebModel } from "./fbxWebModel";
 import { buildSmartSceneDraft } from "./smartDraftBuilder";
+import { runAutoBuildPipeline } from "./autoBuildPipeline";
 import { prepareSketchUpTextureRecovery } from "./sketchUpRecovery";
 import {
   acceptReadyRepeatedFloors,
@@ -2632,6 +2633,29 @@ export default function Studio() {
     );
   }
 
+  async function buildAutomatically() {
+    const result = await runAutoBuildPipeline(p, files, sourceAudits);
+    await persist(result.project, result.assets);
+    setSmartAnalysis(result.analysis);
+    setView("building");
+
+    const summary = result.summary;
+    const web = summary.webModelPrepared ? " · web GLB prepared" : "";
+    const textures = summary.sketchUpTexturesRecovered
+      ? ` · ${summary.sketchUpTexturesRecovered} SketchUp texture${summary.sketchUpTexturesRecovered === 1 ? "" : "s"} recovered`
+      : "";
+    const rooms = summary.autoRooms
+      ? ` · ${summary.autoRooms} room draft${summary.autoRooms === 1 ? "" : "s"}`
+      : "";
+    const openings = summary.readyOpeningsApproved
+      ? ` · ${summary.readyOpeningsApproved} ready opening${summary.readyOpeningsApproved === 1 ? "" : "s"} prepared`
+      : "";
+    const review = result.issues.length + summary.openingReviewRemaining;
+    setMessage(
+      `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${openings}${web}${textures}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`,
+    );
+  }
+
   function buildSmartDraft() {
     if (!smartAnalysis)
       throw Error("Analyze a selected GLB/FBX model before building the draft.");
@@ -3270,6 +3294,7 @@ export default function Studio() {
             void task(() => uploadSourcePack(selectedFiles))
           }
           onAnalyze={() => void task(analyzeSmartProject)}
+          onAutoBuild={() => void task(buildAutomatically)}
           onPrepareWebModel={() => void task(prepareSelectedWebModel)}
           onRecoverSketchUpTextures={() => void task(recoverSketchUpTextures)}
           onApproveReadyWalls={approveHighConfidenceWalls}
