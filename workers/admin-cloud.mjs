@@ -1928,7 +1928,6 @@ async function projectGeoPlacement(request, env, actor, project) {
          VALUES (?,?,'geo','active',?,?,?,?)
          ON CONFLICT(project_id,type) DO UPDATE SET
            lifecycle='active',
-           source_building_release_id=excluded.source_building_release_id,
            updated_at=excluded.updated_at`,
       ).bind(
         `experience_geo_${project.id}`,
@@ -2082,6 +2081,9 @@ async function deleteProjectRecords(env, project) {
     ).bind(project.id),
     env.DB.prepare(
       "DELETE FROM geo_placements_3d WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "DELETE FROM geo_experience_drafts_3d WHERE project_id=?",
     ).bind(project.id),
     env.DB.prepare(
       "DELETE FROM experiences_3d WHERE project_id=?",
@@ -2311,6 +2313,9 @@ async function routeProjects(request, env, actor, url) {
 
   if (parts[1] === "experiences" && parts.length === 2)
     return projectExperiences(request, env, actor, project);
+
+  if (parts[1] === "geo-draft" && parts.length === 2)
+    return projectGeoDraft(request, env, actor, project);
 
   if (parts[1] === "geo-placement" && parts.length === 2)
     return projectGeoPlacement(request, env, actor, project);
