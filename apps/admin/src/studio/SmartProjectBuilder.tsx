@@ -96,6 +96,12 @@ export default function SmartProjectBuilder({
       (!publishModel || !/\.glb$/i.test(publishModel.name)),
   );
   const hasSketchUpSource = files.some((file) => /\.(?:skb|skp)$/i.test(file.name));
+  const hasPlanReference = files.some(
+    (file) =>
+      /\.pdf$/i.test(file.name) ||
+      file.type.startsWith("image/") ||
+      /\.(?:png|jpe?g|webp|tiff?)$/i.test(file.name),
+  );
   const draftBuilt =
     project.scene.floors.length > 1 &&
     Boolean(
@@ -341,6 +347,15 @@ export default function SmartProjectBuilder({
                       onClick={onRecoverSketchUpTextures}
                     >
                       Recover SKB textures
+                    </button>
+                  )}
+                  {hasPlanReference && project.scene.modelId && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={onStartAlignment}
+                    >
+                      Align floor plan →
                     </button>
                   )}
                 </div>
