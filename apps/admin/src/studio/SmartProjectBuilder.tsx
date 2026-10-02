@@ -5,6 +5,7 @@ import type { SmartProjectAnalysis, SmartSourceRole } from "./projectAnalyzer";
 import type { OpeningSuggestion } from "./openingAssociator";
 import { floorSkeletonStatus } from "./floorSkeleton";
 import type { QuickSourceSetup } from "./sourcePackSetup";
+import type { SourceFusionReport } from "./sourceFusion";
 
 const ROLE_LABEL: Record<SmartSourceRole, string> = {
   model: "3D model",
@@ -34,11 +35,13 @@ export default function SmartProjectBuilder({
   files,
   audits,
   analysis,
+  fusion,
   openingSuggestions,
   busy,
   onProjectMeta,
   onImportFiles,
   onAnalyze,
+  onPrepareWebModel,
   onSelectModel,
   onBuildDraft,
   onApplyArchitecturalCandidates,
@@ -54,6 +57,7 @@ export default function SmartProjectBuilder({
   files: Asset[];
   audits: FbxSourceAudit[];
   analysis?: SmartProjectAnalysis;
+  fusion?: SourceFusionReport;
   openingSuggestions: OpeningSuggestion[];
   busy: boolean;
   onProjectMeta: (
@@ -63,6 +67,7 @@ export default function SmartProjectBuilder({
   ) => void;
   onImportFiles: (files: File[]) => void;
   onAnalyze: () => void;
+  onPrepareWebModel: () => void;
   onSelectModel: (assetId: string) => void;
   onBuildDraft: () => void;
   onApplyArchitecturalCandidates: () => void;
@@ -77,6 +82,15 @@ export default function SmartProjectBuilder({
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const modelCandidates = files.filter((file) => /\.(glb|fbx)$/i.test(file.name));
+  const selectedModel = files.find((file) => file.id === project.scene.modelId);
+  const publishModel = project.scene.publishModelId
+    ? files.find((file) => file.id === project.scene.publishModelId)
+    : undefined;
+  const needsWebModel = Boolean(
+    selectedModel &&
+      /\.fbx$/i.test(selectedModel.name) &&
+      (!publishModel || !/\.glb$/i.test(publishModel.name)),
+  );
   const floorStatus = quickSetup.profile
     ? floorSkeletonStatus(
         project.scene,
@@ -298,6 +312,62 @@ export default function SmartProjectBuilder({
               event.target.value = "";
             }}
           />
+          {fusion && (
+            <div className="builder-source-fusion" aria-label="Source fusion status">
+              <div className="builder-architecture-head">
+                <div>
+                  <b>Source Fusion</b>
+                  <small>
+                    Project-specific hashes के बिना हर source की usable capability,
+                    evidence और processing gap track होती है.
+                  </small>
+                </div>
+                {needsWebModel ? (
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={busy}
+                    onClick={onPrepareWebModel}
+                  >
+                    Prepare web GLB
+                  </button>
+                ) : publishModel && /\.glb$/i.test(publishModel.name) ? (
+                  <span className="ops-pill ops-pill--ready">WEB MODEL READY</span>
+                ) : null}
+              </div>
+              <div className="builder-source-fusion-stats">
+                <span>Ready <b>{fusion.readySources}</b></span>
+                <span>Partial <b>{fusion.partialSources}</b></span>
+                <span>Evidence <b>{fusion.evidenceOnlySources}</b></span>
+                <span>Processor needed <b>{fusion.needsConversionSources}</b></span>
+                <span>Review <b>{fusion.reviewCount}</b></span>
+              </div>
+              <div className="builder-source-fusion-list">
+                {fusion.items.map((item) => (
+                  <div key={item.assetId} className={`fusion-source fusion-source--${item.support}`}>
+                    <span>
+                      <b>{item.name}</b>
+                      <small>{item.kind} · {item.extension.toUpperCase() || "FILE"}</small>
+                    </span>
+                    <strong>{item.support.replace("-", " ")}</strong>
+                    <small>
+                      {item.findings[0] ?? "Source retained with provenance."}
+                      {item.warnings[0] ? ` · ${item.warnings[0]}` : ""}
+                    </small>
+                  </div>
+                ))}
+              </div>
+              {fusion.recommendedActions.length > 0 && (
+                <details className="builder-draft-options">
+                  <summary>Next automatic processing</summary>
+                  {fusion.recommendedActions.map((action) => (
+                    <p key={action}>{action}</p>
+                  ))}
+                </details>
+              )}
+            </div>
+          )}
+
           {quickSetup.profile && (
             <div className="builder-source-lock" aria-label="Recognized project quick setup">
               <div className="builder-source-lock-head">

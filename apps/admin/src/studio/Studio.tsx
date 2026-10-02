@@ -65,6 +65,11 @@ import {
   type SmartProjectAnalysis,
 } from "./projectAnalyzer";
 import {
+  buildSourceFusionReport,
+  type SourceFusionReport,
+} from "./sourceFusion";
+import { prepareFbxWebModel } from "./fbxWebModel";
+import {
   suggestOpeningAssociations,
   type OpeningSuggestion,
 } from "./openingAssociator";
@@ -179,6 +184,7 @@ export default function Studio() {
   const [sourceAudits, setSourceAudits] = useState<FbxSourceAudit[]>([]);
   const [sourceAuditBusy, setSourceAuditBusy] = useState(false);
   const [smartAnalysis, setSmartAnalysis] = useState<SmartProjectAnalysis>();
+  const [sourceFusion, setSourceFusion] = useState<SourceFusionReport>();
   const [quickSourceSetup, setQuickSourceSetup] =
     useState<QuickSourceSetup>(emptyQuickSourceSetup());
   const [manifestText, setManifestText] = useState("");
@@ -261,6 +267,7 @@ export default function Studio() {
     setSelectedMaterial("");
     setSourceAudits([]);
     setSmartAnalysis(undefined);
+    setSourceFusion(undefined);
     setShowReferenceWorkspace(false);
     setShowRoomMapper(false);
     setShowFloorReview(false);
@@ -468,6 +475,29 @@ export default function Studio() {
       active = false;
     };
   }, [files]);
+
+  useEffect(() => {
+    let active = true;
+    if (!files.length) {
+      setSourceFusion(undefined);
+      return;
+    }
+    void buildSourceFusionReport(
+      files,
+      smartAnalysis,
+      sourceAudits,
+      roomSheetRows,
+    )
+      .then((report) => {
+        if (active) setSourceFusion(report);
+      })
+      .catch(() => {
+        if (active) setSourceFusion(undefined);
+      });
+    return () => {
+      active = false;
+    };
+  }, [files, smartAnalysis, sourceAudits, roomSheetRows]);
 
   useEffect(() => {
     if (!modelMaterials.length) {
@@ -2485,6 +2515,46 @@ export default function Studio() {
     setView("building");
   }
 
+  async function prepareSelectedWebModel() {
+    const source = p.scene.modelId
+      ? files.find((file) => file.id === p.scene.modelId)
+      : undefined;
+    if (!source || !/\.fbx$/i.test(source.name))
+      throw Error("Select an FBX authoring model before preparing the web model.");
+
+    const currentPublish = p.scene.publishModelId
+      ? files.find((file) => file.id === p.scene.publishModelId)
+      : undefined;
+    if (currentPublish && /\.glb$/i.test(currentPublish.name)) {
+      setMessage(`Web model already ready · ${currentPublish.name}.`);
+      return;
+    }
+
+    const prepared = await prepareFbxWebModel(source, p.id);
+    const existing = files.find(
+      (file) =>
+        /\.glb$/i.test(file.name) &&
+        file.hash.toLowerCase() === prepared.asset.hash.toLowerCase() &&
+        file.size === prepared.asset.size,
+    );
+    const publishAsset = existing ?? prepared.asset;
+    const next: Project = {
+      ...p,
+      assets: p.assets.includes(publishAsset.id)
+        ? p.assets
+        : [...p.assets, publishAsset.id],
+      scene: {
+        ...p.scene,
+        publishModelId: publishAsset.id,
+      },
+    };
+    validateProject(next);
+    await persist(next, existing ? [] : [publishAsset]);
+    setMessage(
+      `Web GLB ready · ${prepared.meshCount} meshes · ${prepared.materialCount} materials · ${prepared.triangleCount.toLocaleString()} triangles${prepared.externalTexturesBlocked ? " · external FBX textures were not embedded; visual material recovery still needs review" : ""}.`,
+    );
+  }
+
   async function analyzeSmartProject() {
     const result = await analyzeProjectFiles(
       files,
@@ -3217,6 +3287,7 @@ export default function Studio() {
           files={files}
           audits={sourceAudits}
           analysis={smartAnalysis}
+          fusion={sourceFusion}
           openingSuggestions={openingSuggestions}
           busy={busy || sourceAuditBusy}
           onProjectMeta={(change) => edit({ ...p, ...change })}
@@ -3224,6 +3295,7 @@ export default function Studio() {
             void task(() => uploadSourcePack(selectedFiles))
           }
           onAnalyze={() => void task(analyzeSmartProject)}
+          onPrepareWebModel={() => void task(prepareSelectedWebModel)}
           onSelectModel={selectBuilderModel}
           onBuildDraft={() => {
             try {
