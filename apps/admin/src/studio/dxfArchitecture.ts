@@ -1,19 +1,52 @@
 import type { SmartArchitecturalKind } from "./projectAnalyzer";
 
 export type DxfPoint = [number, number];
+export type DxfCadKind =
+  | SmartArchitecturalKind
+  | "stair"
+  | "lift"
+  | "column"
+  | "slab";
 
 export interface DxfSemanticSegment {
-  kind: SmartArchitecturalKind;
+  id?: string;
+  kind: DxfCadKind;
   layer: string;
   start: DxfPoint;
   end: DxfPoint;
-  sourceEntity: "LINE" | "LWPOLYLINE";
+  sourceEntity: "LINE" | "LWPOLYLINE" | "POLYLINE" | "DWG";
+  confidence?: number;
+  thickness?: number;
+  height?: number;
+  floorLabel?: string;
 }
 
 export interface DxfTextLabel {
   layer: string;
   text: string;
   point: DxfPoint;
+  floorLabel?: string;
+}
+
+export interface DxfCadAnchor {
+  id?: string;
+  kind: DxfCadKind;
+  layer: string;
+  blockName?: string;
+  point: DxfPoint;
+  rotationY?: number;
+  scaleX?: number;
+  scaleY?: number;
+  confidence?: number;
+  floorLabel?: string;
+}
+
+export interface DxfCadDimension {
+  layer: string;
+  valueMetres?: number;
+  text?: string;
+  point?: DxfPoint;
+  floorLabel?: string;
 }
 
 export interface DxfPlanGeometry {
@@ -24,6 +57,9 @@ export interface DxfPlanGeometry {
   geometryReady: boolean;
   segments: DxfSemanticSegment[];
   labels: DxfTextLabel[];
+  anchors?: DxfCadAnchor[];
+  dimensions?: DxfCadDimension[];
+  floorHints?: string[];
   bounds?: {
     min: DxfPoint;
     max: DxfPoint;
@@ -49,11 +85,17 @@ const UNIT: Record<number, { name: string; metres: number }> = {
   21: { name: "US survey foot", metres: 1200 / 3937 },
 };
 
-function semanticLayerKind(layer: string): SmartArchitecturalKind | undefined {
+function semanticLayerKind(layer: string): DxfCadKind | undefined {
   const normalized = layer.toLowerCase().replace(/[^a-z0-9]+/g, " ");
   if (/\b(door|doors|gate|entry)\b/.test(normalized)) return "door";
   if (/\b(window|windows|glazing|fenestration)\b/.test(normalized))
     return "window";
+  if (/\b(stair|stairs|staircase|step|steps)\b/.test(normalized))
+    return "stair";
+  if (/\b(lift|elevator|elevators)\b/.test(normalized)) return "lift";
+  if (/\b(column|columns|pillar|pillars)\b/.test(normalized))
+    return "column";
+  if (/\b(slab|slabs)\b/.test(normalized)) return "slab";
   if (/\b(wall|walls|partition|masonry|brick)\b/.test(normalized))
     return "wall";
   return undefined;
@@ -165,6 +207,9 @@ export function parseAsciiDxfArchitecture(
     geometryReady: false,
     segments: [],
     labels: [],
+    anchors: [],
+    dimensions: [],
+    floorHints: [],
     issues: [],
   };
   if (!/\bSECTION\b/i.test(text) || !/\bENTITIES\b/i.test(text)) {
@@ -193,7 +238,7 @@ export function parseAsciiDxfArchitecture(
   let truncated = false;
 
   const pushSegment = (
-    kind: SmartArchitecturalKind,
+    kind: DxfCadKind,
     layer: string,
     start: DxfPoint,
     end: DxfPoint,
@@ -289,7 +334,7 @@ export function parseAsciiDxfArchitecture(
   result.geometryReady = Boolean(unit && result.segments.length);
   if (!result.segments.length)
     result.issues.push(
-      "No LINE/LWPOLYLINE geometry was found on clearly named wall/door/window layers.",
+      "No LINE/LWPOLYLINE geometry was found on clearly named architectural layers.",
     );
   return result;
 }
