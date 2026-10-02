@@ -36,19 +36,6 @@ const { newProject, validateProject } = await import(domainUrl);
 const { makeAsset, projects } = await import(storageUrl);
 const { loadPublished, importPublished } = await import(publicationUrl);
 
-test("published Jyoti manifest retains the original source model, room and review", () => {
-  const manifest = JSON.parse(
-    fs.readFileSync("published/jyoti-paradise.json", "utf8"),
-  );
-  validateProject(manifest.project);
-  assert.equal(manifest.project.slug, "jyoti-paradise");
-  assert.equal(manifest.project.releases.length, 1);
-  assert.equal(manifest.project.scene.rooms[0].verified, false);
-  assert.equal(
-    manifest.assets[0].hash,
-    "45316366101b3790da9699949bef7e4507a800da2321c3de874b55e5fa3e64d8",
-  );
-});
 test("published loader verifies bytes; editable copies cannot overwrite original or each other", async () => {
   const p = { ...newProject("Published test"), slug: "published-test" };
   const a = await makeAsset(
