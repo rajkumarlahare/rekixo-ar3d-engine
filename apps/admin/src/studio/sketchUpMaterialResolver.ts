@@ -15,6 +15,22 @@ export interface ResolvedMaterialTexture {
   score: number;
 }
 
+export interface SketchUpMaterialStyleBinding {
+  sourceArchiveId: string;
+  archivePath: string;
+  materialName: string;
+  baseColor?: string;
+  opacity?: number;
+  xScale?: number;
+  yScale?: number;
+  confidence: number;
+}
+
+export interface ResolvedMaterialStyle {
+  binding: SketchUpMaterialStyleBinding;
+  score: number;
+}
+
 export function normalizedMaterialKey(value: string) {
   return value
     .normalize("NFKD")
@@ -48,6 +64,44 @@ function textureRoleScore(value: string) {
   if (/(?:normal|roughness|metallic|metalness|bump|height|displacement|ao|ambient.?occlusion|opacity|alpha)/.test(normalized))
     return -24;
   return 0;
+}
+
+export function resolveSketchUpMaterialStyle(
+  materialName: string,
+  bindings: readonly SketchUpMaterialStyleBinding[],
+): ResolvedMaterialStyle | undefined {
+  const materialKey = normalizedMaterialKey(materialName);
+  if (!materialKey) return undefined;
+
+  const ranked = bindings
+    .map((binding) => {
+      const bindingKey = normalizedMaterialKey(binding.materialName);
+      let score = 0;
+      if (bindingKey === materialKey) score = 100;
+      else if (
+        bindingKey &&
+        (bindingKey.includes(materialKey) || materialKey.includes(bindingKey))
+      )
+        score = 78;
+      return { binding, score };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        right.binding.confidence - left.binding.confidence ||
+        left.binding.archivePath.localeCompare(right.binding.archivePath),
+    );
+
+  if (!ranked.length) return undefined;
+  if (
+    ranked.length > 1 &&
+    ranked[0].score === ranked[1].score &&
+    normalizedMaterialKey(ranked[0].binding.materialName) !==
+      normalizedMaterialKey(ranked[1].binding.materialName)
+  )
+    return undefined;
+  return ranked[0];
 }
 
 export function resolveSketchUpMaterialTexture(
