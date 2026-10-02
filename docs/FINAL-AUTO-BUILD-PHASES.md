@@ -13,7 +13,7 @@ The product rule is: **files first, automatic reconstruction first, manual editi
 
 ## Phase 1 — Six-file pipeline hardening
 
-Status: **implementation branch in progress**
+Status: **complete — validation and browser E2E passed before merge**
 
 Goals:
 - Keep the six-role intake generic; never hardcode customer names, hashes or geometry.
