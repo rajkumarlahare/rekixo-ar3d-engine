@@ -7,7 +7,7 @@ const read = (path) => fs.readFileSync(path, "utf8");
 test("production deploy verifies all remote Engine Admin secret names", () => {
   const workflow = read(".github/workflows/deploy-cloudflare.yml");
   assert.match(workflow, /Verify remote Engine Admin secret names/);
-  assert.match(workflow, /wrangler@4\\.146\\.0 secret list/);
+  assert.match(workflow, /wrangler@4\.146\.0 secret list/);
   for (const name of [
     "ENGINE_ADMIN_EMAIL",
     "ENGINE_ADMIN_PASSWORD_SALT",
