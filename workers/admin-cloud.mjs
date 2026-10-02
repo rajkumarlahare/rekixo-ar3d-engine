@@ -1163,6 +1163,166 @@ async function projectReleases(request, env, actor, project, parts) {
 }
 
 
+async function experienceSchemaReady(env) {
+  try {
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS total FROM sqlite_master WHERE type='table' AND name='experiences_3d'",
+    ).first();
+    return Number(row?.total || 0) === 1;
+  } catch {
+    return false;
+  }
+}
+
+function mapExperienceRow(row) {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    type: row.type,
+    lifecycle: row.lifecycle,
+    sourceBuildingReleaseId: row.sourceBuildingReleaseId ?? undefined,
+    sourceBuildingReleaseVersion:
+      row.sourceBuildingReleaseVersion === null ||
+      row.sourceBuildingReleaseVersion === undefined
+        ? undefined
+        : Number(row.sourceBuildingReleaseVersion),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+async function experienceRows(env, project) {
+  const rows = await env.DB.prepare(
+    `SELECT e.id,
+            e.project_id AS projectId,
+            e.type,
+            e.lifecycle,
+            e.source_building_release_id AS sourceBuildingReleaseId,
+            r.version AS sourceBuildingReleaseVersion,
+            e.created_at AS createdAt,
+            e.updated_at AS updatedAt
+       FROM experiences_3d e
+       LEFT JOIN releases_3d r
+         ON r.id=e.source_building_release_id
+        AND r.project_id=e.project_id
+      WHERE e.project_id=?
+      ORDER BY CASE e.type WHEN 'building' THEN 0 ELSE 1 END,e.created_at ASC`,
+  ).bind(project.id).all();
+  return (rows.results || []).map(mapExperienceRow);
+}
+
+async function projectExperiences(request, env, actor, project) {
+  if (!(await experienceSchemaReady(env)))
+    return json(
+      { error: "Engine Experience schema is not installed." },
+      { status: 503 },
+    );
+
+  if (request.method === "GET")
+    return json({ experiences: await experienceRows(env, project) });
+
+  if (request.method !== "POST")
+    return json({ error: "Method not allowed." }, { status: 405 });
+  if (!sameOrigin(request))
+    return json({ error: "Invalid request origin." }, { status: 403 });
+
+  const body = await request.json().catch(() => ({}));
+  const type = String(body.type || "").trim().toLowerCase();
+  if (type !== "geo")
+    return json(
+      {
+        error:
+          "Only optional Geo Experiences are created explicitly. Building Experience identity is automatic.",
+      },
+      { status: 400 },
+    );
+
+  const sourceBuildingReleaseId = String(
+    body.sourceBuildingReleaseId || "",
+  ).trim();
+  if (!/^release_[A-Za-z0-9-]{20,80}$/.test(sourceBuildingReleaseId))
+    return json(
+      { error: "Valid source Building release ID required." },
+      { status: 400 },
+    );
+
+  const source = await env.DB.prepare(
+    `SELECT id,version
+       FROM releases_3d
+      WHERE id=? AND project_id=?
+      LIMIT 1`,
+  ).bind(sourceBuildingReleaseId, project.id).first();
+  if (!source)
+    return json(
+      { error: "Source Building release does not belong to this project." },
+      { status: 404 },
+    );
+
+  const existing = await env.DB.prepare(
+    `SELECT id,source_building_release_id AS sourceBuildingReleaseId
+       FROM experiences_3d
+      WHERE project_id=? AND type='geo'
+      LIMIT 1`,
+  ).bind(project.id).first();
+  if (existing) {
+    if (existing.sourceBuildingReleaseId !== source.id)
+      return json(
+        {
+          error:
+            "Geo Experience already exists. Source upgrades require the Geo workflow so live Geo cannot change silently.",
+        },
+        { status: 409 },
+      );
+    const experiences = await experienceRows(env, project);
+    return json({
+      created: false,
+      experience: experiences.find((item) => item.type === "geo"),
+    });
+  }
+
+  const now = new Date().toISOString();
+  const experienceId = `experience_geo_${project.id}`;
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO experiences_3d
+        (id,project_id,type,lifecycle,source_building_release_id,created_by,created_at,updated_at)
+       VALUES (?,?,'geo','active',?,?,?,?)`,
+    ).bind(
+      experienceId,
+      project.id,
+      source.id,
+      actor.email,
+      now,
+      now,
+    ),
+    env.DB.prepare(
+      `INSERT INTO engine_admin_audit
+        (id,actor_email,action,project_id,target_id,details_json,created_at)
+       VALUES (?,?,?,?,?,?,?)`,
+    ).bind(
+      crypto.randomUUID(),
+      actor.email,
+      "experience.geo_created",
+      project.id,
+      experienceId,
+      JSON.stringify({
+        sourceBuildingReleaseId: source.id,
+        sourceBuildingReleaseVersion: Number(source.version),
+      }),
+      now,
+    ),
+  ]);
+
+  const experiences = await experienceRows(env, project);
+  return json(
+    {
+      created: true,
+      experience: experiences.find((item) => item.type === "geo"),
+    },
+    { status: 201 },
+  );
+}
+
 async function geoPlacementSchemaReady(env) {
   try {
     const row = await env.DB.prepare(
@@ -1358,7 +1518,28 @@ async function projectGeoPlacement(request, env, actor, project) {
     return json({ error: "Valid 3D Geo placement values required." }, { status: 400 });
 
   const now = new Date().toISOString();
-  await env.DB.batch([
+  const statements = [];
+  if (await experienceSchemaReady(env)) {
+    statements.push(
+      env.DB.prepare(
+        `INSERT INTO experiences_3d
+          (id,project_id,type,lifecycle,source_building_release_id,created_by,created_at,updated_at)
+         VALUES (?,?,'geo','active',?,?,?,?)
+         ON CONFLICT(project_id,type) DO UPDATE SET
+           lifecycle='active',
+           source_building_release_id=excluded.source_building_release_id,
+           updated_at=excluded.updated_at`,
+      ).bind(
+        `experience_geo_${project.id}`,
+        project.id,
+        release.id,
+        actor.email,
+        now,
+        now,
+      ),
+    );
+  }
+  statements.push(
     env.DB.prepare(
       `INSERT INTO geo_placements_3d
         (project_id,release_id,release_version,longitude,latitude,altitude_m,
@@ -1415,7 +1596,8 @@ async function projectGeoPlacement(request, env, actor, project) {
       }),
       now,
     ),
-  ]);
+  );
+  await env.DB.batch(statements);
 
   return json(await geoPlacementState(env, project));
 }
@@ -1499,6 +1681,9 @@ async function deleteProjectRecords(env, project) {
     ).bind(project.id),
     env.DB.prepare(
       "DELETE FROM geo_placements_3d WHERE project_id=?",
+    ).bind(project.id),
+    env.DB.prepare(
+      "DELETE FROM experiences_3d WHERE project_id=?",
     ).bind(project.id),
     env.DB.prepare(
       "DELETE FROM release_activations_3d WHERE project_id=?",
@@ -1634,10 +1819,21 @@ async function patchProject(request, env, actor, project) {
       (action === "restore" && project.status !== "archived")
     )
       return json({ ok: true, status: project.status });
-    await env.DB.batch([
+    const statements = [
       env.DB.prepare(
         "UPDATE projects_3d SET status=?,updated_at=? WHERE id=?",
       ).bind(status, now, project.id),
+    ];
+    if (await experienceSchemaReady(env)) {
+      statements.push(
+        env.DB.prepare(
+          `UPDATE experiences_3d
+              SET lifecycle=?,updated_at=?
+            WHERE project_id=? AND type='building'`,
+        ).bind(action === "archive" ? "archived" : "active", now, project.id),
+      );
+    }
+    statements.push(
       env.DB.prepare(
         `INSERT INTO engine_admin_audit
           (id,actor_email,action,project_id,target_id,details_json,created_at)
@@ -1651,7 +1847,8 @@ async function patchProject(request, env, actor, project) {
         "{}",
         now,
       ),
-    ]);
+    );
+    await env.DB.batch(statements);
     return json({ ok: true, status });
   }
 
@@ -1710,6 +1907,9 @@ async function routeProjects(request, env, actor, url) {
 
   if (parts[1] === "releases")
     return projectReleases(request, env, actor, project, parts);
+
+  if (parts[1] === "experiences" && parts.length === 2)
+    return projectExperiences(request, env, actor, project);
 
   if (parts[1] === "geo-placement" && parts.length === 2)
     return projectGeoPlacement(request, env, actor, project);
