@@ -4468,6 +4468,135 @@ export default function Studio() {
                 onFocus={() => setFocusRequest((value) => value + 1)}
                 />
               </details>
+            ) : siteElement ? (
+              <>
+                <h2>
+                  {siteElement.kind
+                    .replaceAll("-", " ")
+                    .replace(/\b\w/g, (value) => value.toUpperCase())}
+                </h2>
+                <p>
+                  {siteElement.origin === "cad-auto"
+                    ? "Source-backed site draft. Review it before publishing."
+                    : "Edited site element. Review it again before publishing."}
+                </p>
+                <label>
+                  Site type
+                  <select
+                    value={siteElement.kind}
+                    onChange={(event) =>
+                      patchSiteElement({
+                        kind: event.target.value as SiteElement["kind"],
+                      })
+                    }
+                  >
+                    <option value="garden">Garden</option>
+                    <option value="lawn">Lawn</option>
+                    <option value="path">Path</option>
+                    <option value="road">Road / driveway</option>
+                    <option value="parking">Parking</option>
+                    <option value="tree">Tree</option>
+                    <option value="plant">Plant / shrub</option>
+                    <option value="gate">Gate</option>
+                    <option value="outdoor-light">Outdoor light</option>
+                  </select>
+                </label>
+                {field("Position X", siteElement.x, (x) =>
+                  patchSiteElement({ x }),
+                )}
+                {field("Position Z", siteElement.z, (z) =>
+                  patchSiteElement({ z }),
+                )}
+                {field("Width", siteElement.width, (width) =>
+                  patchSiteElement({ width: Math.max(0.05, width) }),
+                )}
+                {field("Depth", siteElement.depth, (depth) =>
+                  patchSiteElement({ depth: Math.max(0.05, depth) }),
+                )}
+                {field("Height", siteElement.height, (height) =>
+                  patchSiteElement({ height: Math.max(0.01, height) }),
+                )}
+                {field(
+                  "Rotation °",
+                  siteElement.rotation,
+                  (rotation) => patchSiteElement({ rotation }),
+                  15,
+                )}
+                <label>
+                  Finish
+                  <input
+                    aria-label="Site element finish"
+                    type="color"
+                    value={siteElement.color}
+                    onChange={(event) =>
+                      patchSiteElement({ color: event.target.value })
+                    }
+                  />
+                </label>
+                {siteElement.sourceAssetId && (
+                  <small>
+                    Source evidence: {siteElement.sourceRef ?? "CAD entity"}
+                    {siteElement.confidence !== undefined
+                      ? " · confidence " + siteElement.confidence.toFixed(2)
+                      : ""}
+                  </small>
+                )}
+                <button
+                  className={siteElement.reviewed ? "" : "primary"}
+                  disabled={siteElement.reviewed}
+                  onClick={() => {
+                    const next: Project = {
+                      ...p,
+                      scene: {
+                        ...p.scene,
+                        siteElements: (p.scene.siteElements ?? []).map(
+                          (entry) =>
+                            entry.id === siteElement.id
+                              ? {
+                                  ...entry,
+                                  reviewed: true,
+                                  reviewState: "human_reviewed" as const,
+                                }
+                              : entry,
+                        ),
+                      },
+                    };
+                    try {
+                      validateProject(next);
+                      edit(next);
+                      setMessage(
+                        siteElement.kind.replaceAll("-", " ") +
+                          " accepted for the site plan.",
+                      );
+                    } catch (reason) {
+                      setError(
+                        reason instanceof Error
+                          ? reason.message
+                          : "Site element review failed.",
+                      );
+                    }
+                  }}
+                >
+                  {siteElement.reviewed ? "Reviewed" : "Accept site element"}
+                </button>
+                <button
+                  className="danger"
+                  onClick={() => {
+                    edit({
+                      ...p,
+                      scene: {
+                        ...p.scene,
+                        siteElements: (p.scene.siteElements ?? []).filter(
+                          (entry) => entry.id !== siteElement.id,
+                        ),
+                      },
+                    });
+                    setSelected("");
+                  }}
+                >
+                  Remove site element
+                </button>
+              </>
             ) : item ? (
               <>
                 <h2>{catalog[item.kind].name}</h2>
