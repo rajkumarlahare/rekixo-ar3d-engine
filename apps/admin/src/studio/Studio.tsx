@@ -71,6 +71,7 @@ import {
 import { prepareFbxWebModel } from "./fbxWebModel";
 import { deriveModelWallGraph } from "./architectureGraph";
 import { detectRepeatedFloors } from "./repeatedFloorDetector";
+import { deriveAutoRoomDrafts } from "./autoRoomDraft";
 import {
   suggestOpeningAssociations,
   type OpeningSuggestion,
@@ -2707,18 +2708,36 @@ export default function Studio() {
       ...generatedWalls.filter((wall) => !retainedIds.has(wall.id)),
     ];
 
+    const autoRoomDraft =
+      p.scene.rooms.length === 0
+        ? deriveAutoRoomDrafts(
+            walls,
+            floors,
+            smartAnalysis.modelAssetId,
+          )
+        : { rooms: [], skippedFloors: [] as string[] };
+    const rooms =
+      p.scene.rooms.length > 0 ? p.scene.rooms : autoRoomDraft.rooms;
+
     edit({
       ...p,
       scene: {
         ...p.scene,
         floors,
+        rooms,
         walls,
         modelNodeTags: [...byKey.values()],
       },
     });
     const repeatedCount = floors.filter((floor) => floor.repeatOfFloorId).length;
+    const roomText = autoRoomDraft.rooms.length
+      ? ` · ${autoRoomDraft.rooms.length} closed-loop room draft${autoRoomDraft.rooms.length === 1 ? "" : "s"} generated`
+      : "";
+    const skippedText = autoRoomDraft.skippedFloors.length
+      ? ` · ${autoRoomDraft.skippedFloors.length} floor${autoRoomDraft.skippedFloors.length === 1 ? "" : "s"} kept for manual room review`
+      : "";
     setMessage(
-      `Smart draft built · ${floors.length} floors · ${autoTagged} meshes auto-tagged · ${walls.length} parametric wall candidate${walls.length === 1 ? "" : "s"} · ${repeatedCount} repeated floor${repeatedCount === 1 ? "" : "s"} detected. Ambiguous geometry remains review-only.`,
+      `Smart draft built · ${floors.length} floors · ${autoTagged} meshes auto-tagged · ${walls.length} parametric wall candidate${walls.length === 1 ? "" : "s"} · ${repeatedCount} repeated floor${repeatedCount === 1 ? "" : "s"} detected${roomText}${skippedText}. Ambiguous geometry remains review-only.`,
     );
   }
   async function analyzeAndApproveReadyOpenings(baseProject: Project = p) {
