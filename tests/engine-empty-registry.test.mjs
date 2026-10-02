@@ -51,7 +51,12 @@ test("clean-room reset clears project-owned D1 data and R2 project prefix", () =
   ])
     assert.match(migration, new RegExp(`DELETE FROM ${table}`));
 
-  assert.match(workflow, /0028_clean_room_project_reset_v1\.sql/);
+  assert.match(workflow, /0028_clean_room_project_reset_v1\\.sql/);
+  assert.match(
+    workflow,
+    /database\/migrations\/0028_clean_room_project_reset_v1\\.sql\$/,
+    "clean-room reset must also trigger a Public runtime deploy",
+  );
   assert.match(workflow, /Purge project-owned R2 objects for clean-room reset/);
   assert.match(workflow, /CONFIRM_ENGINE_PROJECT_PURGE: DELETE_ENGINE_PROJECT_DATA/);
   assert.match(purge, /R2_PREFIX \|\| "projects\/"|process\.env\.R2_PREFIX/);
