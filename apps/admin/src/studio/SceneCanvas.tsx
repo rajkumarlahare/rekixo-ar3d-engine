@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as T from "three";
 import { disposeObjectResources } from "./threeResources";
-import type {
-  TransformCommit,
-  TransformMode,
-} from "./sceneCanvasTransform";
+import type { TransformCommit, TransformMode } from "./sceneCanvasTransform";
 export type { TransformCommit, TransformMode } from "./sceneCanvasTransform";
 import {
   applyModelMaterialOverrides,
