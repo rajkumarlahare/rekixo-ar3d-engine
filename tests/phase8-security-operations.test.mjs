@@ -42,3 +42,16 @@ test("production deployment verifies report-only CSP without silently enforcing 
   assert.match(workflow, /content-security-policy-report-only:/i);
   assert.match(workflow, /Enforcing CSP appeared before report-only validation/);
 });
+
+test("production deploy performs read-only immutable release integrity checks", () => {
+  const workflow = read(".github/workflows/deploy-cloudflare.yml");
+  const verifier = read("scripts/verify-production-release-integrity.mjs");
+
+  assert.match(workflow, /Verify active immutable release integrity/);
+  assert.match(workflow, /verify-production-release-integrity\.mjs/);
+  assert.match(verifier, /\/3Dprojects\/api\/releases/);
+  assert.match(verifier, /\/3Dprojects\/api\/projects\//);
+  assert.match(verifier, /method: "HEAD"/);
+  assert.match(verifier, /geo-placement/);
+  assert.match(verifier, /buildingRelease\.id !== item\.releaseId/);
+});
