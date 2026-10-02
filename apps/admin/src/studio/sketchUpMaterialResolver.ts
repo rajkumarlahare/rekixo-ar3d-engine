@@ -42,6 +42,14 @@ function textureStem(value: string) {
     ?.replace(/\.[^.]+$/, "") ?? value;
 }
 
+function textureRoleScore(value: string) {
+  const normalized = value.toLowerCase();
+  if (/(?:base.?color|diffuse|albedo|color|colour)/.test(normalized)) return 12;
+  if (/(?:normal|roughness|metallic|metalness|bump|height|displacement|ao|ambient.?occlusion|opacity|alpha)/.test(normalized))
+    return -24;
+  return 0;
+}
+
 export function resolveSketchUpMaterialTexture(
   materialName: string,
   bindings: readonly SketchUpMaterialTextureBinding[],
@@ -69,6 +77,7 @@ export function resolveSketchUpMaterialTexture(
         (textureKey.includes(materialKey) || materialKey.includes(textureKey))
       )
         score = 64;
+      if (score > 0) score += textureRoleScore(binding.textureName);
       return { binding, score };
     })
     .filter((entry) => entry.score > 0)
