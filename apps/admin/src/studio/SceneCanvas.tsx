@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import * as T from "three";
 import { disposeObjectResources } from "./threeResources";
+import type {
+  TransformCommit,
+  TransformMode,
+} from "./sceneCanvasTransform";
+export type { TransformCommit, TransformMode } from "./sceneCanvasTransform";
 import {
   applyModelMaterialOverrides,
   applyModelNodeVisibility,
@@ -46,41 +51,6 @@ import {
 } from "./domain";
 
 export type View = "building" | "rooms" | "walk";
-export type TransformMode = "translate" | "rotate" | "scale";
-export type TransformCommit =
-  | {
-      kind: "room";
-      id: string;
-      x?: number;
-      z?: number;
-      width?: number;
-      depth?: number;
-      height?: number;
-    }
-  | {
-      kind: "furniture";
-      id: string;
-      x?: number;
-      z?: number;
-      rotation?: number;
-    }
-  | {
-      kind: "siteElement";
-      id: string;
-      x?: number;
-      z?: number;
-      rotation?: number;
-      width?: number;
-      depth?: number;
-      height?: number;
-    }
-  | {
-      kind: "model";
-      x?: number;
-      y?: number;
-      z?: number;
-      rotationY?: number;
-    };
 export interface ModelNodeSummary {
   key: string;
   name: string;
