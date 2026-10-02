@@ -1411,7 +1411,11 @@ async function geoDraftState(env, project) {
     };
 
   const context = await geoDraftContext(env, project);
-  if (!context?.experienceId)
+  if (!context?.experienceId) {
+    const [activeBuildingRelease, mapsApiKey] = await Promise.all([
+      activeGeoRelease(env, project),
+      engineMapsBrowserKey(env),
+    ]);
     return {
       schemaReady: true,
       project: {
@@ -1424,13 +1428,14 @@ async function geoDraftState(env, project) {
       experience: null,
       draft: null,
       sourceRelease: null,
-      activeBuildingRelease: await activeGeoRelease(env, project),
+      activeBuildingRelease,
       sourceUpdateAvailable: false,
       sourcePreviewAvailable: false,
       legacyPlacement: null,
-      mapsApiKey: await engineMapsBrowserKey(env),
-      mapsConfigured: Boolean(await engineMapsBrowserKey(env)),
+      mapsApiKey,
+      mapsConfigured: Boolean(mapsApiKey),
     };
+  }
 
   const [sourceRelease, activeBuildingRelease, legacyPlacement] = await Promise.all([
     env.DB.prepare(
@@ -1644,19 +1649,29 @@ async function projectGeoDraft(request, env, actor, project) {
     );
 
   const now = new Date().toISOString();
-  const results = await env.DB.batch([
+  await env.DB.batch([
     env.DB.prepare(
       `UPDATE experiences_3d
           SET source_building_release_id=?,
               updated_at=?
         WHERE id=?
           AND project_id=?
-          AND type='geo'`,
+          AND type='geo'
+          AND EXISTS (
+            SELECT 1
+              FROM geo_experience_drafts_3d d
+             WHERE d.experience_id=?
+               AND d.project_id=?
+               AND d.revision=?
+          )`,
     ).bind(
       source.id,
       now,
       current.experienceId,
       project.id,
+      current.experienceId,
+      project.id,
+      expectedRevision,
     ),
     env.DB.prepare(
       `UPDATE geo_experience_drafts_3d
@@ -1674,8 +1689,7 @@ async function projectGeoDraft(request, env, actor, project) {
               updated_at=?
         WHERE experience_id=?
           AND project_id=?
-          AND revision=?
-        RETURNING revision`,
+          AND revision=?`,
     ).bind(
       source.id,
       Number(source.version),
@@ -1694,8 +1708,13 @@ async function projectGeoDraft(request, env, actor, project) {
     ),
   ]);
 
-  const nextRevision = Number(results?.[1]?.results?.[0]?.revision);
-  if (!Number.isInteger(nextRevision))
+  const saved = await geoDraftContext(env, project);
+  const nextRevision = Number(saved?.revision);
+  if (
+    !Number.isInteger(nextRevision) ||
+    nextRevision !== expectedRevision + 1 ||
+    saved?.sourceBuildingReleaseId !== source.id
+  )
     return json(
       { error: "Geo draft changed elsewhere. Reload before saving it." },
       { status: 409 },
