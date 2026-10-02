@@ -1,18 +1,71 @@
 import * as THREE from "three";
-import { sourceTextureData } from "./sourceTextureData";
+import sourceTextureAssetUrl from "../../../../project-profiles/reference-source-v9/source-textures.json?url";
 import type { ExperienceFeature, ExperienceMode } from "./experienceTypes";
 import interiorScene from "../../../../project-profiles/jyoti-paradise/interior-scene-v2.json";
 
+type SourceTextureData = Record<string, string>;
+
+let sourceTextureDataPromise: Promise<SourceTextureData> | null = null;
+const disposedSourceFinishMaterials = new WeakSet<THREE.Material>();
+
+function sourceTextureData() {
+  if (!sourceTextureDataPromise) {
+    sourceTextureDataPromise = fetch(sourceTextureAssetUrl, {
+      cache: "force-cache",
+      credentials: "same-origin",
+    })
+      .then(async (response) => {
+        if (!response.ok)
+          throw new Error(
+            `Reference source texture asset failed (${response.status}).`,
+          );
+        const payload = (await response.json()) as unknown;
+        if (!payload || typeof payload !== "object" || Array.isArray(payload))
+          throw new Error("Reference source texture asset is invalid.");
+        return payload as SourceTextureData;
+      })
+      .catch((error) => {
+        sourceTextureDataPromise = null;
+        throw error;
+      });
+  }
+  return sourceTextureDataPromise;
+}
+
 function sourceFinish(key: string, color: number, roughness: number) {
   const material = standard(color, roughness);
-  const data = sourceTextureData[key];
-  if (data) {
-    const texture = new THREE.TextureLoader().load(data);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(3, 3);
-    material.map = texture;
-  }
+  const onDispose = () => {
+    disposedSourceFinishMaterials.add(material);
+    material.removeEventListener("dispose", onDispose);
+  };
+  material.addEventListener("dispose", onDispose);
+
+  void sourceTextureData()
+    .then((data) => {
+      const source = data[key];
+      if (!source || disposedSourceFinishMaterials.has(material)) return;
+
+      new THREE.TextureLoader().load(
+        source,
+        (texture) => {
+          if (disposedSourceFinishMaterials.has(material)) {
+            texture.dispose();
+            return;
+          }
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+          texture.repeat.set(3, 3);
+          material.map = texture;
+          material.needsUpdate = true;
+        },
+        undefined,
+        () => {},
+      );
+    })
+    .catch((error) => {
+      console.error("Reference interior texture asset load failed", error);
+    });
+
   return material;
 }
 

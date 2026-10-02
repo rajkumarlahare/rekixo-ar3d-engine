@@ -4,8 +4,10 @@ import test from "node:test";
 
 const read = (file) => fs.readFileSync(file, "utf8");
 
-test("viewer ships textures extracted from the supplied SKB", () => {
-  const textures = read("apps/public/src/viewer/sourceTextureData.ts");
+test("viewer ships textures extracted from the supplied SKB as a lazy asset", () => {
+  const textures = JSON.parse(
+    read("project-profiles/reference-source-v9/source-textures.json"),
+  );
   for (const key of [
     "Metal_Panel",
     "Color_A06",
@@ -17,13 +19,18 @@ test("viewer ships textures extracted from the supplied SKB", () => {
     "Tile_Ceramic_Multi",
     "Granite_Tile",
   ]) {
-    assert.match(textures, new RegExp(`"${key}"`));
+    assert.equal(typeof textures[key], "string", key);
+    assert.match(textures[key], /^data:image\/jpeg;base64,/);
   }
-  assert.match(textures, /data:image\/jpeg;base64/);
+  assert.equal(
+    fs.existsSync("apps/public/src/viewer/sourceTextureData.ts"),
+    false,
+  );
 });
 
 test("architectural model reapplies source textures to GLB material names", () => {
   const realism = read("apps/public/src/viewer/referenceSourceV9Materials.ts");
+  assert.match(realism, /source-textures\.json\?url/);
   assert.match(realism, /sourceTextureData/);
   assert.match(realism, /TextureLoader/);
   assert.match(realism, /texture\.flipY = false/);
