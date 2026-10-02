@@ -364,7 +364,8 @@ export function normalizeDxfArchitecture(text, meta = {}) {
     });
   };
 
-  for (const entity of entities) {
+  for (let entityIndex = 0; entityIndex < entities.length; entityIndex += 1) {
+    const entity = entities[entityIndex];
     const layer = firstString(entity.rows, 8) || "0";
     const blockName = firstString(entity.rows, 2) || "";
     const floorLabel =
@@ -385,8 +386,26 @@ export function normalizeDxfArchitecture(text, meta = {}) {
     }
 
     if ((entity.type === "LWPOLYLINE" || entity.type === "POLYLINE") && kind) {
-      const points = polylinePoints(entity.rows);
+      let points = polylinePoints(entity.rows);
       const flags = firstNumber(entity.rows, 70) || 0;
+
+      if (entity.type === "POLYLINE" && points.length < 2) {
+        const legacy = [];
+        let next = entityIndex + 1;
+        for (; next < entities.length; next += 1) {
+          const vertex = entities[next];
+          if (vertex.type === "SEQEND") break;
+          if (vertex.type !== "VERTEX") break;
+          const x = firstNumber(vertex.rows, 10);
+          const y = firstNumber(vertex.rows, 20);
+          if (x !== undefined && y !== undefined) legacy.push([x, y]);
+        }
+        if (legacy.length) {
+          points = legacy;
+          entityIndex = Math.max(entityIndex, next - 1);
+        }
+      }
+
       for (let index = 0; index + 1 < points.length; index += 1)
         pushSegment(kind, layer, points[index], points[index + 1], entity.type, floorLabel);
       if ((flags & 1) === 1 && points.length > 2)
