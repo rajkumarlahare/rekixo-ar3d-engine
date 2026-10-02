@@ -4,7 +4,7 @@ This plan closes the production-hardening backlog before the next major Rekixo A
 
 ## Phase 1 — Production safety and correctness
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 Small, low-risk fixes that should not change Building/Geo rendering behavior:
 
@@ -24,23 +24,24 @@ Exit gate:
 
 ## Phase 2 — Data lifecycle and deployment confidence
 
-Status: PENDING
+Status: IN PROGRESS — Steps 1–2 complete; Step 3 security/operations rollout in review
 
 Finish the high-risk operational items:
 
-- replace destructive project cleanup with an idempotent, resumable delete lifecycle so R2 and D1 cannot be left half-cleaned;
-- add a committed lockfile and switch CI/deploy to reproducible installs;
-- run the full migration chain against a fresh D1-compatible database in CI;
-- add real Engine staging/integration coverage for cloud draft -> Building publish -> public load -> rollback and Geo verify -> publish -> public load -> rollback;
-- enforce/verify main-branch merge protection outside the repository code;
-- introduce CSP in report-only mode first, verify Admin/PDF/Google Maps/3D flows, then enforce it;
-- document recovery/runbook steps for D1 and R2 failures.
+- [done] replace destructive project cleanup with an idempotent, resumable delete lifecycle so R2 and D1 cannot be left half-cleaned;
+- [done] add a committed lockfile and switch CI/deploy/provisioning to reproducible installs;
+- [done] run the full migration chain against a fresh local D1-compatible database in every normal test gate;
+- [done] add post-deploy read-only integrity checks for active immutable Building/Geo releases and their model bytes;
+- [tracked separately] enforce/verify main-branch merge protection outside repository code (GitHub issue #143);
+- [in review] introduce CSP in report-only mode first and verify it on Admin/Public before any enforcement;
+- [in review] document recovery/runbook steps for D1, R2, Worker, Building release and Geo release incidents;
+- [deferred until dedicated isolated staging resources exist] destructive publish/rollback staging rehearsal. Production is never used as a mutation test fixture.
 
 Exit gate:
 
 - destructive cleanup is retry-safe;
 - clean-database migrations pass from 0001 through latest;
-- staging lifecycle tests exercise real persistence;
+- active production release pointers and bytes pass read-only integrity checks; destructive publish/rollback rehearsal runs only on dedicated isolated staging resources;
 - reproducible dependency install is mandatory.
 
 ## Phase 3 — Performance and maintainability
