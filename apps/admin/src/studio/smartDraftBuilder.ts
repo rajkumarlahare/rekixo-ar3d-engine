@@ -5,9 +5,11 @@ import {
   deriveModelWallGraph,
   fuseSourceWallGraphs,
   linkWallsToRooms,
+  mergeWallGraphs,
 } from "./architectureGraph";
 import { detectRepeatedFloors } from "./repeatedFloorDetector";
 import { deriveAutoRoomDrafts } from "./autoRoomDraft";
+import { regularizeWallTopology } from "./wallTopology";
 
 export interface SmartDraftBuildResult {
   scene: Scene;
@@ -19,6 +21,10 @@ export interface SmartDraftBuildResult {
     repeatedFloors: number;
     autoRooms: number;
     skippedRoomFloors: number;
+    topologySnappedEndpoints: number;
+    topologyIntersectionSplits: number;
+    topologyDuplicatesRemoved: number;
+    topologyTinySegmentsRemoved: number;
   };
 }
 
@@ -151,16 +157,18 @@ export function buildSmartSceneDraft(
     project.scene.modelTransform,
   );
   const fusedWalls = fuseSourceWallGraphs(cadGraph.walls, modelWalls);
-  const generatedWalls = fusedWalls.walls;
   const retainedWalls = (project.scene.walls ?? []).filter(
     (wall) =>
       !["model-auto", "cad-auto"].includes(wall.origin) || wall.reviewed,
   );
   const retainedIds = new Set(retainedWalls.map((wall) => wall.id));
-  const walls = [
-    ...retainedWalls,
-    ...generatedWalls.filter((wall) => !retainedIds.has(wall.id)),
-  ];
+  const topology = regularizeWallTopology(
+    fusedWalls.walls.filter((wall) => !retainedIds.has(wall.id)),
+  );
+  const generatedWalls = topology.walls.filter(
+    (wall) => !retainedIds.has(wall.id),
+  );
+  const walls = mergeWallGraphs(retainedWalls, generatedWalls);
 
   const autoRoomDraft =
     project.scene.rooms.length === 0
@@ -190,6 +198,10 @@ export function buildSmartSceneDraft(
       repeatedFloors: floors.filter((floor) => floor.repeatOfFloorId).length,
       autoRooms: autoRoomDraft.rooms.length,
       skippedRoomFloors: autoRoomDraft.skippedFloors.length,
+      topologySnappedEndpoints: topology.snappedEndpoints,
+      topologyIntersectionSplits: topology.intersectionSplits,
+      topologyDuplicatesRemoved: topology.duplicatesRemoved,
+      topologyTinySegmentsRemoved: topology.tinySegmentsRemoved,
     },
   };
 }
