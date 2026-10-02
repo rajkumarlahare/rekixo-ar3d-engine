@@ -146,20 +146,6 @@ function standardizeModel(root: T.Object3D) {
   return { meshCount, triangleCount, materialCount: materialNames.size };
 }
 
-function waitForLoadingManager(manager: T.LoadingManager, hasRequests: () => boolean) {
-  if (!hasRequests()) return Promise.resolve();
-  return new Promise<void>((resolve) => {
-    let settled = false;
-    const done = () => {
-      if (settled) return;
-      settled = true;
-      resolve();
-    };
-    manager.onLoad = done;
-    setTimeout(done, 12_000);
-  });
-}
-
 function loadTextureAsset(asset: Asset, objectUrls: Set<string>) {
   const url = URL.createObjectURL(asset.blob);
   objectUrls.add(url);
@@ -249,7 +235,12 @@ export async function prepareFbxWebModel(
   let resolvedExternalTextures = 0;
   let unresolvedExternalTextures = 0;
   let textureLoadErrors = 0;
+  let finishManagerLoad: (() => void) | undefined;
+  const managerLoaded = new Promise<void>((resolve) => {
+    finishManagerLoad = resolve;
+  });
 
+  manager.onLoad = () => finishManagerLoad?.();
   manager.onError = () => {
     textureLoadErrors += 1;
   };
@@ -270,7 +261,12 @@ export async function prepareFbxWebModel(
   let root: T.Object3D | undefined;
   try {
     root = new FBXLoader(manager).parse(bytes, "");
-    await waitForLoadingManager(manager, () => textureRequests > 0);
+    if (textureRequests > 0) {
+      await Promise.race([
+        managerLoaded,
+        new Promise<void>((resolve) => setTimeout(resolve, 12_000)),
+      ]);
+    }
 
     root.name = root.name || source.name.replace(/\.fbx$/i, "");
     const summary = standardizeModel(root);
