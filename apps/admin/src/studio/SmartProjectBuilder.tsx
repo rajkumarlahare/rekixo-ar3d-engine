@@ -7,6 +7,7 @@ import { floorSkeletonStatus } from "./floorSkeleton";
 import type { QuickSourceSetup } from "./sourcePackSetup";
 import type { SourceFusionReport } from "./sourceFusion";
 import { detectRepeatedFloors } from "./repeatedFloorDetector";
+import { autoBuildingReviewCounts } from "./autoBuildingReview";
 
 const ROLE_LABEL: Record<SmartSourceRole, string> = {
   model: "3D model",
@@ -44,6 +45,8 @@ export default function SmartProjectBuilder({
   onAnalyze,
   onPrepareWebModel,
   onRecoverSketchUpTextures,
+  onApproveReadyWalls,
+  onAcceptRepeatedFloors,
   onSelectModel,
   onBuildDraft,
   onApplyArchitecturalCandidates,
@@ -71,6 +74,8 @@ export default function SmartProjectBuilder({
   onAnalyze: () => void;
   onPrepareWebModel: () => void;
   onRecoverSketchUpTextures: () => void;
+  onApproveReadyWalls: () => void;
+  onAcceptRepeatedFloors: () => void;
   onSelectModel: (assetId: string) => void;
   onBuildDraft: () => void;
   onApplyArchitecturalCandidates: () => void;
@@ -135,6 +140,11 @@ export default function SmartProjectBuilder({
   const repeatedFloorCount = repeatedFloorGroups.reduce(
     (sum, group) => sum + group.members.length,
     0,
+  );
+
+  const autoReview = useMemo(
+    () => autoBuildingReviewCounts(project.scene),
+    [project.scene],
   );
 
   const architecturalCounts = useMemo(() => {
@@ -617,6 +627,54 @@ export default function SmartProjectBuilder({
                       </i>
                     </span>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {(draftBuilt ||
+              autoReview.readyWalls > 0 ||
+              autoReview.readyRepeats > 0 ||
+              autoReview.approvedWalls > 0 ||
+              autoReview.acceptedRepeats > 0) && (
+              <div className="builder-auto-review">
+                <div className="builder-architecture-head">
+                  <div>
+                    <b>Fast building review</b>
+                    <small>
+                      सिर्फ high-confidence wall और repeated-floor suggestions
+                      one-click में accept होंगी. बाकी items review में ही रहेंगी.
+                    </small>
+                  </div>
+                  <div className="builder-source-fusion-actions">
+                    <button
+                      type="button"
+                      disabled={busy || autoReview.readyWalls === 0}
+                      onClick={onApproveReadyWalls}
+                    >
+                      Approve {autoReview.readyWalls} ready walls
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy || autoReview.readyRepeats === 0}
+                      onClick={onAcceptRepeatedFloors}
+                    >
+                      Accept {autoReview.readyRepeats} repeated floors
+                    </button>
+                  </div>
+                </div>
+                <div className="builder-architecture-stats">
+                  <span>
+                    Approved walls <b>{autoReview.approvedWalls}</b>
+                  </span>
+                  <span>
+                    Wall review <b>{autoReview.wallReview}</b>
+                  </span>
+                  <span>
+                    Accepted repeats <b>{autoReview.acceptedRepeats}</b>
+                  </span>
+                  <span>
+                    Repeat review <b>{autoReview.repeatReview}</b>
+                  </span>
                 </div>
               </div>
             )}
