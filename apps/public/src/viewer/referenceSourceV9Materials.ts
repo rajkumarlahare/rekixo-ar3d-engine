@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { sourceTextureData } from "./sourceTextureData";
+import sourceTextureAssetUrl from "../../../../project-profiles/reference-source-v9/source-textures.json?url";
 import { JYOTI_SOURCE_MODEL_SHA256 } from "./jyotiSourceProfile";
 
 const sourceMaterialTint: Record<string, number> = {
@@ -71,21 +71,60 @@ function hasReferenceSource(root: THREE.Object3D) {
   return matched;
 }
 
-const sourceTextureCache = new Map<string, THREE.Texture>();
-const sourceTextureWaiters = new Map<string, THREE.MeshStandardMaterial[]>();
+type SourceTextureData = Record<string, string>;
+
+let sourceTextureDataPromise: Promise<SourceTextureData> | null = null;
+const disposedProfileMaterials = new WeakSet<THREE.Material>();
+
+function sourceTextureData() {
+  if (!sourceTextureDataPromise) {
+    sourceTextureDataPromise = fetch(sourceTextureAssetUrl, {
+      cache: "force-cache",
+      credentials: "same-origin",
+    })
+      .then(async (response) => {
+        if (!response.ok)
+          throw new Error(
+            `Reference source texture asset failed (${response.status}).`,
+          );
+        const payload = (await response.json()) as unknown;
+        if (!payload || typeof payload !== "object" || Array.isArray(payload))
+          throw new Error("Reference source texture asset is invalid.");
+        const entries = Object.entries(payload);
+        if (
+          !entries.length ||
+          entries.some(
+            ([key, value]) =>
+              !key ||
+              typeof value !== "string" ||
+              !value.startsWith("data:image/"),
+          )
+        )
+          throw new Error("Reference source texture payload is invalid.");
+        return Object.fromEntries(entries) as SourceTextureData;
+      })
+      .catch((error) => {
+        sourceTextureDataPromise = null;
+        throw error;
+      });
+  }
+  return sourceTextureDataPromise;
+}
 
 function applySourceTexture(
   material: THREE.MeshStandardMaterial,
   anisotropy: number,
   referenceVisual: boolean,
+  sourceTextureCache: Map<string, THREE.Texture>,
+  sourceTextureWaiters: Map<string, THREE.MeshStandardMaterial[]>,
 ) {
+  if (material.map) return;
+
   const key = material.name.replaceAll(" ", "_");
   const normalized = normalizedMaterialName(material.name);
   const tint = referenceVisual
     ? referenceFacadeTint[normalized] ?? sourceMaterialTint[normalized]
     : sourceMaterialTint[normalized];
-  const dataUrl = sourceTextureData[key] ?? sourceTextureData[material.name];
-  if (!dataUrl || material.map) return;
 
   const cached = sourceTextureCache.get(key);
   if (cached) {
@@ -95,38 +134,67 @@ function applySourceTexture(
     return;
   }
 
+  material.addEventListener(
+    "dispose",
+    () => disposedProfileMaterials.add(material),
+    { once: true },
+  );
+
   const waiters = sourceTextureWaiters.get(key) ?? [];
   waiters.push(material);
   sourceTextureWaiters.set(key, waiters);
   if (waiters.length > 1) return;
 
-  new THREE.TextureLoader().load(
-    dataUrl,
-    (texture) => {
-      texture.colorSpace = THREE.SRGBColorSpace;
-      texture.flipY = false;
-      texture.wrapS = THREE.RepeatWrapping;
-      texture.wrapT = THREE.RepeatWrapping;
-      texture.anisotropy = Math.max(texture.anisotropy || 1, anisotropy);
-      texture.needsUpdate = true;
-      sourceTextureCache.set(key, texture);
-      for (const target of sourceTextureWaiters.get(key) ?? []) {
-        const normalizedTarget = normalizedMaterialName(target.name);
-        const targetTint = referenceVisual
-          ? referenceFacadeTint[normalizedTarget] ??
-            sourceMaterialTint[normalizedTarget]
-          : sourceMaterialTint[normalizedTarget];
-        if (targetTint !== undefined) target.color.setHex(targetTint);
-        target.map = texture;
-        target.needsUpdate = true;
+  void sourceTextureData()
+    .then((data) => {
+      const dataUrl = data[key] ?? data[material.name];
+      if (!dataUrl) {
+        sourceTextureWaiters.delete(key);
+        return;
       }
+
+      new THREE.TextureLoader().load(
+        dataUrl,
+        (texture) => {
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.flipY = false;
+          texture.wrapS = THREE.RepeatWrapping;
+          texture.wrapT = THREE.RepeatWrapping;
+          texture.anisotropy = Math.max(texture.anisotropy || 1, anisotropy);
+          texture.needsUpdate = true;
+
+          const liveTargets = (sourceTextureWaiters.get(key) ?? []).filter(
+            (target) => !disposedProfileMaterials.has(target),
+          );
+          sourceTextureWaiters.delete(key);
+
+          if (!liveTargets.length) {
+            texture.dispose();
+            return;
+          }
+
+          sourceTextureCache.set(key, texture);
+          for (const target of liveTargets) {
+            const normalizedTarget = normalizedMaterialName(target.name);
+            const targetTint = referenceVisual
+              ? referenceFacadeTint[normalizedTarget] ??
+                sourceMaterialTint[normalizedTarget]
+              : sourceMaterialTint[normalizedTarget];
+            if (targetTint !== undefined) target.color.setHex(targetTint);
+            target.map = texture;
+            target.needsUpdate = true;
+          }
+        },
+        undefined,
+        () => {
+          sourceTextureWaiters.delete(key);
+        },
+      );
+    })
+    .catch((error) => {
       sourceTextureWaiters.delete(key);
-    },
-    undefined,
-    () => {
-      sourceTextureWaiters.delete(key);
-    },
-  );
+      console.error("Reference source texture asset load failed", error);
+    });
 }
 
 /**
@@ -143,6 +211,10 @@ export function enhanceReferenceSourceV9Model(
   if (!hasReferenceSource(root)) return false;
 
   const anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+  // Cache belongs to this model instance. Generic model disposal owns the
+  // resulting GPU textures; no module-global THREE.Texture survives a project switch.
+  const sourceTextureCache = new Map<string, THREE.Texture>();
+  const sourceTextureWaiters = new Map<string, THREE.MeshStandardMaterial[]>();
 
   root.traverse((object) => {
     if (!(object instanceof THREE.Mesh)) return;
@@ -154,7 +226,13 @@ export function enhanceReferenceSourceV9Model(
       if (material.userData.referenceFinish) continue;
 
       const name = normalizedMaterialName(material.name);
-      applySourceTexture(material, anisotropy, referenceVisual);
+      applySourceTexture(
+        material,
+        anisotropy,
+        referenceVisual,
+        sourceTextureCache,
+        sourceTextureWaiters,
+      );
 
       const displayTint = referenceVisual
         ? referenceFacadeTint[name] ?? sourceMaterialTint[name]
