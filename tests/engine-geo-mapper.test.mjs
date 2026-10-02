@@ -47,7 +47,8 @@ test("3D Jio Mapper is an Engine route, not a Platform dependency", () => {
   assert.match(mapper, /resetGeoDraft/);
   assert.match(mapper, /saveGeoMapsKey/);
   assert.match(mapper, /sourceUpdateAvailable/);
-  assert.doesNotMatch(mapper, /saveGeoPlacement|publicEnabled/);
+  assert.doesNotMatch(mapper, /saveGeoPlacement|removeGeoPlacement/);
+  assert.doesNotMatch(mapper, /Public 3D Jio demo|type="checkbox"/);
   assert.doesNotMatch(mapper, /tiyansh-production|rekixo-ar3d-platform|geo_3d_placements/);
 });
 
