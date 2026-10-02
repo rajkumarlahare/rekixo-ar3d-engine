@@ -76,18 +76,63 @@ export function walkStartPosition(
  * can opt meshes into/out of collision with userData.walkCollision. If a model
  * has no explicit collider tags, visible meshes remain a compatibility fallback.
  */
+const walkColliderBounds = new WeakMap<THREE.Object3D, THREE.Box3>();
+
 export function collectWalkColliders(root: THREE.Object3D | undefined) {
   if (!root) return [] as THREE.Object3D[];
 
+  root.updateMatrixWorld(true);
   const explicit: THREE.Object3D[] = [];
   const fallback: THREE.Object3D[] = [];
   root.traverseVisible((object) => {
     if (!(object instanceof THREE.Mesh)) return;
     if (object.userData.walkCollision === false) return;
+
+    const bounds = new THREE.Box3().setFromObject(object);
+    if (!bounds.isEmpty()) walkColliderBounds.set(object, bounds);
+
     fallback.push(object);
     if (object.userData.walkCollision === true) explicit.push(object);
   });
   return explicit.length ? explicit : fallback;
+}
+
+/**
+ * Cheap broad phase before Three.js triangle raycasts. It keeps only colliders
+ * whose world-space bounds overlap the swept walk segment plus player radius.
+ * Missing/stale cache entries fail open by remaining candidates.
+ */
+export function walkRaycastCandidates(
+  colliders: readonly THREE.Object3D[],
+  origin: THREE.Vector3,
+  direction: THREE.Vector3,
+  distance: number,
+  radius: number,
+) {
+  if (!colliders.length) return [] as THREE.Object3D[];
+
+  const travel = Math.max(0, distance);
+  const padding = Math.max(0, radius);
+  const end = origin
+    .clone()
+    .addScaledVector(direction, travel);
+  const swept = new THREE.Box3(
+    new THREE.Vector3(
+      Math.min(origin.x, end.x) - padding,
+      Math.min(origin.y, end.y) - padding,
+      Math.min(origin.z, end.z) - padding,
+    ),
+    new THREE.Vector3(
+      Math.max(origin.x, end.x) + padding,
+      Math.max(origin.y, end.y) + padding,
+      Math.max(origin.z, end.z) + padding,
+    ),
+  );
+
+  return colliders.filter((object) => {
+    const bounds = walkColliderBounds.get(object);
+    return !bounds || bounds.intersectsBox(swept);
+  });
 }
 
 export function walkDelta(
