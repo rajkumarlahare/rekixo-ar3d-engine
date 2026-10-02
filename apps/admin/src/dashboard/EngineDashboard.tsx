@@ -632,6 +632,178 @@ export default function EngineDashboard() {
             </article>
           </section>
 
+          <section className="engine-home__panel engine-experiences" id="experiences">
+            <div className="engine-section-title">
+              <div>
+                <p className="engine-kicker">CUSTOMER DELIVERABLES</p>
+                <h3>Experiences</h3>
+                <small>
+                  Building Website primary product hai. Geo sirf optional add-on hai aur
+                  selected immutable Building release ko reference karta hai.
+                </small>
+              </div>
+            </div>
+
+            {experienceError ? (
+              <div className="engine-experience-alert" role="alert">
+                <strong>Experience state unavailable</strong>
+                <span>{experienceError}</span>
+              </div>
+            ) : null}
+
+            <div className="engine-experience-grid">
+              <article className="engine-experience-card engine-experience-card--building">
+                <div className="engine-experience-card__head">
+                  <span>PRIMARY PRODUCT</span>
+                  <b>{buildingLive ? "LIVE" : activeBuildingRelease ? "READY" : "DRAFT"}</b>
+                </div>
+                <div>
+                  <h4>3D Building Website</h4>
+                  <p>
+                    Standalone customer site. Building explore, floors, rooms, amenities,
+                    walkthrough aur approved project content isi Experience me live hota hai.
+                  </p>
+                </div>
+                <dl>
+                  <div>
+                    <dt>Building release</dt>
+                    <dd>
+                      {activeBuildingRelease
+                        ? `v${activeBuildingRelease.version} · immutable`
+                        : "Publish required"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Canonical URL</dt>
+                    <dd>{buildingUrl || "ar3dstudio.in/3Dprojects/{project-slug}"}</dd>
+                  </div>
+                  <div>
+                    <dt>Identity</dt>
+                    <dd>{buildingExperience ? "Building Experience ready" : "Loading…"}</dd>
+                  </div>
+                </dl>
+                <div className="engine-experience-actions">
+                  <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
+                    Design &amp; releases
+                  </a>
+                  {buildingLive ? (
+                    <a href={buildingUrl} target="_blank" rel="noreferrer">
+                      Open Building Live
+                    </a>
+                  ) : (
+                    <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
+                      Publish Building
+                    </a>
+                  )}
+                </div>
+              </article>
+
+              <article className="engine-experience-card engine-experience-card--geo">
+                <div className="engine-experience-card__head">
+                  <span>OPTIONAL ADD-ON</span>
+                  <b>
+                    {geoExperience
+                      ? geoLive
+                        ? "LIVE"
+                        : geoNeedsSourceUpgrade
+                          ? "UPDATE AVAILABLE"
+                          : geoState?.placement
+                            ? "CONFIGURED"
+                            : "SETUP"
+                      : "NOT ADDED"}
+                  </b>
+                </div>
+
+                {geoExperience ? (
+                  <>
+                    <div>
+                      <h4>3D Geo Experience</h4>
+                      <p>
+                        Building ko real-world geographic context me place karta hai.
+                        Building project copy nahi hota; source immutable release reference hota hai.
+                      </p>
+                    </div>
+                    <dl>
+                      <div>
+                        <dt>Source Building</dt>
+                        <dd>
+                          {geoExperience.sourceBuildingReleaseVersion
+                            ? `Release v${geoExperience.sourceBuildingReleaseVersion}`
+                            : geoExperience.sourceBuildingReleaseId || "Pinned release"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Canonical URL</dt>
+                        <dd>{geoUrl || "ar3dstudio.in/3Dprojects/{project-slug}/geo"}</dd>
+                      </div>
+                      <div>
+                        <dt>Source status</dt>
+                        <dd>
+                          {geoNeedsSourceUpgrade
+                            ? `New Building v${activeBuildingRelease?.version} available — preview before upgrade`
+                            : "Pinned source unchanged"}
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="engine-experience-actions">
+                      <a
+                        href={
+                          selectedSlug
+                            ? projectUrl("geo-mapper", selectedSlug)
+                            : "/3Dprojects/geo-mapper"
+                        }
+                      >
+                        Manage Geo Experience
+                      </a>
+                      {geoLive ? (
+                        <a href={geoUrl} target="_blank" rel="noreferrer">
+                          Open Geo Live
+                        </a>
+                      ) : null}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <h4>+ Add 3D Geo Experience</h4>
+                      <p>
+                        Customer ko map-based 3D site chahiye tabhi add karein. Existing
+                        Building release source rahega; Building Website independent live rahegi.
+                      </p>
+                    </div>
+                    <div className="engine-experience-requirement">
+                      <strong>
+                        {activeBuildingRelease
+                          ? `Ready to use Building Release v${activeBuildingRelease.version}`
+                          : "Building release required"}
+                      </strong>
+                      <span>
+                        {activeBuildingRelease
+                          ? "Geo add-on create karke Mapper me location aur alignment set karein."
+                          : "Pehle Design Studio se immutable Building release publish karein."}
+                      </span>
+                    </div>
+                    <div className="engine-experience-actions">
+                      {activeBuildingRelease ? (
+                        <button
+                          type="button"
+                          onClick={() => void addGeoExperience()}
+                          disabled={experienceBusy || !selectedSlug}
+                        >
+                          {experienceBusy ? "Adding…" : "+ Add 3D Geo Experience"}
+                        </button>
+                      ) : (
+                        <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
+                          Publish Building first
+                        </a>
+                      )}
+                    </div>
+                  </>
+                )}
+              </article>
+            </div>
+          </section>
+
           <section className="engine-home__panel">
             <div className="engine-section-title">
               <div>
