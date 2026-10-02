@@ -37,6 +37,7 @@ import {
   type Room,
   type RoomPoint,
   type SceneAppearance,
+  type SiteElement,
 } from "./domain";
 import * as storage from "./storage";
 import * as cloud from "./cloud";
@@ -818,6 +819,7 @@ export default function Studio() {
         isRemovableUnsourcedDraft(scene, room),
     ),
     item = scene.furniture.find((f) => f.id === selected),
+    siteElement = scene.siteElements?.find((entry) => entry.id === selected),
     floor = scene.floors.find((f) => f.id === room?.floorId),
     readiness = buildStudioReadiness(
       p,
@@ -1013,6 +1015,28 @@ export default function Studio() {
       },
     });
   }
+  function patchSiteElement(change: Partial<SiteElement>) {
+    if (!siteElement) return;
+    edit({
+      ...p,
+      scene: {
+        ...p.scene,
+        siteElements: (p.scene.siteElements ?? []).map((entry) =>
+          entry.id === siteElement.id
+            ? {
+                ...entry,
+                ...change,
+                reviewed: false,
+                reviewState: "suggested" as const,
+                origin: "manual" as const,
+                confidence: undefined,
+              }
+            : entry,
+        ),
+      },
+    });
+  }
+
   function placeFurnitureOnCanvas(placement: {
     kind: Kind;
     roomId: string;
@@ -1390,6 +1414,38 @@ export default function Studio() {
               ? { rotationY: change.rotationY }
               : {}),
           },
+        },
+      };
+    } else if (change.kind === "siteElement") {
+      next = {
+        ...p,
+        scene: {
+          ...p.scene,
+          siteElements: (p.scene.siteElements ?? []).map((candidate) =>
+            candidate.id === change.id
+              ? {
+                  ...candidate,
+                  ...(change.x !== undefined ? { x: change.x } : {}),
+                  ...(change.z !== undefined ? { z: change.z } : {}),
+                  ...(change.rotation !== undefined
+                    ? { rotation: change.rotation }
+                    : {}),
+                  ...(change.width !== undefined
+                    ? { width: change.width }
+                    : {}),
+                  ...(change.depth !== undefined
+                    ? { depth: change.depth }
+                    : {}),
+                  ...(change.height !== undefined
+                    ? { height: change.height }
+                    : {}),
+                  reviewed: false,
+                  reviewState: "suggested" as const,
+                  origin: "manual" as const,
+                  confidence: undefined,
+                }
+              : candidate,
+          ),
         },
       };
     } else if (change.kind === "room") {
@@ -2034,6 +2090,8 @@ export default function Studio() {
 
   function select(key: string) {
     setSelected(key);
+    setMesh("");
+    setSelectedModelNodeKey("");
     const r =
       scene.rooms.find((r) => r.id === key) ??
       scene.rooms.find(
