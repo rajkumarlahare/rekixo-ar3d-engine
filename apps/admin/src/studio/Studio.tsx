@@ -3295,6 +3295,7 @@ export default function Studio() {
             void task(() => uploadSourcePack(selectedFiles))
           }
           onAnalyze={() => void task(analyzeSmartProject)}
+          onPrepareWebModel={() => void task(prepareSelectedWebModel)}
           onSelectModel={selectBuilderModel}
           onBuildDraft={() => {
             try {
