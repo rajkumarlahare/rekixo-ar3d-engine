@@ -34,11 +34,15 @@ Status: **complete — material XML/texture fusion implemented; validation and b
 
 ## Phase 3 — Real DWG architecture processor
 
+Status: **implementation complete; production decoder activates only when Cloudflare Containers access is available, otherwise the route fails closed and DWG remains evidence**
+
 - Decode binary DWG/AEC architecture through a controlled processor.
 - Normalize walls, thicknesses, doors, windows, stairs, lifts, slabs/columns, dimensions, text and floor identity.
 - Keep provider output behind a stable Rekixo normalized contract.
 
 ## Phase 4 — PDF + SKB + DRS deep extraction
+
+Status: **complete — structured DRS/SKB/PDF extraction implemented; validation and browser E2E passed before merge**
 
 - Extract PDF embedded floor-plan imagery in addition to the text layer.
 - Recover room/flat labels and dimensional evidence with coordinates.
@@ -47,11 +51,15 @@ Status: **complete — material XML/texture fusion implemented; validation and b
 
 ## Phase 5 — Cross-source alignment and fusion
 
+Status: **partial — CAD↔model rigid registration and per-floor wall fusion are live; PDF/SKB registration still needs the remaining evidence-fusion work**
+
 - Normalize units, origin, scale and orientation across FBX/DWG/SKB/PDF.
 - Fuse claims by capability and source authority instead of treating CAD as a fallback.
 - Detect conflicts and require review instead of silently averaging or guessing.
 
 ## Phase 6 — Automatic building reconstruction
+
+Status: **partial — floor/repeat/wall/room/opening flow and conservative wall-topology cleanup are live; stairs/lifts/unit hierarchy still need full reconstruction/binding**
 
 - Build floors, repeated floors, wall topology, rooms, openings, stairs/lifts and unit hierarchy.
 - Bind reconstructed architecture to source 3D geometry.

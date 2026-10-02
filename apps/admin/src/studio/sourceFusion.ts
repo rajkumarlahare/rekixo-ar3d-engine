@@ -2,7 +2,11 @@ import type { Asset } from "./domain";
 import type { FbxSourceAudit } from "./sourceAudit";
 import type { SmartProjectAnalysis } from "./projectAnalyzer";
 import type { RoomSheetRow } from "./roomSheet";
-import { inspectSketchUpArchive } from "./sketchUpArchive";
+import {
+  inspectSketchUpArchive,
+  inspectSketchUpSemanticEvidence,
+} from "./sketchUpArchive";
+import { inspectDrsMetadata } from "./drsInspector";
 import { inspectDwgEvidence } from "./dwgEvidence";
 import { isDwgNormalizedAsset } from "./dwgNormalized";
 import {
@@ -145,8 +149,10 @@ function itemFor(asset: Asset): SourceFusionItem {
       extension: ext,
       kind: "drawing",
       support: "evidence-only",
-      capabilities: ["dimensions", "visual-style"],
-      findings: ["PDF pages can be rasterized and calibrated for plan alignment."],
+      capabilities: ["dimensions", "rooms", "visual-style"],
+      findings: [
+        "PDF pages can provide spatial room/dimension evidence and rasterized plan references.",
+      ],
       warnings: [],
     };
   if (["jpg", "jpeg", "png", "webp", "tif", "tiff"].includes(ext))
@@ -217,8 +223,9 @@ function fact(
   };
 }
 
-async function inspectMetadataAsset(asset: Asset) {
-  if (asset.size > 8 * 1024 * 1024) return { resourceRefs: [] as string[], json: false };
+async function inspectGenericJsonMetadata(asset: Asset) {
+  if (asset.size > 8 * 1024 * 1024)
+    return { resourceRefs: [] as string[], json: false };
   const text = await asset.blob.text();
   let json = false;
   try {
@@ -226,7 +233,11 @@ async function inspectMetadataAsset(asset: Asset) {
     json = true;
   } catch {}
   const refs = unique(
-    [...text.matchAll(/(?:[A-Za-z]:)?[^\s"'<>]+\.(?:png|jpe?g|webp|tiff?|exr|hdr|dds|ktx2|fbx|obj|glb|gltf|skp|skb)/gi)]
+    [
+      ...text.matchAll(
+        /(?:[A-Za-z]:)?[^\s"'<>]+\.(?:png|jpe?g|webp|tiff?|exr|hdr|dds|ktx2|fbx|obj|glb|gltf|skp|skb)/gi,
+      ),
+    ]
       .map((match) => match[0].replaceAll("\\", "/"))
       .slice(0, 500),
   );
@@ -472,10 +483,126 @@ export async function buildSourceFusionReport(
     if (item) item.findings.push(`${rows.length} valid room measurement row(s) parsed.`);
   }
 
-  for (const asset of files.filter((entry) => /\.(drs|json)$/i.test(entry.name))) {
-    const inspection = await inspectMetadataAsset(asset);
+  for (const asset of files.filter((entry) => /\.(?:drs|json)$/i.test(entry.name))) {
     const item = items.find((entry) => entry.assetId === asset.id);
     if (!item) continue;
+
+    if (/\.drs$/i.test(asset.name)) {
+      const inspection = await inspectDrsMetadata(asset);
+      if (inspection.json) item.findings.push("Readable D5/DRS JSON metadata detected.");
+      if (inspection.source)
+        item.findings.push(`Render source: ${inspection.source}.`);
+      if (inspection.resources.length)
+        item.findings.push(
+          `${inspection.resources.length} unique render dependency reference${inspection.resources.length === 1 ? "" : "s"} classified.`,
+        );
+      if (inspection.dependentProducts.length)
+        item.findings.push(
+          `${inspection.dependentProducts.length} dependent product ID${inspection.dependentProducts.length === 1 ? "" : "s"} found.`,
+        );
+      if (inspection.roomCenters.length)
+        item.findings.push(
+          `${inspection.roomCenters.length} D5 room-center hint${inspection.roomCenters.length === 1 ? "" : "s"} found.`,
+        );
+
+      if (inspection.resources.length) {
+        facts.push(
+          fact(
+            asset.id,
+            "metadata.resource-refs",
+            inspection.resources.map((entry) => entry.path).slice(0, 500),
+            0.96,
+            "Structured DRS dependency lists",
+          ),
+          fact(
+            asset.id,
+            "drs.resource-count",
+            inspection.uniqueResourceCount,
+            1,
+            "Structured DRS dependency lists",
+          ),
+        );
+        const roleCounts = new Map<string, number>();
+        for (const resource of inspection.resources)
+          roleCounts.set(
+            resource.role,
+            (roleCounts.get(resource.role) ?? 0) + 1,
+          );
+        facts.push(
+          fact(
+            asset.id,
+            "drs.resource-roles",
+            [...roleCounts.entries()]
+              .sort(([left], [right]) => left.localeCompare(right))
+              .map(([role, count]) => `${role}:${count}`),
+            0.9,
+            "DRS resource filename classification",
+            "suggested",
+          ),
+        );
+      }
+      if (inspection.dependentProducts.length)
+        facts.push(
+          fact(
+            asset.id,
+            "drs.dependent-products",
+            inspection.dependentProducts.slice(0, 300),
+            1,
+            "Structured DRS dependent_products",
+          ),
+        );
+      if (inspection.source)
+        facts.push(
+          fact(
+            asset.id,
+            "drs.source",
+            inspection.source,
+            1,
+            "Structured DRS source field",
+          ),
+        );
+      if (inspection.pluginVersions.length)
+        facts.push(
+          fact(
+            asset.id,
+            "drs.plugin-versions",
+            inspection.pluginVersions,
+            1,
+            "Structured DRS DCC plugin metadata",
+          ),
+        );
+      if (inspection.clientVersions.length)
+        facts.push(
+          fact(
+            asset.id,
+            "drs.client-versions",
+            inspection.clientVersions,
+            1,
+            "Structured DRS client metadata",
+          ),
+        );
+      if (inspection.roomCenters.length)
+        facts.push(
+          fact(
+            asset.id,
+            "drs.room-centers",
+            inspection.roomCenters.map(
+              (point) => `${point.x},${point.y},${point.z}`,
+            ),
+            0.65,
+            "DRS detail_Info room-center hints; not geometry truth",
+            "suggested",
+          ),
+        );
+      if (inspection.resources.length)
+        item.warnings.push(
+          "DRS dependency paths are metadata only; resource bytes not present in the six-file pack cannot be reconstructed or published automatically.",
+        );
+      item.warnings.push(...inspection.issues);
+      continue;
+    }
+
+    const inspection = await inspectGenericJsonMetadata(asset);
     if (inspection.json) item.findings.push("Readable JSON metadata detected.");
     if (inspection.resourceRefs.length) {
       item.findings.push(
@@ -487,7 +614,7 @@ export async function buildSourceFusionReport(
           "metadata.resource-refs",
           inspection.resourceRefs,
           0.9,
-          "Literal resource paths found in metadata",
+          "Literal resource paths found in JSON metadata",
         ),
       );
     }
@@ -532,6 +659,7 @@ export async function buildSourceFusionReport(
 
   for (const asset of files.filter((entry) => /\.(?:skb|skp)$/i.test(entry.name))) {
     const inspection = await inspectSketchUpArchive(asset);
+    const semantic = await inspectSketchUpSemanticEvidence(asset);
     const item = items.find((entry) => entry.assetId === asset.id);
     if (!item) continue;
     if (inspection.zipLike) {
@@ -571,7 +699,44 @@ export async function buildSourceFusionReport(
           ),
         );
     }
-    item.warnings.push(...inspection.issues);
+    if (semantic.architecturalTokens.length) {
+      item.findings.push(
+        `${semantic.architecturalTokens.length} readable architectural string hint${semantic.architecturalTokens.length === 1 ? "" : "s"} found in SketchUp model data.`,
+      );
+      facts.push(
+        fact(
+          asset.id,
+          "sketchup.architectural-tokens",
+          semantic.architecturalTokens.slice(0, 220),
+          0.58,
+          "Literal printable strings from SketchUp model.dat; not decoded geometry",
+          "suggested",
+        ),
+      );
+    }
+    if (semantic.tagCandidates.length)
+      facts.push(
+        fact(
+          asset.id,
+          "sketchup.tag-candidates",
+          semantic.tagCandidates.slice(0, 180),
+          0.62,
+          "Literal SketchUp model.dat tag/layer-like strings",
+          "suggested",
+        ),
+      );
+    if (semantic.componentCandidates.length)
+      facts.push(
+        fact(
+          asset.id,
+          "sketchup.component-candidates",
+          semantic.componentCandidates.slice(0, 180),
+          0.55,
+          "Literal SketchUp model.dat component/group-like strings",
+          "suggested",
+        ),
+      );
+    item.warnings.push(...inspection.issues, ...semantic.issues);
   }
 
   for (const asset of files.filter((entry) => /\.pdf$/i.test(entry.name))) {
@@ -621,6 +786,56 @@ export async function buildSourceFusionReport(
             ),
           );
       }
+      if (best?.spatialLabels.length) {
+        const useful = best.spatialLabels
+          .filter((entry) => entry.kind !== "other")
+          .slice(0, 180);
+        if (useful.length)
+          facts.push(
+            fact(
+              asset.id,
+              "pdf.spatial-labels",
+              useful.map(
+                (entry) =>
+                  `${entry.kind}:${entry.text}@${entry.x.toFixed(4)},${entry.y.toFixed(4)}`,
+              ),
+              0.78,
+              `PDF page ${best.page} text positions normalized to page coordinates`,
+              "suggested",
+            ),
+          );
+      }
+      if (best?.embeddedImages.length) {
+        const candidates = best.embeddedImages.slice(0, 20);
+        item.findings.push(
+          `${candidates.length} embedded image candidate${candidates.length === 1 ? "" : "s"} detected on PDF plan page ${best.page}.`,
+        );
+        facts.push(
+          fact(
+            asset.id,
+            "pdf.embedded-image-candidates",
+            candidates.map(
+              (entry) =>
+                `page:${best.page};crop:${entry.x.toFixed(4)},${entry.y.toFixed(4)},${entry.width.toFixed(4)},${entry.height.toFixed(4)};confidence:${entry.confidence.toFixed(3)}${entry.pixelWidth && entry.pixelHeight ? `;pixels:${entry.pixelWidth}x${entry.pixelHeight}` : ""}`,
+            ),
+            Math.max(...candidates.map((entry) => entry.confidence)),
+            "PDF image XObject placement and intrinsic-size evidence",
+            "suggested",
+          ),
+        );
+        const strongest = candidates[0];
+        if (strongest)
+          facts.push(
+            fact(
+              asset.id,
+              "pdf.plan-image-crop",
+              `${best.page}:${strongest.x.toFixed(5)},${strongest.y.toFixed(5)},${strongest.width.toFixed(5)},${strongest.height.toFixed(5)}`,
+              strongest.confidence,
+              "Largest plan-page embedded image candidate",
+              "suggested",
+            ),
+          );
+      }
       item.warnings.push(...inspection.issues);
     } catch (error) {
       item.warnings.push(
@@ -651,7 +866,7 @@ export async function buildSourceFusionReport(
     );
   if (items.some((item) => item.kind === "sketchup"))
     recommendedActions.push(
-      "Run the controlled SketchUp processor to recover component/material metadata.",
+      "Use recovered SketchUp materials/semantic hints now; run the controlled SketchUp processor only when native component geometry is required.",
     );
   const planFact = facts.find((entry) => entry.key === "pdf.plan-page");
   if (planFact && typeof planFact.value === "number")
