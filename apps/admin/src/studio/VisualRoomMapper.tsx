@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { roomArea, type Room, type Scene } from "./domain";
+import { roomArea, type Room, type Scene, type Wall } from "./domain";
 import type { RoomSheetRow } from "./roomSheet";
 import type { BatchRepeatPreview } from "./unitRepeat";
 
@@ -13,6 +13,7 @@ export interface OpeningWorkflowStatus {
 
 export type RoomMapAction =
   | "idle"
+  | "wall"
   | "stamp"
   | "create"
   | "polygon"
@@ -27,6 +28,9 @@ export default function VisualRoomMapper({
   action,
   snap,
   selectedRoom,
+  selectedWall,
+  wallThickness,
+  wallHeight,
   disabled,
   onFloor,
   onUnit,
@@ -35,6 +39,11 @@ export default function VisualRoomMapper({
   onSnap,
   onClone,
   onMirror,
+  onWallThickness,
+  onWallHeight,
+  onWallApplySize,
+  onWallDelete,
+  onGenerateRoomsFromWalls,
   roomSheetRows,
   mappedRoomSheetKeys,
   selectedRoomSheetKey,
@@ -55,6 +64,9 @@ export default function VisualRoomMapper({
   action: RoomMapAction;
   snap: boolean;
   selectedRoom?: Room;
+  selectedWall?: Wall;
+  wallThickness: number;
+  wallHeight: number;
   disabled?: boolean;
   onFloor: (floorId: string) => void;
   onUnit: (unit: string) => void;
@@ -63,6 +75,11 @@ export default function VisualRoomMapper({
   onSnap: (value: boolean) => void;
   onClone: () => void;
   onMirror: (axis: "x" | "z") => void;
+  onWallThickness: (value: number) => void;
+  onWallHeight: (value: number) => void;
+  onWallApplySize: () => void;
+  onWallDelete: () => void;
+  onGenerateRoomsFromWalls: () => void;
   roomSheetRows: RoomSheetRow[];
   mappedRoomSheetKeys: Set<string>;
   selectedRoomSheetKey: string;
@@ -123,6 +140,16 @@ export default function VisualRoomMapper({
       selectedRoom.floorId === floorId &&
       unitRooms.length > 1,
   );
+  const floorWalls = (scene.walls ?? []).filter(
+    (wall) => wall.floorId === floorId,
+  );
+  const manualWalls = floorWalls.filter((wall) => wall.origin === "manual");
+  const selectedWallLength = selectedWall
+    ? Math.hypot(
+        selectedWall.end[0] - selectedWall.start[0],
+        selectedWall.end[1] - selectedWall.start[1],
+      )
+    : 0;
 
   return (
     <section className="room-mapper" aria-label="Visual unit and room mapper">
@@ -255,6 +282,92 @@ export default function VisualRoomMapper({
           </label>
         </div>
 
+        <section className="room-mapper-architect" aria-label="Architect wall tools">
+          <div className="room-mapper-architect-head">
+            <div>
+              <small>ARCHITECT MODE · PARAMETRIC WALLS</small>
+              <b>Walls first, rooms can be derived from closed loops</b>
+              <span>
+                {manualWalls.length} manual wall{manualWalls.length === 1 ? "" : "s"} on this floor
+              </span>
+            </div>
+            <button
+              type="button"
+              className={action === "wall" ? "active primary" : "primary"}
+              disabled={disabled || !floorId}
+              onClick={() => onAction(action === "wall" ? "idle" : "wall")}
+            >
+              + Draw wall
+            </button>
+          </div>
+          <div className="room-mapper-architect-fields">
+            <label>
+              Wall thickness
+              <span>
+                <input
+                  type="number"
+                  min="0.03"
+                  max="1.2"
+                  step="0.01"
+                  value={wallThickness}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    if (Number.isFinite(value)) onWallThickness(value);
+                  }}
+                />
+                m
+              </span>
+            </label>
+            <label>
+              Wall height
+              <span>
+                <input
+                  type="number"
+                  min="0.3"
+                  max="20"
+                  step="0.05"
+                  value={wallHeight}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    if (Number.isFinite(value)) onWallHeight(value);
+                  }}
+                />
+                m
+              </span>
+            </label>
+            <button
+              type="button"
+              disabled={disabled || manualWalls.length < 3}
+              onClick={onGenerateRoomsFromWalls}
+              title="Detect bounded faces from connected manual walls and create unverified room drafts"
+            >
+              Detect closed rooms
+            </button>
+          </div>
+          {selectedWall && selectedWall.floorId === floorId && (
+            <div className="room-mapper-wall-selected">
+              <span>
+                Selected wall · <b>{selectedWallLength.toFixed(2)} m</b> ·{" "}
+                {selectedWall.thickness.toFixed(2)} m thick ·{" "}
+                {selectedWall.height.toFixed(2)} m high
+              </span>
+              <button type="button" disabled={disabled} onClick={onWallApplySize}>
+                Apply size
+              </button>
+              <button
+                type="button"
+                className="danger"
+                disabled={disabled}
+                onClick={onWallDelete}
+              >
+                Delete wall
+              </button>
+            </div>
+          )}
+        </section>
+
         <div className="room-mapper-tools">
           <button
             type="button"
@@ -368,7 +481,13 @@ export default function VisualRoomMapper({
         </div>
 
         <div className="room-mapper-help">
-          {action === "stamp" && selectedSheetRow ? (
+          {action === "wall" ? (
+            <b>
+              Plan पर click-drag करके wall बनाइए. Endpoints, midpoints,
+              intersections और nearby wall directions पर snap होगा; 15° angle
+              assist और parallel/perpendicular alignment भी active है.
+            </b>
+          ) : action === "stamp" && selectedSheetRow ? (
             <b>
               {selectedSheetRow.unit} · {selectedSheetRow.name} is ready at{" "}
               {selectedSheetRow.width.toFixed(2)} × {selectedSheetRow.depth.toFixed(2)} m.
