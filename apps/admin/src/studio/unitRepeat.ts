@@ -250,3 +250,150 @@ export function applyBatchRepeatPlan(
     generatedTargets: preview.readyTargets,
   };
 }
+
+
+function unitNamesOnFloor(scene: Scene, floorId: string) {
+  return [
+    ...new Set(
+      scene.rooms
+        .filter((room) => room.floorId === floorId)
+        .map((room) => room.unit.trim())
+        .filter(Boolean),
+    ),
+  ].sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+}
+
+export function buildDetectedRepeatPreview(scene: Scene): BatchRepeatPreview {
+  const rows: BatchRepeatPreviewRow[] = [];
+
+  for (const targetFloor of scene.floors) {
+    if (
+      !targetFloor.repeatOfFloorId ||
+      targetFloor.repeatReviewed !== true
+    )
+      continue;
+    const sourceFloor = scene.floors.find(
+      (floor) => floor.id === targetFloor.repeatOfFloorId,
+    );
+    if (!sourceFloor) continue;
+
+    const units = unitNamesOnFloor(scene, sourceFloor.id);
+    if (!units.length) {
+      rows.push({
+        key: `detected:${sourceFloor.id}:${targetFloor.id}:unmapped`,
+        sourceFloorId: sourceFloor.id,
+        sourceFloorName: sourceFloor.name,
+        sourceUnit: "",
+        sourceRoomCount: 0,
+        targetFloorId: targetFloor.id,
+        targetFloorName: targetFloor.name,
+        targetUnit: "",
+        status: "blocked",
+        reason: "Map and review at least one source-floor unit before repeating this floor.",
+      });
+      continue;
+    }
+
+    for (const sourceUnit of units) {
+      const sourceRooms = scene.rooms.filter(
+        (room) =>
+          room.floorId === sourceFloor.id &&
+          sameUnit(room.unit, sourceUnit),
+      );
+      const existing = scene.rooms.some(
+        (room) =>
+          room.floorId === targetFloor.id &&
+          sameUnit(room.unit, sourceUnit),
+      );
+      let status: BatchRepeatRowStatus = "ready";
+      let reason = `${sourceRooms.length} reviewed room${sourceRooms.length === 1 ? "" : "s"} ready to copy`;
+
+      if (existing) {
+        status = "existing";
+        reason = "Target floor/unit already has mapped rooms; it will be preserved.";
+      } else if (!sourceRooms.length) {
+        status = "blocked";
+        reason = "Source unit has no mapped rooms.";
+      } else if (sourceRooms.some((room) => !room.verified)) {
+        status = "blocked";
+        reason =
+          "Review and accept each source room before repeating this detected floor.";
+      }
+
+      rows.push({
+        key: `detected:${sourceFloor.id}:${targetFloor.id}:${sourceUnit.toLowerCase()}`,
+        sourceFloorId: sourceFloor.id,
+        sourceFloorName: sourceFloor.name,
+        sourceUnit,
+        sourceRoomCount: sourceRooms.length,
+        targetFloorId: targetFloor.id,
+        targetFloorName: targetFloor.name,
+        targetUnit: sourceUnit,
+        status,
+        reason,
+      });
+    }
+  }
+
+  return {
+    planId: "detected-floor-repeats",
+    label: "Detected repeated floors",
+    note:
+      "Targets come from accepted repeatOfFloorId relationships; copied rooms remain unverified until visual review.",
+    rows,
+    readyTargets: rows.filter((row) => row.status === "ready").length,
+    existingTargets: rows.filter((row) => row.status === "existing").length,
+    blockedTargets: rows.filter((row) => row.status === "blocked").length,
+    roomsToCreate: rows
+      .filter((row) => row.status === "ready")
+      .reduce((sum, row) => sum + row.sourceRoomCount, 0),
+  };
+}
+
+export function applyDetectedRepeatPlan(
+  scene: Scene,
+  makeId: () => string = () => crypto.randomUUID(),
+): BatchRepeatApplyResult {
+  const preview = buildDetectedRepeatPreview(scene);
+  if (!preview.readyTargets)
+    return {
+      ...preview,
+      rooms: [...scene.rooms],
+      createdRooms: [],
+      generatedTargets: 0,
+    };
+
+  const createdRooms: Room[] = [];
+  for (const row of preview.rows) {
+    if (
+      row.status !== "ready" ||
+      !row.sourceFloorId ||
+      !row.targetFloorId ||
+      !row.sourceUnit
+    )
+      continue;
+    const sourceRooms = scene.rooms.filter(
+      (room) =>
+        room.floorId === row.sourceFloorId &&
+        sameUnit(room.unit, row.sourceUnit),
+    );
+    for (const room of sourceRooms)
+      createdRooms.push(
+        copiedRoom(
+          room,
+          row.targetFloorId,
+          row.targetUnit,
+          row.sourceFloorName ?? "source floor",
+          row.sourceUnit,
+          makeId,
+        ),
+      );
+  }
+
+  return {
+    ...preview,
+    rooms: [...scene.rooms, ...createdRooms],
+    createdRooms,
+    generatedTargets: preview.readyTargets,
+  };
+}
