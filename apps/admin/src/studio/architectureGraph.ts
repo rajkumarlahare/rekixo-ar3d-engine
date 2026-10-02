@@ -509,10 +509,7 @@ export function deriveCadWallGraph(
         reviewed: false,
         origin: "cad-auto",
         confidence,
-        reviewState:
-          confidence >= 0.9 && !registration.ambiguous
-            ? "auto_ready"
-            : "suggested",
+        reviewState: "suggested",
       };
     })
     .filter((wall): wall is Wall => Boolean(wall));
