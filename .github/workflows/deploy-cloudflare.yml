@@ -283,6 +283,11 @@ jobs:
           done
           echo "Report-only browser security policy verified on Admin and Public."
 
+      - name: Verify active immutable release integrity
+        env:
+          REKIXO_PUBLIC_ORIGIN: https://ar3dstudio.in
+        run: node scripts/verify-production-release-integrity.mjs
+
       - name: Verify sensitive Admin reads are protected
         shell: bash
         run: |
