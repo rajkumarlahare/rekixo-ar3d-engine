@@ -13,11 +13,13 @@ import { geoPublicProjectPath, publicProjectPath } from "@rekixo/3d-engine-core"
 import {
   createGeoExperience,
   deleteAllProjects,
+  deletionStatus,
   ensureProject,
   experiences,
   geoDraft,
   geoReleases,
   releases,
+  type CloudDeletionJob,
   type CloudGeoDraftState,
   type CloudGeoReleaseState,
   type CloudReleaseSummary,
@@ -89,6 +91,7 @@ export default function EngineDashboard() {
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [deletionJob, setDeletionJob] = useState<CloudDeletionJob | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -134,6 +137,20 @@ export default function EngineDashboard() {
         );
       });
     return () => controller.abort();
+  }, [refresh]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void deletionStatus()
+      .then((result) => {
+        if (!cancelled) setDeletionJob(result.job);
+      })
+      .catch(() => {
+        if (!cancelled) setDeletionJob(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [refresh]);
 
   useEffect(() => {
@@ -248,10 +265,14 @@ export default function EngineDashboard() {
     setDeleteBusy(true);
     setDeleteError("");
     try {
-      const result = await deleteAllProjects(projects.length, deleteConfirm);
+      const result = await deleteAllProjects(
+        deletionJob?.expectedProjectCount ?? projects.length,
+        deleteConfirm,
+      );
       if (result.remainingProjects !== 0)
         throw new Error("Project registry empty nahi hua.");
 
+      setDeletionJob(null);
       setProjects([]);
       setSelectedSlug("");
       setStatus(undefined);
@@ -269,6 +290,9 @@ export default function EngineDashboard() {
           ? reason.message
           : "Projects permanently delete nahi ho sake.",
       );
+      void deletionStatus()
+        .then((result) => setDeletionJob(result.job))
+        .catch(() => {});
     } finally {
       setDeleteBusy(false);
     }
@@ -533,7 +557,7 @@ export default function EngineDashboard() {
             ) : null}
           </div>
 
-          {projects.length > 0 ? (
+          {projects.length > 0 || deletionJob ? (
             <button
               className="engine-delete-all"
               type="button"
@@ -543,7 +567,7 @@ export default function EngineDashboard() {
                 setShowDeleteAll(true);
               }}
             >
-              Delete all projects
+              {deletionJob ? "Finish project cleanup" : "Delete all projects"}
             </button>
           ) : null}
         </aside>
@@ -552,19 +576,38 @@ export default function EngineDashboard() {
           {projectsLoaded && projects.length === 0 ? (
             <section className="engine-empty-workspace">
               <div className="engine-empty-workspace__icon">R</div>
-              <p className="engine-kicker">CLEAN ENGINE</p>
-              <h2>No 3D projects yet</h2>
-              <p>
-                Engine registry ab empty hai. Naya project create karne par Design Studio,
-                Building release aur standalone Building Website workflow start hoga.
+              <p className="engine-kicker">
+                {deletionJob ? "CLEANUP PENDING" : "CLEAN ENGINE"}
               </p>
-              <button
-                className="engine-button engine-button--primary"
-                type="button"
-                onClick={() => setShowCreate(true)}
-              >
-                + Create First 3D Project
-              </button>
+              <h2>
+                {deletionJob ? "Permanent cleanup needs one more pass" : "No 3D projects yet"}
+              </h2>
+              <p>
+                {deletionJob
+                  ? "Project records safe state me hain. Pending storage/database cleanup ko finish karke hi naya project create hoga."
+                  : "Engine registry ab empty hai. Naya project create karne par Design Studio, Building release aur standalone Building Website workflow start hoga."}
+              </p>
+              {deletionJob ? (
+                <button
+                  className="engine-button engine-button--primary"
+                  type="button"
+                  onClick={() => {
+                    setDeleteError("");
+                    setDeleteConfirm("");
+                    setShowDeleteAll(true);
+                  }}
+                >
+                  Finish permanent cleanup
+                </button>
+              ) : (
+                <button
+                  className="engine-button engine-button--primary"
+                  type="button"
+                  onClick={() => setShowCreate(true)}
+                >
+                  + Create First 3D Project
+                </button>
+              )}
             </section>
           ) : (
             <>
@@ -913,10 +956,15 @@ export default function EngineDashboard() {
             <div className="engine-create-modal__head">
               <div>
                 <p className="engine-kicker">PERMANENT DELETE</p>
-                <h2 id="engine-delete-all-title">Delete all {projects.length} projects?</h2>
+                <h2 id="engine-delete-all-title">
+                  {deletionJob
+                    ? `Finish cleanup for ${deletionJob.expectedProjectCount} projects?`
+                    : `Delete all ${projects.length} projects?`}
+                </h2>
                 <p>
-                  D1 project data, Experiences, releases, Studio drafts, 3D Geo placements aur
-                  project-owned R2 assets permanently delete honge.
+                  {deletionJob
+                    ? "Previous permanent deletion safely paused hui thi. Retry existing cleanup job ko resume karega; naya delete operation start nahi hoga."
+                    : "Projects pehle safely archive/freeze honge, phir project-owned R2 assets cleanup honge, aur uske baad D1 records permanently delete honge."}
                 </p>
               </div>
               <button
@@ -942,7 +990,11 @@ export default function EngineDashboard() {
 
             <div className="engine-delete-warning">
               <strong>Ye undo nahi hoga.</strong>
-              <span>Existing public 3D URLs bhi project delete hote hi unavailable ho jayenge.</span>
+              <span>
+                {deletionJob
+                  ? `Cleanup status: ${deletionJob.status} · R2 deleted: ${deletionJob.deletedR2Objects}`
+                  : "Existing public 3D URLs archive/freeze step ke baad unavailable ho jayenge."}
+              </span>
             </div>
 
             {deleteError ? <p className="engine-create-error">{deleteError}</p> : null}
