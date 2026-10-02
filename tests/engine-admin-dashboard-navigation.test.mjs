@@ -6,7 +6,7 @@ const read = (path) => fs.readFileSync(path, "utf8");
 
 test("Engine home exposes a clear project workflow and primary destinations", () => {
   const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
-  assert.match(dashboard, /Project se live 3D tak sab ek jagah/);
+  assert.match(dashboard, /Create → Edit → Map → Live/);
   assert.match(dashboard, />Projects</);
   assert.match(dashboard, />Design Studio</);
   assert.match(dashboard, />3D Jio Mapper</);
