@@ -5,6 +5,11 @@ import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.j
 import type { Asset } from "./domain";
 import type { FbxSourceAudit } from "./sourceAudit";
 import { disposeObjectResources } from "./threeResources";
+import {
+  parseAsciiDxfArchitecture,
+  type DxfSemanticSegment,
+  type DxfTextLabel,
+} from "./dxfArchitecture";
 
 export type SmartSourceRole =
   | "model"
@@ -63,6 +68,11 @@ export interface SmartCadAudit {
     layer: string;
     kind: SmartArchitecturalKind;
   }>;
+  unitName?: string;
+  metresPerUnit?: number;
+  geometryReady?: boolean;
+  semanticSegments?: DxfSemanticSegment[];
+  textLabels?: DxfTextLabel[];
   note: string;
 }
 
@@ -538,42 +548,47 @@ async function auditCadSources(files: Asset[]): Promise<SmartCadAudit[]> {
       continue;
     }
     const text = await file.blob.text();
-    if (!/\bSECTION\b/i.test(text)) {
+    const geometry = parseAsciiDxfArchitecture(text);
+    if (!geometry.ascii) {
       result.push({
         assetId: file.id,
         name: file.name,
         kind: "dxf",
         semanticReady: false,
         layerHints: [],
-        note: "DXF does not look like readable ASCII DXF; no CAD semantics were guessed.",
+        note:
+          geometry.issues[0] ??
+          "DXF does not look like readable ASCII DXF; no CAD semantics were guessed.",
       });
       continue;
     }
-    const lines = text.split(/\r?\n/);
-    const layers = new Set<string>();
-    for (let index = 0; index + 1 < lines.length; index += 2) {
-      const code = lines[index].trim();
-      const value = lines[index + 1].trim();
-      if (code === "8" && value) layers.add(value);
-    }
-    const layerHints = [...layers]
-      .map((layer) => {
-        const kind = semanticLayerKind(layer);
-        return kind ? { layer, kind } : undefined;
-      })
-      .filter(
-        (entry): entry is { layer: string; kind: SmartArchitecturalKind } =>
-          Boolean(entry),
-      );
+    const layerHints = [
+      ...new Map(
+        geometry.segments.map((segment) => [
+          `${segment.layer}\u0000${segment.kind}`,
+          { layer: segment.layer, kind: segment.kind },
+        ]),
+      ).values(),
+    ];
     result.push({
       assetId: file.id,
       name: file.name,
       kind: "dxf",
       semanticReady: true,
       layerHints,
-      note: layerHints.length
-        ? `${layerHints.length} wall/door/window layer hint(s) found. They are hints only until geometry is reviewed.`
-        : "ASCII DXF is readable, but no clearly named wall/door/window layers were found.",
+      ...(geometry.unitName ? { unitName: geometry.unitName } : {}),
+      ...(geometry.metresPerUnit !== undefined
+        ? { metresPerUnit: geometry.metresPerUnit }
+        : {}),
+      geometryReady: geometry.geometryReady,
+      semanticSegments: geometry.segments,
+      textLabels: geometry.labels,
+      note: geometry.geometryReady
+        ? `${geometry.segments.length} normalized wall/door/window segment${geometry.segments.length === 1 ? "" : "s"} parsed in ${geometry.unitName}; geometry remains reviewable CAD evidence until floor/alignment is resolved.`
+        : geometry.issues[0] ??
+          (layerHints.length
+            ? `${layerHints.length} wall/door/window layer hint(s) found, but drawing scale still needs review.`
+            : "ASCII DXF is readable, but no clearly named wall/door/window layers were found."),
     });
   }
   return result;
