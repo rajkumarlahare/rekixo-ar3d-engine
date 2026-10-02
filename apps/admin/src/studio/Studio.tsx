@@ -85,14 +85,6 @@ import {
 } from "./openingAssociator";
 import { applyReadyOpeningWorkflow } from "./openingWorkflow";
 import {
-  applyQuickSourceSetup,
-  detectQuickSourceSetup,
-  emptyQuickSourceSetup,
-  prepareQuickPublishModel,
-  type QuickSourceSetup,
-} from "./sourcePackSetup";
-import { floorSkeletonStatus } from "./floorSkeleton";
-import {
   APPEARANCE_PRESETS,
   activeAppearancePreset,
   appearancePreset,
@@ -103,23 +95,15 @@ import {
   createSuggestedRoomDrafts,
   mappedRoomSheetKeys,
   parseRoomSheetAssets,
-  profileRoomSheetRows,
   resolveRoomSheetFloorId,
   roomSheetMarker,
   type RoomSheetRow,
 } from "./roomSheet";
 import {
-  applyBatchRepeatPlan,
-  buildBatchRepeatPreview,
+  applyDetectedRepeatPlan,
+  buildDetectedRepeatPreview,
   isBatchRepeatedRoom,
 } from "./unitRepeat";
-import {
-  auditDemoInterior,
-  buildRepeatedDemoInterior,
-  buildTypicalFloorDemoInterior,
-  reconcileDemoInterior,
-  repairDemoInterior,
-} from "./demoInterior";
 import {
   projectAheadOfCloud,
   withLocalSaveTimestamp,
@@ -195,8 +179,6 @@ export default function Studio() {
   const [sourceAuditBusy, setSourceAuditBusy] = useState(false);
   const [smartAnalysis, setSmartAnalysis] = useState<SmartProjectAnalysis>();
   const [sourceFusion, setSourceFusion] = useState<SourceFusionReport>();
-  const [quickSourceSetup, setQuickSourceSetup] =
-    useState<QuickSourceSetup>(emptyQuickSourceSetup());
   const [manifestText, setManifestText] = useState("");
   const [projectSearch, setProjectSearch] = useState("");
   const [published, setPublished] = useState<PublishedCatalogEntry[]>([]);
@@ -260,7 +242,6 @@ export default function Studio() {
   }
   function open(p: Project) {
     setFiles([]);
-    setQuickSourceSetup(emptyQuickSourceSetup());
     setManifestText("");
     setBackup(undefined);
     setMessage("");
@@ -346,109 +327,13 @@ export default function Studio() {
   }, [project?.id, project?.assets]);
   useEffect(() => {
     let active = true;
-    void detectQuickSourceSetup(files)
-      .then((setup) => {
-        if (active) setQuickSourceSetup(setup);
-      })
-      .catch(() => {
-        if (active) setQuickSourceSetup(emptyQuickSourceSetup());
-      });
-    return () => {
-      active = false;
-    };
-  }, [files]);
-
-  useEffect(() => {
-    if (
-      !project ||
-      review ||
-      busy ||
-      !quickSourceSetup.profile ||
-      !quickSourceSetup.interiorAutomation?.enabled ||
-      !quickSourceSetup.interiorAutomation?.autoReconcile ||
-      !quickSourceSetup.repeatPlan ||
-      !quickSourceSetup.floorSkeleton?.length
-    )
-      return;
-
-    const floorStatus = floorSkeletonStatus(
-      project.scene,
-      quickSourceSetup.profile,
-      quickSourceSetup.floorSkeleton,
-    );
-    const typicalFloorId =
-      floorStatus.floorIdByKey[quickSourceSetup.repeatPlan.sourceFloorKey];
-    if (!typicalFloorId) return;
-
-    const repeatPreview = buildBatchRepeatPreview(
-      project.scene,
-      quickSourceSetup.profile,
-      quickSourceSetup.floorSkeleton,
-      quickSourceSetup.repeatPlan,
-    );
-    const result = reconcileDemoInterior(
-      project.scene,
-      typicalFloorId,
-      repeatPreview.rows,
-      id,
-    );
-    const changed =
-      result.removed.length +
-      result.createdTypical.length +
-      result.createdRepeated.length;
-    if (!changed) return;
-
-    const next: Project = {
-      ...project,
-      scene: { ...project.scene, furniture: result.furniture },
-    };
-    try {
-      validateProject(next);
-      edit(next);
-      setSelected((current) =>
-        result.removed.some((issue) => issue.furnitureId === current)
-          ? roomId
-          : current,
-      );
-      setMessage(
-        `Demo interior auto-repaired · ${result.removed.length} misplaced removed · ${result.createdTypical.length + result.createdRepeated.length} correct items restored/repeated.`,
-      );
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Demo interior automatic repair could not be applied safely.",
-      );
-    }
-  }, [
-    project,
-    quickSourceSetup,
-    review,
-    busy,
-    roomId,
-  ]);
-
-  useEffect(() => {
-    let active = true;
     void parseRoomSheetAssets(files)
       .then((parsed) => {
         if (!active) return;
-        const floorPlanAsset = quickSourceSetup.slots.find(
-          (slot) => slot.key === "floorPlan",
-        )?.asset;
-        const profileRows =
-          quickSourceSetup.profile && quickSourceSetup.roomSheetTemplate?.length
-            ? profileRoomSheetRows(
-                quickSourceSetup.roomSheetTemplate,
-                quickSourceSetup.profile,
-                floorPlanAsset,
-              )
-            : [];
-        const rows = parsed.rows.length ? parsed.rows : profileRows;
-        setRoomSheetRows(rows);
+        setRoomSheetRows(parsed.rows);
         setRoomSheetIssues(parsed.issues);
         setSelectedRoomSheetKey((current) =>
-          rows.some((row) => row.key === current) ? current : "",
+          parsed.rows.some((row) => row.key === current) ? current : "",
         );
       })
       .catch(() => {
@@ -460,7 +345,7 @@ export default function Studio() {
     return () => {
       active = false;
     };
-  }, [files, quickSourceSetup]);
+  }, [files]);
 
   useEffect(() => {
     let active = true;
