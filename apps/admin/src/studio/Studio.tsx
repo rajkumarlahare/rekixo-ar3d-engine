@@ -70,7 +70,11 @@ import {
 } from "./sourceFusion";
 import { prepareFbxWebModel } from "./fbxWebModel";
 import { buildSmartSceneDraft } from "./smartDraftBuilder";
-import { extractSketchUpTextures } from "./sketchUpArchive";
+import { prepareSketchUpTextureRecovery } from "./sketchUpRecovery";
+import {
+  acceptReadyRepeatedFloors,
+  approveReadyModelWalls,
+} from "./autoBuildingReview";
 import {
   suggestOpeningAssociations,
   type OpeningSuggestion,
@@ -2449,62 +2453,49 @@ export default function Studio() {
   }
 
   async function recoverSketchUpTextures() {
-    const archives = files.filter((asset) => /\.(?:skb|skp)$/i.test(asset.name));
-    if (!archives.length)
-      throw Error("Attach a SketchUp SKB/SKP source before recovering textures.");
-
-    const recoveredFiles: File[] = [];
-    const issues: string[] = [];
-    for (const archive of archives) {
-      const recovered = await extractSketchUpTextures(archive);
-      issues.push(...recovered.issues);
-      for (const texture of recovered.textures)
-        recoveredFiles.push(
-          new File([texture.blob], texture.name, {
-            type: texture.type,
-            lastModified: Date.now(),
-          }),
-        );
-    }
-    if (!recoveredFiles.length) {
+    const result = await prepareSketchUpTextureRecovery(files, p);
+    if (!result.recoveredFiles) {
       setMessage(
-        issues.length
-          ? `No recoverable SketchUp texture was added · ${issues[0]}`
-          : "No material texture file was found inside the SketchUp source.",
+        result.issues[0] ??
+          "No material texture file was found inside the SketchUp source.",
       );
       return;
     }
-
-    const incoming = await Promise.all(
-      recoveredFiles.map((file) => storage.makeAsset(file, p.id)),
-    );
-    const known = new Set(files.map((asset) => asset.hash.toLowerCase()));
-    const batch = new Set<string>();
-    const assets = incoming.filter((asset) => {
-      const hash = asset.hash.toLowerCase();
-      if (known.has(hash) || batch.has(hash)) return false;
-      batch.add(hash);
-      return true;
-    });
-    if (!assets.length) {
+    if (!result.assets.length) {
       setMessage("SketchUp textures are already attached to this project.");
       return;
     }
-    const existing = new Set(p.assets);
-    const next: Project = {
-      ...p,
-      assets: [
-        ...p.assets,
-        ...assets.map((asset) => asset.id).filter((id) => !existing.has(id)),
-      ],
-    };
-    await persist(next, assets);
+    await persist(result.nextProject, result.assets);
     setSmartAnalysis(undefined);
-    const issueText = issues.length
-      ? ` · ${issues.length} archive item${issues.length === 1 ? "" : "s"} skipped/reviewed`
+    const issueText = result.issues.length
+      ? ` · ${result.issues.length} archive item${result.issues.length === 1 ? "" : "s"} skipped/reviewed`
       : "";
     setMessage(
-      `${assets.length} SketchUp material texture${assets.length === 1 ? "" : "s"} recovered automatically${issueText}.`,
+      `${result.assets.length} SketchUp material texture${result.assets.length === 1 ? "" : "s"} recovered automatically${issueText}.`,
+    );
+  }
+
+  function approveHighConfidenceWalls() {
+    const result = approveReadyModelWalls(p.scene);
+    if (!result.approved) {
+      setMessage("No additional high-confidence wall is ready for one-click approval.");
+      return;
+    }
+    edit({ ...p, scene: result.scene });
+    setMessage(
+      `${result.approved} high-confidence wall candidate${result.approved === 1 ? "" : "s"} approved. Lower-confidence walls remain review-only.`,
+    );
+  }
+
+  function acceptHighConfidenceRepeatedFloors() {
+    const result = acceptReadyRepeatedFloors(p.scene);
+    if (!result.accepted) {
+      setMessage("No additional high-confidence repeated floor is ready for one-click acceptance.");
+      return;
+    }
+    edit({ ...p, scene: result.scene });
+    setMessage(
+      `${result.accepted} repeated floor relationship${result.accepted === 1 ? "" : "s"} accepted. Lower-confidence repeats remain review-only.`,
     );
   }
 
@@ -3281,6 +3272,8 @@ export default function Studio() {
           onAnalyze={() => void task(analyzeSmartProject)}
           onPrepareWebModel={() => void task(prepareSelectedWebModel)}
           onRecoverSketchUpTextures={() => void task(recoverSketchUpTextures)}
+          onApproveReadyWalls={approveHighConfidenceWalls}
+          onAcceptRepeatedFloors={acceptHighConfidenceRepeatedFloors}
           onSelectModel={selectBuilderModel}
           onBuildDraft={() => {
             try {
