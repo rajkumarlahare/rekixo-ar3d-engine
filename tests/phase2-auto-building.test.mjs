@@ -25,6 +25,9 @@ const sketch = await import(
 const dwg = await import(
   asUrl(compile("apps/admin/src/studio/dwgEvidence.ts"))
 );
+const dxf = await import(
+  asUrl(compile("apps/admin/src/studio/dxfArchitecture.ts"))
+);
 const autoRooms = await import(
   asUrl(compile("apps/admin/src/studio/autoRoomDraft.ts"))
 );
@@ -543,4 +546,131 @@ test("Phase 2 six-source contract remains generic", () => {
   for (const extension of ["fbx", "dwg", "skb", "pdf", "jpg", "drs"])
     assert.match(fusion, new RegExp(extension, "i"));
   assert.doesNotMatch(fusion, /jyoti|project_jyoti|source lock/i);
+});
+
+
+test("Phase 2 parses normalized metre geometry from unit-aware ASCII DXF", () => {
+  const source = [
+    "0","SECTION","2","HEADER",
+    "9","$INSUNITS","70","4",
+    "0","ENDSEC",
+    "0","SECTION","2","ENTITIES",
+    "0","LINE","8","A-WALL","10","0","20","0","11","4000","21","0",
+    "0","LWPOLYLINE","8","A-WALL","70","1",
+    "10","0","20","0","10","4000","20","0","10","4000","20","3000","10","0","20","3000",
+    "0","LINE","8","A-DOOR","10","900","20","0","11","1800","21","0",
+    "0","TEXT","8","A-ROOM","10","2000","20","1500","1","LIVING",
+    "0","ENDSEC","0","EOF",
+  ].join("\n");
+
+  const parsed = dxf.parseAsciiDxfArchitecture(source);
+  assert.equal(parsed.ascii, true);
+  assert.equal(parsed.unitName, "millimetre");
+  assert.equal(parsed.metresPerUnit, 0.001);
+  assert.equal(parsed.geometryReady, true);
+  assert.ok(parsed.segments.some((segment) => segment.kind === "wall"));
+  assert.ok(parsed.segments.some((segment) => segment.kind === "door"));
+  assert.deepEqual(parsed.bounds, { min: [0, 0], max: [4, 3] });
+  assert.equal(parsed.labels[0].text, "LIVING");
+  assert.deepEqual(parsed.labels[0].point, [2, 1.5]);
+});
+
+test("Phase 2 CAD wall fallback is fail-closed on ambiguous floors and usable on a single resolved floor", () => {
+  const analysis = analysisFixture();
+  analysis.architecturalCandidates = [];
+  analysis.cadAudits = [{
+    assetId: "cad",
+    name: "ground-floor.dxf",
+    kind: "dxf",
+    semanticReady: true,
+    layerHints: [{ layer: "A-WALL", kind: "wall" }],
+    unitName: "metre",
+    metresPerUnit: 1,
+    geometryReady: true,
+    semanticSegments: [
+      { kind: "wall", layer: "A-WALL", start: [0,0], end: [4,0], sourceEntity: "LINE" },
+      { kind: "wall", layer: "A-WALL", start: [4,0], end: [4,3], sourceEntity: "LINE" },
+      { kind: "wall", layer: "A-WALL", start: [4,3], end: [0,3], sourceEntity: "LINE" },
+      { kind: "wall", layer: "A-WALL", start: [0,3], end: [0,0], sourceEntity: "LINE" },
+    ],
+    textLabels: [],
+    note: "normalized",
+  }];
+  analysis.bounds = { min: [0,0,0], max: [4,3,3] };
+
+  const one = graph.deriveCadWallGraph(
+    analysis,
+    [{ id: "g", name: "Ground", elevation: 0 }],
+    1,
+    { x: 0, y: 0, z: 0, rotationY: 0 },
+  );
+  assert.equal(one.compatible, true);
+  assert.equal(one.walls.length, 4);
+  assert.ok(one.walls.every((wall) => wall.origin === "cad-auto"));
+  assert.ok(one.walls.every((wall) => wall.reviewed === false));
+
+  const ambiguous = graph.deriveCadWallGraph(
+    { ...analysis, cadAudits: [{ ...analysis.cadAudits[0], name: "typical.dxf" }] },
+    [
+      { id: "g", name: "Ground", elevation: 0 },
+      { id: "f1", name: "Floor 1", elevation: 3 },
+    ],
+    1,
+  );
+  assert.equal(ambiguous.compatible, false);
+  assert.equal(ambiguous.walls.length, 0);
+});
+
+test("SketchUp archive inspection supports prefixed SKB ZIP payloads", async () => {
+  const base = new Uint8Array(await zipDirectory([
+    "model.dat",
+    "materials/[Basic Tile]/Basic Tile.jpg",
+    "materials/[Basic Tile]/material.xml",
+  ]).arrayBuffer());
+  const prefix = new TextEncoder().encode("SketchUp Model prefixed container header...........................");
+  const blob = new Blob([prefix, base]);
+  const result = await sketch.inspectSketchUpArchive({
+    id: "skb-prefix",
+    projectId: "p",
+    name: "model.skb",
+    type: "application/octet-stream",
+    size: blob.size,
+    hash: "d".repeat(64),
+    blob,
+  });
+  assert.equal(result.zipLike, true);
+  assert.equal(result.entryCount, 3);
+  assert.ok(result.textureFiles.includes("materials/[Basic Tile]/Basic Tile.jpg"));
+});
+
+test("Phase 2 active Studio path no longer depends on project hash profiles", () => {
+  const studio = fs.readFileSync(
+    "apps/admin/src/studio/Studio.tsx",
+    "utf8",
+  );
+  const mapper = fs.readFileSync(
+    "apps/admin/src/studio/VisualRoomMapper.tsx",
+    "utf8",
+  );
+  const reference = fs.readFileSync(
+    "apps/admin/src/studio/ReferenceWorkspace.tsx",
+    "utf8",
+  );
+  const repeatSource = fs.readFileSync(
+    "apps/admin/src/studio/unitRepeat.ts",
+    "utf8",
+  );
+  const recovery = fs.readFileSync(
+    "apps/admin/src/studio/sketchUpRecovery.ts",
+    "utf8",
+  );
+
+  assert.doesNotMatch(studio, /quickSourceSetup|detectQuickSourceSetup|source lock|profileRoomSheetRows/i);
+  assert.doesNotMatch(mapper, /onPrepareSuggestedLayout|PROJECT/);
+  assert.doesNotMatch(reference, /QuickSourceSetup|quickSetup/);
+  assert.match(studio, /buildDetectedRepeatPreview/);
+  assert.match(studio, /applyDetectedRepeatPlan/);
+  assert.match(repeatSource, /buildDetectedRepeatPreview/);
+  assert.match(recovery, /canonicalRecoveredTextureName/);
+  assert.match(recovery, /auditFbxSources/);
 });
