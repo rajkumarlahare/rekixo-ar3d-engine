@@ -110,6 +110,10 @@ test("Phase 3 canvas supports desktop drag/drop and mobile tap placement", () =>
     "apps/admin/src/studio/SceneCanvas.tsx",
     "utf8",
   );
+  const canvasPlacement = fs.readFileSync(
+    "apps/admin/src/studio/canvasFurniturePlacement.ts",
+    "utf8",
+  );
   const shelf = fs.readFileSync(
     "apps/admin/src/studio/FurnitureShelf.tsx",
     "utf8",
@@ -119,9 +123,9 @@ test("Phase 3 canvas supports desktop drag/drop and mobile tap placement", () =>
     "utf8",
   );
 
-  assert.match(canvas, /application\/x-rekixo-furniture/);
-  assert.match(canvas, /addEventListener\("dragover"/);
-  assert.match(canvas, /addEventListener\("drop"/);
+  assert.match(canvasPlacement, /application\/x-rekixo-furniture/);
+  assert.match(canvasPlacement, /addEventListener\("dragover"/);
+  assert.match(canvasPlacement, /addEventListener\("drop"/);
   assert.match(canvas, /furniturePlacement\?\.enabled/);
   assert.match(canvas, /onFurniturePlace/);
   assert.match(shelf, /draggable=/);
