@@ -28,6 +28,9 @@ const dwg = await import(
 const autoRooms = await import(
   asUrl(compile("apps/admin/src/studio/autoRoomDraft.ts"))
 );
+const sourceConflicts = await import(
+  asUrl(compile("apps/admin/src/studio/sourceConflicts.ts"))
+);
 const autoReview = await import(
   asUrl(compile("apps/admin/src/studio/autoBuildingReview.ts"))
 );
@@ -449,4 +452,91 @@ test("Phase 2 fast review UI and public sanitization are fail-closed", () => {
   assert.match(studio, /acceptReadyRepeatedFloors/);
   assert.match(worker, /wall\?\.reviewed === true/);
   assert.match(worker, /floor\.repeatReviewed === true/);
+});
+
+
+test("Phase 2 cross-source queue keeps ambiguity and missing metadata resources reviewable", () => {
+  const blob = new Blob(["x"]);
+  const files = [
+    { id: "a", projectId: "p", name: "one.fbx", type: "application/octet-stream", size: 1, hash: "a".repeat(64), blob },
+    { id: "b", projectId: "p", name: "two.fbx", type: "application/octet-stream", size: 1, hash: "b".repeat(64), blob },
+    { id: "m", projectId: "p", name: "scene.drs", type: "application/json", size: 1, hash: "c".repeat(64), blob },
+  ];
+  const items = [
+    { assetId: "a", name: "one.fbx", extension: "fbx", kind: "authoring-model", support: "partial", capabilities: ["geometry"], findings: [], warnings: [] },
+    { assetId: "b", name: "two.fbx", extension: "fbx", kind: "authoring-model", support: "partial", capabilities: ["geometry"], findings: [], warnings: [] },
+    { assetId: "m", name: "scene.drs", extension: "drs", kind: "metadata", support: "partial", capabilities: ["metadata"], findings: [], warnings: [] },
+  ];
+  const facts = [
+    {
+      id: "m:refs",
+      sourceAssetId: "m",
+      key: "metadata.resource-refs",
+      value: ["source/missing-model.fbx"],
+      confidence: 0.9,
+      basis: "metadata",
+      status: "observed",
+    },
+    {
+      id: "a:floor",
+      sourceAssetId: "a",
+      key: "canonical.floor-count",
+      value: 5,
+      confidence: 0.9,
+      basis: "model",
+      status: "suggested",
+    },
+    {
+      id: "b:floor",
+      sourceAssetId: "b",
+      key: "canonical.floor-count",
+      value: 6,
+      confidence: 0.9,
+      basis: "provider",
+      status: "suggested",
+    },
+  ];
+  const conflicts = sourceConflicts.detectSourceFusionConflicts(
+    files,
+    items,
+    facts,
+    [],
+  );
+  assert.ok(conflicts.some((entry) => entry.id === "ambiguous-authoring-model"));
+  assert.ok(conflicts.some((entry) => entry.id === "conflict:canonical.floor-count"));
+  assert.ok(conflicts.some((entry) => entry.id === "missing-model-ref:m"));
+});
+
+test("Phase 2 normal builder exposes one-click generic Auto Build and no hash-profile setup panel", () => {
+  const builder = fs.readFileSync(
+    "apps/admin/src/studio/SmartProjectBuilder.tsx",
+    "utf8",
+  );
+  const studio = fs.readFileSync(
+    "apps/admin/src/studio/Studio.tsx",
+    "utf8",
+  );
+  const pipeline = fs.readFileSync(
+    "apps/admin/src/studio/autoBuildPipeline.ts",
+    "utf8",
+  );
+
+  assert.match(builder, /Build automatically/);
+  assert.doesNotMatch(builder, /SOURCE LOCK DETECTED/);
+  assert.doesNotMatch(builder, /Exact SHA-256 source matches/);
+  assert.match(studio, /runAutoBuildPipeline/);
+  assert.match(pipeline, /prepareFbxWebModel/);
+  assert.match(pipeline, /prepareSketchUpTextureRecovery/);
+  assert.match(pipeline, /buildSmartSceneDraft/);
+  assert.match(pipeline, /applyReadyOpeningWorkflow/);
+});
+
+test("Phase 2 six-source contract remains generic", () => {
+  const fusion = fs.readFileSync(
+    "apps/admin/src/studio/sourceFusion.ts",
+    "utf8",
+  );
+  for (const extension of ["fbx", "dwg", "skb", "pdf", "jpg", "drs"])
+    assert.match(fusion, new RegExp(extension, "i"));
+  assert.doesNotMatch(fusion, /jyoti|project_jyoti|source lock/i);
 });
