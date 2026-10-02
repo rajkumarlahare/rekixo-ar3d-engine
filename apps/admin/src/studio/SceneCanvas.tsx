@@ -1990,12 +1990,8 @@ export default function SceneCanvas(props: Props) {
     runtime.controls.enablePan = false;
     runtime.focus();
   }, [props.alignmentMode]);
-  const authoringActive = Boolean(
-    props.roomDraw?.enabled ||
-      props.roomStamp?.enabled ||
-      props.roomPolygonDraw?.enabled ||
-      props.furniturePlacement?.enabled,
-  );
+  const authoringActive = Boolean(props.roomDraw?.enabled || props.roomStamp?.enabled ||
+    props.roomPolygonDraw?.enabled || props.furniturePlacement?.enabled);
   return (
     <div className={authoringActive ? "canvas-wrap room-draw-active" : "canvas-wrap"}>
       <div className="studio-canvas" ref={host} />
