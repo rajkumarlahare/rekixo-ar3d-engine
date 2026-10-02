@@ -564,3 +564,146 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Phase 5 — immutable Geo release verification, publication and rollback. */
+.geo3d-release-card {
+  border-color: rgba(244, 185, 66, .32);
+  background:
+    linear-gradient(145deg, rgba(244, 185, 66, .06), transparent 46%),
+    #0a111a;
+}
+
+.geo3d-release-readiness {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.geo3d-release-readiness article {
+  min-height: 92px;
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+  align-content: space-between;
+  border: 1px solid #283544;
+  border-radius: 11px;
+  background: #080f17;
+}
+
+.geo3d-release-readiness span {
+  color: #75879b;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.geo3d-release-readiness strong {
+  color: #eef4fb;
+  font-size: 16px;
+}
+
+.geo3d-release-readiness small {
+  color: #718397;
+  overflow-wrap: anywhere;
+}
+
+.geo3d-release-history {
+  margin-top: 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.geo3d-release-history__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #dfe8f2;
+}
+
+.geo3d-release-history__title span {
+  color: #718397;
+  font-size: 10px;
+}
+
+.geo3d-release-history article {
+  padding: 11px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #283544;
+  border-radius: 11px;
+  background: #080f17;
+}
+
+.geo3d-release-history article > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.geo3d-release-history article strong {
+  color: #edf3fa;
+}
+
+.geo3d-release-history article span,
+.geo3d-release-history article small {
+  color: #718397;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.geo3d-release-history article b {
+  padding: 5px 8px;
+  border: 1px solid rgba(244, 185, 66, .35);
+  border-radius: 999px;
+  background: rgba(244, 185, 66, .08);
+  color: var(--geo-gold-soft);
+  font-size: 8px;
+  letter-spacing: .08em;
+}
+
+.geo3d-release-history article button {
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid #3a4654;
+  border-radius: 9px;
+  background: #0c151f;
+  color: #dbe6f1;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.geo3d-release-history article button:hover:not(:disabled) {
+  border-color: var(--geo-gold-border);
+  color: var(--geo-gold-soft);
+}
+
+.geo3d-release-history article button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.geo3d-release-empty {
+  padding: 18px;
+  border: 1px dashed #354354;
+  border-radius: 11px;
+  color: #74879b;
+  text-align: center;
+  font-size: 11px;
+}
+
+@media (max-width: 760px) {
+  .geo3d-release-readiness {
+    grid-template-columns: 1fr;
+  }
+
+  .geo3d-release-history article {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
