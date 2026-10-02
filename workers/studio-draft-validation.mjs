@@ -212,7 +212,16 @@ function validateScene(scene, assetIds) {
       (floor.repeatConfidence !== undefined &&
         !number(floor.repeatConfidence, 0, 1)) ||
       (floor.repeatReviewed !== undefined &&
-        typeof floor.repeatReviewed !== "boolean")
+        typeof floor.repeatReviewed !== "boolean") ||
+      (floor.repeatReviewState !== undefined &&
+        !["suggested", "auto_ready", "human_reviewed"].includes(
+          floor.repeatReviewState,
+        )) ||
+      (floor.repeatReviewState === "human_reviewed" &&
+        floor.repeatReviewed !== true) ||
+      (floor.repeatReviewed === true &&
+        floor.repeatReviewState !== undefined &&
+        floor.repeatReviewState !== "human_reviewed")
     )
       throw Error("Invalid Studio floor.");
 
@@ -309,7 +318,15 @@ function validateScene(scene, assetIds) {
           wall.sourceOccurrence < 1 ||
           wall.sourceOccurrence > 100000 ||
           !wall.sourceNodeName)) ||
-      (wall.confidence !== undefined && !number(wall.confidence, 0, 1))
+      (wall.confidence !== undefined && !number(wall.confidence, 0, 1)) ||
+      (wall.reviewState !== undefined &&
+        !["suggested", "auto_ready", "human_reviewed"].includes(
+          wall.reviewState,
+        )) ||
+      (wall.reviewState === "human_reviewed" && wall.reviewed !== true) ||
+      (wall.reviewed === true &&
+        wall.reviewState !== undefined &&
+        wall.reviewState !== "human_reviewed")
     )
       throw Error("Invalid Studio parametric wall.");
   }
@@ -340,7 +357,16 @@ function validateScene(scene, assetIds) {
           opening.sourceOccurrence < 1 ||
           opening.sourceOccurrence > 100000 ||
           !opening.sourceNodeName)) ||
-      (opening.confidence !== undefined && !number(opening.confidence, 0, 1))
+      (opening.confidence !== undefined && !number(opening.confidence, 0, 1)) ||
+      (opening.reviewState !== undefined &&
+        !["suggested", "auto_ready", "human_reviewed"].includes(
+          opening.reviewState,
+        )) ||
+      (opening.reviewState === "human_reviewed" &&
+        opening.reviewed !== true) ||
+      (opening.reviewed === true &&
+        opening.reviewState !== undefined &&
+        opening.reviewState !== "human_reviewed")
     )
       throw Error("Invalid Studio opening.");
   }
