@@ -11,7 +11,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,6 +28,12 @@ jobs:
 
       - name: Verify
         run: npm test
+
+      - name: Install browser E2E runner
+        run: npx --no-install playwright install --with-deps chromium
+
+      - name: Run browser E2E smoke
+        run: npx --no-install playwright test --config playwright.config.ts
 
       - name: Diff whitespace safety
         run: git diff --check origin/main...HEAD
