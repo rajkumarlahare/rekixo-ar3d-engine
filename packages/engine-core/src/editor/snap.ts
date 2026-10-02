@@ -86,6 +86,23 @@ function positive(value: number | undefined, fallback: number) {
   return Number.isFinite(value) && (value ?? 0) > 0 ? value! : fallback;
 }
 
+function snapPriority(kind: PlanSnapKind) {
+  switch (kind) {
+    case "intersection":
+      return 5;
+    case "vertex":
+      return 4;
+    case "midpoint":
+      return 3;
+    case "edge":
+      return 2;
+    case "grid":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 export function resolvePlanSnap(
   point: PlanPoint,
   options: PlanSnapOptions = {},
@@ -111,9 +128,12 @@ export function resolvePlanSnap(
     sourceId?: string,
   ) => {
     const candidateDistance = distance(point, candidate);
+    const preferredSemanticSnap =
+      snapPriority(kind) > snapPriority(best.kind) &&
+      candidateDistance <= best.distance + 0.03;
     if (
       candidateDistance <= tolerance &&
-      candidateDistance + 1e-9 < best.distance
+      (candidateDistance + 1e-9 < best.distance || preferredSemanticSnap)
     )
       best = {
         point: [candidate[0], candidate[1]],
