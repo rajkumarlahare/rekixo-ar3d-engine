@@ -175,12 +175,50 @@ function versionRows(value: unknown) {
   ].slice(0, 50);
 }
 
+function collectLiteralResourceRefs(
+  value: unknown,
+  output: string[],
+  depth = 0,
+) {
+  if (output.length >= MAX_RESOURCE_REFS || depth > 6) return;
+  if (typeof value === "string") {
+    for (const match of value.matchAll(
+      /(?:[A-Za-z]:)?[^\s"'<>]+\.(?:png|jpe?g|webp|bmp|tiff?|exr|hdr|dds|ktx2|fbx|obj|glb|gltf|skp|skb|pak|bin)/gi,
+    )) {
+      output.push(match[0].replaceAll("\\", "/"));
+      if (output.length >= MAX_RESOURCE_REFS) break;
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      collectLiteralResourceRefs(entry, output, depth + 1);
+      if (output.length >= MAX_RESOURCE_REFS) break;
+    }
+    return;
+  }
+  const row = object(value);
+  if (!row) return;
+  for (const entry of Object.values(row)) {
+    collectLiteralResourceRefs(entry, output, depth + 1);
+    if (output.length >= MAX_RESOURCE_REFS) break;
+  }
+}
+
 function resourceStrings(root: Record<string, unknown>) {
   const direct = stringArray(root.dependent_pak_list, MAX_RESOURCE_REFS);
   const extra = stringArray(root.dependent_resources, MAX_RESOURCE_REFS);
   const pak = clean(root.pak_URL, 1000);
   const design = clean(root.design_File_URL, 1000);
-  return [...direct, ...extra, ...(pak ? [pak] : []), ...(design ? [design] : [])]
+  const literal: string[] = [];
+  collectLiteralResourceRefs(root, literal);
+  return [
+    ...direct,
+    ...extra,
+    ...(pak ? [pak] : []),
+    ...(design ? [design] : []),
+    ...literal,
+  ]
     .filter((entry) => /[\\/]|\.[a-z0-9]{1,8}$/i.test(entry))
     .slice(0, MAX_RESOURCE_REFS);
 }
