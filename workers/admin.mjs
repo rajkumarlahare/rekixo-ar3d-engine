@@ -1,3 +1,4 @@
+export { DwgProcessor } from "./dwg-processor-container.mjs";
 import {
   activeReleaseState,
   experienceFromActiveReleaseState,

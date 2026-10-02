@@ -8,6 +8,14 @@ import type {
   SketchUpMaterialStyleBinding,
   SketchUpMaterialTextureBinding,
 } from "./sketchUpMaterialResolver";
+import {
+  findDwgNormalizedDocument,
+  type DwgNormalizedDocument,
+} from "./dwgNormalized";
+import {
+  prepareDwgArchitectureDerivative,
+  type DwgArchitectureProcessor,
+} from "./dwgProcessor";
 import { analyzeProjectFiles, type SmartProjectAnalysis } from "./projectAnalyzer";
 import { buildSmartSceneDraft } from "./smartDraftBuilder";
 import { suggestOpeningAssociations } from "./openingAssociator";
@@ -16,6 +24,10 @@ import {
   markAutoReadyModelWalls,
   markAutoReadyRepeatedFloors,
 } from "./autoBuildingReview";
+
+export interface AutoBuildPipelineOptions {
+  processDwgArchitecture?: DwgArchitectureProcessor;
+}
 
 export interface AutoBuildPipelineResult {
   project: Project;
@@ -29,6 +41,11 @@ export interface AutoBuildPipelineResult {
     materialStylesApplied: number;
     resolvedExternalTextures: number;
     unresolvedExternalTextures: number;
+    dwgProcessed: boolean;
+    dwgSegments: number;
+    dwgDimensions: number;
+    dwgObjects: number;
+    dwgFloorLabels: number;
     floors: number;
     walls: number;
     repeatedFloors: number;
@@ -85,6 +102,7 @@ export async function runAutoBuildPipeline(
   project: Project,
   files: readonly Asset[],
   audits: readonly FbxSourceAudit[] = [],
+  options: AutoBuildPipelineOptions = {},
 ): Promise<AutoBuildPipelineResult> {
   let next: Project = structuredClone(project);
   let workingFiles = [...files];
@@ -93,6 +111,48 @@ export async function runAutoBuildPipeline(
 
   const authoring = chooseAuthoringModel(next, workingFiles);
   next.scene.modelId = authoring.id;
+
+  let dwgProcessed = false;
+  let dwgDocument: DwgNormalizedDocument | undefined;
+  const dwgSources = workingFiles.filter((file) => /\.dwg$/i.test(file.name));
+  if (dwgSources.length > 1) {
+    issues.push(
+      "Multiple DWG sources are attached. Select/fuse their floor roles during cross-source alignment instead of guessing which drawing is authoritative.",
+    );
+  } else if (dwgSources.length === 1) {
+    const dwgSource = dwgSources[0];
+    const existing = await findDwgNormalizedDocument(workingFiles, dwgSource);
+    if (existing) {
+      dwgDocument = existing.document;
+    } else if (options.processDwgArchitecture) {
+      try {
+        const prepared = await prepareDwgArchitectureDerivative(
+          dwgSource,
+          next.id,
+          options.processDwgArchitecture,
+        );
+        const equivalent = findEquivalentAsset(workingFiles, prepared.asset);
+        const derivative = equivalent ?? prepared.asset;
+        if (!equivalent) {
+          createdAssets.push(derivative);
+          workingFiles.push(derivative);
+          next = appendAsset(next, derivative);
+        }
+        dwgDocument = prepared.document;
+        dwgProcessed = true;
+      } catch (error) {
+        issues.push(
+          error instanceof Error
+            ? `DWG architecture processor: ${error.message}`
+            : "DWG architecture processor could not complete.",
+        );
+      }
+    } else {
+      issues.push(
+        "DWG architecture processor is unavailable in this session; raw DWG remains source evidence and is not guessed into geometry.",
+      );
+    }
+  }
 
   let sketchUpTexturesRecovered = 0;
   let materialBindings: SketchUpMaterialTextureBinding[] = [];
@@ -208,6 +268,13 @@ export async function runAutoBuildPipeline(
       materialStylesApplied,
       resolvedExternalTextures,
       unresolvedExternalTextures,
+      dwgProcessed,
+      dwgSegments: dwgDocument?.segments.length ?? 0,
+      dwgDimensions: dwgDocument?.dimensions.length ?? 0,
+      dwgObjects:
+        (dwgDocument?.objects.length ?? 0) +
+        (dwgDocument?.inserts.length ?? 0),
+      dwgFloorLabels: dwgDocument?.floors.length ?? 0,
       floors: draft.summary.floors,
       walls: draft.summary.walls,
       repeatedFloors: draft.summary.repeatedFloors,
@@ -237,6 +304,9 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   const resolvedTextures = summary.resolvedExternalTextures
     ? ` · ${summary.resolvedExternalTextures} FBX texture reference${summary.resolvedExternalTextures === 1 ? "" : "s"} resolved`
     : "";
+  const dwg = summary.dwgSegments || summary.dwgDimensions || summary.dwgObjects
+    ? ` · DWG: ${summary.dwgSegments} segments · ${summary.dwgDimensions} dimensions · ${summary.dwgObjects} semantic objects${summary.dwgFloorLabels ? ` · ${summary.dwgFloorLabels} floor label${summary.dwgFloorLabels === 1 ? "" : "s"}` : ""}`
+    : "";
   const rooms = summary.autoRooms
     ? ` · ${summary.autoRooms} room draft${summary.autoRooms === 1 ? "" : "s"}`
     : "";
@@ -255,5 +325,5 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
     summary.readyWallsPrepared +
     summary.readyRepeatsPrepared +
     summary.readyOpeningsPrepared;
-  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${walls}${repeats}${openings}${web}${textures}${materialFusion}${materialStyles}${resolvedTextures}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
+  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${walls}${repeats}${openings}${web}${textures}${materialFusion}${materialStyles}${resolvedTextures}${dwg}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
 }

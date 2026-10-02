@@ -10,6 +10,10 @@ import {
   type DxfSemanticSegment,
   type DxfTextLabel,
 } from "./dxfArchitecture";
+import {
+  findDwgNormalizedDocument,
+  type DwgNormalizedDocument,
+} from "./dwgNormalized";
 
 export type SmartSourceRole =
   | "model"
@@ -73,6 +77,7 @@ export interface SmartCadAudit {
   geometryReady?: boolean;
   semanticSegments?: DxfSemanticSegment[];
   textLabels?: DxfTextLabel[];
+  normalizedDwg?: DwgNormalizedDocument;
   note: string;
 }
 
@@ -522,6 +527,78 @@ async function auditCadSources(files: Asset[]): Promise<SmartCadAudit[]> {
       | "dwg"
       | "skp"
       | "skb";
+    if (extension === "dwg") {
+      const normalized = await findDwgNormalizedDocument(files, file);
+      if (!normalized) {
+        result.push({
+          assetId: file.id,
+          name: file.name,
+          kind: "dwg",
+          semanticReady: false,
+          layerHints: [],
+          note:
+            "DWG source is intact, but its controlled normalized architecture derivative is not available yet.",
+        });
+        continue;
+      }
+
+      const document = normalized.document;
+      const semanticSegments: DxfSemanticSegment[] = document.segments.map(
+        (segment) => ({
+          kind: segment.kind,
+          layer: segment.layer,
+          start: segment.start,
+          end: segment.end,
+          sourceEntity: segment.sourceEntity,
+          ...(segment.widthM !== undefined
+            ? { widthM: segment.widthM }
+            : {}),
+        }),
+      );
+      const textLabels: DxfTextLabel[] = document.texts.map((entry) => ({
+        layer: entry.layer,
+        text: entry.text,
+        point: entry.point,
+      }));
+      const layerHints = [
+        ...new Map(
+          document.segments.map((segment) => [
+            `${segment.layer}\u0000${segment.kind}`,
+            { layer: segment.layer, kind: segment.kind },
+          ]),
+        ).values(),
+      ];
+      const geometryReady = Boolean(
+        document.units.metresPerUnit && semanticSegments.length,
+      );
+      const semanticCount =
+        semanticSegments.length +
+        document.dimensions.length +
+        document.inserts.length +
+        document.objects.length +
+        document.texts.length;
+
+      result.push({
+        assetId: file.id,
+        name: file.name,
+        kind: "dwg",
+        semanticReady: semanticCount > 0,
+        layerHints,
+        ...(document.units.name ? { unitName: document.units.name } : {}),
+        ...(document.units.metresPerUnit !== undefined
+          ? { metresPerUnit: document.units.metresPerUnit }
+          : {}),
+        geometryReady,
+        semanticSegments,
+        textLabels,
+        normalizedDwg: document,
+        note: geometryReady
+          ? `${semanticSegments.length} normalized wall/door/window segment${semanticSegments.length === 1 ? "" : "s"}, ${document.dimensions.length} dimension${document.dimensions.length === 1 ? "" : "s"}, ${document.inserts.length} block insert${document.inserts.length === 1 ? "" : "s"} and ${document.objects.length} architectural object${document.objects.length === 1 ? "" : "s"} decoded from DWG by ${document.processor.engine} ${document.processor.engineVersion}. Geometry remains reviewable until cross-source alignment is resolved.`
+          : `DWG decoded by ${document.processor.engine} ${document.processor.engineVersion}, but drawing units/segment geometry are not safe for automatic metre reconstruction. ${document.issues[0] ?? "Keep decoded semantics as review evidence."}`,
+      });
+      continue;
+    }
+
     if (extension !== "dxf") {
       result.push({
         assetId: file.id,
@@ -530,9 +607,7 @@ async function auditCadSources(files: Asset[]): Promise<SmartCadAudit[]> {
         semanticReady: false,
         layerHints: [],
         note:
-          extension === "dwg"
-            ? "DWG is preserved as source evidence. Convert/export to ASCII DXF for safe browser-side layer detection."
-            : "SketchUp source is preserved as evidence; semantic layer extraction is not enabled in-browser.",
+          "SketchUp source is preserved as evidence; semantic layer extraction is not enabled in-browser.",
       });
       continue;
     }

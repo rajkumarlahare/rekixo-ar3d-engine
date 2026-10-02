@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "rekixo-3d-admin",
-  "compatibility_date": "2026-09-16",
+  "compatibility_date": "2026-10-02",
   "main": "./workers/admin.mjs",
   "workers_dev": false,
   "routes": [
@@ -34,6 +34,28 @@
     {
       "binding": "MODEL_ASSETS",
       "bucket_name": "rekixo-3d-assets"
+    }
+  ],
+  "containers": [
+    {
+      "class_name": "DwgProcessor",
+      "image": "./services/dwg-processor/Dockerfile",
+      "instance_type": "basic",
+      "max_instances": 2
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "DWG_PROCESSOR",
+        "class_name": "DwgProcessor"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-dwg-processor",
+      "new_sqlite_classes": ["DwgProcessor"]
     }
   ]
 }

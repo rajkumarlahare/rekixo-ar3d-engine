@@ -16,6 +16,7 @@ import {
   deletionStatus,
   hardDeleteAllProjects,
 } from "./project-deletion.mjs";
+import { processDwgArchitecture } from "./dwg-processor-route.mjs";
 const BASE_PATH = "/3Dprojects";
 const CLOUD_PATH = `${BASE_PATH}/api/cloud`;
 const COOKIE = "rekixo_3d_admin";
@@ -2393,6 +2394,16 @@ export async function handleCloudAdminRequest(request, env, url = new URL(reques
 
   if (url.pathname === `${CLOUD_PATH}/deletion-status`)
     return deletionStatus(request, env);
+
+  if (url.pathname === `${CLOUD_PATH}/processors/dwg`)
+    return processDwgArchitecture(request, env, actor, {
+      json,
+      sameOrigin,
+      validAssetId,
+      validSha256,
+      validProjectId,
+      safeText,
+    });
 
   if (url.pathname === `${CLOUD_PATH}/projects` || url.pathname.startsWith(`${CLOUD_PATH}/projects/`))
     return routeProjects(request, env, actor, url);
