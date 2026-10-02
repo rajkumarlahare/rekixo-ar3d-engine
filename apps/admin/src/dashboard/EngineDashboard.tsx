@@ -15,8 +15,10 @@ import {
   deleteAllProjects,
   ensureProject,
   experiences,
+  geoDraft,
   geoPlacement,
   releases,
+  type CloudGeoDraftState,
   type CloudGeoPlacementState,
   type CloudReleaseSummary,
 } from "../studio/cloud";
@@ -71,6 +73,7 @@ export default function EngineDashboard() {
   const [experienceItems, setExperienceItems] = useState<EngineExperienceSummary[]>([]);
   const [releaseItems, setReleaseItems] = useState<CloudReleaseSummary[]>([]);
   const [geoState, setGeoState] = useState<CloudGeoPlacementState>();
+  const [geoDraftState, setGeoDraftState] = useState<CloudGeoDraftState>();
   const [experienceBusy, setExperienceBusy] = useState(false);
   const [experienceError, setExperienceError] = useState("");
   const [error, setError] = useState("");
@@ -179,6 +182,7 @@ export default function EngineDashboard() {
       setExperienceItems([]);
       setReleaseItems([]);
       setGeoState(undefined);
+      setGeoDraftState(undefined);
       setExperienceError("");
       return;
     }
@@ -187,6 +191,7 @@ export default function EngineDashboard() {
     setExperienceItems([]);
     setReleaseItems([]);
     setGeoState(undefined);
+    setGeoDraftState(undefined);
     setExperienceError("");
 
     void Promise.all([
@@ -194,11 +199,19 @@ export default function EngineDashboard() {
       releases(selectedSlug),
       geoPlacement(selectedSlug),
     ])
-      .then(([experienceResult, releaseResult, placementResult]) => {
+      .then(async ([experienceResult, releaseResult, placementResult]) => {
         if (cancelled) return;
         setExperienceItems(experienceResult.experiences);
         setReleaseItems(releaseResult.releases);
         setGeoState(placementResult);
+
+        const hasGeoExperience = experienceResult.experiences.some(
+          (item) => item.type === "geo",
+        );
+        if (!hasGeoExperience) return;
+
+        const draftState = await geoDraft(selectedSlug);
+        if (!cancelled) setGeoDraftState(draftState);
       })
       .catch((reason: unknown) => {
         if (cancelled) return;
@@ -351,11 +364,17 @@ export default function EngineDashboard() {
       !geoState?.placementStale &&
       status?.project.status === "published",
   );
+  const geoDraftSourceId =
+    geoDraftState?.draft?.sourceBuildingReleaseId ??
+    geoExperience?.sourceBuildingReleaseId;
+  const geoDraftSourceVersion =
+    geoDraftState?.draft?.sourceBuildingReleaseVersion ??
+    geoExperience?.sourceBuildingReleaseVersion;
   const geoNeedsSourceUpgrade = Boolean(
     geoExperience &&
       activeBuildingRelease &&
-      geoExperience.sourceBuildingReleaseId &&
-      geoExperience.sourceBuildingReleaseId !== activeBuildingRelease.id,
+      geoDraftSourceId &&
+      geoDraftSourceId !== activeBuildingRelease.id,
   );
   const assetPrefix = status
     ? `projects/${status.project.slug}`
@@ -725,11 +744,11 @@ export default function EngineDashboard() {
                     </div>
                     <dl>
                       <div>
-                        <dt>Source Building</dt>
+                        <dt>Geo draft source</dt>
                         <dd>
-                          {geoExperience.sourceBuildingReleaseVersion
-                            ? `Release v${geoExperience.sourceBuildingReleaseVersion}`
-                            : geoExperience.sourceBuildingReleaseId || "Pinned release"}
+                          {geoDraftSourceVersion
+                            ? `Release v${geoDraftSourceVersion}`
+                            : geoDraftSourceId || "Pinned release"}
                         </dd>
                       </div>
                       <div>
@@ -740,8 +759,16 @@ export default function EngineDashboard() {
                         <dt>Source status</dt>
                         <dd>
                           {geoNeedsSourceUpgrade
-                            ? `New Building v${activeBuildingRelease?.version} available — preview before upgrade`
-                            : "Pinned source unchanged"}
+                            ? `New Building v${activeBuildingRelease?.version} available — preview before draft upgrade`
+                            : "Draft source pinned"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Current live snapshot</dt>
+                        <dd>
+                          {geoState?.placement?.publicEnabled
+                            ? `Building Release v${geoState.placement.releaseVersion}`
+                            : "Not published"}
                         </dd>
                       </div>
                     </dl>
