@@ -6,6 +6,7 @@ import type { OpeningSuggestion } from "./openingAssociator";
 import { floorSkeletonStatus } from "./floorSkeleton";
 import type { QuickSourceSetup } from "./sourcePackSetup";
 import type { SourceFusionReport } from "./sourceFusion";
+import { detectRepeatedFloors } from "./repeatedFloorDetector";
 
 const ROLE_LABEL: Record<SmartSourceRole, string> = {
   model: "3D model",
@@ -124,6 +125,15 @@ export default function SmartProjectBuilder({
       count.set(source.role, (count.get(source.role) ?? 0) + 1);
     return [...count.entries()];
   }, [analysis]);
+  const repeatedFloorGroups = useMemo(
+    () => (analysis ? detectRepeatedFloors(analysis) : []),
+    [analysis],
+  );
+  const repeatedFloorCount = repeatedFloorGroups.reduce(
+    (sum, group) => sum + group.members.length,
+    0,
+  );
+
   const architecturalCounts = useMemo(() => {
     const rows = analysis?.architecturalCandidates ?? [];
     return {
@@ -553,6 +563,15 @@ export default function SmartProjectBuilder({
                 <span>AUTO TAG</span>
                 <strong>{analysis.highConfidenceAssignments}</strong>
                 <small>high-confidence mesh assignments</small>
+              </div>
+              <div>
+                <span>REPEATED</span>
+                <strong>{repeatedFloorCount || "—"}</strong>
+                <small>
+                  {repeatedFloorCount
+                    ? `${repeatedFloorGroups.length} typical-floor group${repeatedFloorGroups.length === 1 ? "" : "s"}`
+                    : "no confident repeat yet"}
+                </small>
               </div>
               <div>
                 <span>REVIEW</span>
