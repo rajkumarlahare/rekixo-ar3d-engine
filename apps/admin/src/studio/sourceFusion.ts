@@ -324,6 +324,64 @@ export async function buildSourceFusionReport(
         ),
       );
     }
+    if (cad.geometryReady && cad.semanticSegments?.length) {
+      const wallCount = cad.semanticSegments.filter(
+        (segment) => segment.kind === "wall",
+      ).length;
+      const openingCount = cad.semanticSegments.filter(
+        (segment) => segment.kind === "door" || segment.kind === "window",
+      ).length;
+      item.findings.push(
+        `${cad.semanticSegments.length} normalized CAD segment${cad.semanticSegments.length === 1 ? "" : "s"} ready${cad.unitName ? ` in ${cad.unitName}` : ""}.`,
+      );
+      facts.push(
+        fact(
+          cad.assetId,
+          "cad.geometry-ready",
+          true,
+          0.95,
+          "ASCII DXF entities plus declared drawing units",
+        ),
+        fact(
+          cad.assetId,
+          "cad.wall-segment-count",
+          wallCount,
+          0.95,
+          "Normalized LINE/LWPOLYLINE wall entities",
+        ),
+        fact(
+          cad.assetId,
+          "cad.opening-segment-count",
+          openingCount,
+          0.9,
+          "Normalized LINE/LWPOLYLINE door/window entities",
+          "suggested",
+        ),
+      );
+      if (cad.unitName)
+        facts.push(
+          fact(
+            cad.assetId,
+            "cad.unit",
+            cad.unitName,
+            1,
+            "DXF $INSUNITS header",
+          ),
+        );
+      if (cad.textLabels?.length)
+        facts.push(
+          fact(
+            cad.assetId,
+            "cad.text-labels",
+            cad.textLabels.slice(0, 120).map(
+              (label) =>
+                `${label.text}@${label.point[0].toFixed(3)},${label.point[1].toFixed(3)}`,
+            ),
+            0.9,
+            "DXF TEXT/MTEXT entities",
+          ),
+        );
+    }
   }
 
   const roomSourceIds = unique(
