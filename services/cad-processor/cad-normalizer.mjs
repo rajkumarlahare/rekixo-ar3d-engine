@@ -15,7 +15,7 @@ const MAX_DIMENSIONS = 5000;
 const MAX_ANCHORS = 10000;
 
 function pairs(text) {
-  const lines = text.replace(/^\\uFEFF/, "").split(/\\r?\\n/);
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
   const result = [];
   for (let index = 0; index + 1 < lines.length; index += 2) {
     const code = Number.parseInt(lines[index].trim(), 10);
@@ -83,30 +83,30 @@ function dxfUnits(rows) {
 
 function semanticKind(layer, blockName = "") {
   const text = (layer + " " + blockName).toLowerCase().replace(/[^a-z0-9]+/g, " ");
-  if (/\\b(door|doors|gate|entry|shutter)\\b/.test(text)) return "door";
-  if (/\\b(window|windows|glazing|fenestration)\\b/.test(text)) return "window";
-  if (/\\b(stair|stairs|staircase|step|steps)\\b/.test(text)) return "stair";
-  if (/\\b(lift|elevator|elevators)\\b/.test(text)) return "lift";
-  if (/\\b(column|columns|pillar|pillars)\\b/.test(text)) return "column";
-  if (/\\b(slab|slabs|floor slab|roof slab)\\b/.test(text)) return "slab";
-  if (/\\b(wall|walls|partition|masonry|brick)\\b/.test(text)) return "wall";
+  if (/\b(door|doors|gate|entry|shutter)\b/.test(text)) return "door";
+  if (/\b(window|windows|glazing|fenestration)\b/.test(text)) return "window";
+  if (/\b(stair|stairs|staircase|step|steps)\b/.test(text)) return "stair";
+  if (/\b(lift|elevator|elevators)\b/.test(text)) return "lift";
+  if (/\b(column|columns|pillar|pillars)\b/.test(text)) return "column";
+  if (/\b(slab|slabs|floor slab|roof slab)\b/.test(text)) return "slab";
+  if (/\b(wall|walls|partition|masonry|brick)\b/.test(text)) return "wall";
   return undefined;
 }
 
 function floorLabelFromText(value) {
   const text = String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ");
   const named = [
-    [/\\b(?:ground floor|ground|gf|g floor)\\b/, "Ground"],
-    [/\\b(?:first floor|1st floor|floor 1|f1)\\b/, "Floor 1"],
-    [/\\b(?:second floor|2nd floor|floor 2|f2)\\b/, "Floor 2"],
-    [/\\b(?:third floor|3rd floor|floor 3|f3)\\b/, "Floor 3"],
-    [/\\b(?:fourth floor|4th floor|floor 4|f4)\\b/, "Floor 4"],
-    [/\\b(?:fifth floor|5th floor|floor 5|f5)\\b/, "Floor 5"],
-    [/\\b(?:sixth floor|6th floor|floor 6|f6)\\b/, "Floor 6"],
-    [/\\b(?:basement|lower ground|lg)\\b/, "Basement"],
+    [/\b(?:ground floor|ground|gf|g floor)\b/, "Ground"],
+    [/\b(?:first floor|1st floor|floor 1|f1)\b/, "Floor 1"],
+    [/\b(?:second floor|2nd floor|floor 2|f2)\b/, "Floor 2"],
+    [/\b(?:third floor|3rd floor|floor 3|f3)\b/, "Floor 3"],
+    [/\b(?:fourth floor|4th floor|floor 4|f4)\b/, "Floor 4"],
+    [/\b(?:fifth floor|5th floor|floor 5|f5)\b/, "Floor 5"],
+    [/\b(?:sixth floor|6th floor|floor 6|f6)\b/, "Floor 6"],
+    [/\b(?:basement|lower ground|lg)\b/, "Basement"],
   ];
   for (const [pattern, label] of named) if (pattern.test(text)) return label;
-  const numbered = text.match(/\\bfloor\\s*(\\d{1,2})\\b/);
+  const numbered = text.match(/\bfloor\s*(\d{1,2})\b/);
   return numbered ? "Floor " + Number(numbered[1]) : undefined;
 }
 
@@ -138,8 +138,8 @@ function cleanText(rows) {
     .filter((row) => row.code === 1 || row.code === 3)
     .map((row) => row.value)
     .join("")
-    .replace(/\\\\P/g, " ")
-    .replace(/\\s+/g, " ")
+    .replace(/\\P/g, " ")
+    .replace(/\s+/g, " ")
     .trim()
     .slice(0, 500);
 }
@@ -179,7 +179,7 @@ export function normalizeDxfArchitecture(text, meta = {}) {
     issues: [],
   };
 
-  if (!/\\bSECTION\\b/i.test(text) || !/\\bENTITIES\\b/i.test(text)) {
+  if (!/\bSECTION\b/i.test(text) || !/\bENTITIES\b/i.test(text)) {
     result.issues.push("Converted DXF does not contain a readable ENTITIES section.");
     return result;
   }
