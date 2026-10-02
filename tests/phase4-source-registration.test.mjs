@@ -141,7 +141,22 @@ test("Phase 4 CAD graph records registration confidence and never marks automati
   assert.equal(result.walls.length, 5);
   assert.ok(result.walls.every((wall) => wall.origin === "cad-auto"));
   assert.ok(result.walls.every((wall) => wall.reviewed === false));
-  assert.ok(result.walls.every((wall) => wall.reviewState !== "human_reviewed"));
+  assert.ok(result.walls.every((wall) => wall.reviewState === "suggested"));
+
+  const prepared = autoReview.markAutoReadyModelWalls({
+    floors: [{ id: "ground", name: "Ground", elevation: 0 }],
+    rooms: [],
+    furniture: [],
+    walls: result.walls,
+    openings: [],
+    scale: 1,
+  });
+  assert.ok(prepared.prepared > 0);
+  assert.ok(
+    prepared.scene.walls
+      .filter((wall) => (wall.confidence ?? 0) >= 0.9)
+      .every((wall) => wall.reviewState === "auto_ready"),
+  );
 });
 
 test("Phase 4 wall fusion makes strong CAD authoritative per floor while preserving model-only floors", () => {
