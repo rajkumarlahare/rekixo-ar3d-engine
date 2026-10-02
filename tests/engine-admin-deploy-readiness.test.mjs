@@ -33,3 +33,15 @@ test("production deploy exercises the password verification boundary", () => {
   assert.match(workflow, /definitely-wrong-password/);
   assert.match(workflow, /STATUS" != "401"/);
 });
+
+
+test("production deploy degrades safely when Cloudflare Containers access is unavailable", () => {
+  const workflow = read(".github/workflows/deploy-cloudflare.yml");
+  assert.match(workflow, /Check Cloudflare Containers access/);
+  assert.match(workflow, /wrangler containers list/);
+  assert.match(workflow, /available=false/);
+  assert.match(workflow, /Workers Paid/);
+  assert.match(workflow, /Containers > Write/);
+  assert.match(workflow, /--containers-rollout=none/);
+  assert.match(workflow, /DWG processing stays fail-closed/);
+});
