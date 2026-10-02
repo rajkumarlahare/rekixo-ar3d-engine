@@ -1608,6 +1608,7 @@ export default function SceneCanvas(props: Props) {
         Boolean(props.roomMapEnabled && props.view === "building"),
         room.id === props.selected,
         focusedInterior,
+        props.scene.openings ?? [],
       );
       if (
         room.id === props.selected &&
