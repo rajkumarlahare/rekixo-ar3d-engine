@@ -95,7 +95,7 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
   await expect(page.getByLabel("Authoring / source 3D model")).toContainText(
     "four-floor.glb",
   );
-  const analyze = page.getByRole("button", { name: "Analyze project" });
+  const analyze = page.getByTestId("analyze-project");
   await expect(analyze).toBeEnabled();
   await analyze.click();
 
@@ -103,13 +103,13 @@ test("local Studio creates, analyzes and survives a browser reload", async ({
     "Smart analysis complete",
   );
   await expect(page.getByText("Selected for analysis")).toBeVisible();
-  await expect(page.getByText("Detected floor levels", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("detected-floor-levels")).toBeVisible();
 
-  const build = page.getByRole("button", { name: "Build analyzed draft" });
+  const build = page.getByTestId("build-analyzed-draft");
   await expect(build).toBeEnabled();
   await build.click();
 
-  await page.getByRole("button", { name: "Open visual editor" }).click();
+  await page.getByTestId("open-visual-editor").click();
 
   const editorTools = page.getByLabel("3D editor tools");
   await expect(page.getByRole("button", { name: "Setup" })).toBeVisible();
