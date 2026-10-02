@@ -173,13 +173,19 @@ existing immutable Building release system. Building release truth remains in
 specific Building release; it does not copy Building assets.
 
 `geo_experience_drafts_3d` is mutable authoring state only. It is revision
-protected and may change without mutating the current public Geo snapshot.
+protected and may change without mutating the current public Geo Experience.
 Preview verification is revision-bound. Publishing freezes that verified draft
 into `geo_releases_3d`; the active Geo pointer and rollback history are fully
 independent from `projects_3d.active_release_id`, which remains the Building
-release pointer. Legacy `geo_placements_3d` remains temporarily as the public
-compatibility snapshot until immutable Geo releases become the public source of
-truth.
+release pointer.
+
+The public Geo runtime resolves only
+`geo_experience_active_releases_3d -> geo_releases_3d`, validates the immutable
+Geo manifest, then loads the exact Building release ID pinned by that Geo
+manifest. It never follows the current Building pointer implicitly. This is what
+allows Building v2 and Geo v1 to remain live independently. Legacy
+`geo_placements_3d` is retained only as historical compatibility data for now;
+it is not a Phase 6 public source of truth.
 
 New customer projects are provisioned as draft D1 records through the controlled operator workflow. Customer onboarding is data provisioning, not a new repository and not a new schema migration.
 
