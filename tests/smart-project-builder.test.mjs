@@ -72,7 +72,7 @@ test("CAD intake keeps binary DWG fail-closed and parses ASCII DXF through the n
   assert.match(analyzer, /Convert\/export to ASCII DXF/);
   assert.match(analyzer, /semanticReady: false/);
   assert.match(analyzer, /parseAsciiDxfArchitecture\(text\)/);
-  assert.match(dxf, /code === "8"/);
+  assert.match(dxf, /firstString\(entity\.rows, 8\)/);
   assert.match(dxf, /metresPerUnit/);
 });
 
