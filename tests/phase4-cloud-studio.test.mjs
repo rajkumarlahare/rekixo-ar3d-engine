@@ -164,7 +164,7 @@ test("admin-infra deployment applies Engine D1/R2 without deploying Public Worke
   assert.match(workflow, /steps\.public_runtime\.outputs\.changed == 'true'/);
   assert.match(
     workflow,
-    /apps\/public\/\|workers\/\(public\|release-runtime\|http-range\|storage-boundary\)/,
+    /apps\/public\/\|workers\/\(public\|release-runtime\|geo-release-runtime\|http-range\|storage-boundary\)/,
   );
 });
 
