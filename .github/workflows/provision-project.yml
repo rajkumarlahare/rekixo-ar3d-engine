@@ -37,6 +37,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install locked dependencies
+        run: npm ci
+
       - name: Render validated project SQL
         env:
           PROJECT_SLUG: ${{ inputs.slug }}
@@ -46,7 +49,7 @@ jobs:
 
       - name: Provision draft project in isolated Engine D1
         run: >-
-          npx --yes wrangler@4.146.0 d1 execute rekixo-3d-production
+          npx --no-install wrangler d1 execute rekixo-3d-production
           --remote
           --config wrangler.infra.jsonc
           --file /tmp/rekixo-3d-project.sql

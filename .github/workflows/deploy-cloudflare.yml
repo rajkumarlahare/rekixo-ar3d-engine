@@ -50,7 +50,7 @@ jobs:
           fi
           CHANGED="$(git diff --name-only "$BEFORE" "$GITHUB_SHA")"
           printf '%s\n' "$CHANGED"
-          if printf '%s\n' "$CHANGED" | grep -Eq '^(apps/public/|workers/(public|release-runtime|geo-release-runtime|http-range|storage-boundary)\.mjs$|packages/(contracts|engine-core)/|shared/|scripts/build-geo-model-derivative\.mjs$|project-profiles/geo-model-derivatives\.json$|package\.json$|wrangler\.public\.jsonc$|\.github/workflows/deploy-cloudflare\.yml$)'; then
+          if printf '%s\n' "$CHANGED" | grep -Eq '^(apps/public/|workers/(public|release-runtime|geo-release-runtime|http-range|storage-boundary)\.mjs$|packages/(contracts|engine-core)/|shared/|scripts/build-geo-model-derivative\.mjs$|project-profiles/geo-model-derivatives\.json$|package(-lock)?\.json$|wrangler\.public\.jsonc$|\.github/workflows/deploy-cloudflare\.yml$)'; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -67,18 +67,16 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Verify generalized Engine
         run: npm test
 
       - name: Install browser E2E runner
-        run: |
-          npm install --no-save --package-lock=false @playwright/test@1.55.1
-          npx playwright install --with-deps chromium
+        run: npx --no-install playwright install --with-deps chromium
 
       - name: Run browser E2E smoke
-        run: npx playwright test --config playwright.config.ts
+        run: npx --no-install playwright test --config playwright.config.ts
 
       - name: Require Cloudflare deployment secret
         shell: bash
@@ -93,7 +91,7 @@ jobs:
           (github.event_name == 'workflow_dispatch' && inputs.deployment_scope != 'admin-only') ||
           (github.event_name == 'push' && steps.public_runtime.outputs.migrations_changed == 'true')
         run: >-
-          npx --yes wrangler@4.146.0
+          npx --no-install wrangler
           d1 migrations apply rekixo-3d-production
           --remote
           --config wrangler.infra.jsonc
@@ -103,11 +101,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BUCKETS="$(npx --yes wrangler@4.146.0 r2 bucket list)"
+          BUCKETS="$(npx --no-install wrangler r2 bucket list)"
           if printf '%s\n' "$BUCKETS" | grep -Fq "rekixo-3d-assets"; then
             echo "R2 bucket already exists: rekixo-3d-assets"
           else
-            npx --yes wrangler@4.146.0 r2 bucket create rekixo-3d-assets
+            npx --no-install wrangler r2 bucket create rekixo-3d-assets
           fi
 
       - name: Verify remote Engine Admin secret names
@@ -115,7 +113,7 @@ jobs:
         run: |
           set -euo pipefail
           OUT="$(mktemp)"
-          npx --yes wrangler@4.146.0 secret list --config wrangler.admin.jsonc --format json > "$OUT"
+          npx --no-install wrangler secret list --config wrangler.admin.jsonc --format json > "$OUT"
           node - "$OUT" <<'NODE'
           const fs = require("fs");
           const path = process.argv[2];
@@ -176,11 +174,11 @@ jobs:
             META_KEY="$(node -e 'const m=require(process.argv[1]); process.stdout.write(m.metadataR2Key)' "$OUT/metadata.json")"
             GEO_SHA="$(node -e 'const m=require(process.argv[1]); process.stdout.write(m.geoSha256)' "$OUT/metadata.json")"
 
-            npx --yes wrangler@4.146.0 r2 object put "rekixo-3d-assets/$GEO_KEY"               --remote               --force               --file "$OUT/model.glb"               --content-type "model/gltf-binary"               --cache-control "public,max-age=31536000,immutable"
+            npx --no-install wrangler r2 object put "rekixo-3d-assets/$GEO_KEY"               --remote               --force               --file "$OUT/model.glb"               --content-type "model/gltf-binary"               --cache-control "public,max-age=31536000,immutable"
 
-            npx --yes wrangler@4.146.0 r2 object put "rekixo-3d-assets/$META_KEY"               --remote               --force               --file "$OUT/metadata.json"               --content-type "application/json"               --cache-control "public,max-age=31536000,immutable"
+            npx --no-install wrangler r2 object put "rekixo-3d-assets/$META_KEY"               --remote               --force               --file "$OUT/metadata.json"               --content-type "application/json"               --cache-control "public,max-age=31536000,immutable"
 
-            npx --yes wrangler@4.146.0 r2 object get "rekixo-3d-assets/$GEO_KEY"               --remote               --file "$OUT/verify.glb"
+            npx --no-install wrangler r2 object get "rekixo-3d-assets/$GEO_KEY"               --remote               --file "$OUT/verify.glb"
             ACTUAL_SHA="$(sha256sum "$OUT/verify.glb" | awk '{print $1}')"
             if [ "$ACTUAL_SHA" != "$GEO_SHA" ]; then
               echo "::error::Uploaded Geo derivative checksum mismatch for $SLUG"
@@ -195,7 +193,7 @@ jobs:
         # Preparation above must succeed before deploying this Worker.
         id: admin-deploy
         run: >-
-          npx --yes wrangler@4.146.0
+          npx --no-install wrangler
           deploy
           --config wrangler.admin.jsonc
 
@@ -255,7 +253,7 @@ jobs:
           (github.event_name == 'workflow_dispatch' && inputs.deployment_scope == 'engine-all') ||
           (github.event_name == 'push' && steps.public_runtime.outputs.changed == 'true')
         run: >-
-          npx --yes wrangler@4.146.0
+          npx --no-install wrangler
           deploy
           --config wrangler.public.jsonc
 

@@ -42,14 +42,23 @@ test("unauthenticated login exceptions do not expose internal exception reasons"
   assert.doesNotMatch(loginBlock, /\breason\s*[:,=]/);
 });
 
-test("production workflows use the reviewed Wrangler version", () => {
+test("production workflows use locked dependencies without floating installs", () => {
+  const root = JSON.parse(read("package.json"));
+  const lock = JSON.parse(read("package-lock.json"));
+  const validate = read(".github/workflows/validate.yml");
   const deploy = read(".github/workflows/deploy-cloudflare.yml");
   const provision = read(".github/workflows/provision-project.yml");
 
+  assert.equal(root.devDependencies.wrangler, "4.146.0");
+  assert.equal(root.devDependencies["@playwright/test"], "1.55.1");
+  assert.equal(lock.lockfileVersion, 3);
+  for (const workflow of [validate, deploy, provision])
+    assert.match(workflow, /npm ci/);
   for (const workflow of [deploy, provision]) {
-    assert.match(workflow, /wrangler@4\.146\.0/);
-    assert.doesNotMatch(workflow, /wrangler@4(?:\s|$)/m);
+    assert.match(workflow, /npx --no-install wrangler/);
+    assert.doesNotMatch(workflow, /wrangler@4/);
   }
+  assert.doesNotMatch(deploy, /npm install --no-save/);
 });
 
 test("tracked Cloudflare metadata matches Engine R2 binding", () => {
@@ -66,6 +75,6 @@ test("deployment guide documents selective production behavior", () => {
   const deployment = read("docs/DEPLOYMENT.md");
   assert.match(deployment, /D1 migrations only when migration files changed/);
   assert.match(deployment, /Public Worker only when public runtime\/dependency inputs changed/);
-  assert.match(deployment, /Wrangler is pinned to `4\.146\.0`/);
+  assert.match(deployment, /Wrangler `4\.146\.0`/);
   assert.match(deployment, /docs\/PHASE-8-CLOSEOUT\.md/);
 });
