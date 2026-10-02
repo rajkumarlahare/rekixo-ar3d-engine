@@ -100,6 +100,16 @@ test("archive and restore keep canonical Building Experience lifecycle coherent"
   assert.match(worker, /action === "archive" \? "archived" : "active"/);
 });
 
+test("typed Admin client exposes Experience listing and explicit Geo creation", () => {
+  const cloud = read("apps/admin/src/studio/cloud.ts");
+
+  assert.match(cloud, /EngineExperienceSummary/);
+  assert.match(cloud, /export async function experiences\(slug: string\)/);
+  assert.match(cloud, /export async function createGeoExperience/);
+  assert.match(cloud, /sourceBuildingReleaseId/);
+  assert.match(cloud, /type: "geo"/);
+});
+
 test("shared contracts expose Experience lifecycle and summaries for the next Admin phase", () => {
   const contracts = read("packages/contracts/src/index.ts");
 
