@@ -21,8 +21,9 @@ test("Engine project context is carried from dashboard into Studio and 3D Jio Ma
   const studio = read("apps/admin/src/studio/Studio.tsx");
   const geo = read("apps/admin/src/geo/GeoMapper3D.tsx");
 
-  assert.match(dashboard, /\/3Dprojects\/studio\?project=/);
-  assert.match(dashboard, /\/3Dprojects\/geo-mapper\?project=/);
+  assert.match(dashboard, /projectUrl\("studio", selectedSlug\)/);
+  assert.match(dashboard, /projectUrl\("geo-mapper", selectedSlug\)/);
+  assert.match(dashboard, /\?project=\$\{encodeURIComponent\(slug\)\}/);
   assert.match(studio, /new URLSearchParams\(window\.location\.search\)/);
   assert.match(studio, /requestedCloudProjectRef/);
   assert.match(studio, /openCloudProject\(requested\)/);
