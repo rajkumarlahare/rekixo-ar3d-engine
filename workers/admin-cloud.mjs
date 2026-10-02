@@ -24,6 +24,7 @@ const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 5;
 const MAX_DRAFT_BYTES = 2 * 1024 * 1024;
 const MAX_ASSET_BYTES = 64 * 1024 * 1024;
+const MAX_CAD_PROCESSOR_BYTES = 32 * 1024 * 1024;
 /**
  * Cloudflare workerd currently caps PBKDF2 deriveBits iterations at 100,000.
  * Keep generator and verifier identical; dedicated auth is additionally protected
@@ -857,6 +858,145 @@ function assetResponse(row) {
     createdAt: row.created_at,
     contentUrl: `${CLOUD_PATH}/projects/${encodeURIComponent(row.project_slug)}/assets/${encodeURIComponent(row.id)}/content`,
   };
+}
+
+
+async function processCadDwg(request, env, actor, url) {
+  if (request.method !== "POST")
+    return json({ error: "Method not allowed." }, { status: 405 });
+  if (!sameOrigin(request))
+    return json({ error: "Invalid request origin." }, { status: 403 });
+
+  const processorUrl = String(env.CAD_PROCESSOR_URL || "").trim();
+  const processorToken = String(env.CAD_PROCESSOR_TOKEN || "").trim();
+  if (!processorUrl || !processorToken)
+    return json(
+      { error: "Controlled DWG processor is not configured." },
+      { status: 503 },
+    );
+
+  let endpoint;
+  try {
+    endpoint = new URL(processorUrl);
+  } catch {
+    return json({ error: "Controlled DWG processor URL is invalid." }, { status: 503 });
+  }
+  if (endpoint.protocol !== "https:")
+    return json(
+      { error: "Controlled DWG processor must use HTTPS." },
+      { status: 503 },
+    );
+
+  const sourceName = String(url.searchParams.get("name") || "").trim();
+  if (!safeText(sourceName, 500) || !/\.dwg$/i.test(sourceName))
+    return json({ error: "A valid DWG filename is required." }, { status: 400 });
+
+  const declaredSha = String(
+    request.headers.get("x-rekixo-sha256") || "",
+  ).trim().toLowerCase();
+  if (!validSha256(declaredSha))
+    return json({ error: "Valid source SHA-256 is required." }, { status: 400 });
+
+  const declaredLength = Number(request.headers.get("content-length") || 0);
+  if (declaredLength > MAX_CAD_PROCESSOR_BYTES)
+    return json(
+      { error: "DWG exceeds the 32 MB controlled processor limit." },
+      { status: 413 },
+    );
+
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_CAD_PROCESSOR_BYTES)
+    return json(
+      {
+        error:
+          bytes.byteLength === 0
+            ? "DWG source is empty."
+            : "DWG exceeds the 32 MB controlled processor limit.",
+      },
+      { status: bytes.byteLength === 0 ? 400 : 413 },
+    );
+
+  const hashBytes = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  const sha256 = Array.from(hashBytes, (item) =>
+    item.toString(16).padStart(2, "0"),
+  ).join("");
+  if (sha256 !== declaredSha)
+    return json(
+      { error: "DWG checksum changed before controlled processing." },
+      { status: 409 },
+    );
+
+  endpoint.pathname = "/v1/process-dwg";
+  endpoint.search = "";
+  endpoint.searchParams.set("name", sourceName);
+
+  let upstream;
+  try {
+    upstream = await fetch(endpoint.toString(), {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${processorToken}`,
+        "content-type": "application/acad",
+        "x-rekixo-source-sha256": sha256,
+      },
+      body: bytes,
+    });
+  } catch {
+    return json(
+      { error: "Controlled DWG processor is temporarily unavailable." },
+      { status: 503 },
+    );
+  }
+
+  const body = await upstream.text();
+  if (body.length > 8 * 1024 * 1024)
+    return json(
+      { error: "Controlled DWG processor returned an oversized payload." },
+      { status: 502 },
+    );
+
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    return json(
+      { error: "Controlled DWG processor returned malformed JSON." },
+      { status: 502 },
+    );
+  }
+
+  if (!upstream.ok)
+    return json(
+      {
+        error:
+          typeof payload?.error === "string"
+            ? payload.error
+            : "Controlled DWG processing failed.",
+      },
+      { status: upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502 },
+    );
+
+  await env.DB.prepare(
+    `INSERT INTO engine_admin_audit
+      (id,actor_email,action,project_id,target_id,details_json,created_at)
+      VALUES (?,?,?,?,?,?,?)`,
+  )
+    .bind(
+      crypto.randomUUID(),
+      actor.email,
+      "cad.dwg_processed",
+      null,
+      declaredSha,
+      JSON.stringify({
+        name: sourceName,
+        byteSize: bytes.byteLength,
+        processor: payload?.processor?.engine || "unknown",
+      }),
+      new Date().toISOString(),
+    )
+    .run();
+
+  return json(payload);
 }
 
 async function listAssets(env, project) {
@@ -2393,6 +2533,9 @@ export async function handleCloudAdminRequest(request, env, url = new URL(reques
 
   if (url.pathname === `${CLOUD_PATH}/deletion-status`)
     return deletionStatus(request, env);
+
+  if (url.pathname === `${CLOUD_PATH}/cad/process`)
+    return processCadDwg(request, env, actor, url);
 
   if (url.pathname === `${CLOUD_PATH}/projects` || url.pathname.startsWith(`${CLOUD_PATH}/projects/`))
     return routeProjects(request, env, actor, url);
