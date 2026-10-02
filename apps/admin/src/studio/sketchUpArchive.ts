@@ -80,10 +80,30 @@ function parseZipEntries(bytes: Uint8Array) {
   const centralSize = u32(view, end + 12);
   const relativeCentralOffset = u32(view, end + 16);
   const firstLocalHeader = findFirstLocalHeader(bytes);
-  const zipBase = firstLocalHeader >= 0 ? firstLocalHeader : 0;
+  // ZIP offsets are relative to the start of the ZIP payload, not necessarily
+  // byte zero of an SKB container. Infer the payload base from the EOCD first;
+  // fall back to a discovered local header/zero only when needed.
+  const inferredZipBase = end - centralSize - relativeCentralOffset;
+  const candidateBases = [
+    inferredZipBase,
+    firstLocalHeader,
+    0,
+  ].filter(
+    (value, index, values) =>
+      value >= 0 && values.indexOf(value) === index,
+  );
+  const zipBase =
+    candidateBases.find((base) => {
+      const offset = base + relativeCentralOffset;
+      return (
+        offset + 4 <= bytes.length &&
+        u32(view, offset) === 0x02014b50
+      );
+    }) ?? inferredZipBase;
   const centralOffset = zipBase + relativeCentralOffset;
   if (
     totalEntries > 10_000 ||
+    zipBase < 0 ||
     centralOffset < zipBase ||
     centralOffset + centralSize > bytes.length
   )
