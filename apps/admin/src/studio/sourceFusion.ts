@@ -4,6 +4,7 @@ import type { SmartProjectAnalysis } from "./projectAnalyzer";
 import type { RoomSheetRow } from "./roomSheet";
 import { inspectSketchUpArchive } from "./sketchUpArchive";
 import { inspectDwgEvidence } from "./dwgEvidence";
+import { isDwgNormalizedAsset } from "./dwgNormalized";
 import {
   detectSourceFusionConflicts,
   type SourceFusionConflict,
@@ -238,7 +239,7 @@ export async function buildSourceFusionReport(
   audits: FbxSourceAudit[] = [],
   roomSheetRows: RoomSheetRow[] = [],
 ): Promise<SourceFusionReport> {
-  const items = files.map(itemFor);
+  const items = files.filter((asset) => !isDwgNormalizedAsset(asset)).map(itemFor);
   const facts: SourceFusionFact[] = [];
 
   if (analysis?.modelAssetId) {
@@ -309,6 +310,71 @@ export async function buildSourceFusionReport(
   for (const cad of analysis?.cadAudits ?? []) {
     const item = items.find((entry) => entry.assetId === cad.assetId);
     if (!item) continue;
+
+    if (cad.kind === "dwg" && cad.normalizedDwg) {
+      const document = cad.normalizedDwg;
+      item.support = "ready";
+      item.capabilities = unique([
+        ...item.capabilities,
+        "geometry",
+        "floors",
+        "rooms",
+      ]);
+      item.warnings = item.warnings.filter(
+        (warning) => !/controlled CAD processor/i.test(warning),
+      );
+      item.findings.push(
+        `Controlled DWG processor decoded ${document.segments.length} wall/door/window segment${document.segments.length === 1 ? "" : "s"}, ${document.dimensions.length} dimension${document.dimensions.length === 1 ? "" : "s"}, ${document.inserts.length} block insert${document.inserts.length === 1 ? "" : "s"} and ${document.objects.length} architectural object${document.objects.length === 1 ? "" : "s"}.`,
+      );
+      if (document.units.name)
+        item.findings.push(
+          `DWG units normalized to metres from ${document.units.name}.`,
+        );
+      if (document.floors.length)
+        item.findings.push(
+          `${document.floors.length} floor label${document.floors.length === 1 ? "" : "s"} decoded from drawing text.`,
+        );
+      item.warnings.push(...document.issues);
+
+      facts.push(
+        fact(
+          cad.assetId,
+          "dwg.normalized-segments",
+          document.segments.length,
+          document.segments.length ? 0.96 : 0.4,
+          `${document.processor.engine} ${document.processor.engineVersion} → Rekixo normalized DWG v${document.version}`,
+          "suggested",
+        ),
+        fact(
+          cad.assetId,
+          "dwg.dimension-count",
+          document.dimensions.length,
+          0.96,
+          "Decoded DIMENSION entities",
+          "observed",
+        ),
+        fact(
+          cad.assetId,
+          "dwg.architectural-object-count",
+          document.objects.length + document.inserts.length,
+          0.93,
+          "Decoded semantic entities and block inserts",
+          "suggested",
+        ),
+      );
+      if (document.floors.length)
+        facts.push(
+          fact(
+            cad.assetId,
+            "dwg.floor-labels",
+            document.floors.map((entry) => entry.label),
+            0.9,
+            "Decoded DWG text entities",
+            "suggested",
+          ),
+        );
+    }
+
     if (cad.semanticReady && cad.layerHints.length) {
       item.findings.push(
         `${cad.layerHints.length} architectural CAD layer hint(s) detected.`,
@@ -319,7 +385,9 @@ export async function buildSourceFusionReport(
           "cad.layer-hints",
           cad.layerHints.map((entry) => `${entry.layer}:${entry.kind}`),
           0.7,
-          "ASCII DXF layer names",
+          cad.kind === "dwg"
+            ? "Controlled normalized DWG layer semantics"
+            : "ASCII DXF layer names",
           "suggested",
         ),
       );
@@ -572,7 +640,12 @@ export async function buildSourceFusionReport(
     recommendedActions.push(
       "Prepare a web GLB derivative from the selected FBX before publication.",
     );
-  if (items.some((item) => item.extension === "dwg"))
+  if (
+    items.some((item) => item.extension === "dwg") &&
+    !(analysis?.cadAudits ?? []).some(
+      (audit) => audit.kind === "dwg" && Boolean(audit.normalizedDwg),
+    )
+  )
     recommendedActions.push(
       "Run the controlled DWG processor to extract architectural entities before automatic wall/room reconstruction.",
     );
