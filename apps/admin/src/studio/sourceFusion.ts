@@ -866,7 +866,7 @@ export async function buildSourceFusionReport(
     );
   if (items.some((item) => item.kind === "sketchup"))
     recommendedActions.push(
-      "Run the controlled SketchUp processor to recover component/material metadata.",
+      "Use recovered SketchUp materials/semantic hints now; run the controlled SketchUp processor only when native component geometry is required.",
     );
   const planFact = facts.find((entry) => entry.key === "pdf.plan-page");
   if (planFact && typeof planFact.value === "number")
