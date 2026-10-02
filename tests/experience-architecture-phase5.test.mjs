@@ -122,13 +122,13 @@ test("Geo Mapper implements explicit verify then publish and immutable rollback 
   assert.match(mapper, /Building Website unchanged hai/);
 });
 
-test("dashboard distinguishes immutable Geo release from public compatibility snapshot", () => {
+test("dashboard distinguishes immutable Geo release from customer Geo website", () => {
   const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
 
   assert.match(dashboard, /geoReleases\(selectedSlug\)/);
   assert.match(dashboard, /activeImmutableGeoRelease/);
   assert.match(dashboard, /Active immutable Geo release/);
-  assert.match(dashboard, /Public compatibility snapshot/);
+  assert.match(dashboard, /Customer Geo website/);
 });
 
 test("project hard-delete removes immutable Geo release state before Experiences and Building releases", () => {
@@ -161,10 +161,12 @@ test("project hard-delete removes immutable Geo release state before Experiences
   assert.ok(buildingReleaseAt > experienceAt);
 });
 
-test("Phase 5 does not change public Geo runtime source of truth", () => {
-  const publicWorker = read("workers/public.mjs");
+test("Phase 5 publication never mutates the legacy Geo placement snapshot", () => {
+  const publish = read("workers/geo-release-publish.mjs");
+  const activate = read("workers/geo-release-activate.mjs");
 
-  assert.match(publicWorker, /FROM geo_placements_3d g/);
-  assert.doesNotMatch(publicWorker, /geo_releases_3d/);
-  assert.doesNotMatch(publicWorker, /geo_experience_active_releases_3d/);
+  assert.doesNotMatch(publish, /INSERT INTO geo_placements_3d/);
+  assert.doesNotMatch(publish, /UPDATE geo_placements_3d/);
+  assert.doesNotMatch(activate, /INSERT INTO geo_placements_3d/);
+  assert.doesNotMatch(activate, /UPDATE geo_placements_3d/);
 });
