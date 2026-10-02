@@ -69,6 +69,8 @@ import {
   type SourceFusionReport,
 } from "./sourceFusion";
 import { prepareFbxWebModel } from "./fbxWebModel";
+import { deriveModelWallGraph } from "./architectureGraph";
+import { detectRepeatedFloors } from "./repeatedFloorDetector";
 import {
   suggestOpeningAssociations,
   type OpeningSuggestion,
@@ -2595,7 +2597,7 @@ export default function Studio() {
     const suggestedElevations = smartAnalysis.floorCandidates
       .map((candidate) => candidate.elevation * scale + modelY)
       .sort((left, right) => left - right);
-    const floors = replaceFloorSkeleton
+    let floors = replaceFloorSkeleton
       ? suggestedElevations.map((elevation, index) => ({
           id: id(),
           name: index === 0 ? "Ground" : `Floor ${index}`,
@@ -2604,6 +2606,35 @@ export default function Studio() {
       : [...p.scene.floors].sort(
           (left, right) => left.elevation - right.elevation,
         );
+
+    const repeatGroups = detectRepeatedFloors(smartAnalysis);
+    const repeatByTarget = new Map<
+      number,
+      { sourceFloorIndex: number; similarity: number }
+    >();
+    for (const group of repeatGroups)
+      for (const member of group.members)
+        repeatByTarget.set(member.floorIndex, {
+          sourceFloorIndex: group.sourceFloorIndex,
+          similarity: member.similarity,
+        });
+    floors = floors.map((floor, index) => {
+      const repeat = repeatByTarget.get(index);
+      if (!repeat)
+        return {
+          ...floor,
+          repeatOfFloorId: undefined,
+          repeatConfidence: undefined,
+          repeatReviewed: undefined,
+        };
+      const sourceFloor = floors[repeat.sourceFloorIndex];
+      return {
+        ...floor,
+        repeatOfFloorId: sourceFloor?.id,
+        repeatConfidence: Number(repeat.similarity.toFixed(3)),
+        repeatReviewed: false,
+      };
+    });
 
     if (!floors.length)
       throw Error("Create or detect at least one floor before auto-tagging meshes.");
@@ -2661,16 +2692,33 @@ export default function Studio() {
       autoTagged += 1;
     }
 
+    const generatedWalls = deriveModelWallGraph(
+      smartAnalysis,
+      floors,
+      p.scene.scale,
+      p.scene.modelTransform,
+    );
+    const retainedWalls = (p.scene.walls ?? []).filter(
+      (wall) => wall.origin !== "model-auto" || wall.reviewed,
+    );
+    const retainedIds = new Set(retainedWalls.map((wall) => wall.id));
+    const walls = [
+      ...retainedWalls,
+      ...generatedWalls.filter((wall) => !retainedIds.has(wall.id)),
+    ];
+
     edit({
       ...p,
       scene: {
         ...p.scene,
         floors,
+        walls,
         modelNodeTags: [...byKey.values()],
       },
     });
+    const repeatedCount = floors.filter((floor) => floor.repeatOfFloorId).length;
     setMessage(
-      `Smart draft built · ${floors.length} floors · ${autoTagged} meshes auto-tagged. Ambiguous/multi-floor meshes remain unassigned for visual review.`,
+      `Smart draft built · ${floors.length} floors · ${autoTagged} meshes auto-tagged · ${walls.length} parametric wall candidate${walls.length === 1 ? "" : "s"} · ${repeatedCount} repeated floor${repeatedCount === 1 ? "" : "s"} detected. Ambiguous geometry remains review-only.`,
     );
   }
   async function analyzeAndApproveReadyOpenings(baseProject: Project = p) {
