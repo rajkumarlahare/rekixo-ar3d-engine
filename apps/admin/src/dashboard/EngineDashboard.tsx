@@ -460,7 +460,7 @@ export default function EngineDashboard() {
             <div>
               <p className="engine-kicker">YOUR PROJECTS</p>
               <h2>{projects.length} Engine project{projects.length === 1 ? "" : "s"}</h2>
-              <small>Select karke usi project ka Studio / Jio / Live open karein.</small>
+              <small>Select karke Building workspace, releases aur optional Experiences manage karein.</small>
             </div>
           </div>
 
@@ -532,8 +532,8 @@ export default function EngineDashboard() {
               <p className="engine-kicker">CLEAN ENGINE</p>
               <h2>No 3D projects yet</h2>
               <p>
-                Engine registry ab empty hai. Naya project create karne par hi Studio,
-                3D Jio Mapper aur Live workflow start hoga.
+                Engine registry ab empty hai. Naya project create karne par Design Studio,
+                Building release aur standalone Building Website workflow start hoga.
               </p>
               <button
                 className="engine-button engine-button--primary"
