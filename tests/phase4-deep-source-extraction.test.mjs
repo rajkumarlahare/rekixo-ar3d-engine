@@ -166,7 +166,11 @@ test("Phase 4 PDF inspection keeps spatial text and embedded-image evidence expl
   assert.match(pipeline, /rasterPdfReference/);
   assert.match(pipeline, /auto-plan-image/);
   assert.match(pipeline, /visible: false/);
-  assert.doesNotMatch(pipeline, /metresPerPixel:/);
+  assert.match(pipeline, /metresPerPixel:/);
+  assert.match(pipeline, /estimatePdfCadRegistration/);
+  assert.match(pipeline, /estimateCadModelRegistration/);
+  assert.match(pipeline, /pixelScaleAgreement <= 0\.035/);
+  assert.match(pipeline, /pdfReferenceAutoAligned = true/);
 });
 
 test("Phase 4 DRS dependencies remain provenance metadata when bytes are absent", () => {
