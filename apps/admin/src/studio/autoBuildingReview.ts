@@ -1,7 +1,8 @@
-import type { Floor, Scene, Wall } from "./domain";
+import type { Floor, Scene, VerticalConnector, Wall } from "./domain";
 
 export const READY_WALL_CONFIDENCE = 0.9;
 export const READY_REPEAT_CONFIDENCE = 0.92;
+export const READY_CONNECTOR_CONFIDENCE = 0.9;
 
 export interface AutoBuildingReviewCounts {
   readyWalls: number;
@@ -10,6 +11,9 @@ export interface AutoBuildingReviewCounts {
   readyRepeats: number;
   repeatReview: number;
   acceptedRepeats: number;
+  readyConnectors: number;
+  connectorReview: number;
+  approvedConnectors: number;
 }
 
 function automaticWall(wall: Wall) {
@@ -36,11 +40,22 @@ function repeatIsAutoReady(floor: Floor) {
   );
 }
 
+function connectorIsAutoReady(connector: VerticalConnector) {
+  return (
+    !connector.reviewed &&
+    connector.origin !== "manual" &&
+    (connector.reviewState === "auto_ready" ||
+      (connector.reviewState === undefined &&
+        (connector.confidence ?? 0) >= READY_CONNECTOR_CONFIDENCE))
+  );
+}
+
 export function autoBuildingReviewCounts(
   scene: Scene,
 ): AutoBuildingReviewCounts {
   const walls = scene.walls ?? [];
   const repeated = scene.floors.filter((floor) => floor.repeatOfFloorId);
+  const connectors = scene.verticalConnectors ?? [];
   return {
     readyWalls: walls.filter(wallIsAutoReady).length,
     wallReview: walls.filter(
@@ -53,6 +68,14 @@ export function autoBuildingReviewCounts(
     ).length,
     acceptedRepeats: repeated.filter(
       (floor) => floor.repeatReviewed === true,
+    ).length,
+    readyConnectors: connectors.filter(connectorIsAutoReady).length,
+    connectorReview: connectors.filter(
+      (connector) =>
+        !connector.reviewed && !connectorIsAutoReady(connector),
+    ).length,
+    approvedConnectors: connectors.filter(
+      (connector) => connector.reviewed,
     ).length,
   };
 }
@@ -177,5 +200,71 @@ export function acceptReadyRepeatedFloors(scene: Scene): {
       floors,
     },
     accepted,
+  };
+}
+
+
+/**
+ * Marks high-confidence automatic stair/lift connectors ready for explicit
+ * operator review without turning machine confidence into human approval.
+ */
+export function markAutoReadyVerticalConnectors(scene: Scene): {
+  scene: Scene;
+  prepared: number;
+} {
+  let prepared = 0;
+  const verticalConnectors = (scene.verticalConnectors ?? []).map(
+    (connector) => {
+      if (
+        connector.reviewed ||
+        connector.origin === "manual" ||
+        (connector.confidence ?? 0) < READY_CONNECTOR_CONFIDENCE
+      )
+        return { ...connector, floorIds: [...connector.floorIds] };
+      if (connector.reviewState !== "auto_ready") prepared += 1;
+      return {
+        ...connector,
+        floorIds: [...connector.floorIds],
+        reviewed: false,
+        reviewState: "auto_ready" as const,
+      };
+    },
+  );
+  return {
+    scene: {
+      ...scene,
+      verticalConnectors,
+    },
+    prepared,
+  };
+}
+
+/**
+ * Explicit user action: approves ready stair/lift connector suggestions.
+ */
+export function approveReadyVerticalConnectors(scene: Scene): {
+  scene: Scene;
+  approved: number;
+} {
+  let approved = 0;
+  const verticalConnectors = (scene.verticalConnectors ?? []).map(
+    (connector) => {
+      if (!connectorIsAutoReady(connector))
+        return { ...connector, floorIds: [...connector.floorIds] };
+      approved += 1;
+      return {
+        ...connector,
+        floorIds: [...connector.floorIds],
+        reviewed: true,
+        reviewState: "human_reviewed" as const,
+      };
+    },
+  );
+  return {
+    scene: {
+      ...scene,
+      verticalConnectors,
+    },
+    approved,
   };
 }
