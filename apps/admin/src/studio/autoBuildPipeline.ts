@@ -50,6 +50,10 @@ export interface AutoBuildPipelineResult {
     walls: number;
     repeatedFloors: number;
     autoRooms: number;
+    topologySnappedEndpoints: number;
+    topologyIntersectionSplits: number;
+    topologyDuplicatesRemoved: number;
+    topologyTinySegmentsRemoved: number;
     readyWallsPrepared: number;
     readyRepeatsPrepared: number;
     readyOpeningsPrepared: number;
@@ -279,6 +283,10 @@ export async function runAutoBuildPipeline(
       walls: draft.summary.walls,
       repeatedFloors: draft.summary.repeatedFloors,
       autoRooms: draft.summary.autoRooms,
+      topologySnappedEndpoints: draft.summary.topologySnappedEndpoints,
+      topologyIntersectionSplits: draft.summary.topologyIntersectionSplits,
+      topologyDuplicatesRemoved: draft.summary.topologyDuplicatesRemoved,
+      topologyTinySegmentsRemoved: draft.summary.topologyTinySegmentsRemoved,
       readyWallsPrepared: wallReview.prepared,
       readyRepeatsPrepared: repeatReview.prepared,
       readyOpeningsPrepared,
@@ -310,6 +318,14 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   const rooms = summary.autoRooms
     ? ` · ${summary.autoRooms} room draft${summary.autoRooms === 1 ? "" : "s"}`
     : "";
+  const topologyChanges =
+    summary.topologySnappedEndpoints +
+    summary.topologyIntersectionSplits +
+    summary.topologyDuplicatesRemoved +
+    summary.topologyTinySegmentsRemoved;
+  const topology = topologyChanges
+    ? ` · topology: ${summary.topologySnappedEndpoints} endpoint snap${summary.topologySnappedEndpoints === 1 ? "" : "s"}, ${summary.topologyIntersectionSplits} intersection split${summary.topologyIntersectionSplits === 1 ? "" : "s"}, ${summary.topologyDuplicatesRemoved} duplicate${summary.topologyDuplicatesRemoved === 1 ? "" : "s"} removed`
+    : "";
   const walls = summary.readyWallsPrepared
     ? ` · ${summary.readyWallsPrepared} high-confidence wall${summary.readyWallsPrepared === 1 ? "" : "s"} ready for review`
     : "";
@@ -325,5 +341,5 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
     summary.readyWallsPrepared +
     summary.readyRepeatsPrepared +
     summary.readyOpeningsPrepared;
-  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${walls}${repeats}${openings}${web}${textures}${materialFusion}${materialStyles}${resolvedTextures}${dwg}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
+  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${topology}${walls}${repeats}${openings}${web}${textures}${materialFusion}${materialStyles}${resolvedTextures}${dwg}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
 }
