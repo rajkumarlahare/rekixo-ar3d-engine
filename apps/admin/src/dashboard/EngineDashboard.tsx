@@ -873,7 +873,7 @@ export default function EngineDashboard() {
                 <p className="engine-kicker">PERMANENT DELETE</p>
                 <h2 id="engine-delete-all-title">Delete all {projects.length} projects?</h2>
                 <p>
-                  D1 project data, releases, Studio drafts, 3D Jio placements aur
+                  D1 project data, Experiences, releases, Studio drafts, 3D Geo placements aur
                   project-owned R2 assets permanently delete honge.
                 </p>
               </div>
@@ -959,8 +959,8 @@ export default function EngineDashboard() {
             <div className="engine-create-next">
               <strong>Project create hone ke baad:</strong>
               <span>1. Design Studio open hoga</span>
-              <span>2. Model upload/edit karke Publish karein</span>
-              <span>3. 3D Jio Mapper me real location set karein</span>
+              <span>2. Building design karke immutable release Publish karein</span>
+              <span>3. Building Website live hogi; Geo baad me optional add-on ke roop me add karein</span>
             </div>
 
             {createError ? <p className="engine-create-error">{createError}</p> : null}
