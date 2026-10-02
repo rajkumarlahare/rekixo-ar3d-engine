@@ -10,6 +10,11 @@ import type {
   SmartCadAudit,
   SmartProjectAnalysis,
 } from "./projectAnalyzer";
+import {
+  applyCadRegistrationPoint,
+  estimateCadModelRegistration,
+  type RegistrationMode,
+} from "./sourceRegistration";
 
 function rotatePoint(
   x: number,
@@ -200,6 +205,77 @@ export function mergeWallGraphs(
 }
 
 
+export interface SourceWallFusionResult {
+  walls: Wall[];
+  cadWalls: number;
+  modelWalls: number;
+  suppressedModelWalls: number;
+  cadAuthoritativeFloors: string[];
+}
+
+function averageConfidence(walls: readonly Wall[]) {
+  if (!walls.length) return 0;
+  return (
+    walls.reduce((sum, wall) => sum + (wall.confidence ?? 0), 0) /
+    walls.length
+  );
+}
+
+/**
+ * Fuses independent source graphs instead of treating CAD as an all-or-nothing
+ * fallback. A sufficiently dense/high-confidence CAD floor is authoritative;
+ * model-derived walls remain available on floors without trustworthy CAD.
+ * Weak/partial CAD can coexist with model walls, with exact duplicates removed.
+ */
+export function fuseSourceWallGraphs(
+  cadWalls: readonly Wall[],
+  modelWalls: readonly Wall[],
+): SourceWallFusionResult {
+  const cadByFloor = new Map<string, Wall[]>();
+  for (const wall of cadWalls) {
+    const rows = cadByFloor.get(wall.floorId) ?? [];
+    rows.push(wall);
+    cadByFloor.set(wall.floorId, rows);
+  }
+
+  const authoritative = new Set<string>();
+  for (const [floorId, walls] of cadByFloor)
+    if (walls.length >= 3 && averageConfidence(walls) >= 0.82)
+      authoritative.add(floorId);
+
+  const result = new Map<string, Wall>();
+  for (const wall of cadWalls)
+    result.set(segmentKey(wall.floorId, wall.start, wall.end), {
+      ...wall,
+      roomIds: [...wall.roomIds],
+    });
+
+  let keptModelWalls = 0;
+  let suppressedModelWalls = 0;
+  for (const wall of modelWalls) {
+    if (authoritative.has(wall.floorId)) {
+      suppressedModelWalls += 1;
+      continue;
+    }
+    const key = segmentKey(wall.floorId, wall.start, wall.end);
+    if (result.has(key)) {
+      suppressedModelWalls += 1;
+      continue;
+    }
+    result.set(key, { ...wall, roomIds: [...wall.roomIds] });
+    keptModelWalls += 1;
+  }
+
+  return {
+    walls: [...result.values()],
+    cadWalls: cadWalls.length,
+    modelWalls: keptModelWalls,
+    suppressedModelWalls,
+    cadAuthoritativeFloors: [...authoritative],
+  };
+}
+
+
 function boundaryPoints(room: Room): RoomPoint[] {
   return room.polygon?.length
     ? room.polygon
@@ -313,27 +389,15 @@ function cadFloorIndex(
   return undefined;
 }
 
-function transformedCadPoint(
-  point: RoomPoint,
-  centre: RoomPoint,
-  targetCentre: RoomPoint,
-  quarterTurn: boolean,
-): RoomPoint {
-  const x = point[0] - centre[0];
-  const z = point[1] - centre[1];
-  const rx = quarterTurn ? -z : x;
-  const rz = quarterTurn ? x : z;
-  return [
-    Number((targetCentre[0] + rx).toFixed(4)),
-    Number((targetCentre[1] + rz).toFixed(4)),
-  ];
-}
-
 export interface CadWallGraphResult {
   walls: Wall[];
   auditAssetId?: string;
   floorIndex?: number;
   quarterTurn: boolean;
+  rotationDeg?: number;
+  registrationConfidence?: number;
+  registrationMode?: RegistrationMode;
+  ambiguous?: boolean;
   compatible: boolean;
   reason?: string;
 }
@@ -384,88 +448,51 @@ export function deriveCadWallGraph(
       reason: "CAD source contains no normalized wall segments.",
     };
 
-  const cadPoints = wallSegments.flatMap((segment) => [
-    segment.start,
-    segment.end,
-  ]);
-  const minX = Math.min(...cadPoints.map((point) => point[0]));
-  const maxX = Math.max(...cadPoints.map((point) => point[0]));
-  const minZ = Math.min(...cadPoints.map((point) => point[1]));
-  const maxZ = Math.max(...cadPoints.map((point) => point[1]));
-  const cadWidth = maxX - minX;
-  const cadDepth = maxZ - minZ;
-  if (cadWidth < 0.5 || cadDepth < 0.5)
+  const registration = estimateCadModelRegistration(
+    analysis,
+    audit,
+    floorIndex,
+    scale,
+    transform,
+  );
+  if (!registration.compatible)
     return {
       walls: [],
       auditAssetId: audit.assetId,
       floorIndex,
-      quarterTurn: false,
+      quarterTurn: registration.sourceRotationDeg % 180 !== 0,
+      rotationDeg: registration.rotationDeg,
+      registrationConfidence: registration.confidence,
+      registrationMode: registration.mode,
+      ambiguous: registration.ambiguous,
       compatible: false,
-      reason: "CAD wall bounds are too small for building reconstruction.",
+      reason: registration.reason,
     };
 
-  let targetCentre: RoomPoint = [0, 0];
-  let quarterTurn = false;
-  if (analysis.bounds) {
-    const sourceWidth =
-      Math.max(0.01, analysis.bounds.max[0] - analysis.bounds.min[0]) *
-      scale;
-    const sourceDepth =
-      Math.max(0.01, analysis.bounds.max[2] - analysis.bounds.min[2]) *
-      scale;
-    const directError =
-      Math.abs(Math.log(cadWidth / sourceWidth)) +
-      Math.abs(Math.log(cadDepth / sourceDepth));
-    const rotatedError =
-      Math.abs(Math.log(cadDepth / sourceWidth)) +
-      Math.abs(Math.log(cadWidth / sourceDepth));
-    quarterTurn = rotatedError + 0.03 < directError;
-    const bestError = Math.min(directError, rotatedError);
-    if (bestError > 0.75)
-      return {
-        walls: [],
-        auditAssetId: audit.assetId,
-        floorIndex,
-        quarterTurn,
-        compatible: false,
-        reason:
-          "CAD/model footprint dimensions disagree too much for automatic alignment.",
-      };
-
-    const modelCentreX =
-      ((analysis.bounds.min[0] + analysis.bounds.max[0]) / 2) * scale;
-    const modelCentreZ =
-      ((analysis.bounds.min[2] + analysis.bounds.max[2]) / 2) * scale;
-    const rotated = rotatePoint(
-      modelCentreX,
-      modelCentreZ,
-      transform?.rotationY ?? 0,
-    );
-    targetCentre = [
-      rotated[0] + (transform?.x ?? 0),
-      rotated[1] + (transform?.z ?? 0),
-    ];
-  } else {
-    targetCentre = [transform?.x ?? 0, transform?.z ?? 0];
-  }
-
-  const cadCentre: RoomPoint = [(minX + maxX) / 2, (minZ + maxZ) / 2];
+  const baseConfidence = audit.kind === "dwg" ? 0.92 : 0.86;
+  const registeredConfidence = Math.min(
+    baseConfidence,
+    baseConfidence * (0.65 + 0.35 * registration.confidence),
+  );
   const walls = wallSegments
     .map((segment, index): Wall | undefined => {
-      const start = transformedCadPoint(
+      const start = applyCadRegistrationPoint(
         segment.start,
-        cadCentre,
-        targetCentre,
-        quarterTurn,
+        registration.sourceCentre,
+        registration.targetCentre,
+        registration.rotationDeg,
       );
-      const end = transformedCadPoint(
+      const end = applyCadRegistrationPoint(
         segment.end,
-        cadCentre,
-        targetCentre,
-        quarterTurn,
+        registration.sourceCentre,
+        registration.targetCentre,
+        registration.rotationDeg,
       );
       if (Math.hypot(end[0] - start[0], end[1] - start[1]) < 0.12)
         return undefined;
+      const confidence = Number(
+        Math.min(registeredConfidence, segment.confidence ?? 1).toFixed(3),
+      );
       return {
         id: `wall-cad-${audit.assetId.slice(0, 12)}-${index + 1}`,
         floorId: floor.id,
@@ -481,7 +508,11 @@ export function deriveCadWallGraph(
         height: 2.8,
         reviewed: false,
         origin: "cad-auto",
-        confidence: audit.kind === "dwg" ? 0.92 : 0.86,
+        confidence,
+        reviewState:
+          confidence >= 0.9 && !registration.ambiguous
+            ? "auto_ready"
+            : "suggested",
       };
     })
     .filter((wall): wall is Wall => Boolean(wall));
@@ -490,7 +521,13 @@ export function deriveCadWallGraph(
     walls,
     auditAssetId: audit.assetId,
     floorIndex,
-    quarterTurn,
+    quarterTurn: registration.sourceRotationDeg % 180 !== 0,
+    rotationDeg: registration.rotationDeg,
+    registrationConfidence: registration.confidence,
+    registrationMode: registration.mode,
+    ambiguous: registration.ambiguous,
     compatible: walls.length > 0,
+    reason: registration.reason,
   };
 }
+
