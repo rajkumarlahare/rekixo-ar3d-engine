@@ -78,3 +78,16 @@ test("deployment guide documents selective production behavior", () => {
   assert.match(deployment, /Wrangler `4\.146\.0`/);
   assert.match(deployment, /docs\/PHASE-8-CLOSEOUT\.md/);
 });
+
+
+test("production deployment fails closed for direct pushes to main", () => {
+  const workflow = read(".github/workflows/deploy-cloudflare.yml");
+  assert.match(workflow, /Require merged PR for production push/);
+  assert.match(workflow, /pull-requests: read/);
+  assert.match(workflow, /commits\/\$GITHUB_SHA\/pulls/);
+  assert.match(workflow, /pr\.merged_at && pr\.base\?\.ref === "main"/);
+  assert.match(
+    workflow,
+    /Production deploy blocked: main commit is not associated with a merged PR\./,
+  );
+});
