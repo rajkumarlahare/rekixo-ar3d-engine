@@ -467,6 +467,42 @@ export function duplicateFloor(p: Project, floorId: string): Project {
       .filter((f) => remap.has(f.roomId))
       .map((f) => ({ ...f, id: id(), roomId: remap.get(f.roomId)! })),
   );
+  next.scene.walls ??= [];
+  next.scene.walls.push(
+    ...(p.scene.walls ?? [])
+      .filter((wall) => wall.floorId === floorId)
+      .map((wall) => ({
+        ...wall,
+        id: id(),
+        floorId: newFloor.id,
+        roomIds: wall.roomIds
+          .map((roomId) => remap.get(roomId))
+          .filter((roomId): roomId is string => Boolean(roomId)),
+        reviewed: false,
+        sourceNodeName: undefined,
+        sourceOccurrence: undefined,
+        confidence: wall.origin === "manual" ? wall.confidence : undefined,
+        origin: wall.origin === "manual" ? ("manual" as const) : ("room-derived" as const),
+      })),
+  );
+  next.scene.openings ??= [];
+  next.scene.openings.push(
+    ...(p.scene.openings ?? [])
+      .filter((opening) => opening.floorId === floorId)
+      .map((opening) => ({
+        ...opening,
+        id: id(),
+        floorId: newFloor.id,
+        roomIds: opening.roomIds
+          .map((roomId) => remap.get(roomId))
+          .filter((roomId): roomId is string => Boolean(roomId)),
+        reviewed: false,
+        sourceNodeName: undefined,
+        sourceOccurrence: undefined,
+        confidence: undefined,
+      }))
+      .filter((opening) => opening.roomIds.length > 0),
+  );
   validateProject(next);
   return next;
 }
