@@ -102,3 +102,12 @@ test("production shell smoke retries bounded edge propagation and logs diagnosti
   assert.match(workflow, /Admin asset attempt \$attempt\/6/);
   assert.match(workflow, /Admin JavaScript asset did not become ready/);
 });
+
+
+test("pull-request validation runs the same browser smoke before merge", () => {
+  const validate = read(".github/workflows/validate.yml");
+  assert.match(validate, /Install browser E2E runner/);
+  assert.match(validate, /playwright install --with-deps chromium/);
+  assert.match(validate, /Run browser E2E smoke/);
+  assert.match(validate, /playwright test --config playwright\.config\.ts/);
+});
