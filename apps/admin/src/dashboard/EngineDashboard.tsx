@@ -286,6 +286,36 @@ export default function EngineDashboard() {
     }
   }
 
+
+  async function addGeoExperience() {
+    const activeRelease = releaseItems.find((release) => release.active);
+    if (!selectedSlug || !activeRelease) {
+      setExperienceError(
+        "3D Geo Experience add karne se pehle Building ko immutable release ke roop me publish karein.",
+      );
+      return;
+    }
+
+    setExperienceBusy(true);
+    setExperienceError("");
+    try {
+      const result = await createGeoExperience(selectedSlug, activeRelease.id);
+      setExperienceItems((current) => {
+        const withoutGeo = current.filter((item) => item.type !== "geo");
+        return [...withoutGeo, result.experience];
+      });
+      window.location.assign(projectUrl("geo-mapper", selectedSlug));
+    } catch (reason) {
+      setExperienceError(
+        reason instanceof Error
+          ? reason.message
+          : "3D Geo Experience create nahi ho saka.",
+      );
+    } finally {
+      setExperienceBusy(false);
+    }
+  }
+
   const selectedProject = projects.find((item) => item.slug === selectedSlug);
   const visibleProjects = useMemo(() => {
     const query = search.trim().toLowerCase();
