@@ -7,6 +7,7 @@ import type {
 } from "./domain";
 import type {
   SmartArchitecturalCandidate,
+  SmartCadAudit,
   SmartProjectAnalysis,
 } from "./projectAnalyzer";
 
@@ -281,4 +282,210 @@ export function linkWallsToRooms(
       roomIds,
     };
   });
+}
+
+
+function cadFloorIndex(
+  audit: SmartCadAudit,
+  floorCount: number,
+): number | undefined {
+  if (floorCount === 1) return 0;
+  const text = [
+    audit.name,
+    ...audit.layerHints.map((entry) => entry.layer),
+    ...(audit.textLabels ?? []).map((entry) => entry.text),
+  ]
+    .join(" ")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ");
+
+  if (/\b(?:ground floor|ground|gf|g floor)\b/.test(text)) return 0;
+  const words: Array<[RegExp, number]> = [
+    [/\b(?:first floor|1st floor|floor 1|f1)\b/, 1],
+    [/\b(?:second floor|2nd floor|floor 2|f2)\b/, 2],
+    [/\b(?:third floor|3rd floor|floor 3|f3)\b/, 3],
+    [/\b(?:fourth floor|4th floor|floor 4|f4)\b/, 4],
+    [/\b(?:fifth floor|5th floor|floor 5|f5)\b/, 5],
+    [/\b(?:sixth floor|6th floor|floor 6|f6)\b/, 6],
+  ];
+  for (const [pattern, index] of words)
+    if (index < floorCount && pattern.test(text)) return index;
+  return undefined;
+}
+
+function transformedCadPoint(
+  point: RoomPoint,
+  centre: RoomPoint,
+  targetCentre: RoomPoint,
+  quarterTurn: boolean,
+): RoomPoint {
+  const x = point[0] - centre[0];
+  const z = point[1] - centre[1];
+  const rx = quarterTurn ? -z : x;
+  const rz = quarterTurn ? x : z;
+  return [
+    Number((targetCentre[0] + rx).toFixed(4)),
+    Number((targetCentre[1] + rz).toFixed(4)),
+  ];
+}
+
+export interface CadWallGraphResult {
+  walls: Wall[];
+  auditAssetId?: string;
+  floorIndex?: number;
+  quarterTurn: boolean;
+  compatible: boolean;
+  reason?: string;
+}
+
+export function deriveCadWallGraph(
+  analysis: SmartProjectAnalysis,
+  floors: readonly Floor[],
+  scale: number,
+  transform?: ModelTransform,
+): CadWallGraphResult {
+  const audit = analysis.cadAudits.find(
+    (entry) =>
+      entry.kind === "dxf" &&
+      entry.geometryReady &&
+      (entry.semanticSegments?.some((segment) => segment.kind === "wall") ??
+        false),
+  );
+  if (!audit)
+    return {
+      walls: [],
+      quarterTurn: false,
+      compatible: false,
+      reason: "No normalized DXF wall geometry is ready.",
+    };
+
+  const floorIndex = cadFloorIndex(audit, floors.length);
+  const floor = floorIndex !== undefined ? floors[floorIndex] : undefined;
+  if (!floor)
+    return {
+      walls: [],
+      auditAssetId: audit.assetId,
+      quarterTurn: false,
+      compatible: false,
+      reason:
+        "DXF floor identity is ambiguous; keep CAD geometry as review evidence.",
+    };
+
+  const wallSegments = (audit.semanticSegments ?? []).filter(
+    (segment) => segment.kind === "wall",
+  );
+  if (!wallSegments.length)
+    return {
+      walls: [],
+      auditAssetId: audit.assetId,
+      floorIndex,
+      quarterTurn: false,
+      compatible: false,
+      reason: "DXF contains no normalized wall segments.",
+    };
+
+  const cadPoints = wallSegments.flatMap((segment) => [
+    segment.start,
+    segment.end,
+  ]);
+  const minX = Math.min(...cadPoints.map((point) => point[0]));
+  const maxX = Math.max(...cadPoints.map((point) => point[0]));
+  const minZ = Math.min(...cadPoints.map((point) => point[1]));
+  const maxZ = Math.max(...cadPoints.map((point) => point[1]));
+  const cadWidth = maxX - minX;
+  const cadDepth = maxZ - minZ;
+  if (cadWidth < 0.5 || cadDepth < 0.5)
+    return {
+      walls: [],
+      auditAssetId: audit.assetId,
+      floorIndex,
+      quarterTurn: false,
+      compatible: false,
+      reason: "DXF wall bounds are too small for building reconstruction.",
+    };
+
+  let targetCentre: RoomPoint = [0, 0];
+  let quarterTurn = false;
+  if (analysis.bounds) {
+    const sourceWidth =
+      Math.max(0.01, analysis.bounds.max[0] - analysis.bounds.min[0]) *
+      scale;
+    const sourceDepth =
+      Math.max(0.01, analysis.bounds.max[2] - analysis.bounds.min[2]) *
+      scale;
+    const directError =
+      Math.abs(Math.log(cadWidth / sourceWidth)) +
+      Math.abs(Math.log(cadDepth / sourceDepth));
+    const rotatedError =
+      Math.abs(Math.log(cadDepth / sourceWidth)) +
+      Math.abs(Math.log(cadWidth / sourceDepth));
+    quarterTurn = rotatedError + 0.03 < directError;
+    const bestError = Math.min(directError, rotatedError);
+    if (bestError > 0.75)
+      return {
+        walls: [],
+        auditAssetId: audit.assetId,
+        floorIndex,
+        quarterTurn,
+        compatible: false,
+        reason:
+          "DXF/model footprint dimensions disagree too much for automatic alignment.",
+      };
+
+    const modelCentreX =
+      ((analysis.bounds.min[0] + analysis.bounds.max[0]) / 2) * scale;
+    const modelCentreZ =
+      ((analysis.bounds.min[2] + analysis.bounds.max[2]) / 2) * scale;
+    const rotated = rotatePoint(
+      modelCentreX,
+      modelCentreZ,
+      transform?.rotationY ?? 0,
+    );
+    targetCentre = [
+      rotated[0] + (transform?.x ?? 0),
+      rotated[1] + (transform?.z ?? 0),
+    ];
+  } else {
+    targetCentre = [transform?.x ?? 0, transform?.z ?? 0];
+  }
+
+  const cadCentre: RoomPoint = [(minX + maxX) / 2, (minZ + maxZ) / 2];
+  const walls = wallSegments
+    .map((segment, index): Wall | undefined => {
+      const start = transformedCadPoint(
+        segment.start,
+        cadCentre,
+        targetCentre,
+        quarterTurn,
+      );
+      const end = transformedCadPoint(
+        segment.end,
+        cadCentre,
+        targetCentre,
+        quarterTurn,
+      );
+      if (Math.hypot(end[0] - start[0], end[1] - start[1]) < 0.12)
+        return undefined;
+      return {
+        id: `wall-cad-${audit.assetId.slice(0, 12)}-${index + 1}`,
+        floorId: floor.id,
+        roomIds: [],
+        start,
+        end,
+        thickness: 0.12,
+        height: 2.8,
+        reviewed: false,
+        origin: "cad-auto",
+        confidence: 0.86,
+      };
+    })
+    .filter((wall): wall is Wall => Boolean(wall));
+
+  return {
+    walls,
+    auditAssetId: audit.assetId,
+    floorIndex,
+    quarterTurn,
+    compatible: walls.length > 0,
+  };
 }
