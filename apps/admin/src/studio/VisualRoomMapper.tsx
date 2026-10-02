@@ -40,7 +40,6 @@ export default function VisualRoomMapper({
   selectedRoomSheetKey,
   roomSheetIssues,
   onRoomSheetSelect,
-  onPrepareSuggestedLayout,
   batchRepeatPreview,
   onGenerateBatchRepeat,
   openingWorkflow,
@@ -48,7 +47,6 @@ export default function VisualRoomMapper({
   onReviewOpenings,
   onRepeatUnit,
   onClose,
-  canPrepare = true,
 }: {
   scene: Scene;
   floorId: string;
@@ -70,7 +68,6 @@ export default function VisualRoomMapper({
   selectedRoomSheetKey: string;
   roomSheetIssues: string[];
   onRoomSheetSelect: (row: RoomSheetRow) => void;
-  onPrepareSuggestedLayout: (floorId: string) => void;
   batchRepeatPreview?: BatchRepeatPreview;
   onGenerateBatchRepeat: () => void;
   openingWorkflow: OpeningWorkflowStatus;
@@ -78,7 +75,6 @@ export default function VisualRoomMapper({
   onReviewOpenings: () => void;
   onRepeatUnit: (targetFloorId: string, targetUnit: string) => void;
   onClose: () => void;
-  canPrepare?: boolean;
 }) {
   const floorRooms = scene.rooms.filter((room) => room.floorId === floorId);
   const unmappedRows = roomSheetRows.filter(
@@ -86,14 +82,6 @@ export default function VisualRoomMapper({
   );
   const selectedSheetRow = roomSheetRows.find(
     (row) => row.key === selectedRoomSheetKey,
-  );
-  const suggestedRows = unmappedRows.filter(
-    (row) =>
-      row.origin === "profile" &&
-      typeof row.suggestedX === "number" &&
-      Number.isFinite(row.suggestedX) &&
-      typeof row.suggestedZ === "number" &&
-      Number.isFinite(row.suggestedZ),
   );
   const mappedSheetCount = roomSheetRows.length - unmappedRows.length;
   const unitRooms = floorRooms.filter((room) => room.unit === unit.trim());
@@ -175,25 +163,6 @@ export default function VisualRoomMapper({
               </div>
             )}
           </div>
-          {canPrepare && suggestedRows.length > 0 && (
-            <div className="room-sheet-suggested-action">
-              <span>
-                <strong>{suggestedRows.length} reconstructed placements ready</strong>
-                <small>
-                  Rekixo इन्हें draft position पर रख देगा; existing rooms untouched
-                  रहेंगे और आप mouse/touch से correction कर सकते हैं.
-                </small>
-              </span>
-              <button
-                type="button"
-                className="primary"
-                disabled={disabled || !floorId}
-                onClick={() => onPrepareSuggestedLayout(floorId)}
-              >
-                Prepare suggested floor
-              </button>
-            </div>
-          )}
           {unmappedRows.length > 0 ? (
             <div className="room-sheet-queue-list">
               {unmappedRows.map((row) => (
@@ -217,7 +186,7 @@ export default function VisualRoomMapper({
                     {row.width.toFixed(2)} × {row.depth.toFixed(2)} m
                     {row.floorLabel ? ` · ${row.floorLabel}` : ""}
                   </small>
-                  <i>{row.origin === "csv" ? "CSV" : "PROJECT"}</i>
+                  <i>{row.origin === "csv" ? "CSV" : "DATA"}</i>
                 </button>
               ))}
             </div>
