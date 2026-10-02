@@ -361,7 +361,7 @@ export function linkWallsToRooms(
 }
 
 
-function cadFloorIndex(
+export function resolveCadFloorIndex(
   audit: SmartCadAudit,
   floorCount: number,
 ): number | undefined {
@@ -423,7 +423,7 @@ export function deriveCadWallGraph(
       reason: "No normalized CAD wall geometry is ready.",
     };
 
-  const floorIndex = cadFloorIndex(audit, floors.length);
+  const floorIndex = resolveCadFloorIndex(audit, floors.length);
   if (floorIndex === undefined || !floors[floorIndex])
     return {
       walls: [],
