@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import * as T from "three";
 import {
+  constrainPlanAngle,
   isPointerTap,
   resolvePlanSnap,
   type PlanSegment,
+  type PlanSnapResult,
 } from "@rekixo/3d-engine-core";
 import { disposeObjectResources } from "./threeResources";
 import {
@@ -40,6 +42,7 @@ import {
   type Asset,
   type Room,
   type RoomPoint,
+  type Wall,
   type Scene as SceneData,
 } from "./domain";
 
@@ -83,6 +86,14 @@ export interface RoomDrawResult {
   width: number;
   depth: number;
 }
+export interface WallDrawResult {
+  start: RoomPoint;
+  end: RoomPoint;
+  length: number;
+  angleDegrees: number;
+  thickness: number;
+  height: number;
+}
 interface Props {
   resolveAsset?: (id: string) => Promise<Asset | undefined>;
   scene: SceneData;
@@ -113,6 +124,13 @@ interface Props {
     floorId: string;
     snap: boolean;
   };
+  wallDraw?: {
+    enabled: boolean;
+    floorId: string;
+    snap: boolean;
+    thickness: number;
+    height: number;
+  };
   roomStamp?: {
     enabled: boolean;
     floorId: string;
@@ -131,6 +149,7 @@ interface Props {
     snap: boolean;
   };
   onRoomDraw?: (result: RoomDrawResult) => void;
+  onWallDraw?: (result: WallDrawResult) => void;
   onRoomPolygonDraw?: (points: RoomPoint[]) => void;
   onRoomPolygonChange?: (roomId: string, points: RoomPoint[]) => void;
   furniturePlacement?: CanvasFurniturePlacement;
@@ -168,6 +187,7 @@ export default function SceneCanvas(props: Props) {
     profileExterior?: ModelProfileRuntime["exterior"];
     modelSelection?: T.BoxHelper;
     roomDraft: T.Mesh;
+    wallDraft: T.Mesh;
     polygonDraft: T.Group;
     polygonEdit: T.Group;
     clearPolygonDraft: () => void;
@@ -242,13 +262,33 @@ export default function SceneCanvas(props: Props) {
     );
     roomDraft.visible = false;
     roomDraft.renderOrder = 30;
+    const wallDraft = new T.Mesh(
+      new T.BoxGeometry(1, 0.16, 1),
+      new T.MeshBasicMaterial({
+        color: 0x5b7cff,
+        transparent: true,
+        opacity: 0.72,
+        depthWrite: false,
+      }),
+    );
+    wallDraft.name = "Wall draft";
+    wallDraft.visible = false;
+    wallDraft.renderOrder = 33;
     const polygonDraft = new T.Group();
     polygonDraft.name = "Room polygon draft";
     polygonDraft.renderOrder = 31;
     const polygonEdit = new T.Group();
     polygonEdit.name = "Room polygon edit handles";
     polygonEdit.renderOrder = 32;
-    scene.add(references, model, rooms, roomDraft, polygonDraft, polygonEdit);
+    scene.add(
+      references,
+      model,
+      rooms,
+      roomDraft,
+      wallDraft,
+      polygonDraft,
+      polygonEdit,
+    );
     const keys = new Set<string>();
     const selectables = new Map<string, T.Object3D>();
     const transform = new TransformControls(camera, renderer.domElement);
@@ -417,11 +457,27 @@ export default function SceneCanvas(props: Props) {
           }
           if (hasContent) topBox = contentBox;
           if (latest.current.roomMapEnabled && latest.current.isolateFloorId) {
-            const floorRooms = latest.current.scene.rooms.filter((room) => room.floorId === latest.current.isolateFloorId);
-            const floor = latest.current.scene.floors.find((entry) => entry.id === latest.current.isolateFloorId);
-            if (floorRooms.length && floor) {
-              topBox = new T.Box3().setFromPoints(floorRooms.flatMap((room) =>
-                roomBoundaryPoints(room).map(([x, z]) => new T.Vector3(x, floor.elevation, z))));
+            const floorRooms = latest.current.scene.rooms.filter(
+              (room) => room.floorId === latest.current.isolateFloorId,
+            );
+            const floorWalls = (latest.current.scene.walls ?? []).filter(
+              (wall) => wall.floorId === latest.current.isolateFloorId,
+            );
+            const floor = latest.current.scene.floors.find(
+              (entry) => entry.id === latest.current.isolateFloorId,
+            );
+            if (floor && (floorRooms.length || floorWalls.length)) {
+              topBox = new T.Box3().setFromPoints([
+                ...floorRooms.flatMap((room) =>
+                  roomBoundaryPoints(room).map(
+                    ([x, z]) => new T.Vector3(x, floor.elevation, z),
+                  ),
+                ),
+                ...floorWalls.flatMap((wall) => [
+                  new T.Vector3(wall.start[0], floor.elevation, wall.start[1]),
+                  new T.Vector3(wall.end[0], floor.elevation, wall.end[1]),
+                ]),
+              ]);
             }
           }
         }
@@ -541,6 +597,7 @@ export default function SceneCanvas(props: Props) {
       fill,
       grid,
       roomDraft,
+      wallDraft,
       polygonDraft,
       polygonEdit,
       clearPolygonDraft,
@@ -677,6 +734,7 @@ export default function SceneCanvas(props: Props) {
       | { x: number; y: number; ox: number; oy: number; id: number }
       | undefined;
     let roomDrawStart: T.Vector3 | undefined;
+    let wallDrawStart: T.Vector3 | undefined;
     let roomStampCenter: T.Vector3 | undefined;
     let vertexDrag:
       | {
@@ -687,13 +745,10 @@ export default function SceneCanvas(props: Props) {
         }
       | undefined;
 
-    const snapRoomPoint = (
-      point: T.Vector3,
+    const planSegmentsForFloor = (
       floorId: string,
-      enabled: boolean,
       excludeRoomId?: string,
-    ) => {
-      if (!enabled) return point;
+    ): PlanSegment[] => {
       const segments: PlanSegment[] = [];
       for (const room of latest.current.scene.rooms) {
         if (room.floorId !== floorId || room.id === excludeRoomId) continue;
@@ -702,21 +757,46 @@ export default function SceneCanvas(props: Props) {
           const [ax, az] = boundary[index];
           const [bx, bz] = boundary[(index + 1) % boundary.length];
           segments.push({
-            id: `${room.id}:${index}`,
+            id: `room:${room.id}:${index}`,
             start: [ax, az],
             end: [bx, bz],
           });
         }
       }
-      const snapped = resolvePlanSnap([point.x, point.z], {
+      for (const wall of latest.current.scene.walls ?? []) {
+        if (wall.floorId !== floorId) continue;
+        segments.push({
+          id: `wall:${wall.id}`,
+          start: [wall.start[0], wall.start[1]],
+          end: [wall.end[0], wall.end[1]],
+        });
+      }
+      return segments;
+    };
+
+    const resolveCanvasPlanSnap = (
+      point: T.Vector3,
+      floorId: string,
+      excludeRoomId?: string,
+    ): PlanSnapResult =>
+      resolvePlanSnap([point.x, point.z], {
         enabled: true,
         gridSize: 0.1,
         vertexTolerance: 0.24,
         midpointTolerance: 0.18,
         edgeTolerance: 0.18,
         intersectionTolerance: 0.18,
-        segments,
+        segments: planSegmentsForFloor(floorId, excludeRoomId),
       });
+
+    const snapRoomPoint = (
+      point: T.Vector3,
+      floorId: string,
+      enabled: boolean,
+      excludeRoomId?: string,
+    ) => {
+      if (!enabled) return point;
+      const snapped = resolveCanvasPlanSnap(point, floorId, excludeRoomId);
       return new T.Vector3(snapped.point[0], point.y, snapped.point[1]);
     };
 
@@ -745,6 +825,59 @@ export default function SceneCanvas(props: Props) {
       if (!raycaster.ray.intersectPlane(plane, target)) return undefined;
       target.y = floor.elevation + 0.04;
       return snapRoomPoint(target, floor.id, snap, excludeRoomId);
+    };
+
+    const wallReferenceAngles = (floorId: string) =>
+      (latest.current.scene.walls ?? [])
+        .filter((wall) => wall.floorId === floorId)
+        .map(
+          (wall) =>
+            (Math.atan2(
+              wall.end[1] - wall.start[1],
+              wall.end[0] - wall.start[0],
+            ) *
+              180) /
+            Math.PI,
+        );
+
+    const wallPlanePoint = (
+      event: PointerEvent,
+      start?: T.Vector3,
+    ) => {
+      const config = latest.current.wallDraw;
+      if (!config?.enabled || !config.floorId) return undefined;
+      const raw = pointOnFloor(
+        event.clientX,
+        event.clientY,
+        config.floorId,
+        false,
+      );
+      if (!raw || !config.snap) return raw;
+      const firstSnap = resolveCanvasPlanSnap(raw, config.floorId);
+      if (!start || firstSnap.kind !== "grid")
+        return new T.Vector3(firstSnap.point[0], raw.y, firstSnap.point[1]);
+
+      const constrained = constrainPlanAngle(
+        [start.x, start.z],
+        firstSnap.point,
+        {
+          incrementDegrees: 15,
+          toleranceDegrees: 4,
+          referenceAnglesDegrees: wallReferenceAngles(config.floorId),
+        },
+      );
+      const constrainedVector = new T.Vector3(
+        constrained.point[0],
+        raw.y,
+        constrained.point[1],
+      );
+      const secondSnap = resolveCanvasPlanSnap(
+        constrainedVector,
+        config.floorId,
+      );
+      const point =
+        secondSnap.kind === "grid" ? constrained.point : secondSnap.point;
+      return new T.Vector3(point[0], raw.y, point[1]);
     };
 
     const roomPlanePoint = (
@@ -793,8 +926,52 @@ export default function SceneCanvas(props: Props) {
       roomDraft.visible = true;
     };
 
+    const updateWallDraft = (
+      start: T.Vector3,
+      end: T.Vector3,
+      thickness: number,
+    ) => {
+      const dx = end.x - start.x;
+      const dz = end.z - start.z;
+      const length = Math.max(0.001, Math.hypot(dx, dz));
+      wallDraft.position.set(
+        (start.x + end.x) / 2,
+        start.y + 0.08,
+        (start.z + end.z) / 2,
+      );
+      wallDraft.rotation.y = Math.atan2(-dz, dx);
+      wallDraft.scale.set(length, 1, Math.max(0.03, thickness));
+      wallDraft.visible = true;
+      const angle = ((Math.atan2(dz, dx) * 180) / Math.PI + 360) % 360;
+      setStatus(
+        `Wall ${length.toFixed(2)} m · ${Math.round(angle)}° · drag to set end`,
+      );
+    };
+
     const pointerDown = (e: PointerEvent) => {
       renderer.domElement.focus();
+      if (
+        e.button === 0 &&
+        latest.current.wallDraw?.enabled &&
+        latest.current.view === "building"
+      ) {
+        const start = wallPlanePoint(e);
+        if (start) {
+          wallDrawStart = start;
+          wallDraft.visible = false;
+          controls.enabled = false;
+          renderer.domElement.setPointerCapture(e.pointerId);
+          point = {
+            x: e.clientX,
+            y: e.clientY,
+            ox: e.clientX,
+            oy: e.clientY,
+            id: e.pointerId,
+          };
+          setStatus("Wall start set · drag to place the end point");
+          return;
+        }
+      }
       if (
         e.button === 0 &&
         latest.current.roomPolygonEdit?.enabled &&
@@ -914,6 +1091,16 @@ export default function SceneCanvas(props: Props) {
         renderer.domElement.setPointerCapture(e.pointerId);
     };
     const move = (e: PointerEvent) => {
+      if (wallDrawStart && latest.current.wallDraw?.enabled) {
+        const end = wallPlanePoint(e, wallDrawStart);
+        if (end)
+          updateWallDraft(
+            wallDrawStart,
+            end,
+            latest.current.wallDraw.thickness,
+          );
+        return;
+      }
       if (vertexDrag) {
         const target = roomPlanePoint(e, vertexDrag.roomId);
         if (target) {
@@ -957,6 +1144,52 @@ export default function SceneCanvas(props: Props) {
       point.y = e.clientY;
     };
     const click = (e: PointerEvent) => {
+      if (wallDrawStart) {
+        const currentWallStart = wallDrawStart;
+        const config = latest.current.wallDraw;
+        const cancelled = e.type === "pointercancel";
+        const end = cancelled
+          ? undefined
+          : wallPlanePoint(e, currentWallStart);
+        wallDrawStart = undefined;
+        wallDraft.visible = false;
+        point = undefined;
+        controls.enabled = latest.current.view !== "walk";
+        try {
+          renderer.domElement.releasePointerCapture(e.pointerId);
+        } catch {}
+        if (!end || !config?.enabled) {
+          setStatus(cancelled ? "Wall draw cancelled." : "");
+          return;
+        }
+        const dx = end.x - currentWallStart.x;
+        const dz = end.z - currentWallStart.z;
+        const length = Math.hypot(dx, dz);
+        if (length < 0.15) {
+          setStatus("Wall is too short. Draw at least 0.15 m.");
+          return;
+        }
+        const angleDegrees =
+          ((Math.atan2(dz, dx) * 180) / Math.PI + 360) % 360;
+        latest.current.onWallDraw?.({
+          start: [
+            Number(currentWallStart.x.toFixed(4)),
+            Number(currentWallStart.z.toFixed(4)),
+          ],
+          end: [
+            Number(end.x.toFixed(4)),
+            Number(end.z.toFixed(4)),
+          ],
+          length: Number(length.toFixed(4)),
+          angleDegrees: Number(angleDegrees.toFixed(2)),
+          thickness: Math.max(0.03, config.thickness),
+          height: Math.max(0.3, config.height),
+        });
+        setStatus(
+          `Wall added · ${length.toFixed(2)} m · draw another wall or switch tool`,
+        );
+        return;
+      }
       if (vertexDrag) {
         const current = vertexDrag;
         const target = roomPlanePoint(e, current.roomId);
@@ -1689,6 +1922,60 @@ export default function SceneCanvas(props: Props) {
       }
     }
 
+    if (props.roomMapEnabled && props.view === "building") {
+      for (const wall of props.scene.walls ?? []) {
+        if (
+          props.isolateFloorId &&
+          wall.floorId !== props.isolateFloorId
+        )
+          continue;
+        const floorY =
+          props.scene.floors.find((floor) => floor.id === wall.floorId)
+            ?.elevation ?? 0;
+        const dx = wall.end[0] - wall.start[0];
+        const dz = wall.end[1] - wall.start[1];
+        const length = Math.hypot(dx, dz);
+        if (length < 0.03) continue;
+        const root = new T.Group();
+        root.userData.selectId = wall.id;
+        root.position.set(
+          (wall.start[0] + wall.end[0]) / 2,
+          floorY,
+          (wall.start[1] + wall.end[1]) / 2,
+        );
+        root.rotation.y = Math.atan2(-dz, dx);
+        const displayHeight = Math.min(
+          0.34,
+          Math.max(0.12, wall.height),
+        );
+        const material = new T.MeshStandardMaterial({
+          color: wall.origin === "manual" ? 0x3f63d8 : 0x6f7c88,
+          transparent: true,
+          opacity: wall.origin === "manual" ? 0.9 : 0.46,
+          roughness: 0.78,
+        });
+        const marker = new T.Mesh(
+          new T.BoxGeometry(
+            Math.max(0.03, length),
+            displayHeight,
+            Math.max(0.03, wall.thickness),
+          ),
+          material,
+        );
+        marker.name = `Wall · ${wall.origin}`;
+        marker.position.y = displayHeight / 2 + 0.03;
+        marker.castShadow = true;
+        marker.receiveShadow = true;
+        root.add(marker);
+        r.rooms.add(root);
+        r.selectables.set(wall.id, root);
+        if (wall.id === props.selected) {
+          root.updateWorldMatrix(true, true);
+          r.rooms.add(new T.BoxHelper(root, 0x2748b8));
+        }
+      }
+    }
+
     for (const opening of props.scene.openings ?? []) {
       if (!opening.reviewed) continue;
       if (
@@ -1743,6 +2030,12 @@ export default function SceneCanvas(props: Props) {
   useEffect(() => {
     const runtime = api.current;
     if (!runtime) return;
+    if (!props.wallDraw?.enabled) runtime.wallDraft.visible = false;
+  }, [props.wallDraw?.enabled, props.wallDraw?.floorId]);
+
+  useEffect(() => {
+    const runtime = api.current;
+    if (!runtime) return;
     runtime.transform.detach();
     const mode = props.transformMode ?? "translate";
     runtime.transform.setTranslationSnap(props.snap ? 0.1 : null);
@@ -1777,6 +2070,10 @@ export default function SceneCanvas(props: Props) {
     const isFurniture = props.scene.furniture.some(
       (item) => item.id === props.selected,
     );
+    const isWall = (props.scene.walls ?? []).some(
+      (wall) => wall.id === props.selected,
+    );
+    if (isWall) return;
     if (
       (isRoom && mode === "rotate") ||
       (isFurniture && mode === "scale") ||
