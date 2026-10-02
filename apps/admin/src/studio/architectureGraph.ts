@@ -346,7 +346,7 @@ export function deriveCadWallGraph(
 ): CadWallGraphResult {
   const audit = analysis.cadAudits.find(
     (entry) =>
-      entry.kind === "dxf" &&
+      (entry.kind === "dxf" || entry.kind === "dwg") &&
       entry.geometryReady &&
       (entry.semanticSegments?.some((segment) => segment.kind === "wall") ??
         false),
@@ -356,7 +356,7 @@ export function deriveCadWallGraph(
       walls: [],
       quarterTurn: false,
       compatible: false,
-      reason: "No normalized DXF wall geometry is ready.",
+      reason: "No normalized CAD wall geometry is ready.",
     };
 
   const floorIndex = cadFloorIndex(audit, floors.length);
@@ -368,7 +368,7 @@ export function deriveCadWallGraph(
       quarterTurn: false,
       compatible: false,
       reason:
-        "DXF floor identity is ambiguous; keep CAD geometry as review evidence.",
+        "CAD floor identity is ambiguous; keep normalized geometry as review evidence.",
     };
 
   const wallSegments = (audit.semanticSegments ?? []).filter(
@@ -381,7 +381,7 @@ export function deriveCadWallGraph(
       floorIndex,
       quarterTurn: false,
       compatible: false,
-      reason: "DXF contains no normalized wall segments.",
+      reason: "CAD source contains no normalized wall segments.",
     };
 
   const cadPoints = wallSegments.flatMap((segment) => [
@@ -401,7 +401,7 @@ export function deriveCadWallGraph(
       floorIndex,
       quarterTurn: false,
       compatible: false,
-      reason: "DXF wall bounds are too small for building reconstruction.",
+      reason: "CAD wall bounds are too small for building reconstruction.",
     };
 
   let targetCentre: RoomPoint = [0, 0];
@@ -429,7 +429,7 @@ export function deriveCadWallGraph(
         quarterTurn,
         compatible: false,
         reason:
-          "DXF/model footprint dimensions disagree too much for automatic alignment.",
+          "CAD/model footprint dimensions disagree too much for automatic alignment.",
       };
 
     const modelCentreX =
@@ -472,11 +472,16 @@ export function deriveCadWallGraph(
         roomIds: [],
         start,
         end,
-        thickness: 0.12,
+        thickness:
+          segment.widthM !== undefined &&
+          segment.widthM >= 0.05 &&
+          segment.widthM <= 1
+            ? Number(segment.widthM.toFixed(4))
+            : 0.12,
         height: 2.8,
         reviewed: false,
         origin: "cad-auto",
-        confidence: 0.86,
+        confidence: audit.kind === "dwg" ? 0.92 : 0.86,
       };
     })
     .filter((wall): wall is Wall => Boolean(wall));
