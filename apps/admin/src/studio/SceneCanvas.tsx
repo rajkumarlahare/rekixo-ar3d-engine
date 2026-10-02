@@ -18,7 +18,7 @@ import {
   applyModelProfileExterior,
   loadModelProfileMaterialEnhancer,
   type ModelProfileRuntime,
-} from "../../../public/src/viewer/modelProfiles";
+} from "@rekixo/3d-model-profiles";
 import { asset } from "./storage";
 import {
   canWalk,
