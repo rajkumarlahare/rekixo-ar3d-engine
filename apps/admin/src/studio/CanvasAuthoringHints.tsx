@@ -1,10 +1,12 @@
 export default function CanvasAuthoringHints({
   furniture,
+  wall,
   stamp,
   room,
   polygon,
 }: {
   furniture: boolean;
+  wall: boolean;
   stamp: boolean;
   room: boolean;
   polygon: boolean;
@@ -14,6 +16,13 @@ export default function CanvasAuthoringHints({
       <div className="room-draw-hint">
         Tap inside the room to place · desktop: drag a furniture card onto the
         canvas · Esc cancels
+      </div>
+    );
+  if (wall)
+    return (
+      <div className="room-draw-hint">
+        Drag wall start → end · endpoint/midpoint/intersection snap + angle assist
+        · release to place
       </div>
     );
   if (stamp)
