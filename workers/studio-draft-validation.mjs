@@ -201,6 +201,45 @@ function validateScene(scene, assetIds) {
   )
     throw Error("Studio scene publish model asset is missing.");
 
+  if (scene.referenceImageEvidence !== undefined) {
+    const evidence = scene.referenceImageEvidence;
+    if (
+      !evidence ||
+      typeof evidence !== "object" ||
+      Array.isArray(evidence) ||
+      !assetIds.has(evidence.assetId) ||
+      !Number.isInteger(evidence.sourceWidth) ||
+      !number(evidence.sourceWidth, 2, 50000) ||
+      !Number.isInteger(evidence.sourceHeight) ||
+      !number(evidence.sourceHeight, 2, 50000) ||
+      !Number.isInteger(evidence.sampledWidth) ||
+      !number(evidence.sampledWidth, 2, 2000) ||
+      !Number.isInteger(evidence.sampledHeight) ||
+      !number(evidence.sampledHeight, 2, 2000) ||
+      !Array.isArray(evidence.renderedPalette) ||
+      evidence.renderedPalette.length < 1 ||
+      evidence.renderedPalette.length > 8 ||
+      evidence.renderedPalette.some((entry) => !color(entry)) ||
+      new Set(
+        evidence.renderedPalette.map((entry) => String(entry).toLowerCase()),
+      ).size !== evidence.renderedPalette.length ||
+      !number(evidence.averageLuminance, 0, 1) ||
+      !number(evidence.warmFraction, 0, 1) ||
+      !number(evidence.darkFraction, 0, 1) ||
+      !number(evidence.highlightFraction, 0, 1) ||
+      !number(evidence.averageSaturation, 0, 1) ||
+      !number(evidence.verticalEdgeStrength, 0, 1) ||
+      !number(evidence.horizontalEdgeStrength, 0, 1) ||
+      !["day", "evening", "night", "unknown"].includes(
+        evidence.lightingMood,
+      ) ||
+      !number(evidence.confidence, 0, 1) ||
+      !Number.isInteger(evidence.sampleCount) ||
+      !number(evidence.sampleCount, 1, 1000000)
+    )
+      throw Error("Invalid Studio reference image evidence.");
+  }
+
   for (const floor of scene.floors)
     if (
       !text(floor.name) ||
