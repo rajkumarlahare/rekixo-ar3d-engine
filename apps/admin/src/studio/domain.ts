@@ -33,7 +33,7 @@ export interface Room {
   sourceClaimIds?: string[];
   mesh?: string;
 }
-export type FurnitureOrigin = "demo-auto" | "demo-repeat";
+export type FurnitureOrigin = "demo-auto" | "demo-repeat" | "source-auto";
 
 export interface Furniture {
   id: string;
@@ -854,7 +854,7 @@ export function validateScene(s: Scene): void {
       !number(f.rotation, -360, 360) ||
       !color(f.color) ||
       (f.origin !== undefined &&
-        !["demo-auto", "demo-repeat"].includes(f.origin)) ||
+        !["demo-auto", "demo-repeat", "source-auto"].includes(f.origin)) ||
       !number(f.x, -200, 200) ||
       !number(f.z, -200, 200)
     )
