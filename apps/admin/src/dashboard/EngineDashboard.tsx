@@ -547,7 +547,7 @@ export default function EngineDashboard() {
             <>
           <section className="engine-project-hero">
             <div>
-              <p className="engine-kicker">SELECTED PROJECT</p>
+              <p className="engine-kicker">PROJECT WORKSPACE</p>
               <span className={`engine-status engine-status--${status?.project.status ?? "loading"}`}>
                 {status?.project.status ?? (selectedSlug ? "Loading" : "No project")}
               </span>
@@ -555,7 +555,7 @@ export default function EngineDashboard() {
               <p>
                 {status?.project.location ??
                   selectedProject?.location ??
-                  "Project select karke editor, Jio Mapper aur live controls use karein."}
+                  "Project select karke Building design, release aur customer Experiences manage karein."}
               </p>
               <small>{selectedSlug || "No project selected"}</small>
             </div>
@@ -566,41 +566,42 @@ export default function EngineDashboard() {
                 href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}
                 aria-disabled={!selectedSlug}
               >
-                <span>01 · DESIGN STUDIO</span>
-                <strong>Edit this project</strong>
-                <small>Model upload, rooms, materials aur publish</small>
+                <span>01 · DESIGN</span>
+                <strong>Open Design Studio</strong>
+                <small>Model, rooms, materials, walkthrough aur Building publish</small>
               </a>
-              <a
-                className="engine-action engine-action--geo"
-                href={
-                  selectedSlug
-                    ? projectUrl("geo-mapper", selectedSlug)
-                    : "/3Dprojects/geo-mapper"
-                }
-                aria-disabled={!selectedSlug}
-              >
-                <span>02 · 3D JIO MAPPER</span>
-                <strong>Set real location</strong>
-                <small>Satellite anchor, heading, ground aur public demo</small>
-              </a>
-              {liveUrl ? (
+
+              {buildingLive ? (
                 <a
                   className="engine-action"
-                  href={liveUrl}
+                  href={buildingUrl}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  <span>03 · LIVE SITE</span>
-                  <strong>Open customer view</strong>
-                  <small>Published customer-facing 3D experience</small>
+                  <span>02 · BUILDING SITE</span>
+                  <strong>Open Building Website</strong>
+                  <small>Standalone customer-facing 3D Building Experience</small>
                 </a>
               ) : (
-                <div className="engine-action engine-action--disabled">
-                  <span>03 · LIVE SITE</span>
-                  <strong>Publish required</strong>
-                  <small>Design Studio se publish karne ke baad live hoga.</small>
-                </div>
+                <a
+                  className="engine-action engine-action--disabled"
+                  href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}
+                  aria-disabled={!selectedSlug}
+                >
+                  <span>02 · BUILDING SITE</span>
+                  <strong>Publish Building first</strong>
+                  <small>Immutable Building release ke baad website live hogi</small>
+                </a>
               )}
+
+              <a
+                className="engine-action engine-action--geo"
+                href={selectedSlug ? "#experiences" : "/3Dprojects"}
+              >
+                <span>03 · EXPERIENCES</span>
+                <strong>Manage deliverables</strong>
+                <small>Building primary hai; Geo sirf optional customer add-on</small>
+              </a>
             </div>
           </section>
 
