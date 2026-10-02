@@ -22,10 +22,28 @@ export function projectSlugFromPathname(pathname: string) {
   }
 }
 
-export function publicProjectPath(slug: string) {
+export const BUILDING_EXPERIENCE_TYPE = "building" as const;
+export const GEO_EXPERIENCE_TYPE = "geo" as const;
+
+export function buildingPublicProjectPath(slug: string) {
   const normalized = normalizeProjectSlug(slug);
   if (!validProjectSlug(normalized)) throw new Error("Invalid 3D project slug.");
   return `${PUBLIC_BASE_PATH}/${encodeURIComponent(normalized)}`;
+}
+
+/**
+ * Backward-compatible canonical Building Experience URL helper.
+ *
+ * Building remains the default public deliverable for every Engine project.
+ * Keep this alias stable so existing callers and customer URLs do not change
+ * while optional experiences (such as Geo) evolve independently.
+ */
+export function publicProjectPath(slug: string) {
+  return buildingPublicProjectPath(slug);
+}
+
+export function geoPublicProjectPath(slug: string) {
+  return `${buildingPublicProjectPath(slug)}/geo`;
 }
 
 export function projectAssetPrefix(slug: string) {
