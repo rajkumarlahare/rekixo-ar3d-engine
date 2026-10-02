@@ -404,11 +404,12 @@ export default function EngineDashboard() {
 
       <section className="engine-home__intro">
         <div className="engine-home__intro-copy">
-          <p className="engine-kicker">START HERE</p>
-          <h1>Create → Edit → Map → Live</h1>
+          <p className="engine-kicker">BUILDING-FIRST WORKFLOW</p>
+          <h1>Create → Design → Publish → Building Live</h1>
           <p>
-            Naya 3D project yahin create hota hai. Create ke baad wahi project Design Studio
-            me khulega; publish hone ke baad 3D Jio Mapper se real location set karein.
+            Har Engine project ka primary deliverable standalone 3D Building Website hai.
+            3D Geo Experience optional add-on hai aur sirf customer requirement par baad me
+            existing immutable Building release ko reference karke add hota hai.
           </p>
           <button
             className="engine-button engine-button--primary engine-button--hero"
@@ -418,25 +419,31 @@ export default function EngineDashboard() {
             + Create New 3D Project
           </button>
         </div>
-        <div className="engine-home__steps" aria-label="3D project workflow">
-          <button type="button" onClick={() => setShowCreate(true)}>
-            <span>01</span><strong>Create Project</strong><small>Name + location se start karein</small>
-          </button>
-          <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
-            <span>02</span><strong>Design Studio</strong><small>GLB, rooms, material, publish</small>
-          </a>
-          <a href={selectedSlug ? projectUrl("geo-mapper", selectedSlug) : "/3Dprojects/geo-mapper"}>
-            <span>03</span><strong>3D Jio Mapper</strong><small>Real location + heading + ground</small>
-          </a>
-          {liveUrl ? (
-            <a href={liveUrl} target="_blank" rel="noreferrer">
-              <span>04</span><strong>Open Live</strong><small>Customer-facing experience</small>
+        <div>
+          <div className="engine-home__steps" aria-label="Building project workflow">
+            <button type="button" onClick={() => setShowCreate(true)}>
+              <span>01</span><strong>Create Project</strong><small>Name + location se start karein</small>
+            </button>
+            <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
+              <span>02</span><strong>Design Building</strong><small>Model, rooms, material, walkthrough</small>
             </a>
-          ) : (
-            <div>
-              <span>04</span><strong>Go Live</strong><small>Studio se publish karne ke baad</small>
-            </div>
-          )}
+            <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
+              <span>03</span><strong>Publish Building</strong><small>Immutable Building release create karein</small>
+            </a>
+            {buildingLive ? (
+              <a href={buildingUrl} target="_blank" rel="noreferrer">
+                <span>04</span><strong>Building Live</strong><small>Standalone customer-facing website</small>
+              </a>
+            ) : (
+              <div>
+                <span>04</span><strong>Building Live</strong><small>Publish ke baad customer website live hogi</small>
+              </div>
+            )}
+          </div>
+          <p className="engine-home__optional-note">
+            Map requirement baad me aaye to selected project ke Experiences section se
+            <strong> + Add 3D Geo Experience</strong> karein. Building Website uske bina bhi complete hai.
+          </p>
         </div>
       </section>
 
