@@ -3980,6 +3980,7 @@ export default function Studio() {
                     view === "walk" ||
                     (view === "building" &&
                       !showReferenceWorkspace &&
+                      !siteElement &&
                       !(showRoomMapper && Boolean(room) && selected === room?.id))
                   }
                   title="Move selected object (W)"
@@ -3995,7 +3996,8 @@ export default function Studio() {
                     busy ||
                     !(
                       (view === "rooms" && Boolean(item)) ||
-                      (view === "building" && showReferenceWorkspace)
+                      (view === "building" && showReferenceWorkspace) ||
+                      Boolean(siteElement)
                     )
                   }
                   title="Rotate selected object (E)"
@@ -4009,11 +4011,12 @@ export default function Studio() {
                   disabled={
                     Boolean(review) ||
                     busy ||
-                    !(
-                      view === "rooms" ||
-                      (view === "building" && showRoomMapper)
-                    ) ||
-                    !room ||
+                    (!siteElement &&
+                      !(
+                        view === "rooms" ||
+                        (view === "building" && showRoomMapper)
+                      )) ||
+                    (!siteElement && !room) ||
                     Boolean(item)
                   }
                   title="Scale selected room (R)"
