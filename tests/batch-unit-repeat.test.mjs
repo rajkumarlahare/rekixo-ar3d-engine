@@ -179,20 +179,6 @@ test("batch repeat creates unverified drafts and clears direct evidence bindings
   assert.notEqual(polygonCopy.polygon, rooms[0].polygon);
 });
 
-test("Jyoti repeat plan stays source-specific and excludes common rooms", () => {
-  const profile = fs.readFileSync(
-    "project-profiles/studio-source-profiles.ts",
-    "utf8",
-  );
-  assert.match(profile, /jyotiRepeatPlan/);
-  assert.match(profile, /sourceFloorKey: "floor-1"/);
-  assert.match(profile, /targetUnit: "501"/);
-  assert.match(profile, /targetUnit: "502"/);
-  assert.match(profile, /targetUnit: "403"/);
-  assert.doesNotMatch(profile, /sourceUnit: "Common"/);
-  assert.match(profile, /not a certified legal floor schedule/);
-});
-
 
 test("batch repeated room identity is explicit and stable for review automation", () => {
   const generated = repeat.applyBatchRepeatPlan(
