@@ -34,16 +34,28 @@ Use the repository-pinned Wrangler after `npm ci`.
 Inspect the available Time Travel restore point before any restore:
 
 ```powershell
-npx.cmd --no-install wrangler d1 time-travel info rekixo-3d-production --remote --config wrangler.infra.jsonc
+npx.cmd --no-install wrangler d1 time-travel info rekixo-3d-production --config wrangler.infra.jsonc
 ```
 
 Linux/macOS equivalent:
 
 ```bash
-npx --no-install wrangler d1 time-travel info rekixo-3d-production --remote --config wrangler.infra.jsonc
+npx --no-install wrangler d1 time-travel info rekixo-3d-production --config wrangler.infra.jsonc
 ```
 
-A restore is an explicit incident action. Choose a reviewed timestamp/bookmark that predates the bad database mutation, document it, then use the corresponding Wrangler Time Travel restore command. Never run a restore speculatively.
+A restore is an explicit incident action. Cloudflare D1 Time Travel is always-on for production-backend databases and restores in place, so first retrieve and record the intended bookmark/timestamp. Choose a reviewed point that predates the bad database mutation, document it, then use one of the corresponding commands:
+
+```powershell
+npx.cmd --no-install wrangler d1 time-travel restore rekixo-3d-production --bookmark="<reviewed-bookmark>" --config wrangler.infra.jsonc
+```
+
+or:
+
+```powershell
+npx.cmd --no-install wrangler d1 time-travel restore rekixo-3d-production --timestamp="<RFC3339-or-Unix-time>" --config wrangler.infra.jsonc
+```
+
+Never run a restore speculatively. Record the pre-restore bookmark as well so the restore itself can be undone if necessary.
 
 After D1 recovery, verify at minimum:
 
