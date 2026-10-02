@@ -23,6 +23,7 @@ export interface DwgProcessorResult {
     code?: number;
     name: string;
     metresPerUnit: number | null;
+    basis?: string;
   };
   geometryReady: boolean;
   segments: DxfSemanticSegment[];
