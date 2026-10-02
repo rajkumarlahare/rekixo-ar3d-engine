@@ -3,8 +3,6 @@ import type { Asset, Project } from "./domain";
 import type { FbxSourceAudit } from "./sourceAudit";
 import type { SmartProjectAnalysis, SmartSourceRole } from "./projectAnalyzer";
 import type { OpeningSuggestion } from "./openingAssociator";
-import { floorSkeletonStatus } from "./floorSkeleton";
-import type { QuickSourceSetup } from "./sourcePackSetup";
 import type { SourceFusionReport } from "./sourceFusion";
 import { detectRepeatedFloors } from "./repeatedFloorDetector";
 import { autoBuildingReviewCounts } from "./autoBuildingReview";
@@ -55,9 +53,7 @@ export default function SmartProjectBuilder({
   onApproveReadyOpenings,
   onOpenEditor,
   onOpenSources,
-  onAutoSetup,
   onStartAlignment,
-  quickSetup,
 }: {
   project: Project;
   files: Asset[];
@@ -85,9 +81,7 @@ export default function SmartProjectBuilder({
   onApproveReadyOpenings: () => void;
   onOpenEditor: () => void;
   onOpenSources: () => void;
-  onAutoSetup: () => void;
   onStartAlignment: () => void;
-  quickSetup: QuickSourceSetup;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -102,39 +96,6 @@ export default function SmartProjectBuilder({
       (!publishModel || !/\.glb$/i.test(publishModel.name)),
   );
   const hasSketchUpSource = files.some((file) => /\.(?:skb|skp)$/i.test(file.name));
-  const floorStatus = quickSetup.profile
-    ? floorSkeletonStatus(
-        project.scene,
-        quickSetup.profile,
-        quickSetup.floorSkeleton,
-      )
-    : undefined;
-  const quickSetupAuthoringModelReady =
-    !quickSetup.primaryModelId ||
-    project.scene.modelId === quickSetup.primaryModelId ||
-    (Boolean(quickSetup.publishModelId) &&
-      project.scene.modelId === quickSetup.publishModelId);
-  const quickSetupApplied =
-    Boolean(quickSetup.profile) &&
-    project.slug === quickSetup.slug &&
-    quickSetupAuthoringModelReady &&
-    (!quickSetup.publishModel ||
-      (Boolean(quickSetup.publishModelId) &&
-        project.scene.publishModelId === quickSetup.publishModelId)) &&
-    (!floorStatus || floorStatus.missing === 0);
-  const draftBuilt =
-    project.scene.floors.length > 1 &&
-    Boolean(
-      project.scene.modelNodeTags?.some(
-        (tag) => Boolean(tag.floorId) && tag.assignment === "auto",
-      ),
-    );
-  const roles = useMemo(() => {
-    const count = new Map<SmartSourceRole, number>();
-    for (const source of analysis?.sources ?? [])
-      count.set(source.role, (count.get(source.role) ?? 0) + 1);
-    return [...count.entries()];
-  }, [analysis]);
   const repeatedFloorGroups = useMemo(
     () => (analysis ? detectRepeatedFloors(analysis) : []),
     [analysis],
@@ -377,6 +338,7 @@ export default function SmartProjectBuilder({
                 <span>Evidence <b>{fusion.evidenceOnlySources}</b></span>
                 <span>Processor needed <b>{fusion.needsConversionSources}</b></span>
                 <span>Review <b>{fusion.reviewCount}</b></span>
+                <span>Conflicts <b>{fusion.conflicts.length}</b></span>
               </div>
               <div className="builder-source-fusion-list">
                 {fusion.items.map((item) => (
@@ -393,6 +355,18 @@ export default function SmartProjectBuilder({
                   </div>
                 ))}
               </div>
+              {fusion.conflicts.length > 0 && (
+                <details className="builder-draft-options builder-source-conflicts">
+                  <summary>
+                    Source review queue · {fusion.conflicts.length}
+                  </summary>
+                  {fusion.conflicts.map((conflict) => (
+                    <p key={conflict.id}>
+                      <b>{conflict.kind.replaceAll("-", " ")}</b> · {conflict.message}
+                    </p>
+                  ))}
+                </details>
+              )}
               {fusion.recommendedActions.length > 0 && (
                 <details className="builder-draft-options">
                   <summary>Next automatic processing</summary>
@@ -404,101 +378,6 @@ export default function SmartProjectBuilder({
             </div>
           )}
 
-          {quickSetup.profile && (
-            <div className="builder-source-lock" aria-label="Recognized project quick setup">
-              <div className="builder-source-lock-head">
-                <div>
-                  <span className="ops-eyebrow">SOURCE LOCK DETECTED</span>
-                  <strong>{quickSetup.name ?? "Recognized project"}</strong>
-                  <small>
-                    Exact SHA-256 source matches · {quickSetup.matchedCount}/{quickSetup.requiredCount}
-                  </small>
-                </div>
-                <div className="builder-source-lock-actions">
-                  <button
-                    type="button"
-                    className="primary"
-                    disabled={busy || quickSetupApplied}
-                    onClick={onAutoSetup}
-                  >
-                    {quickSetupApplied
-                      ? "Auto setup applied"
-                      : `Auto setup ${quickSetup.name ?? "project"}`}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy || !quickSetupApplied || !quickSetup.alignment}
-                    onClick={onStartAlignment}
-                  >
-                    Align floor plan →
-                  </button>
-                </div>
-              </div>
-              <div className="builder-source-lock-grid">
-                {quickSetup.publishModel ? (
-                  <div
-                    className={
-                      quickSetup.publishModelId &&
-                      project.scene.publishModelId === quickSetup.publishModelId
-                        ? "ready"
-                        : "missing"
-                    }
-                    title={quickSetup.publishModel.sha256}
-                  >
-                    <span>
-                      {quickSetup.publishModelId &&
-                      project.scene.publishModelId === quickSetup.publishModelId
-                        ? "✓"
-                        : "↓"}
-                    </span>
-                    <span>
-                      <b>Web publish model</b>
-                      <small>
-                        {quickSetup.publishModelId
-                          ? quickSetup.publishModel.name
-                          : `${quickSetup.publishModel.name} · Auto setup will attach verified GLB`}
-                      </small>
-                    </span>
-                  </div>
-                ) : null}
-                {quickSetup.floorSkeleton?.length ? (
-                  <div
-                    className={floorStatus?.missing ? "missing" : "ready"}
-                    title="Model-derived source-coordinate level bands; reviewable and not an as-built survey."
-                  >
-                    <span>{floorStatus?.missing ? "—" : "✓"}</span>
-                    <span>
-                      <b>Source floor skeleton</b>
-                      <small>
-                        {floorStatus?.matched ?? 0}/{quickSetup.floorSkeleton.length} levels ready
-                        {floorStatus?.missing
-                          ? ` · ${floorStatus.missing} will be prepared by Auto setup`
-                          : ""}
-                      </small>
-                    </span>
-                  </div>
-                ) : null}
-                {quickSetup.slots.map((slot) => (
-                  <div
-                    key={slot.key}
-                    className={slot.exact ? "ready" : "missing"}
-                    title={slot.asset?.hash ?? "Source not attached"}
-                  >
-                    <span>{slot.exact ? "✓" : "—"}</span>
-                    <span>
-                      <b>{slot.label}</b>
-                      <small>{slot.asset?.name ?? "Not attached yet"}</small>
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <p>
-                Rekixo source/authoring model, separate verified web GLB और
-                known source floor levels automatically तैयार करेगा. Raw source
-                files unchanged रहेंगी; customer publish FBX पर depend नहीं करेगा.
-              </p>
-            </div>
-          )}
           {modelCandidates.length > 0 && (
             <label className="builder-model-picker">
               Authoring / source 3D model
