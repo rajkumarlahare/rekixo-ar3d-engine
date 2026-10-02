@@ -308,3 +308,31 @@ test("Phase 2 builder exposes automatic SketchUp texture recovery", () => {
   assert.match(studio, /extractSketchUpTextures/);
   assert.match(studio, /SketchUp material texture/);
 });
+
+
+test("Phase 2 PDF plan evidence and auto-orientation are wired into alignment", () => {
+  const pdfInspector = fs.readFileSync(
+    "apps/admin/src/studio/pdfPlanInspector.ts",
+    "utf8",
+  );
+  const fusion = fs.readFileSync(
+    "apps/admin/src/studio/sourceFusion.ts",
+    "utf8",
+  );
+  const reference = fs.readFileSync(
+    "apps/admin/src/studio/ReferenceWorkspace.tsx",
+    "utf8",
+  );
+  const canvas = fs.readFileSync(
+    "apps/admin/src/studio/SceneCanvas.tsx",
+    "utf8",
+  );
+
+  assert.match(pdfInspector, /getTextContent/);
+  assert.match(pdfInspector, /dimensionStrings/);
+  assert.match(pdfInspector, /bestPage/);
+  assert.match(fusion, /pdf\.plan-page/);
+  assert.match(reference, /recommendedPdfPage/);
+  assert.match(canvas, /score90 \+ 0\.08 < score0 \? 90 : 0/);
+  assert.match(canvas, /90° plan orientation selected automatically/);
+});
