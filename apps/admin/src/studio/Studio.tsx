@@ -1107,6 +1107,9 @@ export default function Studio() {
     materialSummary = modelMaterials.find(
       (entry) => entry.name === selectedMaterial,
     ),
+    suggestedFinishPreset = selectedMaterial
+      ? suggestedMaterialPreset(selectedMaterial)
+      : undefined,
     sourceTypeCounts = files.reduce<Record<string, number>>((counts, file) => {
       const extension = file.name.toLowerCase().split(".").pop() || "file";
       counts[extension] = (counts[extension] ?? 0) + 1;
@@ -1382,6 +1385,15 @@ export default function Studio() {
       },
     });
   }
+  function applyMaterialPreset(presetId: string) {
+    const preset = MATERIAL_PRESETS.find((entry) => entry.id === presetId);
+    if (!preset || !selectedMaterial) return;
+    patchMaterial(preset.override);
+    setMessage(
+      `${preset.label} applied to ${selectedMaterial}. Source material bytes remain unchanged.`,
+    );
+  }
+
   function resetMaterial() {
     if (!selectedMaterial) return;
     edit({
@@ -5159,6 +5171,42 @@ export default function Studio() {
                   </label>
                   {materialSummary && (
                     <fieldset disabled={Boolean(review) || busy}>
+                      <div
+                        className="material-preset-grid"
+                        role="group"
+                        aria-label="Quick material finishes"
+                      >
+                        {MATERIAL_PRESETS.map((preset) => {
+                          const recommended =
+                            suggestedFinishPreset?.id === preset.id;
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              className={
+                                recommended
+                                  ? "material-preset recommended"
+                                  : "material-preset"
+                              }
+                              title={preset.detail}
+                              onClick={() => applyMaterialPreset(preset.id)}
+                            >
+                              <span
+                                className={`material-preset-swatch material-preset-swatch--${preset.id}`}
+                                aria-hidden="true"
+                              />
+                              <span>
+                                <b>{preset.label}</b>
+                                <small>
+                                  {recommended ? "Suggested" : preset.detail}
+                                </small>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <details className="material-fine-tune">
+                        <summary>Fine tune material</summary>
                       <div className="material-color-row">
                         <label>
                           Base color
@@ -5222,9 +5270,10 @@ export default function Studio() {
                       >
                         Reset material override
                       </button>
+                      </details>
                       <small>
-                        Runtime material override only; imported source bytes stay
-                        unchanged.
+                        Quick finishes change only the runtime look; imported source
+                        bytes stay unchanged.
                       </small>
                     </fieldset>
                   )}
