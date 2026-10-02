@@ -70,11 +70,11 @@ test("source precedence prevents brochure/render data from becoming silent dimen
 
 test("source-backed runtime fingerprint and floor levels come from the canonical profile", () => {
   const exterior = fs.readFileSync(
-    "apps/public/src/viewer/jyotiReferenceExterior.ts",
+    "packages/model-profiles/src/referenceExterior.ts",
     "utf8",
   );
   const profile = fs.readFileSync(
-    "apps/public/src/viewer/jyotiSourceProfile.ts",
+    "packages/model-profiles/src/referenceSourceRuntime.ts",
     "utf8",
   );
   assert.match(exterior, /JYOTI_SOURCE_MODEL_SHA256/);
