@@ -2343,7 +2343,9 @@ export default function Studio() {
   }
 
   async function buildAutomatically() {
-    const result = await runAutoBuildPipeline(p, files, sourceAudits);
+    const result = await runAutoBuildPipeline(p, files, sourceAudits, {
+      processDwgArchitecture: cloud.processDwgArchitecture,
+    });
     await persist(result.project, result.assets);
     setSmartAnalysis(result.analysis);
     setView("building");
