@@ -309,6 +309,22 @@ export async function buildSourceFusionReport(
   for (const cad of analysis?.cadAudits ?? []) {
     const item = items.find((entry) => entry.assetId === cad.assetId);
     if (!item) continue;
+
+    const processorBasis =
+      cad.kind === "dwg" && cad.processor
+        ? `Controlled DWG processor ${cad.processor}`
+        : "ASCII DXF browser parser";
+
+    if (cad.kind === "dwg" && cad.geometryReady) {
+      item.support = "partial";
+      item.warnings = item.warnings.filter(
+        (warning) => !/require the controlled CAD processor/i.test(warning),
+      );
+      item.findings.push(
+        `Controlled DWG processor produced normalized architecture${cad.processor ? ` via ${cad.processor}` : ""}.`,
+      );
+    }
+
     if (cad.semanticReady && cad.layerHints.length) {
       item.findings.push(
         `${cad.layerHints.length} architectural CAD layer hint(s) detected.`,
@@ -318,46 +334,84 @@ export async function buildSourceFusionReport(
           cad.assetId,
           "cad.layer-hints",
           cad.layerHints.map((entry) => `${entry.layer}:${entry.kind}`),
-          0.7,
-          "ASCII DXF layer names",
+          cad.kind === "dwg" ? 0.9 : 0.7,
+          processorBasis + " layer semantics",
           "suggested",
         ),
       );
     }
+
     if (cad.geometryReady && cad.semanticSegments?.length) {
-      const wallCount = cad.semanticSegments.filter(
-        (segment) => segment.kind === "wall",
+      const counts = new Map<string, number>();
+      for (const segment of cad.semanticSegments)
+        counts.set(segment.kind, (counts.get(segment.kind) ?? 0) + 1);
+      const wallCount = counts.get("wall") ?? 0;
+      const openingCount =
+        (counts.get("door") ?? 0) + (counts.get("window") ?? 0);
+      const measuredWallCount = cad.semanticSegments.filter(
+        (segment) =>
+          segment.kind === "wall" &&
+          segment.thickness !== undefined &&
+          segment.thickness >= 0.06 &&
+          segment.thickness <= 1.2,
       ).length;
-      const openingCount = cad.semanticSegments.filter(
-        (segment) => segment.kind === "door" || segment.kind === "window",
-      ).length;
+
       item.findings.push(
         `${cad.semanticSegments.length} normalized CAD segment${cad.semanticSegments.length === 1 ? "" : "s"} ready${cad.unitName ? ` in ${cad.unitName}` : ""}.`,
       );
+      if (measuredWallCount)
+        item.findings.push(
+          `${measuredWallCount} wall centerline${measuredWallCount === 1 ? "" : "s"} include measured thickness evidence.`,
+        );
+
       facts.push(
         fact(
           cad.assetId,
           "cad.geometry-ready",
           true,
-          0.95,
-          "ASCII DXF entities plus declared drawing units",
+          cad.kind === "dwg" ? 0.98 : 0.95,
+          processorBasis + " normalized geometry",
         ),
         fact(
           cad.assetId,
           "cad.wall-segment-count",
           wallCount,
-          0.95,
-          "Normalized LINE/LWPOLYLINE wall entities",
+          cad.kind === "dwg" ? 0.98 : 0.95,
+          processorBasis + " wall entities",
+        ),
+        fact(
+          cad.assetId,
+          "cad.measured-wall-count",
+          measuredWallCount,
+          measuredWallCount ? 0.97 : 0.5,
+          "Paired parallel wall-boundary evidence; no missing thickness was invented",
+          "suggested",
         ),
         fact(
           cad.assetId,
           "cad.opening-segment-count",
           openingCount,
           0.9,
-          "Normalized LINE/LWPOLYLINE door/window entities",
+          processorBasis + " door/window entities",
           "suggested",
         ),
       );
+
+      for (const kind of ["stair", "lift", "column", "slab"] as const) {
+        const count = counts.get(kind) ?? 0;
+        if (count)
+          facts.push(
+            fact(
+              cad.assetId,
+              `cad.${kind}-segment-count`,
+              count,
+              0.88,
+              processorBasis + ` ${kind} entities`,
+              "suggested",
+            ),
+          );
+      }
+
       if (cad.unitName)
         facts.push(
           fact(
@@ -365,7 +419,28 @@ export async function buildSourceFusionReport(
             "cad.unit",
             cad.unitName,
             1,
-            "DXF $INSUNITS header",
+            processorBasis + " normalized units",
+          ),
+        );
+      if (cad.dimensions?.length)
+        facts.push(
+          fact(
+            cad.assetId,
+            "cad.dimension-count",
+            cad.dimensions.length,
+            0.96,
+            processorBasis + " DIMENSION entities",
+          ),
+        );
+      if (cad.floorHints?.length)
+        facts.push(
+          fact(
+            cad.assetId,
+            "cad.floor-hints",
+            cad.floorHints,
+            0.9,
+            processorBasis + " floor labels",
+            "suggested",
           ),
         );
       if (cad.textLabels?.length)
@@ -378,12 +453,11 @@ export async function buildSourceFusionReport(
                 `${label.text}@${label.point[0].toFixed(3)},${label.point[1].toFixed(3)}`,
             ),
             0.9,
-            "DXF TEXT/MTEXT entities",
+            processorBasis + " TEXT/MTEXT entities",
           ),
         );
     }
   }
-
   const roomSourceIds = unique(
     roomSheetRows
       .map((row) => row.assetId)
