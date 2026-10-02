@@ -173,6 +173,47 @@ export default function EngineDashboard() {
     return () => controller.abort();
   }, [selectedSlug, refresh]);
 
+
+  useEffect(() => {
+    if (!selectedSlug) {
+      setExperienceItems([]);
+      setReleaseItems([]);
+      setGeoState(undefined);
+      setExperienceError("");
+      return;
+    }
+
+    let cancelled = false;
+    setExperienceItems([]);
+    setReleaseItems([]);
+    setGeoState(undefined);
+    setExperienceError("");
+
+    void Promise.all([
+      experiences(selectedSlug),
+      releases(selectedSlug),
+      geoPlacement(selectedSlug),
+    ])
+      .then(([experienceResult, releaseResult, placementResult]) => {
+        if (cancelled) return;
+        setExperienceItems(experienceResult.experiences);
+        setReleaseItems(releaseResult.releases);
+        setGeoState(placementResult);
+      })
+      .catch((reason: unknown) => {
+        if (cancelled) return;
+        setExperienceError(
+          reason instanceof Error
+            ? reason.message
+            : "Project Experiences load nahi ho sake.",
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSlug, refresh]);
+
   function selectProject(slug: string) {
     setSelectedSlug(slug);
     setStatus(undefined);
