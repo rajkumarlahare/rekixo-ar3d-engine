@@ -26,6 +26,7 @@ import {
   resolveReviewedDoorWalkStep,
   roomBoundaryPoints,
   type Asset,
+  type Kind,
   type Room,
   type RoomPoint,
   type Scene as SceneData,
@@ -121,6 +122,18 @@ interface Props {
   onRoomDraw?: (result: RoomDrawResult) => void;
   onRoomPolygonDraw?: (points: RoomPoint[]) => void;
   onRoomPolygonChange?: (roomId: string, points: RoomPoint[]) => void;
+  furniturePlacement?: {
+    enabled: boolean;
+    kind: Kind;
+    roomId: string;
+  };
+  onFurniturePlace?: (placement: {
+    kind: Kind;
+    roomId: string;
+    worldX: number;
+    worldZ: number;
+  }) => void;
+  onFurniturePlacementCancel?: () => void;
   onWalkRoomChange?: (roomId: string, openingId: string) => void;
   isolateFloorId?: string;
   sectionCut?: {
@@ -541,6 +554,15 @@ export default function SceneCanvas(props: Props) {
     });
     resize.observe(el);
     const down = (e: KeyboardEvent) => {
+      if (
+        e.key === "Escape" &&
+        latest.current.furniturePlacement?.enabled
+      ) {
+        e.preventDefault();
+        latest.current.onFurniturePlacementCancel?.();
+        setStatus("");
+        return;
+      }
       if (latest.current.roomPolygonDraw?.enabled) {
         if (e.key === "Enter") {
           e.preventDefault();
@@ -713,6 +735,33 @@ export default function SceneCanvas(props: Props) {
       return best;
     };
 
+    const pointOnFloor = (
+      clientX: number,
+      clientY: number,
+      floorId: string,
+      snap: boolean,
+      excludeRoomId?: string,
+    ) => {
+      const floor = latest.current.scene.floors.find(
+        (entry) => entry.id === floorId,
+      );
+      if (!floor) return undefined;
+      const rect = renderer.domElement.getBoundingClientRect();
+      const raycaster = new T.Raycaster();
+      raycaster.setFromCamera(
+        new T.Vector2(
+          ((clientX - rect.left) / rect.width) * 2 - 1,
+          (-(clientY - rect.top) / rect.height) * 2 + 1,
+        ),
+        camera,
+      );
+      const target = new T.Vector3();
+      const plane = new T.Plane(new T.Vector3(0, 1, 0), -floor.elevation);
+      if (!raycaster.ray.intersectPlane(plane, target)) return undefined;
+      target.y = floor.elevation + 0.04;
+      return snapRoomPoint(target, floor.id, snap, excludeRoomId);
+    };
+
     const roomPlanePoint = (
       event: PointerEvent,
       excludeRoomId?: string,
@@ -738,24 +787,13 @@ export default function SceneCanvas(props: Props) {
               }
             : undefined;
       if (!config?.enabled || !config.floorId) return undefined;
-      const floor = latest.current.scene.floors.find(
-        (entry) => entry.id === config.floorId,
+      return pointOnFloor(
+        event.clientX,
+        event.clientY,
+        config.floorId,
+        config.snap,
+        excludeRoomId,
       );
-      if (!floor) return undefined;
-      const rect = renderer.domElement.getBoundingClientRect();
-      const raycaster = new T.Raycaster();
-      raycaster.setFromCamera(
-        new T.Vector2(
-          ((event.clientX - rect.left) / rect.width) * 2 - 1,
-          (-(event.clientY - rect.top) / rect.height) * 2 + 1,
-        ),
-        camera,
-      );
-      const target = new T.Vector3();
-      const plane = new T.Plane(new T.Vector3(0, 1, 0), -floor.elevation);
-      if (!raycaster.ray.intersectPlane(plane, target)) return undefined;
-      target.y = floor.elevation + 0.04;
-      return snapRoomPoint(target, floor.id, config.snap, excludeRoomId);
     };
 
     const updateRoomDraft = (start: T.Vector3, end: T.Vector3) => {
@@ -1033,6 +1071,35 @@ export default function SceneCanvas(props: Props) {
       const small = Math.hypot(e.clientX - point.ox, e.clientY - point.oy) < 5;
       point = undefined;
       if (!small || latest.current.view === "walk") return;
+
+      const placement = latest.current.furniturePlacement;
+      if (
+        placement?.enabled &&
+        latest.current.view === "rooms" &&
+        placement.roomId
+      ) {
+        const placementRoom = latest.current.scene.rooms.find(
+          (candidate) => candidate.id === placement.roomId,
+        );
+        if (placementRoom) {
+          const target = pointOnFloor(
+            e.clientX,
+            e.clientY,
+            placementRoom.floorId,
+            true,
+          );
+          if (target) {
+            latest.current.onFurniturePlace?.({
+              kind: placement.kind,
+              roomId: placementRoom.id,
+              worldX: target.x,
+              worldZ: target.z,
+            });
+            return;
+          }
+        }
+      }
+
       const rect = renderer.domElement.getBoundingClientRect(),
         ray = new T.Raycaster();
       ray.setFromCamera(
@@ -1082,10 +1149,56 @@ export default function SceneCanvas(props: Props) {
         }
       }
     };
+    const furnitureMime = "application/x-rekixo-furniture";
+    const validFurnitureKinds = new Set<Kind>([
+      "sofa",
+      "bed",
+      "table",
+      "wardrobe",
+      "plant",
+    ]);
+    const dragOver = (event: DragEvent) => {
+      if (!event.dataTransfer?.types.includes(furnitureMime)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    };
+    const dropFurniture = (event: DragEvent) => {
+      const raw = event.dataTransfer?.getData(furnitureMime);
+      if (!raw) return;
+      event.preventDefault();
+      let payload: { kind?: string; roomId?: string };
+      try {
+        payload = JSON.parse(raw) as { kind?: string; roomId?: string };
+      } catch {
+        return;
+      }
+      if (!payload.kind || !validFurnitureKinds.has(payload.kind as Kind)) return;
+      const roomId = payload.roomId || latest.current.roomId;
+      const targetRoom = latest.current.scene.rooms.find(
+        (room) => room.id === roomId,
+      );
+      if (!targetRoom) return;
+      const target = pointOnFloor(
+        event.clientX,
+        event.clientY,
+        targetRoom.floorId,
+        true,
+      );
+      if (!target) return;
+      latest.current.onFurniturePlace?.({
+        kind: payload.kind as Kind,
+        roomId: targetRoom.id,
+        worldX: target.x,
+        worldZ: target.z,
+      });
+    };
+
     renderer.domElement.addEventListener("pointerdown", pointerDown);
     renderer.domElement.addEventListener("pointermove", move);
     renderer.domElement.addEventListener("pointerup", click);
     renderer.domElement.addEventListener("pointercancel", click);
+    renderer.domElement.addEventListener("dragover", dragOver);
+    renderer.domElement.addEventListener("drop", dropFurniture);
     let previous = performance.now(),
       frame = 0;
     const draw = (now: number) => {
@@ -1187,6 +1300,8 @@ export default function SceneCanvas(props: Props) {
       renderer.domElement.removeEventListener("pointermove", move);
       renderer.domElement.removeEventListener("pointerup", click);
       renderer.domElement.removeEventListener("pointercancel", click);
+      renderer.domElement.removeEventListener("dragover", dragOver);
+      renderer.domElement.removeEventListener("drop", dropFurniture);
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", blur);
       transform.detach();
@@ -1937,7 +2052,8 @@ export default function SceneCanvas(props: Props) {
       className={
         props.roomDraw?.enabled ||
         props.roomStamp?.enabled ||
-        props.roomPolygonDraw?.enabled
+        props.roomPolygonDraw?.enabled ||
+        props.furniturePlacement?.enabled
           ? "canvas-wrap room-draw-active"
           : "canvas-wrap"
       }
@@ -1946,6 +2062,11 @@ export default function SceneCanvas(props: Props) {
       {status && (
         <div className="canvas-status" role="status">
           {status}
+        </div>
+      )}
+      {props.furniturePlacement?.enabled && (
+        <div className="room-draw-hint">
+          Tap inside the room to place · desktop: drag a furniture card onto the canvas · Esc cancels
         </div>
       )}
       {props.roomStamp?.enabled && (
