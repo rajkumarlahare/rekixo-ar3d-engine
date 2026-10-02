@@ -1490,6 +1490,17 @@
   background: #f7fbfa;
 }
 
+.builder-source-fusion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.builder-source-fusion-actions button {
+  min-height: 34px;
+}
+
 .builder-source-fusion-stats {
   display: flex;
   flex-wrap: wrap;
