@@ -1,4 +1,5 @@
 import type { EngineExperienceSummary } from "@rekixo/3d-contracts";
+import type { DwgNormalizedDocument } from "./dwgNormalized";
 import {
   projectSlug,
   validateProject,
@@ -344,6 +345,25 @@ export async function uploadAsset(
       body: asset.blob,
     },
   );
+}
+
+export async function processDwgArchitecture(asset: Asset) {
+  if (!/\.dwg$/i.test(asset.name))
+    throw Error("Choose a DWG source before running the architecture processor.");
+  if (asset.size > 32 * 1024 * 1024)
+    throw Error("DWG exceeds the 32 MB architecture processor limit.");
+
+  return api<DwgNormalizedDocument>(`${CLOUD_BASE}/processors/dwg`, {
+    method: "POST",
+    headers: {
+      "Content-Type": asset.type || "application/octet-stream",
+      "X-Rekixo-Project-Id": asset.projectId,
+      "X-Rekixo-Source-Asset-Id": asset.id,
+      "X-Rekixo-Source-Sha256": asset.hash,
+      "X-Rekixo-Source-Name": encodeURIComponent(asset.name),
+    },
+    body: asset.blob,
+  });
 }
 
 export async function deleteAsset(slug: string, assetId: string) {
