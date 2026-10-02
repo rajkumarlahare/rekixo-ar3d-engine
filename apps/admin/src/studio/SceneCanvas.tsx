@@ -1836,27 +1836,47 @@ export default function SceneCanvas(props: Props) {
         .filter((tag) => Boolean(tag.floorId) && tag.semantic !== "ignore")
         .map((tag) => [`${tag.nodeName}::${tag.occurrence}`, tag]),
     );
-    const buildingBox = new T.Box3();
-    let taggedMeshCount = 0;
-    runtime.model.traverse((node) => {
-      if (!(node instanceof T.Mesh)) return;
-      const key = `${node.userData.studioNodeName ?? node.name}::${node.userData.studioNodeOccurrence ?? 1}`;
-      if (!tagged.has(key)) return;
-      buildingBox.expandByObject(node);
-      taggedMeshCount += 1;
-    });
-    const modelBox =
-      taggedMeshCount > 0 && !buildingBox.isEmpty()
-        ? buildingBox
-        : new T.Box3().setFromObject(runtime.model);
+    const measureModelBox = () => {
+      const box = new T.Box3();
+      let count = 0;
+      runtime.model.traverse((node) => {
+        if (!(node instanceof T.Mesh)) return;
+        const key = `${node.userData.studioNodeName ?? node.name}::${node.userData.studioNodeOccurrence ?? 1}`;
+        if (tagged.size && !tagged.has(key)) return;
+        box.expandByObject(node);
+        count += 1;
+      });
+      return {
+        box:
+          count > 0 && !box.isEmpty()
+            ? box
+            : new T.Box3().setFromObject(runtime.model),
+        count,
+      };
+    };
+
     const referenceBox = new T.Box3().setFromObject(referenceRoot);
-    if (modelBox.isEmpty() || referenceBox.isEmpty()) {
+    let measured = measureModelBox();
+    if (measured.box.isEmpty() || referenceBox.isEmpty()) {
       setStatus("Auto position could not measure the model/reference bounds.");
       return;
     }
 
-    const modelCentre = modelBox.getCenter(new T.Vector3());
+    const modelSize = measured.box.getSize(new T.Vector3());
+    const referenceSize = referenceBox.getSize(new T.Vector3());
+    const ratioScore = (mx: number, mz: number) =>
+      Math.abs(Math.log(Math.max(1e-6, mx) / Math.max(1e-6, referenceSize.x))) +
+      Math.abs(Math.log(Math.max(1e-6, mz) / Math.max(1e-6, referenceSize.z)));
+    const score0 = ratioScore(modelSize.x, modelSize.z);
+    const score90 = ratioScore(modelSize.z, modelSize.x);
+    const autoRotation = score90 + 0.08 < score0 ? 90 : 0;
+    runtime.model.rotation.y = T.MathUtils.degToRad(autoRotation);
+    runtime.model.updateWorldMatrix(true, true);
+    if (autoRotation) measured = measureModelBox();
+
+    const modelCentre = measured.box.getCenter(new T.Vector3());
     const referenceCentre = referenceBox.getCenter(new T.Vector3());
+    const taggedMeshCount = tagged.size ? measured.count : 0;
     runtime.model.position.x += referenceCentre.x - modelCentre.x;
     runtime.model.position.z += referenceCentre.z - modelCentre.z;
     runtime.model.updateWorldMatrix(true, true);
@@ -1866,13 +1886,16 @@ export default function SceneCanvas(props: Props) {
       x: runtime.model.position.x,
       y: runtime.model.position.y,
       z: runtime.model.position.z,
-      rotationY: 0,
+      rotationY: autoRotation,
     });
     runtime.focus();
+    const orientationText = autoRotation
+      ? " · 90° plan orientation selected automatically"
+      : "";
     setStatus(
       taggedMeshCount
-        ? `Auto positioned using ${taggedMeshCount} floor-tagged building meshes. Fine-tune only if needed.`
-        : "Auto positioned using the model bounds. Fine-tune only if needed.",
+        ? `Auto positioned using ${taggedMeshCount} floor-tagged building meshes${orientationText}. Fine-tune only if needed.`
+        : `Auto positioned using the model bounds${orientationText}. Fine-tune only if needed.`,
     );
   }, [props.autoAlignRequest]);
 
