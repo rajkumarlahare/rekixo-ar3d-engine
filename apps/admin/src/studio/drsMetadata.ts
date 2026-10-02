@@ -246,12 +246,28 @@ export function parseDrsMetadataText(source: string): DrsMetadataInspection {
   const productIds = stringArray(root.dependent_products, MAX_PRODUCTS);
 
   const detail = parseNestedObject(root.detail_Info ?? root.detailInfo);
-  const roomCenters = Array.isArray(detail?.room_centers ?? detail?.roomCenters)
-    ? (detail?.room_centers ?? detail?.roomCenters as unknown[])
+  const rawRoomCenters = detail?.room_centers ?? detail?.roomCenters;
+  const roomCenters = Array.isArray(rawRoomCenters)
+    ? rawRoomCenters
         .map(parseVector)
         .filter((entry): entry is DrsVector3 => Boolean(entry))
         .slice(0, 200)
     : [];
+  const title = text(root.title, 300);
+  const projectId = text(root.id, 200);
+  const authoringSource = text(root.source, 200);
+  const layoutId = text(root.layout_id ?? root.layoutId, 200);
+  const saveTimestamp = text(root.saveTimeStamp ?? root.save_timestamp, 100);
+  const maxLength = finite(detail?.max_length ?? detail?.maxLength);
+  const startLocation = parseVector(
+    detail?.start_location ?? detail?.startLocation,
+  );
+  const startRotation = parseRotation(
+    detail?.start_rotation ?? detail?.startRotation,
+  );
+  const floorCenter = parseVector(
+    detail?.floor_center ?? detail?.floorCenter,
+  );
 
   const floorRefWidth = finite(root.floor_ref_width ?? root.floorRefWidth);
   const floorRefHeight = finite(root.floor_ref_height ?? root.floorRefHeight);
@@ -267,45 +283,21 @@ export function parseDrsMetadataText(source: string): DrsMetadataInspection {
     ...base,
     json: true,
     format: d5 ? "d5-design" : "generic-json",
-    ...(text(root.title, 300) ? { title: text(root.title, 300) } : {}),
-    ...(text(root.id, 200) ? { projectId: text(root.id, 200) } : {}),
-    ...(text(root.source, 200) ? { source: text(root.source, 200) } : {}),
-    ...(text(root.layout_id ?? root.layoutId, 200)
-      ? { layoutId: text(root.layout_id ?? root.layoutId, 200) }
-      : {}),
+    ...(title ? { title } : {}),
+    ...(projectId ? { projectId } : {}),
+    ...(authoringSource ? { source: authoringSource } : {}),
+    ...(layoutId ? { layoutId } : {}),
     ...(sketchUpRef ? { sketchUpRef: normalizeResourceRef(sketchUpRef) } : {}),
     resourceRefs,
     resourceRoots: unique(resourceRefs.map(resourceRoot), 50),
     productIds,
     pluginVersions: versions(root.dccPluginsData, ["version", "name"]),
     clientVersions: versions(root.d5ClientVerData, ["version", "region"]),
-    ...(text(root.saveTimeStamp ?? root.save_timestamp, 100)
-      ? { saveTimestamp: text(root.saveTimeStamp ?? root.save_timestamp, 100) }
-      : {}),
-    ...(finite(detail?.max_length ?? detail?.maxLength) !== undefined
-      ? { maxLength: finite(detail?.max_length ?? detail?.maxLength) }
-      : {}),
-    ...(parseVector(detail?.start_location ?? detail?.startLocation)
-      ? {
-          startLocation: parseVector(
-            detail?.start_location ?? detail?.startLocation,
-          ),
-        }
-      : {}),
-    ...(parseRotation(detail?.start_rotation ?? detail?.startRotation)
-      ? {
-          startRotation: parseRotation(
-            detail?.start_rotation ?? detail?.startRotation,
-          ),
-        }
-      : {}),
-    ...(parseVector(detail?.floor_center ?? detail?.floorCenter)
-      ? {
-          floorCenter: parseVector(
-            detail?.floor_center ?? detail?.floorCenter,
-          ),
-        }
-      : {}),
+    ...(saveTimestamp ? { saveTimestamp } : {}),
+    ...(maxLength !== undefined ? { maxLength } : {}),
+    ...(startLocation ? { startLocation } : {}),
+    ...(startRotation ? { startRotation } : {}),
+    ...(floorCenter ? { floorCenter } : {}),
     roomCenters,
     ...(hasFloorReference
       ? {
