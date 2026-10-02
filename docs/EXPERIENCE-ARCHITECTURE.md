@@ -165,10 +165,34 @@ Geo Experience.
 - Immutable Geo publication/history remains Phase 5; the public Geo runtime stays
   on the legacy snapshot until Phase 6.
 
-### Phase 5 — immutable Geo releases
+### Phase 5 — immutable Geo releases ✅
 
-Add Geo release publication, active release pointer, release history and rollback.
-A Building release upgrade is explicit and preview-gated.
+Migration `0026_geo_immutable_release_v1.sql` adds an independent immutable Geo
+release lifecycle without changing Building release tables or the public Geo
+runtime.
+
+- `geo_draft_verifications_3d` records explicit preview verification for one
+  exact saved Geo draft revision and Building source.
+- Verification is valid only for the current draft revision; any later draft
+  save/reset makes the previous verification stale automatically.
+- Preview verification requires the selected source to be the current active
+  immutable Building release, so a Building upgrade is explicit and preview-gated.
+- `geo_releases_3d` freezes source Building release identity, placement,
+  alignment and Geo draft revision into a SHA-256 protected immutable manifest.
+- One saved Geo draft revision can produce at most one immutable Geo release.
+- `geo_experience_active_releases_3d` is the independent active Geo release
+  pointer.
+- `geo_release_activations_3d` records publish/rollback activation history.
+- Publishing a Geo release activates it without changing the Building Website,
+  Building active release, Geo draft, or legacy public Geo snapshot.
+- Older Geo releases can be integrity-checked and explicitly reactivated as a
+  rollback.
+- Geo Mapper now exposes `Verify current preview -> Publish Geo Release` plus
+  immutable Geo release history and Activate/Rollback controls.
+- Project hard-delete removes Geo active pointers, activations, releases and
+  verifications before Experience and Building release records.
+- Public `/[slug]/geo` still reads the compatibility snapshot in this phase;
+  immutable Geo releases become public source of truth in Phase 6.
 
 ### Phase 6 — public runtime separation
 
