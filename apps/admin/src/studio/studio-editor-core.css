@@ -1167,6 +1167,102 @@
   accent-color: #8d84ff;
 }
 
+
+.room-mapper-architect {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid #32486d;
+  border-radius: 10px;
+  background:
+    linear-gradient(90deg, rgba(91, 124, 255, .12), transparent 58%),
+    #091425;
+}
+
+.room-mapper-architect-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.room-mapper-architect-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.room-mapper-architect-head small {
+  color: #9ca8ff;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.room-mapper-architect-head b {
+  color: #eef2fa;
+  font-size: 11px;
+}
+
+.room-mapper-architect-head span {
+  color: #8ea0b8;
+  font-size: 9px;
+}
+
+.room-mapper-architect-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 7px;
+}
+
+.room-mapper-architect-fields label {
+  display: grid;
+  gap: 3px;
+  color: #8fa0b8;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.room-mapper-architect-fields label > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #8fa0b8;
+}
+
+.room-mapper-architect-fields input {
+  width: 92px;
+  min-height: 32px;
+  border: 1px solid #334866;
+  border-radius: 7px;
+  background: #0d1829;
+  color: #eef2fa;
+}
+
+.room-mapper-wall-selected {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px;
+  border: 1px solid #31445f;
+  border-radius: 8px;
+  background: rgba(8, 17, 31, .74);
+  color: #aab8ca;
+  font-size: 9px;
+}
+
+.room-mapper-wall-selected span {
+  margin-right: auto;
+}
+
+.room-mapper-wall-selected b {
+  color: #edf2fb;
+}
+
+
 .room-mapper-status {
   min-width: 0;
   display: grid;
@@ -1274,6 +1370,20 @@
   .room-mapper-body,
   .room-mapper-fields {
     grid-template-columns: 1fr;
+  }
+
+  .room-mapper-architect-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .room-mapper-architect-fields {
+    align-items: stretch;
+  }
+
+  .room-mapper-architect-fields label,
+  .room-mapper-architect-fields button {
+    flex: 1 1 140px;
   }
 
   .room-mapper-tools {
