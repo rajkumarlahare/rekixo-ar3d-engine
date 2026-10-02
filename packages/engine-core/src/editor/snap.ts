@@ -202,3 +202,92 @@ export function resolvePlanSnap(
 
   return best;
 }
+
+
+export interface PlanAngleConstraintOptions {
+  incrementDegrees?: number;
+  toleranceDegrees?: number;
+  force?: boolean;
+  referenceAnglesDegrees?: readonly number[];
+}
+
+export interface PlanAngleConstraintResult {
+  point: PlanPoint;
+  snapped: boolean;
+  angleDegrees: number;
+  snappedAngleDegrees: number;
+  length: number;
+}
+
+function normalizeAngleDegrees(value: number) {
+  let normalized = value % 360;
+  if (normalized < 0) normalized += 360;
+  return normalized;
+}
+
+function smallestAngleDelta(left: number, right: number) {
+  const delta = Math.abs(normalizeAngleDegrees(left) - normalizeAngleDegrees(right));
+  return Math.min(delta, 360 - delta);
+}
+
+export function constrainPlanAngle(
+  anchor: PlanPoint,
+  point: PlanPoint,
+  options: PlanAngleConstraintOptions = {},
+): PlanAngleConstraintResult {
+  const dx = point[0] - anchor[0];
+  const dz = point[1] - anchor[1];
+  const length = Math.hypot(dx, dz);
+  if (length <= Number.EPSILON)
+    return {
+      point: [point[0], point[1]],
+      snapped: false,
+      angleDegrees: 0,
+      snappedAngleDegrees: 0,
+      length: 0,
+    };
+
+  const angleDegrees = normalizeAngleDegrees((Math.atan2(dz, dx) * 180) / Math.PI);
+  const increment = Math.max(1, Math.min(180, options.incrementDegrees ?? 15));
+  const candidates = new Set<number>();
+  for (let angle = 0; angle < 360; angle += increment)
+    candidates.add(normalizeAngleDegrees(angle));
+  for (const reference of options.referenceAnglesDegrees ?? []) {
+    candidates.add(normalizeAngleDegrees(reference));
+    candidates.add(normalizeAngleDegrees(reference + 90));
+    candidates.add(normalizeAngleDegrees(reference - 90));
+  }
+
+  let snappedAngleDegrees = angleDegrees;
+  let bestDelta = Number.POSITIVE_INFINITY;
+  for (const candidate of candidates) {
+    const delta = smallestAngleDelta(angleDegrees, candidate);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      snappedAngleDegrees = candidate;
+    }
+  }
+
+  const tolerance = Math.max(0, options.toleranceDegrees ?? 4);
+  const snapped = Boolean(options.force) || bestDelta <= tolerance;
+  if (!snapped)
+    return {
+      point: [point[0], point[1]],
+      snapped: false,
+      angleDegrees,
+      snappedAngleDegrees: angleDegrees,
+      length,
+    };
+
+  const radians = (snappedAngleDegrees * Math.PI) / 180;
+  return {
+    point: [
+      anchor[0] + Math.cos(radians) * length,
+      anchor[1] + Math.sin(radians) * length,
+    ],
+    snapped: true,
+    angleDegrees,
+    snappedAngleDegrees,
+    length,
+  };
+}
