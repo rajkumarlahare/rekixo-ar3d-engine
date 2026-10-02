@@ -10,7 +10,10 @@ const interiorScene = JSON.parse(
 );
 const source = fs.readFileSync('apps/public/src/viewer/projectExperience.ts', 'utf8')
   .replace('import * as THREE from "three";', `import * as THREE from ${JSON.stringify(import.meta.resolve('three'))};`)
-  .replace('import { sourceTextureData } from "./sourceTextureData";', 'const sourceTextureData = {};')
+  .replace(
+    'import sourceTextureAssetUrl from "../../../../project-profiles/reference-source-v9/source-textures.json?url";',
+    'const sourceTextureAssetUrl = "data:application/json,%7B%7D";',
+  )
   .replace(
     'import interiorScene from "../../../../project-profiles/jyoti-paradise/interior-scene-v2.json";',
     `const interiorScene = ${JSON.stringify(interiorScene)};`,
