@@ -3,6 +3,7 @@ import type { FbxSourceAudit } from "./sourceAudit";
 import type { SmartProjectAnalysis } from "./projectAnalyzer";
 import type { RoomSheetRow } from "./roomSheet";
 import {
+  extractSketchUpMaterialDefinitions,
   inspectSketchUpArchive,
   inspectSketchUpSemanticEvidence,
 } from "./sketchUpArchive";
@@ -13,6 +14,13 @@ import {
   detectSourceFusionConflicts,
   type SourceFusionConflict,
 } from "./sourceConflicts";
+import {
+  chooseSourceAuthorities,
+  estimatePdfCadRegistration,
+  sketchUpFbxMaterialOverlap,
+  type PdfCadRegistration,
+  type SourceAuthorityDecision,
+} from "./crossSourceFusion";
 
 export type SourceFusionKind =
   | "authoring-model"
@@ -64,10 +72,22 @@ export interface SourceFusionFact {
   status: "observed" | "suggested";
 }
 
+export interface SourceFusionRegistration {
+  kind: "pdf-cad";
+  sourceAssetId: string;
+  targetAssetId: string;
+  compatible: boolean;
+  confidence: number;
+  matches: number;
+  reason: string;
+}
+
 export interface SourceFusionReport {
   createdAt: string;
   items: SourceFusionItem[];
   facts: SourceFusionFact[];
+  authorityDecisions: SourceAuthorityDecision[];
+  registrations: SourceFusionRegistration[];
   readySources: number;
   partialSources: number;
   evidenceOnlySources: number;
@@ -252,6 +272,7 @@ export async function buildSourceFusionReport(
 ): Promise<SourceFusionReport> {
   const items = files.filter((asset) => !isDwgNormalizedAsset(asset)).map(itemFor);
   const facts: SourceFusionFact[] = [];
+  const registrations: SourceFusionRegistration[] = [];
 
   if (analysis?.modelAssetId) {
     facts.push(
@@ -660,6 +681,7 @@ export async function buildSourceFusionReport(
   for (const asset of files.filter((entry) => /\.(?:skb|skp)$/i.test(entry.name))) {
     const inspection = await inspectSketchUpArchive(asset);
     const semantic = await inspectSketchUpSemanticEvidence(asset);
+    const materialDefinitions = await extractSketchUpMaterialDefinitions(asset);
     const item = items.find((entry) => entry.assetId === asset.id);
     if (!item) continue;
     if (inspection.zipLike) {
@@ -736,7 +758,34 @@ export async function buildSourceFusionReport(
           "suggested",
         ),
       );
-    item.warnings.push(...inspection.issues, ...semantic.issues);
+    const selectedAudit =
+      audits.find((audit) => audit.assetId === analysis?.modelAssetId) ??
+      (audits.length === 1 ? audits[0] : undefined);
+    if (selectedAudit && materialDefinitions.definitions.length) {
+      const overlap = sketchUpFbxMaterialOverlap(
+        materialDefinitions.definitions.map((entry) => entry.name),
+        selectedAudit.materialNames,
+      );
+      facts.push(
+        fact(
+          asset.id,
+          "fusion.sketchup-fbx-material-overlap",
+          overlap.ratio,
+          overlap.denominator >= 5 ? 0.94 : 0.72,
+          `${overlap.matched}/${overlap.denominator} normalized material names shared with selected FBX; identity/material evidence only, not a spatial transform`,
+          "suggested",
+        ),
+      );
+      if (overlap.ratio >= 0.6)
+        item.findings.push(
+          `SketchUp ↔ FBX source-family link is strong: ${overlap.matched}/${overlap.denominator} normalized material names overlap.`,
+        );
+    }
+    item.warnings.push(
+      ...inspection.issues,
+      ...semantic.issues,
+      ...materialDefinitions.issues,
+    );
   }
 
   for (const asset of files.filter((entry) => /\.pdf$/i.test(entry.name))) {
@@ -805,6 +854,63 @@ export async function buildSourceFusionReport(
             ),
           );
       }
+      const cadForRegistration = (analysis?.cadAudits ?? []).find(
+        (audit) =>
+          audit.kind === "dwg" &&
+          audit.geometryReady &&
+          (audit.textLabels?.length ?? 0) >= 3,
+      );
+      if (best && cadForRegistration) {
+        const registration: PdfCadRegistration = estimatePdfCadRegistration(
+          best,
+          cadForRegistration,
+        );
+        registrations.push({
+          kind: "pdf-cad",
+          sourceAssetId: asset.id,
+          targetAssetId: cadForRegistration.assetId,
+          compatible: registration.compatible,
+          confidence: registration.confidence,
+          matches: registration.matches,
+          reason: registration.reason,
+        });
+        facts.push(
+          fact(
+            asset.id,
+            "fusion.pdf-cad-registration-confidence",
+            registration.confidence,
+            registration.matches >= 3 ? 0.95 : 0.6,
+            `${registration.matches} unique shared PDF/CAD spatial labels; ${registration.reason}`,
+            "suggested",
+          ),
+        );
+        if (registration.compatible) {
+          facts.push(
+            fact(
+              asset.id,
+              "fusion.pdf-cad-registration",
+              [
+                `target:${cadForRegistration.assetId}`,
+                `matches:${registration.matches}`,
+                `scale:${registration.scaleMetresPerPdfUnit?.toFixed(6) ?? "?"}`,
+                `rotation:${registration.rotationDeg?.toFixed(4) ?? "?"}`,
+                `tx:${registration.translateX?.toFixed(5) ?? "?"}`,
+                `tz:${registration.translateZ?.toFixed(5) ?? "?"}`,
+                `rms:${registration.normalizedRms?.toFixed(5) ?? "?"}`,
+              ],
+              registration.confidence,
+              "Unique spatial text correspondences between PDF plan and normalized DWG",
+              "suggested",
+            ),
+          );
+          item.findings.push(
+            `PDF plan can be registered to normalized DWG from ${registration.matches} unique shared labels (confidence ${registration.confidence.toFixed(2)}).`,
+          );
+        } else if (registration.matches > 0) {
+          item.warnings.push(registration.reason);
+        }
+      }
+
       if (best?.embeddedImages.length) {
         const candidates = best.embeddedImages.slice(0, 20);
         item.findings.push(
@@ -882,12 +988,15 @@ export async function buildSourceFusionReport(
       "Use the parsed room sheet to place exact-size rooms with mouse/touch.",
     );
 
+  const authorityDecisions = chooseSourceAuthorities(items);
   const conflicts = detectSourceFusionConflicts(files, items, facts, audits);
 
   return {
     createdAt: new Date().toISOString(),
     items,
     facts,
+    authorityDecisions,
+    registrations,
     conflicts,
     readySources: items.filter((item) => item.support === "ready").length,
     partialSources: items.filter((item) => item.support === "partial").length,
