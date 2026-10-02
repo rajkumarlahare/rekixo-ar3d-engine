@@ -172,6 +172,41 @@ export function buildSceneManifestV2(
           ]
         : [],
     sites: [{ id: siteId, name: project.name }],
+    siteElements: (project.scene.siteElements ?? [])
+      .filter((item) => item.reviewed)
+      .map((item) => ({
+        id: item.id,
+        siteId,
+        kind: item.kind,
+        transform: {
+          position: [item.x, 0, item.z] as [number, number, number],
+          rotation: [
+            0,
+            (item.rotation * Math.PI) / 180,
+            0,
+          ] as [number, number, number],
+          scale: [1, 1, 1] as [number, number, number],
+        },
+        dimensionsM: [
+          item.width,
+          item.height,
+          item.depth,
+        ] as [number, number, number],
+        finish: { color: item.color },
+        evidence: {
+          status: "reviewed" as const,
+          ...(item.sourceAssetId
+            ? { sourceAssetId: item.sourceAssetId }
+            : {}),
+          ...(item.sourceRef
+            ? { basis: item.sourceRef }
+            : {}),
+          sourceNote:
+            item.origin === "cad-auto"
+              ? "Human-reviewed site geometry derived from CAD evidence."
+              : "Human-reviewed site geometry edited in Rekixo Studio.",
+        },
+      })),
     buildings: [{ id: buildingId, siteId, name: project.name }],
     floors: project.scene.floors.map((floor) => ({
       id: floor.id,
