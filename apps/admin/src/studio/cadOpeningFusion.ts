@@ -190,7 +190,14 @@ function cadSuggestions(
       ).toFixed(3),
     );
     const sourceNodeName = (
-      "CAD:" + audit.assetId + ":" + (segment.id ?? occurrence)
+      "CAD:" +
+      audit.assetId +
+      ":" +
+      segment.layer +
+      ":" +
+      segment.sourceEntity +
+      ":" +
+      occurrence
     )
       .replace(/\s+/g, " ")
       .slice(0, 480);
