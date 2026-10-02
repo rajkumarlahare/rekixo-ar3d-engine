@@ -16,9 +16,16 @@ const asUrl = (code) =>
 const repeat = await import(
   asUrl(compile("apps/admin/src/studio/repeatedFloorDetector.ts"))
 );
-const graph = await import(
-  asUrl(compile("apps/admin/src/studio/architectureGraph.ts"))
+const registrationUrl = asUrl(
+  compile("apps/admin/src/studio/sourceRegistration.ts"),
 );
+const graphCode = compile(
+  "apps/admin/src/studio/architectureGraph.ts",
+).replace(
+  /from "\.\/sourceRegistration";/,
+  `from "${registrationUrl}";`,
+);
+const graph = await import(asUrl(graphCode));
 const sketch = await import(
   asUrl(compile("apps/admin/src/studio/sketchUpArchive.ts"))
 );
