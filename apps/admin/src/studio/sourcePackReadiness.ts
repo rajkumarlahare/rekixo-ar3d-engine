@@ -11,6 +11,8 @@ export interface SourcePackRoleStatus {
 export interface SourcePackReadiness {
   roles: SourcePackRoleStatus[];
   completeSupportPack: boolean;
+  sourceIntegrityReady: boolean;
+  pipelineState: "waiting" | "blocked" | "ready";
   autoBuildReady: boolean;
   blockingIssues: string[];
   reviewIssues: string[];
@@ -76,6 +78,19 @@ export function evaluateSourcePackReadiness(
 
   const blockingIssues: string[] = [];
   const reviewIssues: string[] = [];
+
+  const invalidSourceRecords = files.filter(
+    (file) =>
+      file.projectId !== project.id ||
+      !/^[a-f0-9]{64}$/i.test(file.hash) ||
+      file.size !== file.blob.size ||
+      file.size < 0,
+  );
+  const sourceIntegrityReady = invalidSourceRecords.length === 0;
+  if (!sourceIntegrityReady)
+    blockingIssues.push(
+      `${invalidSourceRecords.length} source file record${invalidSourceRecords.length === 1 ? "" : "s"} failed project/hash/byte-size integrity checks.`,
+    );
 
   const modelRole = roles.find((role) => role.key === "model")!;
   if (!modelRole.present) {
@@ -145,12 +160,17 @@ export function evaluateSourcePackReadiness(
   }
 
   const completeSupportPack = roles.every((role) => role.present);
-  const autoBuildReady = modelRole.present && blockingIssues.length === 0;
+  const autoBuildReady =
+    modelRole.present && sourceIntegrityReady && blockingIssues.length === 0;
   const presentCount = roles.filter((role) => role.present).length;
+  const pipelineState =
+    files.length === 0 ? "waiting" : autoBuildReady ? "ready" : "blocked";
 
   return {
     roles,
     completeSupportPack,
+    sourceIntegrityReady,
+    pipelineState,
     autoBuildReady,
     blockingIssues: [...new Set(blockingIssues)],
     reviewIssues: [...new Set(reviewIssues)],
