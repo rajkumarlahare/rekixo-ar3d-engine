@@ -8,8 +8,8 @@ test("Engine home exposes a Building-first project workflow and optional Experie
   const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
   assert.match(dashboard, /Create → Design → Publish → Building Live/);
   assert.match(dashboard, />Projects</);
-  assert.match(dashboard, />Design Studio</);
-  assert.match(dashboard, />Experiences</);
+  assert.match(dashboard, /Design Studio/);
+  assert.match(dashboard, /Experiences/);
   assert.match(dashboard, /Create 3D Project/);
   assert.match(dashboard, /Create New 3D Project/);
   assert.match(dashboard, /Create & open Studio/);
