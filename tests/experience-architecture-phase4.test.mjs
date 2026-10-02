@@ -75,7 +75,7 @@ test("DB guards keep Geo drafts scoped to their Geo Experience and immutable Bui
 
 test("Geo draft API is authenticated, same-origin and optimistic-revision protected", () => {
   const worker = read("workers/admin-cloud.mjs");
-  const start = worker.indexOf("async function projectGeoDraft");
+  const start = worker.indexOf("async function projectGeoDraft(request");
   const end = worker.indexOf("async function geoPlacementSchemaReady", start);
   assert.ok(start >= 0 && end > start);
   const block = worker.slice(start, end);
@@ -92,7 +92,7 @@ test("Geo draft API is authenticated, same-origin and optimistic-revision protec
 
 test("saving a Geo draft cannot mutate the legacy public Geo placement snapshot", () => {
   const worker = read("workers/admin-cloud.mjs");
-  const start = worker.indexOf("async function projectGeoDraft");
+  const start = worker.indexOf("async function projectGeoDraft(request");
   const end = worker.indexOf("async function geoPlacementSchemaReady", start);
   assert.ok(start >= 0 && end > start);
   const block = worker.slice(start, end);
