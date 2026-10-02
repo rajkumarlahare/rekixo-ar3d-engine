@@ -222,7 +222,9 @@ test("FBX web derivative implementation is wired for binary GLB and Studio limit
   assert.match(source, /GLTFExporter/);
   assert.match(source, /binary: true/);
   assert.match(source, /MAX_STUDIO_ASSET_BYTES/);
-  assert.match(source, /browser-fbx-to-glb-v1/);
+  assert.match(source, /browser-fbx-to-glb-v2-material-fusion/);
+  assert.match(source, /resolveSketchUpMaterialTexture/);
+  assert.match(source, /unresolvedExternalTextures/);
   assert.match(source, /Generated GLB exceeds the current 64 MB Studio asset limit/);
 });
 

@@ -17,6 +17,16 @@ export interface ExtractedSketchUpTexture {
   blob: Blob;
 }
 
+export interface ExtractedSketchUpMaterialDefinition {
+  archivePath: string;
+  name: string;
+  textureName?: string;
+  baseColor?: string;
+  opacity?: number;
+  xScale?: number;
+  yScale?: number;
+}
+
 interface ZipEntry {
   name: string;
   compressionMethod: number;
@@ -227,6 +237,101 @@ function safeLeaf(name: string) {
   return leaf.replace(/[^a-z0-9._ -]+/gi, "_").slice(0, 180);
 }
 
+function materialNameFromPath(path: string) {
+  const parts = path.replaceAll("\\", "/").split("/");
+  const index = parts.findIndex((part) => /^materials?$/i.test(part));
+  if (index < 0 || index + 1 >= parts.length) return undefined;
+  return parts[index + 1].replace(/^\[|\]$/g, "").trim() || undefined;
+}
+
+function xmlTextValue(source: string, names: readonly string[]) {
+  for (const name of names) {
+    const match = source.match(
+      new RegExp(
+        `<(?:[a-z0-9_]+:)?${name}\\b[^>]*>\\s*([^<]+?)\\s*<\\/(?:[a-z0-9_]+:)?${name}>`,
+        "i",
+      ),
+    );
+    if (match?.[1]) return match[1].trim();
+  }
+  return undefined;
+}
+
+function finiteValue(value: string | undefined) {
+  if (!value) return undefined;
+  const parsed = Number.parseFloat(value.replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function colorChannel(value: number) {
+  const scaled = value <= 1 ? value * 255 : value;
+  return Math.max(0, Math.min(255, Math.round(scaled)));
+}
+
+function rgbHex(red: number, green: number, blue: number) {
+  return `#${[red, green, blue]
+    .map((value) => colorChannel(value).toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+function materialColor(source: string) {
+  const direct = source.match(
+    /<(?:[a-z0-9_]+:)?color\b[^>]*>\s*#([0-9a-f]{6})\s*</i,
+  );
+  if (direct?.[1]) return `#${direct[1].toLowerCase()}`;
+
+  const red = finiteValue(xmlTextValue(source, ["red", "r"]));
+  const green = finiteValue(xmlTextValue(source, ["green", "g"]));
+  const blue = finiteValue(xmlTextValue(source, ["blue", "b"]));
+  if (red !== undefined && green !== undefined && blue !== undefined)
+    return rgbHex(red, green, blue);
+
+  const triplet = xmlTextValue(source, ["color", "rgb"])?.match(
+    /(-?\d+(?:\.\d+)?)\D+(-?\d+(?:\.\d+)?)\D+(-?\d+(?:\.\d+)?)/,
+  );
+  if (triplet)
+    return rgbHex(
+      Number.parseFloat(triplet[1]),
+      Number.parseFloat(triplet[2]),
+      Number.parseFloat(triplet[3]),
+    );
+  return undefined;
+}
+
+function materialOpacity(source: string) {
+  const opacity = finiteValue(xmlTextValue(source, ["opacity", "alpha"]));
+  if (opacity !== undefined)
+    return Math.max(0, Math.min(1, opacity > 1 ? opacity / 255 : opacity));
+  const transparency = finiteValue(
+    xmlTextValue(source, ["transparency", "transparent"]),
+  );
+  if (transparency !== undefined) {
+    const normalized = transparency > 1 ? transparency / 255 : transparency;
+    return Math.max(0, Math.min(1, 1 - normalized));
+  }
+  return undefined;
+}
+
+function materialTextureName(source: string) {
+  const candidates = [
+    xmlTextValue(source, ["texture", "textureFile", "texture_file", "filename"]),
+    ...[...source.matchAll(/(?:texture|filename)[^<>"']*["']([^"']+)["']/gi)].map(
+      (match) => match[1],
+    ),
+  ].filter((value): value is string => Boolean(value));
+  return candidates
+    .map((value) => safeLeaf(value))
+    .find((value) => /\.(?:png|jpe?g|webp|bmp|tiff?)$/i.test(value));
+}
+
+function materialDefinitionEntries(entries: readonly ZipEntry[]) {
+  return entries.filter(
+    (entry) =>
+      /(?:^|\/)materials?(?:\/|$)/i.test(entry.name) &&
+      /(?:material\.xml|\.material\.xml)$/i.test(entry.name),
+  );
+}
+
 export async function inspectSketchUpArchive(
   asset: Asset,
 ): Promise<SketchUpArchiveInspection> {
@@ -263,6 +368,74 @@ export async function inspectSketchUpArchive(
     (name) => image.test(name) && /(?:thumb|preview)/i.test(name),
   );
   return result;
+}
+
+export async function extractSketchUpMaterialDefinitions(
+  asset: Asset,
+): Promise<{
+  definitions: ExtractedSketchUpMaterialDefinition[];
+  issues: string[];
+}> {
+  if (!/\.(skb|skp)$/i.test(asset.name))
+    return {
+      definitions: [],
+      issues: ["Choose a SketchUp SKB/SKP archive first."],
+    };
+
+  const archive = new Uint8Array(await asset.blob.arrayBuffer());
+  const parsed = parseZipEntries(archive);
+  if (!parsed.zipLike)
+    return { definitions: [], issues: parsed.issues };
+
+  const entries = materialDefinitionEntries(parsed.entries).slice(0, 250);
+  const definitions: ExtractedSketchUpMaterialDefinition[] = [];
+  const issues = [...parsed.issues];
+
+  for (const entry of entries) {
+    if (entry.uncompressedSize > 512 * 1024) {
+      issues.push(
+        `SketchUp material definition is too large to inspect safely: ${entry.name}`,
+      );
+      continue;
+    }
+    try {
+      const bytes = await extractEntry(archive, entry);
+      const source = decoder.decode(bytes);
+      const name = materialNameFromPath(entry.name);
+      if (!name) {
+        issues.push(
+          `SketchUp material definition has no resolvable material folder: ${entry.name}`,
+        );
+        continue;
+      }
+      const textureName = materialTextureName(source);
+      const baseColor = materialColor(source);
+      const opacity = materialOpacity(source);
+      const xScale = finiteValue(
+        xmlTextValue(source, ["xScale", "xscale", "textureWidth"]),
+      );
+      const yScale = finiteValue(
+        xmlTextValue(source, ["yScale", "yscale", "textureHeight"]),
+      );
+      definitions.push({
+        archivePath: entry.name,
+        name,
+        ...(textureName ? { textureName } : {}),
+        ...(baseColor ? { baseColor } : {}),
+        ...(opacity !== undefined ? { opacity } : {}),
+        ...(xScale !== undefined && xScale > 0 ? { xScale } : {}),
+        ...(yScale !== undefined && yScale > 0 ? { yScale } : {}),
+      });
+    } catch (error) {
+      issues.push(
+        error instanceof Error
+          ? error.message
+          : `Could not inspect SketchUp material definition: ${entry.name}`,
+      );
+    }
+  }
+
+  return { definitions, issues };
 }
 
 export async function extractSketchUpTextures(

@@ -37,6 +37,9 @@ const sourceConflicts = await import(
 const autoReview = await import(
   asUrl(compile("apps/admin/src/studio/autoBuildingReview.ts"))
 );
+const materialResolver = await import(
+  asUrl(compile("apps/admin/src/studio/sketchUpMaterialResolver.ts"))
+);
 const openingWorkflow = await import(
   asUrl(compile("apps/admin/src/studio/openingWorkflow.ts"))
 );
@@ -288,6 +291,117 @@ function storedZip(name, dataBytes) {
 
   return new Blob([local, central, end]);
 }
+
+test("Phase 2 matches SketchUp material folders to FBX material names and prefers color maps", () => {
+  assert.equal(
+    materialResolver.materialNameFromArchivePath(
+      "materials/[Metal Panel]/Metal_Panel.jpg",
+    ),
+    "Metal Panel",
+  );
+
+  const files = [
+    {
+      id: "normal",
+      projectId: "p",
+      name: "Metal_Panel_normal.png",
+      type: "image/png",
+      size: 1,
+      hash: "a".repeat(64),
+      blob: new Blob(["n"]),
+    },
+    {
+      id: "base",
+      projectId: "p",
+      name: "Metal_Panel_basecolor.jpg",
+      type: "image/jpeg",
+      size: 1,
+      hash: "b".repeat(64),
+      blob: new Blob(["b"]),
+    },
+  ];
+  const bindings = [
+    {
+      sourceArchiveId: "skb",
+      archivePath: "materials/[Metal Panel]/Metal_Panel_normal.png",
+      materialName: "Metal Panel",
+      textureAssetId: "normal",
+      textureName: "Metal_Panel_normal.png",
+      confidence: 0.98,
+    },
+    {
+      sourceArchiveId: "skb",
+      archivePath: "materials/[Metal Panel]/Metal_Panel_basecolor.jpg",
+      materialName: "Metal Panel",
+      textureAssetId: "base",
+      textureName: "Metal_Panel_basecolor.jpg",
+      confidence: 0.98,
+    },
+  ];
+  const resolved = materialResolver.resolveSketchUpMaterialTexture(
+    "Material::Metal_Panel",
+    bindings,
+    files,
+  );
+  assert.equal(resolved?.asset.id, "base");
+  assert.ok((resolved?.score ?? 0) > 100);
+});
+
+test("Phase 2 reads SketchUp material XML style metadata safely", async () => {
+  const xml = [
+    "<material>",
+    "<red>143</red>",
+    "<green>157</green>",
+    "<blue>158</blue>",
+    "<opacity>0.8</opacity>",
+    "<texture>Metal_Panel.jpg</texture>",
+    "<xScale>24</xScale>",
+    "<yScale>24</yScale>",
+    "</material>",
+  ].join("");
+  const blob = storedZip(
+    "materials/[Metal Panel]/material.xml",
+    new TextEncoder().encode(xml),
+  );
+  const extracted = await sketch.extractSketchUpMaterialDefinitions({
+    id: "skb-material",
+    projectId: "p",
+    name: "building.skb",
+    type: "application/octet-stream",
+    size: blob.size,
+    hash: "e".repeat(64),
+    blob,
+  });
+  assert.equal(extracted.issues.length, 0);
+  assert.equal(extracted.definitions.length, 1);
+  assert.deepEqual(extracted.definitions[0], {
+    archivePath: "materials/[Metal Panel]/material.xml",
+    name: "Metal Panel",
+    textureName: "Metal_Panel.jpg",
+    baseColor: "#8f9d9e",
+    opacity: 0.8,
+    xScale: 24,
+    yScale: 24,
+  });
+
+  const style = materialResolver.resolveSketchUpMaterialStyle(
+    "Material::Metal_Panel",
+    [
+      {
+        sourceArchiveId: "skb-material",
+        archivePath: "materials/[Metal Panel]/material.xml",
+        materialName: "Metal Panel",
+        baseColor: "#8f9d9e",
+        opacity: 0.8,
+        xScale: 24,
+        yScale: 24,
+        confidence: 0.99,
+      },
+    ],
+  );
+  assert.equal(style?.binding.baseColor, "#8f9d9e");
+  assert.equal(style?.binding.opacity, 0.8);
+});
 
 test("Phase 2 recovers safe material textures from a ZIP-style SKB", async () => {
   const blob = storedZip("materials/Brick/brick.jpg", [1, 2, 3, 4]);
@@ -653,6 +767,22 @@ test("Phase 2 normal builder exposes one-click generic Auto Build and no hash-pr
   assert.match(studio, /runAutoBuildPipeline/);
   assert.match(pipeline, /prepareFbxWebModel/);
   assert.match(pipeline, /prepareSketchUpTextureRecovery/);
+  assert.match(pipeline, /materialBindings/);
+  assert.ok(
+    pipeline.indexOf("const recovery = await prepareSketchUpTextureRecovery") <
+      pipeline.indexOf("const prepared = await prepareFbxWebModel"),
+  );
+  const webModel = fs.readFileSync(
+    "apps/admin/src/studio/fbxWebModel.ts",
+    "utf8",
+  );
+  assert.match(webModel, /resolveSketchUpMaterialTexture/);
+  assert.match(webModel, /browser-fbx-to-glb-v2-material-fusion/);
+  assert.match(webModel, /materialTexturesApplied/);
+  assert.match(webModel, /materialStylesApplied/);
+  assert.match(webModel, /resolveSketchUpMaterialStyle/);
+  assert.match(webModel, /unresolvedExternalTextures/);
+  assert.doesNotMatch(webModel, /stripTextures/);
   assert.match(pipeline, /buildSmartSceneDraft/);
   assert.match(pipeline, /applyReadyOpeningWorkflow/);
   assert.match(pipeline, /markAutoReadyModelWalls/);

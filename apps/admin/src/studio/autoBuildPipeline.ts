@@ -4,6 +4,10 @@ import type { FbxSourceAudit } from "./sourceAudit";
 import { auditFbxSources } from "./sourceAudit";
 import { prepareFbxWebModel } from "./fbxWebModel";
 import { prepareSketchUpTextureRecovery } from "./sketchUpRecovery";
+import type {
+  SketchUpMaterialStyleBinding,
+  SketchUpMaterialTextureBinding,
+} from "./sketchUpMaterialResolver";
 import { analyzeProjectFiles, type SmartProjectAnalysis } from "./projectAnalyzer";
 import { buildSmartSceneDraft } from "./smartDraftBuilder";
 import { suggestOpeningAssociations } from "./openingAssociator";
@@ -21,6 +25,10 @@ export interface AutoBuildPipelineResult {
     selectedModel: string;
     webModelPrepared: boolean;
     sketchUpTexturesRecovered: number;
+    materialTexturesApplied: number;
+    materialStylesApplied: number;
+    resolvedExternalTextures: number;
+    unresolvedExternalTextures: number;
     floors: number;
     walls: number;
     repeatedFloors: number;
@@ -86,35 +94,15 @@ export async function runAutoBuildPipeline(
   const authoring = chooseAuthoringModel(next, workingFiles);
   next.scene.modelId = authoring.id;
 
-  let webModelPrepared = false;
-  const currentPublish = next.scene.publishModelId
-    ? workingFiles.find((file) => file.id === next.scene.publishModelId)
-    : undefined;
-
-  if (/\.glb$/i.test(authoring.name)) {
-    next.scene.publishModelId = authoring.id;
-  } else if (!currentPublish || !/\.glb$/i.test(currentPublish.name)) {
-    const prepared = await prepareFbxWebModel(authoring, next.id);
-    const equivalent = findEquivalentAsset(workingFiles, prepared.asset);
-    const publishAsset = equivalent ?? prepared.asset;
-    if (!equivalent) {
-      createdAssets.push(publishAsset);
-      workingFiles.push(publishAsset);
-      next = appendAsset(next, publishAsset);
-    }
-    next.scene.publishModelId = publishAsset.id;
-    webModelPrepared = true;
-    if (prepared.externalTexturesBlocked)
-      issues.push(
-        "FBX web model was prepared without unresolved external texture maps; SketchUp/source texture recovery remains visual-review evidence.",
-      );
-  }
-
   let sketchUpTexturesRecovered = 0;
+  let materialBindings: SketchUpMaterialTextureBinding[] = [];
+  let materialStyles: SketchUpMaterialStyleBinding[] = [];
   if (workingFiles.some((file) => /\.(?:skb|skp)$/i.test(file.name))) {
     try {
       const recovery = await prepareSketchUpTextureRecovery(workingFiles, next);
       next = recovery.nextProject;
+      materialBindings = recovery.materialBindings;
+      materialStyles = recovery.materialStyles;
       for (const asset of recovery.assets) {
         const equivalent = findEquivalentAsset(workingFiles, asset);
         if (equivalent) continue;
@@ -130,6 +118,44 @@ export async function runAutoBuildPipeline(
           : "SketchUp recovery could not complete.",
       );
     }
+  }
+
+  let webModelPrepared = false;
+  let materialTexturesApplied = 0;
+  let materialStylesApplied = 0;
+  let resolvedExternalTextures = 0;
+  let unresolvedExternalTextures = 0;
+
+  if (/\.glb$/i.test(authoring.name)) {
+    next.scene.publishModelId = authoring.id;
+  } else {
+    const prepared = await prepareFbxWebModel(authoring, next.id, {
+      textureAssets: workingFiles,
+      materialBindings,
+      materialStyles,
+    });
+    const equivalent = findEquivalentAsset(workingFiles, prepared.asset);
+    const publishAsset = equivalent ?? prepared.asset;
+    if (!equivalent) {
+      createdAssets.push(publishAsset);
+      workingFiles.push(publishAsset);
+      next = appendAsset(next, publishAsset);
+    }
+    next.scene.publishModelId = publishAsset.id;
+    webModelPrepared = true;
+    materialTexturesApplied = prepared.materialTexturesApplied;
+    materialStylesApplied = prepared.materialStylesApplied;
+    resolvedExternalTextures = prepared.resolvedExternalTextures;
+    unresolvedExternalTextures = prepared.unresolvedExternalTextures;
+
+    if (prepared.unresolvedExternalTextures)
+      issues.push(
+        `${prepared.unresolvedExternalTextures} FBX texture reference${prepared.unresolvedExternalTextures === 1 ? "" : "s"} could not be resolved from the uploaded source pack; neutral material fallback was kept.`,
+      );
+    if (prepared.textureLoadErrors)
+      issues.push(
+        `${prepared.textureLoadErrors} recovered texture${prepared.textureLoadErrors === 1 ? "" : "s"} could not be decoded for the web model.`,
+      );
   }
 
   const latestAudits =
@@ -178,6 +204,10 @@ export async function runAutoBuildPipeline(
       selectedModel: authoring.name,
       webModelPrepared,
       sketchUpTexturesRecovered,
+      materialTexturesApplied,
+      materialStylesApplied,
+      resolvedExternalTextures,
+      unresolvedExternalTextures,
       floors: draft.summary.floors,
       walls: draft.summary.walls,
       repeatedFloors: draft.summary.repeatedFloors,
@@ -198,6 +228,15 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   const textures = summary.sketchUpTexturesRecovered
     ? ` · ${summary.sketchUpTexturesRecovered} SketchUp texture${summary.sketchUpTexturesRecovered === 1 ? "" : "s"} recovered`
     : "";
+  const materialFusion = summary.materialTexturesApplied
+    ? ` · ${summary.materialTexturesApplied} FBX material texture${summary.materialTexturesApplied === 1 ? "" : "s"} fused`
+    : "";
+  const materialStyles = summary.materialStylesApplied
+    ? ` · ${summary.materialStylesApplied} SketchUp material style${summary.materialStylesApplied === 1 ? "" : "s"} applied`
+    : "";
+  const resolvedTextures = summary.resolvedExternalTextures
+    ? ` · ${summary.resolvedExternalTextures} FBX texture reference${summary.resolvedExternalTextures === 1 ? "" : "s"} resolved`
+    : "";
   const rooms = summary.autoRooms
     ? ` · ${summary.autoRooms} room draft${summary.autoRooms === 1 ? "" : "s"}`
     : "";
@@ -216,5 +255,5 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
     summary.readyWallsPrepared +
     summary.readyRepeatsPrepared +
     summary.readyOpeningsPrepared;
-  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${walls}${repeats}${openings}${web}${textures}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
+  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${walls}${repeats}${openings}${web}${textures}${materialFusion}${materialStyles}${resolvedTextures}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
 }

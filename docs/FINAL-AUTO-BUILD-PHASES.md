@@ -26,6 +26,8 @@ Goals:
 
 ## Phase 2 — FBX + SKB material recovery
 
+Status: **complete — material XML/texture fusion implemented; validation and browser E2E passed**
+
 - Recover SketchUp materials/textures before final FBX → GLB preparation.
 - Match FBX material assignments to recovered SketchUp material definitions.
 - Build a reusable material resolver and preserve material provenance.
