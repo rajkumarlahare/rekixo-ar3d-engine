@@ -186,8 +186,17 @@ test("local autosave survives hard reload without pressing Save local", async ({
   await expect(page.getByText("Autosaved", { exact: true })).toBeVisible();
 });
 
-test("Jyoti source floor preparation, room acceptance and repeat survive reload", async ({ page }) => {
-  test.slow(); // Reviews a whole unit and crosses two persistence boundaries.
+test("clean Studio has no repository-baked project profile", async ({ page }) => {
+  const profileCount = await page.evaluate(async (profileUrl) => {
+    const { studioSourceProfiles } = await import(profileUrl);
+    return studioSourceProfiles.length;
+  }, "/3Dprojects/@fs/" + path.resolve("project-profiles/studio-source-profiles.ts").split(path.sep).join("/"));
+
+  expect(profileCount).toBe(0);
+  await expect(page.getByLabel("Smart 3D project builder")).toBeVisible();
+  await expect(page.getByText(/Jyoti Paradise/i)).toHaveCount(0);
+});
+ // Reviews a whole unit and crosses two persistence boundaries.
   // Persist a synthetic identity fixture through the real storage layer. No source assets are modified.
   const fixture = await page.evaluate(async (profileUrl) => {
     const { studioSourceProfiles } = await import(profileUrl);
