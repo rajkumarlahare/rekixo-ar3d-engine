@@ -22,6 +22,9 @@ const sketch = await import(
 const pdfCoordinates = await import(
   asUrl(compile("apps/admin/src/studio/pdfCoordinates.ts")),
 );
+const roomSemantics = await import(
+  asUrl(compile("apps/admin/src/studio/roomSemanticBinding.ts")),
+);
 
 function asset(id, name, body, type = "application/octet-stream") {
   const blob = body instanceof Blob ? body : new Blob([body], { type });
@@ -256,4 +259,170 @@ test("Phase 4 DRS classifies distinct PBR map roles", () => {
     drs.classifyDrsResourceRole("textures/sign_emissive_color.png"),
     "emissive",
   );
+});
+
+
+test("Phase 6 room semantics classify source labels conservatively", () => {
+  assert.deepEqual(
+    roomSemantics.classifyRoomSemanticText("MASTER BED ROOM"),
+    { roomName: "Master Bedroom" },
+  );
+  assert.deepEqual(
+    roomSemantics.classifyRoomSemanticText("Flat No. 101 - Living Room"),
+    { roomName: "Living Room", unitName: "Flat 101" },
+  );
+  assert.equal(
+    roomSemantics.classifyRoomSemanticText("Flat No. 101 to 501").unitName,
+    undefined,
+  );
+});
+
+test("Phase 6 source labels name rooms and propagate unit groups without crossing common circulation", () => {
+  const floorId = "floor-1";
+  const room = (id, name, x) => ({
+    id,
+    name,
+    floorId,
+    unit: "Auto draft",
+    x,
+    z: 1,
+    width: 2,
+    depth: 2,
+    polygon: [
+      [x - 1, 0],
+      [x + 1, 0],
+      [x + 1, 2],
+      [x - 1, 2],
+    ],
+    height: 2.8,
+    color: "#d8e8e2",
+    source: "Auto draft from walls.",
+    verified: false,
+  });
+  const rooms = [
+    room("a", "Room 1", 1),
+    room("b", "Room 2", 3),
+    room("c", "Room 3", 5),
+    room("d", "Room 4", 7),
+    room("e", "Room 5", 9),
+  ];
+  const wall = (id, left, right) => ({
+    id,
+    floorId,
+    roomIds: [left, right],
+    start: [0, 0],
+    end: [1, 0],
+    thickness: 0.12,
+    height: 2.8,
+    reviewed: false,
+    origin: "cad-auto",
+    confidence: 0.92,
+  });
+  const scene = {
+    floors: [{ id: floorId, name: "Floor 1", elevation: 0 }],
+    rooms,
+    furniture: [],
+    walls: [
+      wall("ab", "a", "b"),
+      wall("bc", "b", "c"),
+      wall("cd", "c", "d"),
+      wall("de", "d", "e"),
+    ],
+    openings: [],
+    scale: 1,
+  };
+  const evidence = [
+    {
+      id: "a-room",
+      floorId,
+      point: [1, 1],
+      text: "Flat 101 Living",
+      source: "cad-text",
+      confidence: 0.95,
+      roomName: "Living Room",
+      unitName: "Flat 101",
+    },
+    {
+      id: "c-common",
+      floorId,
+      point: [5, 1],
+      text: "Corridor",
+      source: "cad-text",
+      confidence: 0.95,
+      roomName: "Corridor",
+    },
+    {
+      id: "d-room",
+      floorId,
+      point: [7, 1],
+      text: "Flat 102 Living",
+      source: "cad-text",
+      confidence: 0.95,
+      roomName: "Living Room",
+      unitName: "Flat 102",
+    },
+  ];
+
+  const result = roomSemantics.applyRoomSemanticEvidence(scene, evidence);
+  const byId = new Map(result.scene.rooms.map((entry) => [entry.id, entry]));
+
+  assert.equal(byId.get("a").name, "Living Room");
+  assert.equal(byId.get("c").name, "Corridor");
+  assert.equal(byId.get("d").name, "Living Room");
+  assert.equal(byId.get("a").unit, "Flat 101");
+  assert.equal(byId.get("b").unit, "Flat 101");
+  assert.equal(byId.get("c").unit, "Auto draft");
+  assert.equal(byId.get("d").unit, "Flat 102");
+  assert.equal(byId.get("e").unit, "Flat 102");
+  assert.equal(result.unitGroupsDetected, 2);
+  assert.equal(result.reviewRemaining, 0);
+});
+
+test("Phase 6 conflicting labels remain reviewable instead of overwriting a room", () => {
+  const scene = {
+    floors: [{ id: "f", name: "Ground", elevation: 0 }],
+    rooms: [
+      {
+        id: "r",
+        name: "Room 1",
+        floorId: "f",
+        unit: "Auto draft",
+        x: 1,
+        z: 1,
+        width: 2,
+        depth: 2,
+        height: 2.8,
+        color: "#d8e8e2",
+        source: "Auto draft.",
+        verified: false,
+      },
+    ],
+    furniture: [],
+    walls: [],
+    openings: [],
+    scale: 1,
+  };
+  const result = roomSemantics.applyRoomSemanticEvidence(scene, [
+    {
+      id: "living",
+      floorId: "f",
+      point: [1, 1],
+      text: "Living",
+      source: "cad-text",
+      confidence: 0.9,
+      roomName: "Living Room",
+    },
+    {
+      id: "bed",
+      floorId: "f",
+      point: [1, 1],
+      text: "Bedroom",
+      source: "pdf-text",
+      confidence: 0.88,
+      roomName: "Bedroom",
+    },
+  ]);
+
+  assert.equal(result.scene.rooms[0].name, "Room 1");
+  assert.equal(result.reviewRemaining, 1);
 });
