@@ -92,7 +92,6 @@ import {
 } from "./appearancePresets";
 import type { PdfReferenceRasterOptions } from "./pdfReferenceRaster";
 import {
-  createSuggestedRoomDrafts,
   mappedRoomSheetKeys,
   parseRoomSheetAssets,
   resolveRoomSheetFloorId,
