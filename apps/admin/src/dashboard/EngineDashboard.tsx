@@ -68,6 +68,11 @@ export default function EngineDashboard() {
   const [projects, setProjects] = useState<EngineProjectSummary[]>([]);
   const [selectedSlug, setSelectedSlug] = useState("");
   const [status, setStatus] = useState<ApiStatus>();
+  const [experienceItems, setExperienceItems] = useState<EngineExperienceSummary[]>([]);
+  const [releaseItems, setReleaseItems] = useState<CloudReleaseSummary[]>([]);
+  const [geoState, setGeoState] = useState<CloudGeoPlacementState>();
+  const [experienceBusy, setExperienceBusy] = useState(false);
+  const [experienceError, setExperienceError] = useState("");
   const [error, setError] = useState("");
   const [refresh, setRefresh] = useState(0);
   const [search, setSearch] = useState("");
