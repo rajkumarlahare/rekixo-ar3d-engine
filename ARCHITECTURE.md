@@ -146,9 +146,10 @@ code and Engine-owned production resources.
 
 ## 6. Data model direction
 
-The 3D database is project-scoped. Planned entities:
+The 3D database is project-scoped. Core/planned entities:
 
 - `projects_3d`
+- `experiences_3d` — Building identity plus optional Geo identity
 - `models_3d`
 - `scenes_3d`
 - `camera_presets_3d`
@@ -159,6 +160,12 @@ The 3D database is project-scoped. Planned entities:
 - `publish_versions_3d`
 
 Each row that belongs to a project must be keyed by the 3D project ID. No customer project may be encoded as a generic runtime default.
+
+`experiences_3d` is an identity/lifecycle layer, not a replacement for the
+existing immutable Building release system. Building release truth remains in
+`releases_3d`, `release_assets_3d`, `release_activations_3d` and
+`projects_3d.active_release_id`. A Geo Experience stores only a reference to a
+specific Building release at this phase; it does not copy Building assets.
 
 New customer projects are provisioned as draft D1 records through the controlled operator workflow. Customer onboarding is data provisioning, not a new repository and not a new schema migration.
 
