@@ -35,8 +35,9 @@ test("Engine Admin owns placement mutation and browser Maps configuration", () =
 
 test("3D Jio Mapper is an Engine route, not a Platform dependency", () => {
   const main = read("apps/admin/src/main.tsx");
+  const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
   const mapper = read("apps/admin/src/geo/GeoMapper3D.tsx");
-  assert.match(main, />3D Jio Mapper</);
+  assert.match(dashboard, />3D Jio Mapper</);
   assert.match(main, /\/3Dprojects\/geo-mapper/);
   assert.match(mapper, /<h1>3D Jio Mapper<\/h1>/);
   assert.match(mapper, /Building placement Engine ke andar/);

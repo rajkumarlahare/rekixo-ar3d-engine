@@ -184,6 +184,7 @@ export default function Studio() {
   const [manifestText, setManifestText] = useState("");
   const [projectSearch, setProjectSearch] = useState("");
   const [published, setPublished] = useState<PublishedCatalogEntry[]>([]);
+  const requestedCloudProjectRef = useRef("");
   const [workspace, setWorkspace] = useState<
     "builder" | "overview" | "editor" | "sources" | "evidence" | "publish"
   >("builder");
@@ -199,6 +200,26 @@ export default function Studio() {
     refreshCloudReleases,
     markCloudSignedOut,
   } = useStudioCloudState(project, setError);
+
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search)
+      .get("project")
+      ?.trim()
+      .toLowerCase();
+    if (
+      !requested ||
+      requestedCloudProjectRef.current === requested ||
+      !cloudSession?.authenticated ||
+      !cloudProjects.some((entry) => entry.slug === requested)
+    )
+      return;
+
+    requestedCloudProjectRef.current = requested;
+    void task(async () => {
+      await openCloudProject(requested);
+      setWorkspace("builder");
+    });
+  }, [cloudProjects, cloudSession?.authenticated]);
 
   useEffect(() => {
     let active = true;

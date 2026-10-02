@@ -47,7 +47,7 @@ test("generic runtime has no first-project or Jyoti identity fallback", () => {
 
 test("admin discovers projects dynamically instead of assuming one tenant", () => {
   const worker = read("workers/admin.mjs");
-  const admin = read("apps/admin/src/main.tsx");
+  const admin = read("apps/admin/src/dashboard/EngineDashboard.tsx");
   assert.match(worker, /async function listProjects/);
   assert.match(worker, /\/api\/projects/);
   assert.match(worker, /ORDER BY p\.created_at ASC, p\.slug ASC/);

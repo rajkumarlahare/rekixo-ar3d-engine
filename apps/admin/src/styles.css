@@ -488,3 +488,20 @@ footer {
   text-decoration: none;
   font-size: 12px;
 }
+
+
+.route-loading {
+  min-height: 100vh;
+  padding: 32px;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  text-align: center;
+  background: #07101b;
+  color: #eaf0f7;
+}
+
+.route-loading h1 {
+  margin: 0;
+  font-size: clamp(24px, 5vw, 38px);
+}

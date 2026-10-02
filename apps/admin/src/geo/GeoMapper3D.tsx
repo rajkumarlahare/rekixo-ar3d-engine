@@ -480,7 +480,15 @@ export default function GeoMapper3D() {
         </div>
         <div className="geo3d-actions">
           <a href="/3Dprojects">Engine Home</a>
-          <a href="/3Dprojects/studio">Design Studio</a>
+          <a
+            href={
+              selectedSlug
+                ? `/3Dprojects/studio?project=${encodeURIComponent(selectedSlug)}`
+                : "/3Dprojects/studio"
+            }
+          >
+            Edit model in Studio
+          </a>
           <select
             value={selectedSlug}
             onChange={(event) => setSelectedSlug(event.target.value)}
