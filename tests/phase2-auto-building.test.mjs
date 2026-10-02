@@ -307,8 +307,13 @@ test("Phase 2 builder exposes automatic SketchUp texture recovery", () => {
     "apps/admin/src/studio/Studio.tsx",
     "utf8",
   );
+  const recovery = fs.readFileSync(
+    "apps/admin/src/studio/sketchUpRecovery.ts",
+    "utf8",
+  );
   assert.match(builder, /Recover SKB textures/);
-  assert.match(studio, /extractSketchUpTextures/);
+  assert.match(studio, /prepareSketchUpTextureRecovery/);
+  assert.match(recovery, /extractSketchUpTextures/);
   assert.match(studio, /SketchUp material texture/);
 });
 
