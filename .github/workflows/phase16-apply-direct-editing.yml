@@ -1,0 +1,63 @@
+name: Phase 16 Apply Direct Editing
+
+on:
+  push:
+    branches:
+      - phase16/direct-architectural-editing
+    paths:
+      - scripts/apply-phase16-direct-editing.mjs
+      - .github/workflows/phase16-apply-direct-editing.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase16/direct-architectural-editing
+          fetch-depth: 0
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Apply deterministic integration
+        run: node scripts/apply-phase16-direct-editing.mjs
+
+      - name: Install
+        run: npm ci
+
+      - name: Verify
+        run: npm test
+
+      - name: Validate Admin Worker bundle and Wrangler config
+        run: >-
+          npx --no-install wrangler deploy
+          --dry-run
+          --config wrangler.admin.jsonc
+          --outdir .wrangler-admin-dry-run
+
+      - name: Install browser E2E runner
+        run: npx --no-install playwright install --with-deps chromium
+
+      - name: Run browser E2E smoke
+        run: npx --no-install playwright test --config playwright.config.ts
+
+      - name: Diff whitespace safety
+        run: git diff --check origin/main...HEAD && git diff --check
+
+      - name: Commit verified integration and remove one-off runner
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm scripts/apply-phase16-direct-editing.mjs .github/workflows/phase16-apply-direct-editing.yml
+          git add apps/admin/src/studio/SceneCanvas.tsx apps/admin/src/studio/Studio.tsx
+          git commit -m "Phase 16: wire direct architectural editing into Studio"
+          git push origin HEAD:phase16/direct-architectural-editing
