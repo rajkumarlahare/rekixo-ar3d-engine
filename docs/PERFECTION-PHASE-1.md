@@ -1,6 +1,6 @@
 # Rekixo AR3D Perfection Phase 1 — Golden Six-File AutoBuild Certification
 
-Status: FOUNDATION IMPLEMENTED ON FEATURE BRANCH
+Status: P1.1/P1.2 MERGED; P1.3/P1.4 PROTECTED CERTIFICATION HARNESS IMPLEMENTED
 
 This phase is intentionally separate from the older numbered implementation phases in the repository. Its purpose is to certify the current generic engine against a real six-role customer source pack before larger visual/editor features are added.
 
@@ -34,11 +34,7 @@ Each expected source records SHA-256 and exact byte size. Verification checks:
 - missing/ambiguous candidates;
 - untracked additional assets.
 
-The manifest is generic. No customer name, customer hash or customer geometry is compiled into the engine.
-
-### Real-source activation
-
-The actual six production binaries should remain private. Once the real pack is available to the certification runner, generate/store its manifest in private test infrastructure rather than committing source binaries or customer-specific fingerprints into the public engine repository.
+The engine-side manifest contract is generic. No customer name, customer hash or customer geometry is compiled into the product.
 
 ## P1.2 — AutoBuild certification report
 
@@ -77,22 +73,100 @@ If a `.dwg` file is attached but no source-bound normalized DWG audit has `geome
 
 Therefore a model-backed build can still produce a useful draft, but it cannot pretend that the six-file DWG path was actually proven.
 
-## What is not certified yet
+## P1.3 — Real binary DWG certification harness
 
-This foundation does **not** claim that the owner's real six files have already passed. The public repository does not contain those private binaries.
+Implemented by `scripts/certify-golden-source-pack.mjs` plus the manual protected workflow `.github/workflows/certify-golden-source-pack.yml`.
 
-Remaining Phase 1 slices are:
+The public repository still contains no private source bytes or customer fingerprints. The runner accepts the private six-file directory and private manifest at runtime.
 
-- P1.3: real binary DWG production certification;
-- P1.4: protected real six-file browser E2E;
+Generate a private manifest locally:
+
+```bash
+npm run golden:manifest -- \
+  --dir /private/path/to/source-pack \
+  --out /private/path/pack.golden-manifest.json \
+  --key golden-building-v1
+```
+
+Verify exact source bytes without claiming native DWG success yet:
+
+```bash
+npm run golden:certify -- \
+  --dir /private/path/to/source-pack \
+  --manifest /private/path/pack.golden-manifest.json \
+  --allow-dwg-pending
+```
+
+A real certification run omits `--allow-dwg-pending` and supplies the pinned processor:
+
+```bash
+npm run golden:certify -- \
+  --dir /private/path/to/source-pack \
+  --manifest /private/path/pack.golden-manifest.json \
+  --processor-url http://127.0.0.1:18080 \
+  --out /private/path/certificate.json
+```
+
+For a DWG to pass, the runner requires all of the following:
+
+- exact source SHA-256 and byte size match the private manifest;
+- normalized contract/version match Rekixo's DWG contract;
+- normalized output points back to the exact source asset/hash/size;
+- processor engine is GNU LibreDWG;
+- CAD units are resolved/reviewed with a positive metres-per-unit value;
+- the normalized document contains usable segment/object/insert geometry.
+
+A processor error, unresolved units, empty normalized geometry, source mismatch or over-limit DWG blocks certification.
+
+## P1.4 — Protected real six-file browser E2E
+
+Implemented in `e2e/golden-source-pack.spec.ts`.
+
+This test is opt-in and skips in normal public CI. It runs only when these runtime variables are present:
+
+- `REKIXO_GOLDEN_PACK_DIR`
+- `REKIXO_GOLDEN_MANIFEST`
+- `REKIXO_DWG_PROCESSOR_URL`
+
+The test uploads the six exact private files through the real Studio source drop, bridges the Studio DWG request to the native processor, runs `Build automatically`, requires the final AutoBuild certification summary to contain **0 blocked** checks, waits for autosave, reloads the browser, verifies the selected source model is retained, and opens the visual editor.
+
+The repository exposes this opt-in command:
+
+```bash
+npm run test:e2e:golden
+```
+
+### Manual GitHub certification workflow
+
+`Certify Private Golden Source Pack` is `workflow_dispatch` only. It does not run on public pull requests. Before running it, configure these repository Actions secrets outside the codebase:
+
+- `REKIXO_GOLDEN_PACK_URL` — private/signed URL for a ZIP whose root contains the six source files;
+- `REKIXO_GOLDEN_PACK_TOKEN` — optional bearer token for that download;
+- `REKIXO_GOLDEN_PACK_SHA256` — exact SHA-256 of the ZIP;
+- `REKIXO_GOLDEN_MANIFEST_B64` — base64 of the private manifest JSON.
+
+The workflow verifies the ZIP checksum, builds the pinned GNU LibreDWG container, runs real DWG certification, runs the protected browser E2E and uploads only a redacted certification summary. Source files, private manifest fingerprints and full certificate are kept under `.private/`, which is ignored by Git.
+
+## Current proof boundary
+
+P1.3/P1.4 being implemented means the engine now has a repeatable protected path for the real source pack. It does **not** mean the real production DWG/six-file pack has passed until that private workflow (or an equivalent trusted local run) completes successfully.
+
+This distinction is mandatory: harness-ready and source-certified are different states.
+
+## Remaining Phase 1 slices
+
 - P1.5: deterministic replay / normalized scene fingerprint;
 - P1.6: whole-scene geometry integrity validator;
 - P1.7: actionable review queue + publish gate integration.
 
-## Acceptance for this foundation slice
+## Acceptance for P1.1–P1.4 code
 
 - generic manifest contract exists without customer hardcoding;
 - AutoBuild always returns a certification report;
 - DWG cannot show complete certification unless normalized geometry is actually ready;
-- summary text exposes blocked/review counts;
+- exact private bytes can be fingerprinted and checked outside Git;
+- real DWG certification uses the same pinned native processor contract as production;
+- protected browser E2E uses the six runtime files instead of synthetic substitutes;
+- normal public CI remains source-independent and does not need private customer assets;
+- private artifacts are ignored and are never uploaded as public build output;
 - normal typecheck/build/test gates remain the merge gate.
