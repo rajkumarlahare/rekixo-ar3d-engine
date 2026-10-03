@@ -14,7 +14,9 @@ function run(args) {
 }
 
 function makePack() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rekixo-golden-pack-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "rekixo-golden-"));
+  const dir = path.join(root, "pack");
+  fs.mkdirSync(dir);
   const rows = [
     ["building.fbx", "FBX fixture bytes"],
     ["floor-plan.dwg", "AC1015 fixture bytes"],
@@ -25,13 +27,13 @@ function makePack() {
   ];
   for (const [name, value] of rows)
     fs.writeFileSync(path.join(dir, name), value);
-  return dir;
+  return { root, dir };
 }
 
 test("private golden runner fingerprints six roles and verifies exact bytes", () => {
-  const dir = makePack();
-  const manifestPath = path.join(dir, "pack.golden-manifest.json");
-  const certificatePath = path.join(dir, "certificate.json");
+  const { root, dir } = makePack();
+  const manifestPath = path.join(root, "pack.golden-manifest.json");
+  const certificatePath = path.join(root, "certificate.json");
 
   const generated = run([
     "manifest",
@@ -74,8 +76,8 @@ test("private golden runner fingerprints six roles and verifies exact bytes", ()
 });
 
 test("private golden runner fails closed when any source bytes change", () => {
-  const dir = makePack();
-  const manifestPath = path.join(dir, "pack.golden-manifest.json");
+  const { root, dir } = makePack();
+  const manifestPath = path.join(root, "pack.golden-manifest.json");
   const generated = run(["manifest", "--dir", dir, "--out", manifestPath]);
   assert.equal(generated.status, 0, generated.stderr);
 
