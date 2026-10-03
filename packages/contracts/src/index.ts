@@ -135,7 +135,16 @@ export type PublicSiteElementKind =
   | "tree"
   | "plant"
   | "gate"
-  | "outdoor-light";
+  | "outdoor-light"
+  | "column"
+  | "beam"
+  | "slab"
+  | "roof"
+  | "duct"
+  | "balcony"
+  | "boundary"
+  | "stair"
+  | "lift";
 
 export interface PublicSiteElement {
   id: string;
@@ -148,6 +157,8 @@ export interface PublicSiteElement {
   height: number;
   rotation: number;
   color: string;
+  /** Structural primitives may preserve a source-backed circular envelope. */
+  shape?: "box" | "cylinder";
 }
 
 export interface PublicWalkthroughGraph {
