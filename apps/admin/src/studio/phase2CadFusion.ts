@@ -259,8 +259,11 @@ function semanticEvidenceForFloor(
   return result;
 }
 
-function sourceKey(value: Pick<OpeningSuggestion, "sourceNodeName" | "sourceOccurrence">) {
-  return `${value.sourceNodeName}\u0000${value.sourceOccurrence}`;
+function sourceKey(value: {
+  sourceNodeName?: string;
+  sourceOccurrence?: number;
+}) {
+  return `${value.sourceNodeName ?? ""}\u0000${value.sourceOccurrence ?? 0}`;
 }
 
 function refinePreparedOpenings(
