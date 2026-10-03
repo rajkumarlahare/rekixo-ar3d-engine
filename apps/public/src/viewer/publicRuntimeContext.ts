@@ -4,12 +4,14 @@ type StudioSiteElement = {
   id?: unknown;
   kind?: unknown;
   x?: unknown;
+  y?: unknown;
   z?: unknown;
   width?: unknown;
   depth?: unknown;
   height?: unknown;
   rotation?: unknown;
   color?: unknown;
+  shape?: unknown;
   reviewed?: unknown;
 };
 
@@ -29,6 +31,15 @@ const SITE_KINDS = new Set<PublicSiteElement["kind"]>([
   "plant",
   "gate",
   "outdoor-light",
+  "column",
+  "beam",
+  "slab",
+  "roof",
+  "duct",
+  "balcony",
+  "boundary",
+  "stair",
+  "lift",
 ]);
 
 let runtimeSiteElements: PublicSiteElement[] = [];
@@ -65,6 +76,7 @@ function transformFor(scene: StudioScene) {
       dx * sine + dz * cosine,
     ] as const;
   };
+  const pointY = (y: number) => (y - ty) / scale;
   const rotation = (degrees: number) => {
     const tangentX = Math.cos((degrees * Math.PI) / 180);
     const tangentZ = -Math.sin((degrees * Math.PI) / 180);
@@ -75,8 +87,8 @@ function transformFor(scene: StudioScene) {
 
   return {
     scale,
-    groundY: (0 - ty) / scale,
     point,
+    pointY,
     rotation,
   };
 }
@@ -112,7 +124,9 @@ export function derivePublicSiteElementsFromStudio(
       !finite(raw.height) ||
       raw.height <= 0 ||
       !finite(raw.rotation) ||
-      !color(raw.color)
+      !color(raw.color) ||
+      (raw.y !== undefined && !finite(raw.y)) ||
+      (raw.shape !== undefined && raw.shape !== "box" && raw.shape !== "cylinder")
     )
       continue;
 
@@ -121,13 +135,16 @@ export function derivePublicSiteElementsFromStudio(
       id: raw.id,
       kind: raw.kind as PublicSiteElement["kind"],
       x,
-      y: spatial.groundY,
+      y: spatial.pointY(finite(raw.y) ? raw.y : 0),
       z,
       width: raw.width / spatial.scale,
       depth: raw.depth / spatial.scale,
       height: raw.height / spatial.scale,
       rotation: spatial.rotation(raw.rotation),
       color: raw.color.toLowerCase(),
+      ...(raw.shape === "box" || raw.shape === "cylinder"
+        ? { shape: raw.shape }
+        : {}),
     });
     ids.add(raw.id);
   }
