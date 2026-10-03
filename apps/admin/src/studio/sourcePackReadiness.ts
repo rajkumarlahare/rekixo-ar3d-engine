@@ -99,13 +99,14 @@ export function evaluateSourcePackReadiness(
       "Attach an FBX/GLB model or a DWG/DXF plan before automatic building.",
     );
   } else if (!modelRole.present) {
-    if (cad.files.length !== 1)
-      blockingIssues.push(
-        "Model-less AutoBuild needs exactly one DWG/DXF source. Keep additional CAD drawings as a later reviewed floor/source role instead of guessing between them.",
+    if (cad.files.length > 1)
+      reviewIssues.push(
+        `${cad.files.length} CAD floor sources are attached. Model-less AutoBuild will stack them only when each source has one unique explicit floor identity and compatible building footprint; ambiguous or duplicate floor roles fail closed.`,
       );
-    reviewIssues.push(
-      "No 3D model is attached. Rekixo can build a model-less parametric draft only when one CAD source resolves to reliable metre wall geometry; generated walls/openings remain reviewable before publication.",
-    );
+    else
+      reviewIssues.push(
+        "No 3D model is attached. Rekixo can build a parametric draft when the CAD source resolves to reliable metre wall geometry; generated walls/openings remain reviewable before publication.",
+      );
   } else {
     const selected = project.scene.modelId
       ? files.find((file) => file.id === project.scene.modelId)
