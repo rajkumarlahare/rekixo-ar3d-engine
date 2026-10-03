@@ -32,8 +32,7 @@ function engineRuntimeUrl(value: unknown) {
 }
 
 function assertProject(value: unknown) {
-  if (!isObject(value))
-    throw Error("Invalid project payload.");
+  if (!isObject(value)) throw Error("Invalid project payload.");
   if (
     !id(value.id) ||
     !slug(value.slug) ||
@@ -48,8 +47,7 @@ function assertProject(value: unknown) {
 }
 
 function assertModel(value: unknown) {
-  if (!isObject(value))
-    throw Error("Invalid model payload.");
+  if (!isObject(value)) throw Error("Invalid model payload.");
   if (
     !id(value.id) ||
     !id(value.projectId) ||
@@ -69,8 +67,7 @@ function assertModel(value: unknown) {
 }
 
 function assertScene(value: unknown) {
-  if (!isObject(value))
-    throw Error("Invalid scene payload.");
+  if (!isObject(value)) throw Error("Invalid scene payload.");
   if (
     !id(value.id) ||
     !id(value.projectId) ||
@@ -93,8 +90,7 @@ function assertScene(value: unknown) {
 }
 
 function assertCamera(value: unknown) {
-  if (!isObject(value))
-    throw Error("Invalid camera payload.");
+  if (!isObject(value)) throw Error("Invalid camera payload.");
   const vector = (item: unknown) =>
     Array.isArray(item) &&
     item.length === 3 &&
@@ -121,9 +117,7 @@ function assertWalkthrough(value: unknown) {
     !Array.isArray(value.rooms) ||
     value.rooms.length > 25000 ||
     !Array.isArray(value.doors) ||
-    value.doors.length > 50000 ||
-    (value.siteElements !== undefined &&
-      (!Array.isArray(value.siteElements) || value.siteElements.length > 5000))
+    value.doors.length > 50000
   )
     throw Error("Invalid walkthrough graph.");
 
@@ -162,8 +156,7 @@ function assertWalkthrough(value: unknown) {
       !Array.isArray(door.roomIds) ||
       door.roomIds.length !== 2 ||
       door.roomIds.some(
-        (roomId) =>
-          !id(roomId) || !roomIds.has(String(roomId)),
+        (roomId) => !id(roomId) || !roomIds.has(String(roomId)),
       ) ||
       door.roomIds[0] === door.roomIds[1] ||
       !finiteNumber(door.x) ||
@@ -179,9 +172,13 @@ function assertWalkthrough(value: unknown) {
       throw Error("Invalid walkthrough door.");
     doorIds.add(String(door.id));
   }
+}
 
-  const siteIds = new Set<string>();
-  for (const site of value.siteElements ?? []) {
+function assertSiteElements(value: unknown) {
+  if (!Array.isArray(value) || value.length > 5000)
+    throw Error("Invalid public site elements.");
+  const ids = new Set<string>();
+  for (const site of value) {
     if (
       !isObject(site) ||
       !id(site.id) ||
@@ -210,10 +207,10 @@ function assertWalkthrough(value: unknown) {
       Number(site.height) > 100 ||
       !finiteNumber(site.rotation) ||
       !color(site.color) ||
-      siteIds.has(String(site.id))
+      ids.has(String(site.id))
     )
       throw Error("Invalid public site element.");
-    siteIds.add(String(site.id));
+    ids.add(String(site.id));
   }
 }
 
@@ -230,6 +227,7 @@ export function assertPublic3DExperiencePayload(value: unknown): void {
   if (value.camera !== undefined) assertCamera(value.camera);
   if (value.model !== undefined) assertModel(value.model);
   if (value.walkthrough !== undefined) assertWalkthrough(value.walkthrough);
+  if (value.siteElements !== undefined) assertSiteElements(value.siteElements);
   if (
     value.mediaBaseUrl !== undefined &&
     (typeof value.mediaBaseUrl !== "string" ||
@@ -256,8 +254,7 @@ export function assertAdminProjectsPayload(value: unknown): void {
 }
 
 export function assertAdminStatusPayload(value: unknown): void {
-  if (!isObject(value))
-    throw Error("Invalid Engine status response.");
+  if (!isObject(value)) throw Error("Invalid Engine status response.");
   assertProject(value.project);
   if (!Array.isArray(value.scenes) || !Array.isArray(value.models))
     throw Error("Invalid Engine status collections.");
