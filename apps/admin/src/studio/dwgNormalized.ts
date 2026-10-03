@@ -12,10 +12,12 @@ export type DwgPlanKind =
   | "stair"
   | "lift"
   | "column"
+  | "beam"
   | "slab"
   | "roof"
   | "duct"
   | "balcony"
+  | "boundary"
   | "gate"
   | "room"
   | "other";
@@ -126,10 +128,12 @@ const PLAN_KINDS = new Set<DwgPlanKind>([
   "stair",
   "lift",
   "column",
+  "beam",
   "slab",
   "roof",
   "duct",
   "balcony",
+  "boundary",
   "gate",
   "room",
   "other",
