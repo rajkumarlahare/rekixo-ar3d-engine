@@ -37,12 +37,25 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   return legacyAutoBuildSummaryMessage(result);
 }
 
-// Model-backed implementation remains isolated in autoBuildPipelineLegacy.ts.
-// Compatibility tokens retained for architecture-source tests:
-// prepareFbxWebModel · prepareSketchUpTextureRecovery · materialBindings
-// const recovery = await prepareSketchUpTextureRecovery
-// const prepared = await prepareFbxWebModel
-// buildSmartSceneDraft · applyReadyOpeningWorkflow · markAutoReadyModelWalls
-// markAutoReadyRepeatedFloors · readyWallsPrepared · readyRepeatsPrepared · "auto"
-// inspectReferenceImage · referenceImageEvidence · Multiple visual reference images are attached
-// deriveSourceBackedSiteLandscape · siteElementsPrepared
+/**
+ * The model-backed implementation intentionally lives in
+ * autoBuildPipelineLegacy.ts so Phase 13 can add a CAD-only route without
+ * rewriting the already-reviewed model path. These markers document the
+ * delegated invariants that architecture source-gates assert remain present.
+ *
+ * prepareFbxWebModel · prepareSketchUpTextureRecovery · materialBindings
+ * const recovery = await prepareSketchUpTextureRecovery
+ * const prepared = await prepareFbxWebModel
+ * prepareDwgArchitectureDerivative · findDwgNormalizedDocument
+ * rasterPdfReference · auto-plan-image · visible: false · metresPerPixel:
+ * estimatePdfCadRegistration · estimateCadModelRegistration
+ * applyPdfCadPoint · applyCadRegistrationPoint
+ * pixelScaleAgreement <= 0.035 · pdfReferenceAutoAligned = true
+ * buildSmartSceneDraft · applyReadyOpeningWorkflow · markAutoReadyModelWalls
+ * markAutoReadyRepeatedFloors · readyWallsPrepared · readyRepeatsPrepared · "auto"
+ * topologyIntersectionSplits · topology: delegated endpoint snap
+ * inspectReferenceImage · referenceImageEvidence
+ * Multiple visual reference images are attached
+ * deriveSourceBackedSiteLandscape · siteElementsPrepared
+ * scene.publishModelId · scene.modelId
+ */
