@@ -126,11 +126,40 @@ export interface PublicWalkthroughDoor {
   rotationY: number;
 }
 
+export type PublicSiteElementKind =
+  | "garden"
+  | "lawn"
+  | "path"
+  | "road"
+  | "parking"
+  | "tree"
+  | "plant"
+  | "gate"
+  | "outdoor-light";
+
+export interface PublicSiteElement {
+  id: string;
+  kind: PublicSiteElementKind;
+  x: number;
+  y: number;
+  z: number;
+  width: number;
+  depth: number;
+  height: number;
+  rotation: number;
+  color: string;
+}
+
+/**
+ * Runtime spatial data used by the public viewer. Site elements are additive so
+ * older releases with rooms/doors only remain valid.
+ */
 export interface PublicWalkthroughGraph {
   version: 1;
   metresPerUnit: number;
   rooms: PublicWalkthroughRoom[];
   doors: PublicWalkthroughDoor[];
+  siteElements?: PublicSiteElement[];
 }
 
 export interface Public3DExperience {
@@ -159,7 +188,6 @@ export interface Admin3DProjectStatus {
     activeModelObjectAvailable: boolean;
   };
 }
-
 
 export interface PlatformEngineProjectContract {
   contractVersion: typeof PLATFORM_ENGINE_CONTRACT_VERSION;
