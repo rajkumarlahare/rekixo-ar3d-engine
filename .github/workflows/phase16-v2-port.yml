@@ -62,8 +62,23 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Verify
-        run: npm test
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Check bundle budgets
+        run: npm run test:bundles
+
+      - name: Check maintainability budgets
+        run: npm run test:maintainability
+
+      - name: Run node tests
+        run: node --test tests/*.test.mjs
+
+      - name: Verify fresh migrations
+        run: npm run test:migrations
 
       - name: Validate Admin Worker bundle and Wrangler config
         run: >-
