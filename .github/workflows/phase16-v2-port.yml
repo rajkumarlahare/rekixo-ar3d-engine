@@ -74,8 +74,26 @@ jobs:
       - name: Check maintainability budgets
         run: npm run test:maintainability
 
-      - name: Run node tests
-        run: node --test tests/*.test.mjs
+      - name: Run Phase 16 focused test
+        run: node --test tests/phase16-architecture-authoring.test.mjs
+
+      - name: Run node regression tests with captured log
+        id: node-regressions
+        shell: bash
+        run: |
+          set +e
+          node --test tests/*.test.mjs 2>&1 | tee phase16-node-tests.log
+          status=${PIPESTATUS[0]}
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      - name: Upload node test diagnostics
+        if: failure() && steps.node-regressions.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase16-node-test-diagnostics
+          path: phase16-node-tests.log
+          retention-days: 1
 
       - name: Verify fresh migrations
         run: npm run test:migrations
