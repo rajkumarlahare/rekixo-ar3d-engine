@@ -16,7 +16,19 @@ const MAX_DIMENSIONS = 20_000;
 const MAX_INSERTS = 30_000;
 const MAX_OBJECTS = 40_000;
 const LIBREDWG_VERSION = process.env.LIBREDWG_VERSION || "0.14";
-const ADAPTER_VERSION = "rekixo-dwg-adapter-v1";
+const ADAPTER_VERSION = "rekixo-dwg-adapter-v2";
+const FOOTPRINT_KINDS = new Set([
+  "stair",
+  "lift",
+  "column",
+  "beam",
+  "slab",
+  "roof",
+  "duct",
+  "balcony",
+  "boundary",
+  "gate",
+]);
 
 const UNITS = {
   1: { name: "inch", metres: 0.0254 },
@@ -168,8 +180,12 @@ function normalizedWords(value) {
 function semanticKind(...values) {
   const text = normalizedWords(values.join(" "));
   if (!text) return "other";
-  if (/\b(door|doors|gate|resistant door|entry)\b/.test(text)) return "door";
+  if (/\b(site boundary|plot boundary|property boundary|property line|compound wall|boundary|perimeter)\b/.test(text))
+    return "boundary";
+  if (/\b(gate|main gate|entry gate|entrance gate)\b/.test(text)) return "gate";
+  if (/\b(door|doors|resistant door|entry)\b/.test(text)) return "door";
   if (/\b(window|windows|glazing|fenestration)\b/.test(text)) return "window";
+  if (/\b(beam|beams|girder|girders)\b/.test(text)) return "beam";
   if (/\b(wall|walls|partition|masonry|brick)\b/.test(text)) return "wall";
   if (/\b(stair|stairs|staircase|floorlanding|landing)\b/.test(text))
     return "stair";
@@ -308,6 +324,91 @@ function normalizeDxf(text, source) {
     layers.set(safeLayer, current);
   };
 
+  const pushObject = (
+    kind,
+    layer,
+    sourceEntity,
+    confidence,
+    point,
+    bounds,
+  ) => {
+    if (objects.length >= MAX_OBJECTS) {
+      truncated = true;
+      return;
+    }
+    objects.push({
+      id: `object-${objects.length + 1}`,
+      layer: cleanText(layer || "0", 260) || "0",
+      sourceEntity: cleanText(sourceEntity, 120) || "UNKNOWN",
+      kind,
+      confidence,
+      ...(point ? { point } : {}),
+      ...(bounds ? { bounds } : {}),
+    });
+  };
+
+  const pushFootprintObject = (kind, layer, sourceEntity, confidence, rawPoints) => {
+    if (!scale || !FOOTPRINT_KINDS.has(kind) || rawPoints.length < 3) return;
+    const metrePoints = rawPoints
+      .map((point) => metresPoint(point?.[0], point?.[1], scale))
+      .filter(Boolean);
+    if (metrePoints.length < 3) return;
+    const bounds = calculateBounds(metrePoints);
+    if (!bounds) return;
+    const width = bounds.max[0] - bounds.min[0];
+    const depth = bounds.max[1] - bounds.min[1];
+    if (width < 0.02 || depth < 0.02) return;
+    boundsPoints.push(...metrePoints);
+    pushObject(
+      kind,
+      layer,
+      sourceEntity,
+      confidence,
+      [
+        Number(((bounds.min[0] + bounds.max[0]) / 2).toFixed(6)),
+        Number(((bounds.min[1] + bounds.max[1]) / 2).toFixed(6)),
+      ],
+      bounds,
+    );
+  };
+
+  const pushLinearFootprintObject = (
+    kind,
+    layer,
+    sourceEntity,
+    confidence,
+    start,
+    end,
+    widthM,
+  ) => {
+    if (!scale || !FOOTPRINT_KINDS.has(kind) || !(widthM > 0)) return;
+    const a = metresPoint(start?.[0], start?.[1], scale);
+    const b = metresPoint(end?.[0], end?.[1], scale);
+    if (!a || !b) return;
+    const dx = b[0] - a[0];
+    const dz = b[1] - a[1];
+    const length = Math.hypot(dx, dz);
+    if (length < 0.02) return;
+    const nx = (-dz / length) * widthM / 2;
+    const nz = (dx / length) * widthM / 2;
+    const corners = [
+      [a[0] + nx, a[1] + nz],
+      [a[0] - nx, a[1] - nz],
+      [b[0] - nx, b[1] - nz],
+      [b[0] + nx, b[1] + nz],
+    ];
+    const bounds = calculateBounds(corners);
+    boundsPoints.push(...corners);
+    pushObject(
+      kind,
+      layer,
+      sourceEntity,
+      confidence,
+      [Number(((a[0] + b[0]) / 2).toFixed(6)), Number(((a[1] + b[1]) / 2).toFixed(6))],
+      bounds,
+    );
+  };
+
   const pushSegment = (kind, layer, start, end, sourceEntity, confidence, widthM) => {
     if (!scale || !["wall", "door", "window"].includes(kind)) return;
     if (segments.length >= MAX_SEGMENTS) {
@@ -339,15 +440,11 @@ function normalizeDxf(text, source) {
     rememberLayer(layer, kind);
 
     if (entity.type === "LINE") {
-      pushSegment(
-        kind,
-        layer,
-        [firstNumber(entity.rows, 10), firstNumber(entity.rows, 20)],
-        [firstNumber(entity.rows, 11), firstNumber(entity.rows, 21)],
-        entity.type,
-        conf,
-        widthMetres(entity.rows, scale),
-      );
+      const start = [firstNumber(entity.rows, 10), firstNumber(entity.rows, 20)];
+      const end = [firstNumber(entity.rows, 11), firstNumber(entity.rows, 21)];
+      const widthM = widthMetres(entity.rows, scale);
+      pushSegment(kind, layer, start, end, entity.type, conf, widthM);
+      pushLinearFootprintObject(kind, layer, entity.type, conf, start, end, widthM);
       continue;
     }
 
@@ -365,7 +462,8 @@ function normalizeDxf(text, source) {
           widthM,
         );
       const flags = firstNumber(entity.rows, 70) ?? 0;
-      if ((flags & 1) === 1 && points.length > 2)
+      const closed = (flags & 1) === 1;
+      if (closed && points.length > 2) {
         pushSegment(
           kind,
           layer,
@@ -375,6 +473,8 @@ function normalizeDxf(text, source) {
           conf,
           widthM,
         );
+        pushFootprintObject(kind, layer, entity.type, conf, points);
+      }
       continue;
     }
 
@@ -406,7 +506,8 @@ function normalizeDxf(text, source) {
           widthM,
         );
       const flags = firstNumber(entity.rows, 70) ?? 0;
-      if ((flags & 1) === 1 && polylinePoints.length > 2)
+      const closed = (flags & 1) === 1;
+      if (closed && polylinePoints.length > 2) {
         pushSegment(
           kind,
           layer,
@@ -416,7 +517,28 @@ function normalizeDxf(text, source) {
           conf,
           widthM,
         );
+        pushFootprintObject(kind, layer, entity.type, conf, polylinePoints);
+      }
       index = Math.max(index, next - 1);
+      continue;
+    }
+
+    if (entity.type === "CIRCLE" && scale && FOOTPRINT_KINDS.has(kind)) {
+      const center = metresPoint(
+        firstNumber(entity.rows, 10),
+        firstNumber(entity.rows, 20),
+        scale,
+      );
+      const rawRadius = firstNumber(entity.rows, 40);
+      const radius = Number.isFinite(rawRadius) ? rawRadius * scale : undefined;
+      if (center && radius > 0.01 && radius <= 100) {
+        const bounds = {
+          min: [Number((center[0] - radius).toFixed(6)), Number((center[1] - radius).toFixed(6))],
+          max: [Number((center[0] + radius).toFixed(6)), Number((center[1] + radius).toFixed(6))],
+        };
+        boundsPoints.push(bounds.min, bounds.max);
+        pushObject(kind, layer, entity.type, conf, center, bounds);
+      }
       continue;
     }
 
@@ -550,14 +672,7 @@ function normalizeDxf(text, source) {
         );
       }
 
-      objects.push({
-        id: `object-${objects.length + 1}`,
-        layer: cleanText(layer, 260) || "0",
-        sourceEntity: cleanText(entity.type, 120),
-        kind: entityKind,
-        confidence: conf,
-        ...(at ? { point: at } : {}),
-      });
+      pushObject(entityKind, layer, entity.type, conf, at, undefined);
     } else if (objects.length >= MAX_OBJECTS) {
       truncated = true;
     }
