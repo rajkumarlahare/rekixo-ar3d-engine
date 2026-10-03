@@ -1,5 +1,9 @@
 import * as T from "three";
 import type { SiteElement } from "./domain";
+import {
+  addStructuralElementVisual,
+  isStructuralVisual,
+} from "./structuralElementVisual";
 
 function material(color: string, roughness = 0.78, metalness = 0) {
   return new T.MeshStandardMaterial({
@@ -171,6 +175,12 @@ export function addSiteElementVisual(
   root: T.Object3D,
   item: SiteElement,
 ) {
+  if (isStructuralVisual(item)) {
+    root.name = "Structural · " + item.kind;
+    addStructuralElementVisual(root, item);
+    return;
+  }
+
   root.name = "Site · " + item.kind;
   switch (item.kind) {
     case "garden":
