@@ -126,6 +126,30 @@ export interface PublicWalkthroughDoor {
   rotationY: number;
 }
 
+export type PublicSiteElementKind =
+  | "garden"
+  | "lawn"
+  | "path"
+  | "road"
+  | "parking"
+  | "tree"
+  | "plant"
+  | "gate"
+  | "outdoor-light";
+
+export interface PublicSiteElement {
+  id: string;
+  kind: PublicSiteElementKind;
+  x: number;
+  y: number;
+  z: number;
+  width: number;
+  depth: number;
+  height: number;
+  rotation: number;
+  color: string;
+}
+
 export interface PublicWalkthroughGraph {
   version: 1;
   metresPerUnit: number;
@@ -141,6 +165,7 @@ export interface Public3DExperience {
   model?: Model3D;
   mediaBaseUrl?: string;
   walkthrough?: PublicWalkthroughGraph;
+  siteElements?: PublicSiteElement[];
 }
 
 export interface Admin3DProjectStatus {
@@ -159,7 +184,6 @@ export interface Admin3DProjectStatus {
     activeModelObjectAvailable: boolean;
   };
 }
-
 
 export interface PlatformEngineProjectContract {
   contractVersion: typeof PLATFORM_ENGINE_CONTRACT_VERSION;

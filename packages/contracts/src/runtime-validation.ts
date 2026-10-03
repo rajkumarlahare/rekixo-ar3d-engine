@@ -14,6 +14,9 @@ const slug = (value: unknown) =>
 const finiteNumber = (value: unknown) =>
   typeof value === "number" && Number.isFinite(value);
 
+const color = (value: unknown) =>
+  typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
+
 function engineRuntimeUrl(value: unknown) {
   if (typeof value !== "string" || !value.trim()) return false;
   if (value.startsWith("/3Dprojects/")) return true;
@@ -29,8 +32,7 @@ function engineRuntimeUrl(value: unknown) {
 }
 
 function assertProject(value: unknown) {
-  if (!isObject(value))
-    throw Error("Invalid project payload.");
+  if (!isObject(value)) throw Error("Invalid project payload.");
   if (
     !id(value.id) ||
     !slug(value.slug) ||
@@ -45,8 +47,7 @@ function assertProject(value: unknown) {
 }
 
 function assertModel(value: unknown) {
-  if (!isObject(value))
-    throw Error("Invalid model payload.");
+  if (!isObject(value)) throw Error("Invalid model payload.");
   if (
     !id(value.id) ||
     !id(value.projectId) ||
@@ -66,8 +67,7 @@ function assertModel(value: unknown) {
 }
 
 function assertScene(value: unknown) {
-  if (!isObject(value))
-    throw Error("Invalid scene payload.");
+  if (!isObject(value)) throw Error("Invalid scene payload.");
   if (
     !id(value.id) ||
     !id(value.projectId) ||
@@ -90,8 +90,7 @@ function assertScene(value: unknown) {
 }
 
 function assertCamera(value: unknown) {
-  if (!isObject(value))
-    throw Error("Invalid camera payload.");
+  if (!isObject(value)) throw Error("Invalid camera payload.");
   const vector = (item: unknown) =>
     Array.isArray(item) &&
     item.length === 3 &&
@@ -157,8 +156,7 @@ function assertWalkthrough(value: unknown) {
       !Array.isArray(door.roomIds) ||
       door.roomIds.length !== 2 ||
       door.roomIds.some(
-        (roomId) =>
-          !id(roomId) || !roomIds.has(String(roomId)),
+        (roomId) => !id(roomId) || !roomIds.has(String(roomId)),
       ) ||
       door.roomIds[0] === door.roomIds[1] ||
       !finiteNumber(door.x) ||
@@ -176,6 +174,46 @@ function assertWalkthrough(value: unknown) {
   }
 }
 
+function assertSiteElements(value: unknown) {
+  if (!Array.isArray(value) || value.length > 5000)
+    throw Error("Invalid public site elements.");
+  const ids = new Set<string>();
+  for (const site of value) {
+    if (
+      !isObject(site) ||
+      !id(site.id) ||
+      ![
+        "garden",
+        "lawn",
+        "path",
+        "road",
+        "parking",
+        "tree",
+        "plant",
+        "gate",
+        "outdoor-light",
+      ].includes(String(site.kind)) ||
+      !finiteNumber(site.x) ||
+      !finiteNumber(site.y) ||
+      !finiteNumber(site.z) ||
+      !finiteNumber(site.width) ||
+      Number(site.width) <= 0 ||
+      Number(site.width) > 1000 ||
+      !finiteNumber(site.depth) ||
+      Number(site.depth) <= 0 ||
+      Number(site.depth) > 1000 ||
+      !finiteNumber(site.height) ||
+      Number(site.height) <= 0 ||
+      Number(site.height) > 100 ||
+      !finiteNumber(site.rotation) ||
+      !color(site.color) ||
+      ids.has(String(site.id))
+    )
+      throw Error("Invalid public site element.");
+    ids.add(String(site.id));
+  }
+}
+
 export function assertPublic3DExperiencePayload(value: unknown): void {
   if (!isObject(value))
     throw Error("3D experience response is not an object.");
@@ -189,6 +227,7 @@ export function assertPublic3DExperiencePayload(value: unknown): void {
   if (value.camera !== undefined) assertCamera(value.camera);
   if (value.model !== undefined) assertModel(value.model);
   if (value.walkthrough !== undefined) assertWalkthrough(value.walkthrough);
+  if (value.siteElements !== undefined) assertSiteElements(value.siteElements);
   if (
     value.mediaBaseUrl !== undefined &&
     (typeof value.mediaBaseUrl !== "string" ||
@@ -215,8 +254,7 @@ export function assertAdminProjectsPayload(value: unknown): void {
 }
 
 export function assertAdminStatusPayload(value: unknown): void {
-  if (!isObject(value))
-    throw Error("Invalid Engine status response.");
+  if (!isObject(value)) throw Error("Invalid Engine status response.");
   assertProject(value.project);
   if (!Array.isArray(value.scenes) || !Array.isArray(value.models))
     throw Error("Invalid Engine status collections.");
