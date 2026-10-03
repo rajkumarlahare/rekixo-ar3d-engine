@@ -1,4 +1,5 @@
 import type { Asset, Project } from "./domain";
+import { autoBuildSourceRole } from "./autoBuildSourcePlan";
 
 export const GOLDEN_SOURCE_ROLES = [
   "model",
@@ -54,19 +55,8 @@ export interface GoldenSourceVerificationReport {
 
 const SHA256 = /^[a-f0-9]{64}$/i;
 
-function extension(name: string) {
-  return name.toLowerCase().split(".").pop() ?? "";
-}
-
-export function assetMatchesGoldenRole(asset: Pick<Asset, "name">, role: GoldenSourceRole) {
-  const ext = extension(asset.name);
-  if (role === "model") return ext === "fbx" || ext === "glb";
-  if (role === "cad") return ext === "dwg" || ext === "dxf";
-  if (role === "sketchup") return ext === "skp" || ext === "skb";
-  if (role === "drawing") return ext === "pdf";
-  if (role === "visual")
-    return ["png", "jpg", "jpeg", "webp", "tif", "tiff", "bmp"].includes(ext);
-  return ext === "drs" || ext === "json";
+export function assetMatchesGoldenRole(asset: Asset, role: GoldenSourceRole) {
+  return autoBuildSourceRole(asset) === role;
 }
 
 function normalizeExpectation(expectation: GoldenSourceExpectation) {
