@@ -27,6 +27,18 @@ import {
   buildAutoBuildExecutionReport,
   type AutoBuildExecutionReport,
 } from "./autoBuildReport";
+import {
+  buildNormalizedSceneFingerprint,
+  type NormalizedSceneFingerprint,
+} from "./sceneReplayFingerprint";
+import {
+  validateWholeSceneGeometry,
+  type SceneGeometryIntegrityReport,
+} from "./sceneGeometryIntegrity";
+import {
+  buildActionableReviewQueue,
+  type ActionableReviewQueue,
+} from "./actionableReviewQueue";
 
 export interface AutoBuildPipelineOptions
   extends LegacyAutoBuildPipelineOptions {
@@ -49,6 +61,9 @@ export interface AutoBuildPipelineResult
   phase2CadFusion: Phase2CadFusionSummary;
   structuredEvidence: AutoBuildStructuredEvidenceSummary;
   certificationReport: AutoBuildExecutionReport;
+  sceneFingerprint: NormalizedSceneFingerprint;
+  geometryIntegrity: SceneGeometryIntegrityReport;
+  reviewQueue: ActionableReviewQueue;
 }
 
 function unique(values: readonly string[]) {
@@ -123,6 +138,16 @@ export async function runAutoBuildPipeline(
     issues,
     sourcePlanMode: sourcePlan.mode,
   });
+  const sceneFingerprint = await buildNormalizedSceneFingerprint(
+    structured.project,
+    reportFiles,
+  );
+  const geometryIntegrity = validateWholeSceneGeometry(structured.project);
+  const reviewQueue = buildActionableReviewQueue(
+    structured.project,
+    certificationReport,
+    geometryIntegrity,
+  );
 
   return {
     ...base,
@@ -131,6 +156,9 @@ export async function runAutoBuildPipeline(
     phase2CadFusion: phase2.summary,
     structuredEvidence,
     certificationReport,
+    sceneFingerprint,
+    geometryIntegrity,
+    reviewQueue,
     issues,
   };
 }
@@ -157,8 +185,10 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
     : "";
   const certification = result.certificationReport;
   const certificationText = ` · certification ${certification.checkCoveragePercent}% (${certification.counts.blocked} blocked · ${certification.counts.needsReview} review)`;
+  const integrityText = ` · geometry ${result.geometryIntegrity.counts.blocker} blocked · ${result.geometryIntegrity.counts.review} review`;
+  const replayText = ` · scene ${result.sceneFingerprint.hash.slice(0, 12)}…`;
 
-  return `${base}${phase2Text}${structuralText}${structuredText}${certificationText}.`;
+  return `${base}${phase2Text}${structuralText}${structuredText}${certificationText}${integrityText}${replayText}.`;
 }
 
 /**

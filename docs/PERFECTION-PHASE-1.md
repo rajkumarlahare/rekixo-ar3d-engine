@@ -1,6 +1,6 @@
 # Rekixo AR3D Perfection Phase 1 — Golden Six-File AutoBuild Certification
 
-Status: P1.1/P1.2 MERGED; P1.3/P1.4 PROTECTED CERTIFICATION HARNESS IMPLEMENTED
+Status: P1.1–P1.7 IMPLEMENTED; REAL PRIVATE SOURCE CERTIFICATION STILL REQUIRES A PROTECTED RUN
 
 This phase is intentionally separate from the older numbered implementation phases in the repository. Its purpose is to certify the current generic engine against a real six-role customer source pack before larger visual/editor features are added.
 
@@ -147,19 +147,66 @@ npm run test:e2e:golden
 
 The workflow verifies the ZIP checksum, builds the pinned GNU LibreDWG container, runs real DWG certification, runs the protected browser E2E and uploads only a redacted certification summary. Source files, private manifest fingerprints and full certificate are kept under `.private/`, which is ignored by Git.
 
+## P1.5 — Deterministic replay / normalized scene fingerprint
+
+Implemented in `apps/admin/src/studio/sceneReplayFingerprint.ts` and attached to every shared AutoBuild result.
+
+`buildNormalizedSceneFingerprint` creates a project-neutral `scene-v1` canonical scene and SHA-256 fingerprint. Normalization removes volatile project/entity IDs, timestamps, cloud revisions and array insertion order while preserving the semantic output that matters: floor/room/wall/opening geometry, room relationships, furniture, site/structural envelopes, model/reference bindings, material/appearance state and model semantic tags.
+
+Asset bindings use source SHA-256/byte-size identity when the source bytes are available. Numeric geometry is normalized to bounded precision before hashing.
+
+`certifyDeterministicReplay` is deliberately stricter than merely generating a hash:
+
+- one run => `pending`;
+- two or more independently produced identical normalized hashes => `passed`;
+- any normalized hash mismatch => `blocked`.
+
+Therefore the presence of a scene hash must never be described as proof that the real private source pack is deterministic. Real-pack deterministic replay is proven only after independent protected AutoBuild runs are compared.
+
+## P1.6 — Whole-scene geometry integrity validator
+
+Implemented in `apps/admin/src/studio/sceneGeometryIntegrity.ts` and executed after every shared AutoBuild as well as during Preview & Release readiness.
+
+The validator keeps the existing strict domain validation and adds cross-entity checks for contradictions that cannot be detected by per-object range validation alone, including:
+
+- floor elevation collisions;
+- repeated-floor cycles;
+- duplicate or heavily overlapping room geometry;
+- duplicate wall segments;
+- wall-to-room boundary disagreement;
+- doors/windows with no plausible same-floor host wall;
+- openings wider than their host wall;
+- opening room bindings that disagree with the host wall;
+- duplicate opening geometry.
+
+Human-reviewed contradictory geometry becomes a publish blocker. Ambiguous automatic/unreviewed geometry remains an explicit review item where it can safely stay non-blocking.
+
+This validator is geometric integrity, not structural engineering, building-code, fire, seismic, wind or fabrication certification.
+
+## P1.7 — Actionable review queue + publish gate integration
+
+Implemented in `apps/admin/src/studio/actionableReviewQueue.ts`, `readiness.ts` and `StudioPublish.tsx`.
+
+The queue converts machine findings into operator work with:
+
+- blocker/review severity;
+- category and affected entity/floor where available;
+- a concrete problem description;
+- a concrete next action instead of a generic warning.
+
+The AutoBuild result combines certification findings, geometry findings and unresolved room/wall/opening/site/floor review state. Preview & Release recomputes whole-scene geometry from the current editable project so a later manual edit cannot bypass the gate by relying on a stale AutoBuild result.
+
+Critical geometry contradictions are fail-closed: `readiness.publishable` remains false while any blocker exists, and the immutable publish button stays disabled. Non-critical draft evidence stays visible as review work instead of being silently promoted to human-reviewed truth.
+
+The queue is capped for UI responsiveness; resolving visible work and rerunning/reopening review refreshes it.
+
 ## Current proof boundary
 
-P1.3/P1.4 being implemented means the engine now has a repeatable protected path for the real source pack. It does **not** mean the real production DWG/six-file pack has passed until that private workflow (or an equivalent trusted local run) completes successfully.
+P1.1–P1.7 code now provides the complete Phase 1 certification, determinism, geometry-integrity and operator-gating foundation. This still does **not** mean the owner's real production DWG/six-file pack has passed every proof step.
 
-This distinction is mandatory: harness-ready and source-certified are different states.
+The private pack is source-certified only when the protected workflow (or equivalent trusted local run) completes with the exact source bytes. Deterministic replay is certified only when two or more independent real AutoBuild runs produce the same normalized scene fingerprint. Harness-ready, fingerprint-generated and source/replay-certified are different states.
 
-## Remaining Phase 1 slices
-
-- P1.5: deterministic replay / normalized scene fingerprint;
-- P1.6: whole-scene geometry integrity validator;
-- P1.7: actionable review queue + publish gate integration.
-
-## Acceptance for P1.1–P1.4 code
+## Acceptance for Phase 1 code
 
 - generic manifest contract exists without customer hardcoding;
 - AutoBuild always returns a certification report;
@@ -169,4 +216,10 @@ This distinction is mandatory: harness-ready and source-certified are different 
 - protected browser E2E uses the six runtime files instead of synthetic substitutes;
 - normal public CI remains source-independent and does not need private customer assets;
 - private artifacts are ignored and are never uploaded as public build output;
-- normal typecheck/build/test gates remain the merge gate.
+- every AutoBuild emits a normalized semantic scene SHA-256 fingerprint;
+- replay certification requires at least two independent matching fingerprints;
+- every AutoBuild emits a whole-scene cross-entity geometry integrity report;
+- the operator receives an explicit actionable review queue;
+- critical geometry contradictions block immutable publication;
+- Preview & Release recomputes current-scene integrity instead of trusting stale automation state;
+- normal typecheck/build/test/browser gates remain the merge gate.
