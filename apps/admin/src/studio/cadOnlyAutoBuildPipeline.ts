@@ -107,52 +107,58 @@ export async function runCadOnlyAutoBuildPipeline(
   let workingFiles = [...files];
   const createdAssets: Asset[] = [];
   const issues: string[] = [];
-  const cadSources = workingFiles.filter((file) => /\.(?:dwg|dxf)$/i.test(file.name));
-  if (cadSources.length !== 1)
+  const cadSources = workingFiles.filter((file) =>
+    /\.(?:dwg|dxf)$/i.test(file.name),
+  );
+  if (!cadSources.length)
+    throw Error("Attach at least one DWG or DXF plan before model-less AutoBuild.");
+  if (cadSources.length > 30)
     throw Error(
-      cadSources.length
-        ? "Model-less AutoBuild needs exactly one DWG/DXF source so floor roles are never guessed."
-        : "Attach one DWG or DXF plan before model-less AutoBuild.",
+      "Model-less AutoBuild accepts at most 30 CAD floor sources in one project.",
     );
 
   let dwgProcessed = false;
-  let dwgDocument: DwgNormalizedDocument | undefined;
-  const cadSource = cadSources[0];
-  if (/\.dwg$/i.test(cadSource.name)) {
+  const dwgDocuments: DwgNormalizedDocument[] = [];
+  for (const cadSource of cadSources) {
+    if (!/\.dwg$/i.test(cadSource.name)) continue;
     const existing = await findDwgNormalizedDocument(workingFiles, cadSource);
     if (existing) {
-      dwgDocument = existing.document;
-    } else if (options.processDwgArchitecture) {
-      try {
-        const prepared = await prepareDwgArchitectureDerivative(
-          cadSource,
-          next.id,
-          options.processDwgArchitecture,
-        );
-        const equivalent = findEquivalentAsset(workingFiles, prepared.asset);
-        const derivative = equivalent ?? prepared.asset;
-        if (!equivalent) {
-          createdAssets.push(derivative);
-          workingFiles.push(derivative);
-          next = appendAsset(next, derivative);
-        }
-        dwgDocument = prepared.document;
-        dwgProcessed = true;
-      } catch (error) {
-        throw Error(
-          error instanceof Error
-            ? `DWG architecture processor: ${error.message}`
-            : "DWG architecture processor could not complete.",
-        );
-      }
-    } else {
+      dwgDocuments.push(existing.document);
+      continue;
+    }
+    if (!options.processDwgArchitecture)
       throw Error(
-        "DWG needs the controlled architecture processor before model-less geometry can be reconstructed.",
+        `DWG “${cadSource.name}” needs the controlled architecture processor before model-less geometry can be reconstructed.`,
+      );
+    try {
+      const prepared = await prepareDwgArchitectureDerivative(
+        cadSource,
+        next.id,
+        options.processDwgArchitecture,
+      );
+      const equivalent = findEquivalentAsset(workingFiles, prepared.asset);
+      const derivative = equivalent ?? prepared.asset;
+      if (!equivalent) {
+        createdAssets.push(derivative);
+        workingFiles.push(derivative);
+        next = appendAsset(next, derivative);
+      }
+      dwgDocuments.push(prepared.document);
+      dwgProcessed = true;
+    } catch (error) {
+      throw Error(
+        error instanceof Error
+          ? `DWG architecture processor (${cadSource.name}): ${error.message}`
+          : `DWG architecture processor could not complete “${cadSource.name}”.`,
       );
     }
   }
 
-  const analysis = await analyzeProjectFiles(workingFiles, undefined, [...audits]);
+  const analysis = await analyzeProjectFiles(
+    workingFiles,
+    undefined,
+    [...audits],
+  );
   const cadDraft = buildCadOnlySceneDraft(next, analysis);
   next = { ...next, scene: cadDraft.scene };
   issues.push(...cadDraft.issues);
@@ -177,12 +183,35 @@ export async function runCadOnlyAutoBuildPipeline(
 
   validateProject(next);
 
+  const dwgSegments = dwgDocuments.reduce(
+    (sum, document) => sum + document.segments.length,
+    0,
+  );
+  const dwgDimensions = dwgDocuments.reduce(
+    (sum, document) => sum + document.dimensions.length,
+    0,
+  );
+  const dwgObjects = dwgDocuments.reduce(
+    (sum, document) =>
+      sum + document.objects.length + document.inserts.length,
+    0,
+  );
+  const dwgFloorLabels = dwgDocuments.reduce(
+    (sum, document) => sum + document.floors.length,
+    0,
+  );
+  const openingReviewRemaining =
+    cadDraft.openingCount + cadDraft.unmatchedOpeningEvidence;
+
   return {
     project: next,
     assets: createdAssets,
     analysis,
     summary: {
-      selectedModel: "CAD-only parametric scene",
+      selectedModel:
+        cadDraft.floorCount > 1
+          ? `CAD-only parametric scene · ${cadDraft.floorCount} floors`
+          : "CAD-only parametric scene",
       webModelPrepared: false,
       sketchUpTexturesRecovered: 0,
       materialTexturesApplied: 0,
@@ -190,12 +219,10 @@ export async function runCadOnlyAutoBuildPipeline(
       resolvedExternalTextures: 0,
       unresolvedExternalTextures: 0,
       dwgProcessed,
-      dwgSegments: dwgDocument?.segments.length ?? 0,
-      dwgDimensions: dwgDocument?.dimensions.length ?? 0,
-      dwgObjects:
-        (dwgDocument?.objects.length ?? 0) +
-        (dwgDocument?.inserts.length ?? 0),
-      dwgFloorLabels: dwgDocument?.floors.length ?? 0,
+      dwgSegments,
+      dwgDimensions,
+      dwgObjects,
+      dwgFloorLabels,
       pdfPlanReferencesPrepared: 0,
       pdfSpatialLabels: 0,
       pdfEmbeddedImages: 0,
@@ -213,10 +240,10 @@ export async function runCadOnlyAutoBuildPipeline(
       readyWallsPrepared: readyBeforeMark + wallReview.prepared,
       readyRepeatsPrepared: repeatReview.prepared,
       readyOpeningsPrepared: 0,
-      openingReviewRemaining: cadDraft.openingCount,
-      cadOpeningEvidence: 0,
-      cadOpeningMatches: 0,
-      cadOpeningReviewOnly: cadDraft.openingCount,
+      openingReviewRemaining,
+      cadOpeningEvidence: openingReviewRemaining,
+      cadOpeningMatches: cadDraft.openingCount,
+      cadOpeningReviewOnly: openingReviewRemaining,
       roomLabelsApplied: cadDraft.semanticLabelsApplied,
       unitAnchorsMatched: 0,
       unitRoomsAssigned: 0,
