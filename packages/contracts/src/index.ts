@@ -150,16 +150,11 @@ export interface PublicSiteElement {
   color: string;
 }
 
-/**
- * Runtime spatial data used by the public viewer. Site elements are additive so
- * older releases with rooms/doors only remain valid.
- */
 export interface PublicWalkthroughGraph {
   version: 1;
   metresPerUnit: number;
   rooms: PublicWalkthroughRoom[];
   doors: PublicWalkthroughDoor[];
-  siteElements?: PublicSiteElement[];
 }
 
 export interface Public3DExperience {
@@ -170,6 +165,7 @@ export interface Public3DExperience {
   model?: Model3D;
   mediaBaseUrl?: string;
   walkthrough?: PublicWalkthroughGraph;
+  siteElements?: PublicSiteElement[];
 }
 
 export interface Admin3DProjectStatus {
