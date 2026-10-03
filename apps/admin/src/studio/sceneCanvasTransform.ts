@@ -1,5 +1,3 @@
-import type { RoomPoint } from "./domain";
-
 export type TransformMode = "translate" | "rotate" | "scale";
 
 export type TransformCommit =
@@ -27,22 +25,6 @@ export type TransformCommit =
       rotation?: number;
       width?: number;
       depth?: number;
-      height?: number;
-    }
-  | {
-      kind: "wall";
-      id: string;
-      start?: RoomPoint;
-      end?: RoomPoint;
-      thickness?: number;
-      height?: number;
-    }
-  | {
-      kind: "opening";
-      id: string;
-      x?: number;
-      z?: number;
-      width?: number;
       height?: number;
     }
   | {
