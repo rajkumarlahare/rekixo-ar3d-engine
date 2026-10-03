@@ -14,6 +14,9 @@ const slug = (value: unknown) =>
 const finiteNumber = (value: unknown) =>
   typeof value === "number" && Number.isFinite(value);
 
+const color = (value: unknown) =>
+  typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
+
 function engineRuntimeUrl(value: unknown) {
   if (typeof value !== "string" || !value.trim()) return false;
   if (value.startsWith("/3Dprojects/")) return true;
@@ -118,7 +121,9 @@ function assertWalkthrough(value: unknown) {
     !Array.isArray(value.rooms) ||
     value.rooms.length > 25000 ||
     !Array.isArray(value.doors) ||
-    value.doors.length > 50000
+    value.doors.length > 50000 ||
+    (value.siteElements !== undefined &&
+      (!Array.isArray(value.siteElements) || value.siteElements.length > 5000))
   )
     throw Error("Invalid walkthrough graph.");
 
@@ -173,6 +178,42 @@ function assertWalkthrough(value: unknown) {
     )
       throw Error("Invalid walkthrough door.");
     doorIds.add(String(door.id));
+  }
+
+  const siteIds = new Set<string>();
+  for (const site of value.siteElements ?? []) {
+    if (
+      !isObject(site) ||
+      !id(site.id) ||
+      ![
+        "garden",
+        "lawn",
+        "path",
+        "road",
+        "parking",
+        "tree",
+        "plant",
+        "gate",
+        "outdoor-light",
+      ].includes(String(site.kind)) ||
+      !finiteNumber(site.x) ||
+      !finiteNumber(site.y) ||
+      !finiteNumber(site.z) ||
+      !finiteNumber(site.width) ||
+      Number(site.width) <= 0 ||
+      Number(site.width) > 1000 ||
+      !finiteNumber(site.depth) ||
+      Number(site.depth) <= 0 ||
+      Number(site.depth) > 1000 ||
+      !finiteNumber(site.height) ||
+      Number(site.height) <= 0 ||
+      Number(site.height) > 100 ||
+      !finiteNumber(site.rotation) ||
+      !color(site.color) ||
+      siteIds.has(String(site.id))
+    )
+      throw Error("Invalid public site element.");
+    siteIds.add(String(site.id));
   }
 }
 
