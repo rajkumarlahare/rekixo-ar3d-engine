@@ -1,0 +1,106 @@
+name: Phase 16 V2 Port Direct Editing
+
+on:
+  push:
+    branches:
+      - phase16/direct-architectural-editing-v2
+    paths:
+      - .github/workflows/phase16-v2-port.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  port-apply-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout latest Phase 16 v2 branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase16/direct-architectural-editing-v2
+          fetch-depth: 0
+
+      - name: Import Phase 16 source, tests and deterministic integration scripts
+        run: |
+          git fetch origin phase16/direct-architectural-editing
+          git checkout origin/phase16/direct-architectural-editing -- \
+            apps/admin/src/studio/ArchitectureEditingPanels.tsx \
+            apps/admin/src/studio/SceneCanvasOverlays.tsx \
+            apps/admin/src/studio/architectureAuthoring.ts \
+            apps/admin/src/studio/sceneCanvasArchitecture.ts \
+            apps/admin/src/studio/sceneCanvasArchitectureController.ts \
+            scripts/prepare-phase16-transform.mjs \
+            scripts/apply-phase16-direct-editing.mjs \
+            scripts/fix-phase16-script-literals.mjs \
+            scripts/refactor-phase16-studio.mjs \
+            scripts/refactor-phase16-canvas.mjs \
+            tests/phase16-architecture-authoring.test.mjs
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Prepare architecture transform contract
+        run: node scripts/prepare-phase16-transform.mjs
+
+      - name: Repair integration script literals
+        run: node scripts/fix-phase16-script-literals.mjs
+
+      - name: Apply deterministic integration
+        run: node scripts/apply-phase16-direct-editing.mjs
+
+      - name: Extract architecture panels
+        run: node scripts/refactor-phase16-studio.mjs
+
+      - name: Extract canvas architecture controller
+        run: node scripts/refactor-phase16-canvas.mjs
+
+      - name: Install
+        run: npm ci
+
+      - name: Verify
+        run: npm test
+
+      - name: Validate Admin Worker bundle and Wrangler config
+        run: >-
+          npx --no-install wrangler deploy
+          --dry-run
+          --config wrangler.admin.jsonc
+          --outdir .wrangler-admin-dry-run
+
+      - name: Install browser E2E runner
+        run: npx --no-install playwright install --with-deps chromium
+
+      - name: Run browser E2E smoke
+        run: npx --no-install playwright test --config playwright.config.ts
+
+      - name: Diff whitespace safety
+        run: git diff --check origin/main...HEAD && git diff --check
+
+      - name: Commit verified Phase 16 v2 integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm \
+            scripts/prepare-phase16-transform.mjs \
+            scripts/apply-phase16-direct-editing.mjs \
+            scripts/fix-phase16-script-literals.mjs \
+            scripts/refactor-phase16-studio.mjs \
+            scripts/refactor-phase16-canvas.mjs \
+            .github/workflows/phase16-v2-port.yml
+          git add \
+            apps/admin/src/studio/SceneCanvas.tsx \
+            apps/admin/src/studio/Studio.tsx \
+            apps/admin/src/studio/sceneCanvasTransform.ts \
+            apps/admin/src/studio/ArchitectureEditingPanels.tsx \
+            apps/admin/src/studio/SceneCanvasOverlays.tsx \
+            apps/admin/src/studio/architectureAuthoring.ts \
+            apps/admin/src/studio/sceneCanvasArchitecture.ts \
+            apps/admin/src/studio/sceneCanvasArchitectureController.ts \
+            tests/phase16-architecture-authoring.test.mjs
+          git commit -m "Phase 16: port direct architectural editing onto latest main"
+          git push origin HEAD:phase16/direct-architectural-editing-v2
