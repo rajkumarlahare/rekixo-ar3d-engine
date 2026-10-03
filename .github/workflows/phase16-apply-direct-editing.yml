@@ -7,6 +7,8 @@ on:
     paths:
       - scripts/apply-phase16-direct-editing.mjs
       - scripts/fix-phase16-script-literals.mjs
+      - scripts/refactor-phase16-studio.mjs
+      - apps/admin/src/studio/ArchitectureEditingPanels.tsx
       - .github/workflows/phase16-apply-direct-editing.yml
 
 permissions:
@@ -35,6 +37,9 @@ jobs:
       - name: Apply deterministic integration
         run: node scripts/apply-phase16-direct-editing.mjs
 
+      - name: Extract architecture panels
+        run: node scripts/refactor-phase16-studio.mjs
+
       - name: Install
         run: npm ci
 
@@ -61,7 +66,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm scripts/apply-phase16-direct-editing.mjs scripts/fix-phase16-script-literals.mjs .github/workflows/phase16-apply-direct-editing.yml
-          git add apps/admin/src/studio/SceneCanvas.tsx apps/admin/src/studio/Studio.tsx
+          git rm scripts/apply-phase16-direct-editing.mjs scripts/fix-phase16-script-literals.mjs scripts/refactor-phase16-studio.mjs .github/workflows/phase16-apply-direct-editing.yml
+          git add apps/admin/src/studio/SceneCanvas.tsx apps/admin/src/studio/Studio.tsx apps/admin/src/studio/ArchitectureEditingPanels.tsx
           git commit -m "Phase 16: wire direct architectural editing into Studio"
           git push origin HEAD:phase16/direct-architectural-editing
