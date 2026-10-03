@@ -186,16 +186,17 @@ test("one CAD source can start model-less AutoBuild without inventing a 3D model
   assert.ok(result.reviewIssues.some((issue) => /No 3D model/.test(issue)));
 });
 
-test("multiple CAD sources block model-less AutoBuild until floor/source roles are explicit", () => {
+test("multiple CAD sources reach model-less AutoBuild only for semantic floor-role validation", () => {
   const files = [
     asset("dxf-1", "ground-floor.dxf", "application/dxf"),
     asset("dxf-2", "first-floor.dxf", "application/dxf"),
   ];
   const result = evaluateSourcePackReadiness(project(undefined), files);
-  assert.equal(result.pipelineState, "blocked");
-  assert.equal(result.autoBuildReady, false);
+  assert.equal(result.pipelineState, "ready");
+  assert.equal(result.autoBuildReady, true);
+  assert.equal(result.blockingIssues.length, 0);
   assert.ok(
-    result.blockingIssues.some((issue) => /exactly one DWG\/DXF source/.test(issue)),
+    result.reviewIssues.some((issue) => /unique explicit floor identity/.test(issue)),
   );
 });
 
