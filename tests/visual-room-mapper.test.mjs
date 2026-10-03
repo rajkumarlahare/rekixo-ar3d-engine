@@ -34,7 +34,8 @@ test("room drawing happens on the selected floor and derives geometry from a dra
   assert.match(canvas, /Math\.abs\(end\.x - start\.x\)/);
   assert.match(canvas, /Math\.abs\(end\.z - start\.z\)/);
   assert.match(canvas, /onRoomDraw/);
-  assert.match(canvas, /edgeDistance <= 0\.18/);
+  assert.match(canvas, /resolvePlanSnap/);
+  assert.match(canvas, /edgeTolerance: 0\.18/);
 });
 
 test("visual room mapping preserves evidence discipline", () => {
@@ -60,7 +61,8 @@ test("polygon mapper snaps to existing room walls and exports polygon callbacks"
   const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
   const studio = read("apps/admin/src/studio/Studio.tsx");
   assert.match(canvas, /roomBoundaryPoints/);
-  assert.match(canvas, /edgeDistance <= 0\.18/);
+  assert.match(canvas, /resolvePlanSnap/);
+  assert.match(canvas, /midpointTolerance: 0\.18/);
   assert.match(canvas, /onRoomPolygonDraw/);
   assert.match(canvas, /onRoomPolygonChange/);
   assert.match(canvas, /roomVertexIndex/);

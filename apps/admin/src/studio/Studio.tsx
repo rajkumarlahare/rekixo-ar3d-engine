@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { SnapshotHistory } from "@rekixo/3d-engine-core";
 import SceneCanvas, {
   type ModelMaterialSummary,
   type ModelNodeSummary,
@@ -238,8 +239,7 @@ export default function Studio() {
       active = false;
     };
   }, []);
-  const undo = useRef<Project[]>([]),
-    redo = useRef<Project[]>([]),
+  const historyRef = useRef(new SnapshotHistory<Project>(40)),
     localEditSerial = useRef(0);
   const modelInput = useRef<HTMLInputElement>(null),
     referenceInput = useRef<HTMLInputElement>(null),
@@ -294,8 +294,7 @@ export default function Studio() {
     setDirty(false);
     setCloudDirty(projectAheadOfCloud(p));
     setLocalSaveState("saved");
-    undo.current = [];
-    redo.current = [];
+    historyRef.current.clear();
     setError("");
   }
   useEffect(() => {
@@ -464,9 +463,7 @@ export default function Studio() {
   function edit(next: Project) {
     if (!project) return;
     setBackup(undefined);
-    undo.current.push(project);
-    if (undo.current.length > 40) undo.current.shift();
-    redo.current = [];
+    historyRef.current.record(project);
     localEditSerial.current += 1;
     setProject(next);
     setDirty(true);
@@ -740,11 +737,10 @@ export default function Studio() {
 
   function history(back: boolean) {
     if (!project) return;
-    const from = back ? undo : redo,
-      to = back ? redo : undo,
-      p = from.current.pop();
+    const p = back
+      ? historyRef.current.undo(project)
+      : historyRef.current.redo(project);
     if (p) {
-      to.current.push(project);
       localEditSerial.current += 1;
       setProject(p);
       setDirty(true);
@@ -2134,8 +2130,7 @@ export default function Studio() {
     await persist(next, [a]);
     if (previousModelId && !previousModelNeededByReview)
       await storage.removeAssetIfUnreferenced(previousModelId);
-    undo.current = [];
-    redo.current = [];
+    historyRef.current.clear();
     if (model) {
       setMesh("");
       setView("building");
@@ -2152,8 +2147,7 @@ export default function Studio() {
       ...assets.map((asset) => asset.id).filter((key) => !existing.has(key)),
     ];
     await persist({ ...p, assets: nextAssetIds }, assets);
-    undo.current = [];
-    redo.current = [];
+    historyRef.current.clear();
     setMessage(
       `${assets.length} source/reference file${assets.length === 1 ? "" : "s"} attached to the project.`,
     );
@@ -2210,8 +2204,7 @@ export default function Studio() {
     };
     await persist(next, assets);
     setSmartAnalysis(undefined);
-    undo.current = [];
-    redo.current = [];
+    historyRef.current.clear();
     const skipped = duplicateCount
       ? ` · ${duplicateCount} duplicate checksum${duplicateCount === 1 ? "" : "s"} skipped`
       : "";
@@ -4037,7 +4030,7 @@ export default function Studio() {
                     <div className="editor-menu-divider" />
                     <button
                       type="button"
-                      disabled={!undo.current.length || busy}
+                      disabled={!historyRef.current.canUndo || busy}
                       title="Undo (Ctrl+Z)"
                       onClick={() => history(true)}
                     >
@@ -4045,7 +4038,7 @@ export default function Studio() {
                     </button>
                     <button
                       type="button"
-                      disabled={!redo.current.length || busy}
+                      disabled={!historyRef.current.canRedo || busy}
                       title="Redo (Ctrl+Y)"
                       onClick={() => history(false)}
                     >

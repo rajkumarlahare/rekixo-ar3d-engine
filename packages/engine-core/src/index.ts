@@ -56,3 +56,5 @@ export function recommendedExteriorModelKey(slug: string, version = 1) {
   if (!Number.isInteger(version) || version < 1) throw new Error("Invalid model version.");
   return `${projectAssetPrefix(slug)}/models/exterior-v${version}.glb`;
 }
+
+export * from "./editor";
