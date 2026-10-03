@@ -94,7 +94,7 @@ test("Phase 10 rejects orphan site evidence and invalid review state", () => {
 
   assert.throws(
     () => domain.validateProject(project),
-    /Invalid site\/landscape element/,
+    /Invalid site\/landscape or structural element/,
   );
 
   project.scene.siteElements[0].reviewed = false;

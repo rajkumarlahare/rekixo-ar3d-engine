@@ -81,6 +81,10 @@ function unique(values: readonly string[]) {
   return [...new Set(values.filter(Boolean))];
 }
 
+/**
+ * Structural CAD footprints represent source-backed 2D bounds only;
+ * no vertical dimension is invented from plan evidence.
+ */
 function structuralRows(audit: SmartCadAudit) {
   const document = audit.normalizedDwg;
   if (!document) return [];
