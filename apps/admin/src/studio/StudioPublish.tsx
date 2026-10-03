@@ -103,6 +103,51 @@ export default function StudioPublish({
             ))}
           </div>
 
+          {readiness.reviewQueue.items.length ? (
+            <div data-testid="actionable-review-queue">
+              <div className="ops-card-head">
+                <div>
+                  <span className="ops-eyebrow">ACTIONABLE REVIEW QUEUE</span>
+                  <h3>
+                    {readiness.reviewQueue.blockers.length} blocker(s) ·{" "}
+                    {readiness.reviewQueue.review.length} review
+                  </h3>
+                </div>
+              </div>
+              <div className="ops-health-list">
+                {readiness.reviewQueue.items.slice(0, 12).map((item) => (
+                  <div
+                    className={`ops-health ops-health--${item.severity === "blocker" ? "blocker" : "warning"}`}
+                    key={item.id}
+                  >
+                    <span>{item.severity === "blocker" ? "×" : "!"}</span>
+                    <div>
+                      <b>{item.title}</b>
+                      <small>{item.detail}</small>
+                      <small>
+                        <strong>Next:</strong> {item.action}
+                      </small>
+                    </div>
+                  </div>
+                ))}
+                {readiness.reviewQueue.items.length > 12 ? (
+                  <div className="ops-health ops-health--warning">
+                    <span>!</span>
+                    <div>
+                      <b>
+                        {readiness.reviewQueue.items.length - 12} more item(s)
+                      </b>
+                      <small>
+                        Resolve the visible items, then reopen Preview & Release
+                        to refresh the queue.
+                      </small>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           <div className="ops-publish-actions">
             <button
               className="ops-primary"
