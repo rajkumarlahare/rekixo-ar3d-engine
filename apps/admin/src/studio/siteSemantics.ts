@@ -1,4 +1,4 @@
-import type { SiteElementKind } from "./domain";
+import type { LandscapeSiteElementKind } from "./domain";
 
 function normalized(value: string) {
   return value
@@ -11,7 +11,7 @@ function normalized(value: string) {
 
 export function classifySiteSemantic(
   value: string,
-): SiteElementKind | undefined {
+): LandscapeSiteElementKind | undefined {
   const text = normalized(value);
   if (!text) return undefined;
 

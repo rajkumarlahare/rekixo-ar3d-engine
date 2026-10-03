@@ -1,7 +1,7 @@
 import type {
+  LandscapeSiteElementKind,
   Scene,
   SiteElement,
-  SiteElementKind,
 } from "./domain";
 import type {
   SmartCadAudit,
@@ -25,7 +25,7 @@ export interface SiteLandscapeDraftResult {
 }
 
 const DEFAULTS: Record<
-  SiteElementKind,
+  LandscapeSiteElementKind,
   { width: number; depth: number; height: number; color: string }
 > = {
   garden: { width: 4, depth: 4, height: 0.06, color: "#6f8c55" },
@@ -61,7 +61,7 @@ function normalizedRotation(value: number) {
 }
 
 function dimensionsFromBounds(
-  kind: SiteElementKind,
+  kind: LandscapeSiteElementKind,
   bounds: { min: [number, number]; max: [number, number] } | undefined,
 ) {
   const fallback = DEFAULTS[kind];
@@ -96,7 +96,7 @@ function dimensionsFromBounds(
   };
 }
 
-function areaKind(kind: SiteElementKind) {
+function areaKind(kind: LandscapeSiteElementKind) {
   return ["garden", "lawn", "path", "road", "parking"].includes(kind);
 }
 

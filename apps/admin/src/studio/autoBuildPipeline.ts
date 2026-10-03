@@ -121,7 +121,7 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
     ? ` · Phase 2: ${phase2.resolvedCadFloors} CAD floor${phase2.resolvedCadFloors === 1 ? "" : "s"} fused${phase2.semanticEvidence ? ` · ${phase2.semanticEvidence} semantic evidence item${phase2.semanticEvidence === 1 ? "" : "s"}` : ""}${phase2.cadOpeningEvidence ? ` · ${phase2.cadOpeningMatches}/${phase2.cadOpeningEvidence} CAD opening${phase2.cadOpeningEvidence === 1 ? "" : "s"} corroborated` : ""}${phase2.openingsRefined ? ` · ${phase2.openingsRefined} prepared opening${phase2.openingsRefined === 1 ? "" : "s"} refined` : ""}${phase2.siteElementsPrepared ? ` · ${phase2.siteElementsPrepared} ground/site element${phase2.siteElementsPrepared === 1 ? "" : "s"} placed` : ""}`
     : "";
   const structuralText = phase2.structuralEvidence
-    ? ` · structural CAD evidence: ${phase2.structuralEvidence}${phase2.structuralFootprints ? ` · ${phase2.structuralFootprints} exact 2D footprint${phase2.structuralFootprints === 1 ? "" : "s"}` : ""}${phase2.circulationEvidence ? ` · ${phase2.circulationEvidence} stair/lift item${phase2.circulationEvidence === 1 ? "" : "s"} used semantically` : ""}${phase2.structuralReviewOnly ? ` · ${phase2.structuralReviewOnly} dedicated structural primitive${phase2.structuralReviewOnly === 1 ? "" : "s"} still review-only` : ""}`
+    ? ` · structural CAD evidence: ${phase2.structuralEvidence}${phase2.structuralFootprints ? ` · ${phase2.structuralFootprints} source-backed 2D footprint${phase2.structuralFootprints === 1 ? "" : "s"}` : ""}${phase2.structuralPrepared ? ` · ${phase2.structuralPrepared} CAD+3D structural envelope${phase2.structuralPrepared === 1 ? "" : "s"} prepared` : ""}${phase2.circulationEvidence ? ` · ${phase2.circulationEvidence} stair/lift item${phase2.circulationEvidence === 1 ? "" : "s"} used semantically` : ""}${phase2.structuralReviewOnly ? ` · ${phase2.structuralReviewOnly} structural evidence item${phase2.structuralReviewOnly === 1 ? "" : "s"} remain review-only` : ""}`
     : "";
 
   const structured = result.structuredEvidence;
@@ -160,5 +160,6 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
  * Multiple visual reference images are attached
  * deriveSourceBackedSiteLandscape · siteElementsPrepared
  * applyPhase2CadFusion · phase2CadFusion · structural CAD evidence
+ * applySourceBackedStructuralPrimitives · structuralPrepared
  * scene.publishModelId · scene.modelId
  */

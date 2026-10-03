@@ -63,12 +63,12 @@ test("door-window fusion spans resolved CAD floors without overwriting human rev
   assert.match(fusion, /suggestion\.confidence \+ 0\.001 < \(opening\.confidence \?\? 0\)/);
 });
 
-test("ground/site evidence chooses one source and structural geometry remains source-backed", () => {
+test("ground/site and structural fusion remain source-backed and review gated", () => {
   assert.match(fusion, /groundSiteRows\.length === 1/);
   assert.match(fusion, /deriveSourceBackedSiteLandscape/);
   assert.match(fusion, /groundSiteRows\.length > 1/);
-  assert.match(fusion, /dedicated structural scene primitive/);
-  assert.match(fusion, /column\/beam\/slab\/roof\/duct\/balcony\/boundary\/gate class/);
+  assert.match(fusion, /applySourceBackedStructuralPrimitives/);
   assert.match(fusion, /structuralFootprints/);
-  assert.match(fusion, /no vertical dimension is invented from plan evidence/);
+  assert.match(fusion, /CAD\+3D|source-backed structural envelope/);
+  assert.match(fusion, /did not invent missing height, footprint, orientation or source correspondence/);
 });

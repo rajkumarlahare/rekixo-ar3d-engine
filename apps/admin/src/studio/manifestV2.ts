@@ -179,7 +179,7 @@ export function buildSceneManifestV2(
         siteId,
         kind: item.kind,
         transform: {
-          position: [item.x, 0, item.z] as [number, number, number],
+          position: [item.x, item.y ?? 0, item.z] as [number, number, number],
           rotation: [
             0,
             (item.rotation * Math.PI) / 180,
@@ -192,6 +192,7 @@ export function buildSceneManifestV2(
           item.height,
           item.depth,
         ] as [number, number, number],
+        ...(item.shape ? { shape: item.shape } : {}),
         finish: { color: item.color },
         evidence: {
           status: "reviewed" as const,
@@ -202,9 +203,11 @@ export function buildSceneManifestV2(
             ? { basis: item.sourceRef }
             : {}),
           sourceNote:
-            item.origin === "cad-auto"
-              ? "Human-reviewed site geometry derived from CAD evidence."
-              : "Human-reviewed site geometry edited in Rekixo Studio.",
+            item.origin === "model-cad-auto"
+              ? "Human-reviewed structural envelope corroborated by CAD footprint and named 3D model geometry."
+              : item.origin === "cad-auto"
+                ? "Human-reviewed site geometry derived from CAD evidence."
+                : "Human-reviewed site or structural geometry edited in Rekixo Studio.",
         },
       })),
     buildings: [{ id: buildingId, siteId, name: project.name }],

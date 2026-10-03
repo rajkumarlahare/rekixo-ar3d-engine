@@ -2,7 +2,7 @@ import * as T from "three";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
-import type { Asset } from "./domain";
+import type { Asset, StructuralElementKind } from "./domain";
 import type { FbxSourceAudit } from "./sourceAudit";
 import { disposeObjectResources } from "./threeResources";
 import {
@@ -63,6 +63,19 @@ export interface SmartArchitecturalCandidate {
   reasons: string[];
 }
 
+export type SmartStructuralKind = StructuralElementKind;
+
+export interface SmartStructuralCandidate {
+  nodeName: string;
+  occurrence: number;
+  kind: SmartStructuralKind;
+  confidence: number;
+  floorIndex?: number;
+  position: [number, number, number];
+  size: [number, number, number];
+  reasons: string[];
+}
+
 export interface SmartCadAudit {
   assetId: string;
   name: string;
@@ -109,6 +122,8 @@ export interface SmartProjectAnalysis {
   floorCandidates: SmartFloorCandidate[];
   nodeAssignments: SmartNodeAssignment[];
   architecturalCandidates: SmartArchitecturalCandidate[];
+  /** Explicit model-name/material structural semantics only; no size-only guessing. */
+  structuralCandidates?: SmartStructuralCandidate[];
   cadAudits: SmartCadAudit[];
   highConfidenceAssignments: number;
   reviewAssignments: number;
@@ -377,6 +392,86 @@ function semanticWords(node: SmartMeshAnalysis) {
     .join(" ")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ");
+}
+
+function structuralKindFromText(value: string): SmartStructuralKind | undefined {
+  const text = value.toLowerCase().replace(/[^a-z0-9]+/g, " ");
+  if (/\b(site boundary|plot boundary|property boundary|property line|compound wall|boundary|perimeter)\b/.test(text))
+    return "boundary";
+  if (/\b(roof|roof slab|terrace slab)\b/.test(text)) return "roof";
+  if (/\b(column|columns|pillar|pillars)\b/.test(text)) return "column";
+  if (/\b(beam|beams|girder|girders)\b/.test(text)) return "beam";
+  if (/\b(slab|floor slab|floor plate)\b/.test(text)) return "slab";
+  if (/\b(duct|shaft)\b/.test(text)) return "duct";
+  if (/\b(balcony|verandah|veranda)\b/.test(text)) return "balcony";
+  if (/\b(stair|stairs|staircase|floorlanding|landing)\b/.test(text))
+    return "stair";
+  if (/\b(lift|elevator|fire lift|normal lift)\b/.test(text)) return "lift";
+  return undefined;
+}
+
+/**
+ * Structural candidates deliberately require explicit source naming/material
+ * semantics. Size-only classification is not used because a generic mesh must
+ * never become a load-bearing/structural primitive by visual guesswork.
+ */
+export function suggestStructuralCandidates(
+  nodes: SmartMeshAnalysis[],
+  assignments: SmartNodeAssignment[],
+): SmartStructuralCandidate[] {
+  const assignmentByKey = new Map(
+    assignments.map((entry) => [
+      `${entry.nodeName}\u0000${entry.occurrence}`,
+      entry,
+    ]),
+  );
+  const result: SmartStructuralCandidate[] = [];
+  for (const node of nodes) {
+    const nameKind = structuralKindFromText(node.name);
+    const materialKinds = [
+      ...new Set(
+        node.materialNames
+          .map(structuralKindFromText)
+          .filter((kind): kind is SmartStructuralKind => Boolean(kind)),
+      ),
+    ];
+    if (!nameKind && materialKinds.length !== 1) continue;
+    if (nameKind && materialKinds.length && materialKinds.some((kind) => kind !== nameKind))
+      continue;
+    const kind = nameKind ?? materialKinds[0];
+    if (!kind) continue;
+    if (
+      ![node.width, node.height, node.depth].every(
+        (value) => Number.isFinite(value) && value >= 0.02,
+      )
+    )
+      continue;
+    const assignment = assignmentByKey.get(
+      `${node.name}\u0000${node.occurrence}`,
+    );
+    const confidence = nameKind ? 0.98 : 0.93;
+    result.push({
+      nodeName: node.name,
+      occurrence: node.occurrence,
+      kind,
+      confidence,
+      ...(assignment?.floorIndex !== undefined
+        ? { floorIndex: assignment.floorIndex }
+        : {}),
+      position: [node.centreX, node.centreY, node.centreZ],
+      size: [node.width, node.height, node.depth],
+      reasons: [
+        nameKind
+          ? `source node name explicitly says ${kind}`
+          : `source material explicitly says ${kind}`,
+      ],
+    });
+  }
+  return result.sort(
+    (left, right) =>
+      right.confidence - left.confidence ||
+      left.nodeName.localeCompare(right.nodeName),
+  );
 }
 
 export function suggestArchitecturalCandidates(
@@ -712,6 +807,7 @@ export async function analyzeProjectFiles(
   let floorCandidates: SmartFloorCandidate[] = [];
   let nodeAssignments: SmartNodeAssignment[] = [];
   let architecturalCandidates: SmartArchitecturalCandidate[] = [];
+  let structuralCandidates: SmartStructuralCandidate[] = [];
   const cadAudits = await auditCadSources(files);
 
   if (selected) {
@@ -774,6 +870,10 @@ export async function analyzeProjectFiles(
         floorCandidates,
         nodeAssignments,
       );
+      structuralCandidates = suggestStructuralCandidates(
+        meshNodes,
+        nodeAssignments,
+      );
       if (floorCandidates.length < 2 && meshNodes.length)
         issues.push("Floor levels were not confidently detected; review them manually.");
     } catch (error) {
@@ -808,6 +908,7 @@ export async function analyzeProjectFiles(
     floorCandidates,
     nodeAssignments,
     architecturalCandidates,
+    structuralCandidates,
     cadAudits,
     highConfidenceAssignments,
     reviewAssignments,

@@ -10,6 +10,18 @@ const AREA_KINDS = new Set<PublicSiteElement["kind"]>([
   "parking",
 ]);
 
+const STRUCTURAL_KINDS = new Set<PublicSiteElement["kind"]>([
+  "column",
+  "beam",
+  "slab",
+  "roof",
+  "duct",
+  "balcony",
+  "boundary",
+  "stair",
+  "lift",
+]);
+
 function material(
   color: string,
   roughness = 0.82,
@@ -23,7 +35,7 @@ function material(
 }
 
 function batchKey(item: PublicSiteElement) {
-  return `${item.kind}|${item.color.toLowerCase()}`;
+  return `${item.kind}|${item.color.toLowerCase()}|${item.shape ?? "default"}`;
 }
 
 function groupsFor(items: readonly PublicSiteElement[]) {
@@ -298,6 +310,42 @@ function addOutdoorLights(
   return bulbMaterial;
 }
 
+function addStructuralBatches(
+  root: THREE.Group,
+  items: readonly PublicSiteElement[],
+  mobile: boolean,
+) {
+  for (const rows of groupsFor(items).values()) {
+    const first = rows[0];
+    const cylinder = first.shape === "cylinder";
+    const geometry = cylinder
+      ? new THREE.CylinderGeometry(1, 1, 1, mobile ? 10 : 18)
+      : new THREE.BoxGeometry(1, 1, 1);
+    const mesh = new THREE.InstancedMesh(
+      geometry,
+      material(first.color, 0.76, 0.03),
+      rows.length,
+    );
+    mesh.name = `Structural ${first.kind}`;
+    mesh.castShadow = !mobile;
+    mesh.receiveShadow = true;
+    rows.forEach((item, index) => {
+      mesh.setMatrixAt(
+        index,
+        matrixFor(
+          item,
+          item.y + item.height / 2,
+          cylinder
+            ? new THREE.Vector3(item.width / 2, item.height, item.depth / 2)
+            : new THREE.Vector3(item.width, item.height, item.depth),
+        ),
+      );
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    root.add(mesh);
+  }
+}
+
 function disposeRoot(root: THREE.Object3D) {
   const geometries = new Set<THREE.BufferGeometry>();
   const materials = new Set<THREE.Material>();
@@ -326,12 +374,14 @@ export function createArchitecturalSiteEnvironment(
   const plants = elements.filter((item) => item.kind === "plant");
   const gates = elements.filter((item) => item.kind === "gate");
   const lights = elements.filter((item) => item.kind === "outdoor-light");
+  const structural = elements.filter((item) => STRUCTURAL_KINDS.has(item.kind));
 
   addAreaBatches(root, areas);
   addTreeBatches(root, trees, mobile);
   addPlantBatches(root, plants, mobile);
   gates.forEach((item) => addGate(root, item, mobile));
   const bulbMaterial = addOutdoorLights(root, lights, mobile);
+  addStructuralBatches(root, structural, mobile);
 
   return {
     root,

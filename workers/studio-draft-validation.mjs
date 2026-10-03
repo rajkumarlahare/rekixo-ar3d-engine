@@ -6,6 +6,18 @@ const FURNITURE = {
   plant: { width: 0.45, depth: 0.45 },
 };
 
+const STRUCTURAL_KINDS = new Set([
+  "column",
+  "beam",
+  "slab",
+  "roof",
+  "duct",
+  "balcony",
+  "boundary",
+  "stair",
+  "lift",
+]);
+
 const text = (value, max = 200) =>
   typeof value === "string" && value.trim().length > 0 && value.length <= max;
 const number = (value, min, max) =>
@@ -314,6 +326,7 @@ function validateScene(scene, assetIds) {
   }
 
   for (const site of scene.siteElements ?? []) {
+    const structural = STRUCTURAL_KINDS.has(site.kind);
     if (
       ![
         "garden",
@@ -325,6 +338,7 @@ function validateScene(scene, assetIds) {
         "plant",
         "gate",
         "outdoor-light",
+        ...STRUCTURAL_KINDS,
       ].includes(site.kind) ||
       !number(site.x, -10000, 10000) ||
       !number(site.z, -10000, 10000) ||
@@ -334,7 +348,29 @@ function validateScene(scene, assetIds) {
       !number(site.rotation, -3600, 3600) ||
       !color(site.color) ||
       typeof site.reviewed !== "boolean" ||
-      !["cad-auto", "manual"].includes(site.origin) ||
+      !["cad-auto", "model-cad-auto", "manual"].includes(site.origin) ||
+      (site.y !== undefined && !number(site.y, -1000, 5000)) ||
+      (site.floorId !== undefined && !floors.has(site.floorId)) ||
+      (site.sourceNodeName !== undefined && !text(site.sourceNodeName, 500)) ||
+      (site.sourceOccurrence !== undefined &&
+        (!Number.isInteger(site.sourceOccurrence) ||
+          site.sourceOccurrence < 1 ||
+          site.sourceOccurrence > 100000 ||
+          !site.sourceNodeName)) ||
+      (site.shape !== undefined && !["box", "cylinder"].includes(site.shape)) ||
+      (structural &&
+        (!number(site.y, -1000, 5000) ||
+          !site.floorId ||
+          !floors.has(site.floorId) ||
+          !["model-cad-auto", "manual"].includes(site.origin) ||
+          !site.shape)) ||
+      (!structural && site.origin === "model-cad-auto") ||
+      (site.origin === "model-cad-auto" &&
+        (!site.sourceAssetId ||
+          !assetIds.has(site.sourceAssetId) ||
+          !site.sourceNodeName ||
+          !Number.isInteger(site.sourceOccurrence) ||
+          site.confidence === undefined)) ||
       (site.reviewState !== undefined &&
         !["suggested", "auto_ready", "human_reviewed"].includes(
           site.reviewState,
@@ -348,7 +384,7 @@ function validateScene(scene, assetIds) {
         !assetIds.has(site.sourceAssetId)) ||
       (site.sourceRef !== undefined && !text(site.sourceRef, 500))
     )
-      throw Error("Invalid Studio site/landscape element.");
+      throw Error("Invalid Studio site/landscape or structural element.");
   }
 
   for (const item of scene.furniture ?? []) {
@@ -673,12 +709,14 @@ function publicSiteElement(site) {
     id: site.id,
     kind: site.kind,
     x: site.x,
+    ...(site.y !== undefined ? { y: site.y } : {}),
     z: site.z,
     width: site.width,
     depth: site.depth,
     height: site.height,
     rotation: site.rotation,
     color: site.color,
+    ...(site.shape ? { shape: site.shape } : {}),
     reviewed: true,
     origin: site.origin,
   };

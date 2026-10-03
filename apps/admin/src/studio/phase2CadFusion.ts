@@ -20,6 +20,9 @@ import {
   deriveSourceBackedSiteLandscape,
 } from "./siteLandscapeDraft";
 import { classifySiteSemantic } from "./siteSemantics";
+import {
+  applySourceBackedStructuralPrimitives,
+} from "./structuralPrimitiveFusion";
 import type {
   SmartCadAudit,
   SmartProjectAnalysis,
@@ -41,6 +44,9 @@ export interface Phase2CadFusionSummary {
   siteElementsReady: number;
   structuralEvidence: number;
   structuralFootprints: number;
+  structuralPrepared: number;
+  structuralAutoReady: number;
+  structuralPreservedReviewed: number;
   structuralReviewOnly: number;
 }
 
@@ -75,6 +81,10 @@ function unique(values: readonly string[]) {
   return [...new Set(values.filter(Boolean))];
 }
 
+/**
+ * Structural CAD footprints represent source-backed 2D bounds only;
+ * no vertical dimension is invented from plan evidence.
+ */
 function structuralRows(audit: SmartCadAudit) {
   const document = audit.normalizedDwg;
   if (!document) return [];
@@ -372,6 +382,9 @@ export function applyPhase2CadFusion(
     siteElementsReady: 0,
     structuralEvidence: counts.structuralEvidence,
     structuralFootprints: counts.structuralFootprints,
+    structuralPrepared: 0,
+    structuralAutoReady: 0,
+    structuralPreservedReviewed: 0,
     structuralReviewOnly: counts.structuralReviewOnly,
   };
 
@@ -463,13 +476,28 @@ export function applyPhase2CadFusion(
     );
   }
 
-  if (counts.structuralFootprints)
+  const structural = applySourceBackedStructuralPrimitives(
+    scene,
+    analysis,
+    resolution.resolved,
+  );
+  scene = structural.scene;
+  issues.push(...structural.issues);
+
+  if (structural.prepared)
     issues.push(
-      `${counts.structuralFootprints} structural CAD footprint${counts.structuralFootprints === 1 ? "" : "s"} have source-backed 2D bounds ready for the dedicated structural scene primitive; no vertical dimension is invented from plan evidence.`,
+      `${structural.prepared} source-backed structural envelope${structural.prepared === 1 ? "" : "s"} prepared from agreeing CAD footprint and named 3D model geometry; human review is still required before public release.`,
     );
-  if (counts.structuralReviewOnly)
+  const nonFootprintReviewOnly = Math.max(
+    0,
+    counts.structuralEvidence -
+      counts.structuralFootprints -
+      counts.circulationEvidence,
+  );
+  const structuralReviewOnly = structural.reviewOnly + nonFootprintReviewOnly;
+  if (structuralReviewOnly)
     issues.push(
-      `${counts.structuralReviewOnly} CAD structural object${counts.structuralReviewOnly === 1 ? "" : "s"} (column/beam/slab/roof/duct/balcony/boundary/gate class) remain first-class source evidence; Phase 2 does not coerce them into wall/room geometry without a dedicated structural scene primitive.`,
+      `${structuralReviewOnly} structural evidence item${structuralReviewOnly === 1 ? "" : "s"} remain evidence-only; Rekixo did not invent missing height, footprint, orientation or source correspondence.`,
     );
 
   return {
@@ -490,7 +518,10 @@ export function applyPhase2CadFusion(
       siteElementsReady,
       structuralEvidence: counts.structuralEvidence,
       structuralFootprints: counts.structuralFootprints,
-      structuralReviewOnly: counts.structuralReviewOnly,
+      structuralPrepared: structural.prepared,
+      structuralAutoReady: structural.autoReady,
+      structuralPreservedReviewed: structural.preservedReviewed,
+      structuralReviewOnly,
     },
     issues: unique(issues),
   };
