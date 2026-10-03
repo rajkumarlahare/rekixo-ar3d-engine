@@ -47,7 +47,16 @@ export type SceneSiteElementKindV2 =
   | "tree"
   | "plant"
   | "gate"
-  | "outdoor-light";
+  | "outdoor-light"
+  | "column"
+  | "beam"
+  | "slab"
+  | "roof"
+  | "duct"
+  | "balcony"
+  | "boundary"
+  | "stair"
+  | "lift";
 
 export interface SceneSiteElementV2 {
   id: string;
@@ -55,6 +64,8 @@ export interface SceneSiteElementV2 {
   kind: SceneSiteElementKindV2;
   transform: SceneTransformV2;
   dimensionsM: [number, number, number];
+  /** Conservative primitive envelope for source-backed structural elements. */
+  shape?: "box" | "cylinder";
   finish?: {
     color?: string;
     materialId?: string;
@@ -549,8 +560,19 @@ export function assertSceneManifestV2(
         "plant",
         "gate",
         "outdoor-light",
+        "column",
+        "beam",
+        "slab",
+        "roof",
+        "duct",
+        "balcony",
+        "boundary",
+        "stair",
+        "lift",
       ].includes(siteElement.kind as string) ||
       !isVector(siteElement.dimensionsM, 3, 0.01, 1000) ||
+      (siteElement.shape !== undefined &&
+        !["box", "cylinder"].includes(siteElement.shape as string)) ||
       !isObject(siteElement.evidence)
     )
       throw Error("Invalid scene site element.");
