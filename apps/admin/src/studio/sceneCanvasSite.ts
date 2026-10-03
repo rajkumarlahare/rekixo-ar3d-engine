@@ -57,7 +57,7 @@ export function renderSiteElements(
   for (const element of elements) {
     const root = new T.Group();
     root.userData.selectId = element.id;
-    root.position.set(element.x, 0, element.z);
+    root.position.set(element.x, element.y ?? 0, element.z);
     root.rotation.y = T.MathUtils.degToRad(element.rotation);
     addSiteElementVisual(root, element);
     group.add(root);
