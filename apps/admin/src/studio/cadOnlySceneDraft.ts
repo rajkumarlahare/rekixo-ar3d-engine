@@ -275,9 +275,19 @@ export function buildCadOnlySceneDraft(
     throw Error(
       "CAD-only reconstruction is only for projects without a source 3D model.",
     );
-  if (project.scene.rooms.length || project.scene.floors.length > 1)
+  const authoredOneFloorContent =
+    (project.scene.walls ?? []).some(
+      (wall) => wall.reviewed || wall.origin === "manual",
+    ) ||
+    (project.scene.openings ?? []).some((opening) => opening.reviewed) ||
+    project.scene.furniture.some((item) => item.origin === undefined);
+  if (
+    project.scene.rooms.length ||
+    project.scene.floors.length > 1 ||
+    authoredOneFloorContent
+  )
     throw Error(
-      "Model-less CAD AutoBuild requires an empty/default scene so existing authored rooms or multi-floor work is never overwritten.",
+      "Model-less CAD AutoBuild requires an empty/default scene so existing authored rooms, walls, openings, furniture or multi-floor work is never overwritten.",
     );
 
   const audit = sourceAudit(analysis);
