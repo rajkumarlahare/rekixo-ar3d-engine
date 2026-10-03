@@ -77,6 +77,29 @@ function createWallDraft() {
   return draft;
 }
 
+export function architectureSelectionKind(scene: Scene, selected: string) {
+  if (scene.walls?.some((wall) => wall.id === selected)) return "wall" as const;
+  if (scene.openings?.some((opening) => opening.id === selected))
+    return "opening" as const;
+  return undefined;
+}
+
+export function architectureAuthoringActive(props: ArchitectureCanvasProps) {
+  return Boolean(props.wallDraw?.enabled || props.openingPlacement?.enabled);
+}
+
+export function renderArchitectureCanvas(
+  group: T.Group,
+  config: Pick<ArchitectureCanvasConfig, "scene" | "selected" | "view" | "architectureEditing">,
+  selectables: Map<string, T.Object3D>,
+  floorId?: string,
+) {
+  renderArchitectureElements(group, config.scene, config.selected, selectables, {
+    visible: config.view === "building" && Boolean(config.architectureEditing),
+    floorId,
+  });
+}
+
 export function createArchitectureCanvasController(
   options: ArchitectureControllerOptions,
 ) {
@@ -238,31 +261,6 @@ export function createArchitectureCanvasController(
       );
       if (change) config.onTransformCommit?.(change);
       return true;
-    },
-
-    selectionKind() {
-      const config = options.getConfig();
-      if (config.scene.walls?.some((wall) => wall.id === config.selected))
-        return "wall" as const;
-      if (
-        config.scene.openings?.some((opening) => opening.id === config.selected)
-      )
-        return "opening" as const;
-      return undefined;
-    },
-
-    authoringActive() {
-      const config = options.getConfig();
-      return Boolean(config.wallDraw?.enabled || config.openingPlacement?.enabled);
-    },
-
-    render(selectables: Map<string, T.Object3D>, floorId?: string) {
-      const config = options.getConfig();
-      renderArchitectureElements(group, config.scene, config.selected, selectables, {
-        visible:
-          config.view === "building" && Boolean(config.architectureEditing),
-        floorId,
-      });
     },
   };
 }
