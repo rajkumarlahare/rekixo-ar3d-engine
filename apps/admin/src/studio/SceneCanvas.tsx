@@ -24,12 +24,19 @@ import {
   siteElementTransformChange,
 } from "./sceneCanvasSite";
 import {
+  architectureAuthoringActive,
+  architectureSelectionKind,
+  createArchitectureCanvasController,
+  renderArchitectureCanvas,
+  type ArchitectureCanvasProps,
+} from "./sceneCanvasArchitectureController";
+import {
   installCanvasFurnitureDrop,
   placeCanvasFurnitureAtPointer,
   type CanvasFurniturePlacement,
   type CanvasFurnitureResult,
 } from "./canvasFurniturePlacement";
-import CanvasAuthoringHints from "./CanvasAuthoringHints";
+import SceneCanvasOverlays from "./SceneCanvasOverlays";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -67,7 +74,7 @@ export interface RoomDrawResult {
   width: number;
   depth: number;
 }
-interface Props {
+interface Props extends ArchitectureCanvasProps {
   resolveAsset?: (id: string) => Promise<Asset | undefined>;
   scene: SceneData;
   roomId: string;
@@ -141,6 +148,7 @@ export default function SceneCanvas(props: Props) {
     model: T.Group;
     rooms: T.Group;
     site: T.Group;
+    architecture: T.Group;
     references: T.Group;
     keys: Set<string>;
     walkRoomId: string;
@@ -153,6 +161,7 @@ export default function SceneCanvas(props: Props) {
     profileExterior?: ModelProfileRuntime["exterior"];
     modelSelection?: T.BoxHelper;
     roomDraft: T.Mesh;
+    wallDraft: T.Mesh;
     polygonDraft: T.Group;
     polygonEdit: T.Group;
     clearPolygonDraft: () => void;
@@ -217,6 +226,14 @@ export default function SceneCanvas(props: Props) {
       site = new T.Group(),
       references = new T.Group();
     site.name = "Studio site and landscape";
+    const architectureController = createArchitectureCanvasController({
+      getConfig: () => latest.current,
+      renderer,
+      controls,
+      pointOnFloor: (x, y, floorId, snap) => pointOnFloor(x, y, floorId, snap),
+      setStatus,
+    });
+    const architecture = architectureController.group;
     references.name = "Studio reference layers";
     const roomDraft = new T.Mesh(
       new T.BoxGeometry(1, 0.06, 1),
@@ -229,6 +246,7 @@ export default function SceneCanvas(props: Props) {
     );
     roomDraft.visible = false;
     roomDraft.renderOrder = 30;
+    const wallDraft = architectureController.wallDraft;
     const polygonDraft = new T.Group();
     polygonDraft.name = "Room polygon draft";
     polygonDraft.renderOrder = 31;
@@ -239,8 +257,10 @@ export default function SceneCanvas(props: Props) {
       references,
       model,
       site,
+      architecture,
       rooms,
       roomDraft,
+      wallDraft,
       polygonDraft,
       polygonEdit,
     );
@@ -404,7 +424,7 @@ export default function SceneCanvas(props: Props) {
         if (view === "building") {
           const contentBox = new T.Box3();
           let hasContent = false;
-          for (const root of [model, references]) {
+          for (const root of [model, references, architecture]) {
             if (!root.children.length) continue;
             root.updateWorldMatrix(true, true);
             contentBox.expandByObject(root);
@@ -447,6 +467,8 @@ export default function SceneCanvas(props: Props) {
       const box =
         view === "building" && model.children.length
           ? new T.Box3().setFromObject(model)
+          : view === "building" && architecture.children.length
+            ? new T.Box3().setFromObject(architecture)
           : r
             ? (() => {
                 const boundary = roomBoundaryPoints(r);
@@ -527,6 +549,7 @@ export default function SceneCanvas(props: Props) {
       model,
       rooms,
       site,
+      architecture,
       references,
       keys,
       walkRoomId: props.roomId,
@@ -537,6 +560,7 @@ export default function SceneCanvas(props: Props) {
       fill,
       grid,
       roomDraft,
+      wallDraft,
       polygonDraft,
       polygonEdit,
       clearPolygonDraft,
@@ -659,6 +683,7 @@ export default function SceneCanvas(props: Props) {
         );
         return;
       }
+      if (architectureController.commitTransform(target)) return;
       const furniture = current.scene.furniture.find(
         (candidate) => candidate.id === current.selected,
       );
@@ -717,6 +742,7 @@ export default function SceneCanvas(props: Props) {
           });
         }
       }
+      architectureController.addSnapSegments(floorId, segments);
       const snapped = resolvePlanSnap([point.x, point.z], {
         enabled: true,
         gridSize: 0.1,
@@ -804,6 +830,7 @@ export default function SceneCanvas(props: Props) {
 
     const pointerDown = (e: PointerEvent) => {
       renderer.domElement.focus();
+      if (architectureController.pointerDown(e)) return;
       if (
         e.button === 0 &&
         latest.current.roomPolygonEdit?.enabled &&
@@ -923,6 +950,7 @@ export default function SceneCanvas(props: Props) {
         renderer.domElement.setPointerCapture(e.pointerId);
     };
     const move = (e: PointerEvent) => {
+      if (architectureController.pointerMove(e)) return;
       if (vertexDrag) {
         const target = roomPlanePoint(e, vertexDrag.roomId);
         if (target) {
@@ -966,6 +994,7 @@ export default function SceneCanvas(props: Props) {
       point.y = e.clientY;
     };
     const click = (e: PointerEvent) => {
+      if (architectureController.pointerUp(e)) return;
       if (vertexDrag) {
         const current = vertexDrag;
         const target = roomPlanePoint(e, current.roomId);
@@ -1109,7 +1138,7 @@ export default function SceneCanvas(props: Props) {
       }
       const hit = ray.intersectObjects(
         latest.current.view === "building"
-          ? [...site.children, ...model.children]
+          ? [...architecture.children, ...site.children, ...model.children]
           : rooms.children,
         true,
       )[0];
@@ -1121,7 +1150,8 @@ export default function SceneCanvas(props: Props) {
             !n.userData.selectId &&
             !n.userData.studioNodeKey &&
             n !== model &&
-            n !== site
+            n !== site &&
+            n !== architecture
           )
             n = n.parent;
           if (n?.userData.selectId) {
@@ -1656,6 +1686,7 @@ export default function SceneCanvas(props: Props) {
       props.selected,
       r.selectables,
     );
+    renderArchitectureCanvas(r.architecture, props, r.selectables, props.isolateFloorId);
 
     for (const room of props.scene.rooms) {
       if (props.view === "walk" && room.id !== props.roomId) continue;
@@ -1731,6 +1762,7 @@ export default function SceneCanvas(props: Props) {
     props.roomId,
     props.isolateFloorId,
     props.roomMapEnabled,
+    props.architectureEditing,
     props.soloRoomId,
   ]);
   useEffect(() => {
@@ -1763,13 +1795,18 @@ export default function SceneCanvas(props: Props) {
         (element) => element.id === props.selected,
       ),
     );
+    const architectureSelection = architectureSelectionKind(props.scene, props.selected);
+    const isArchitectureWall = architectureSelection === "wall";
+    const isArchitectureOpening = architectureSelection === "opening";
     if (
       !target ||
       !props.transformEnabled ||
       props.view === "walk" ||
       (props.view === "building" &&
         !props.roomMapEnabled &&
-        !isSiteElement)
+        !isSiteElement &&
+        !isArchitectureWall &&
+        !isArchitectureOpening)
     )
       return;
 
@@ -1779,6 +1816,7 @@ export default function SceneCanvas(props: Props) {
     );
     if (
       (isRoom && mode === "rotate") ||
+      (isArchitectureOpening && mode === "rotate") ||
       (isFurniture && mode === "scale") ||
       (isRoom && props.view === "rooms" && props.soloRoomId)
     )
@@ -1984,58 +2022,25 @@ export default function SceneCanvas(props: Props) {
     runtime.controls.enablePan = false;
     runtime.focus();
   }, [props.alignmentMode]);
-  const authoringActive = Boolean(props.roomDraw?.enabled || props.roomStamp?.enabled ||
-    props.roomPolygonDraw?.enabled || props.furniturePlacement?.enabled);
+  const authoringActive = Boolean(
+    architectureAuthoringActive(props) || props.roomDraw?.enabled ||
+      props.roomStamp?.enabled || props.roomPolygonDraw?.enabled ||
+      props.furniturePlacement?.enabled,
+  );
   return (
     <div className={authoringActive ? "canvas-wrap room-draw-active" : "canvas-wrap"}>
       <div className="studio-canvas" ref={host} />
-      {status && (
-        <div className="canvas-status" role="status">
-          {status}
-        </div>
-      )}
-      <CanvasAuthoringHints
-        furniture={Boolean(props.furniturePlacement?.enabled)}
-        stamp={Boolean(props.roomStamp?.enabled)}
-        room={Boolean(props.roomDraw?.enabled)}
-        polygon={Boolean(props.roomPolygonDraw?.enabled)}
+      <SceneCanvasOverlays
+        status={status}
+        alignmentMode={props.alignmentMode}
+        view={props.view}
+        furnitureActive={Boolean(props.furniturePlacement?.enabled)}
+        stampActive={Boolean(props.roomStamp?.enabled)}
+        roomActive={Boolean(props.roomDraw?.enabled)}
+        polygonActive={Boolean(props.roomPolygonDraw?.enabled)}
+        onReset={() => api.current?.focus()}
+        onWalkKey={(key, active) => active ? api.current?.keys.add(key) : api.current?.keys.delete(key)}
       />
-      {props.alignmentMode && (
-        <div className="alignment-canvas-legend" aria-label="Alignment canvas legend">
-          <span className="model-key">3D MODEL</span>
-          <span className="plan-key">BLUE FADED = REFERENCE PLAN</span>
-          <small>Move only on the flat X/Z plane · camera rotation is locked</small>
-        </div>
-      )}
-      <button className="reset-camera" onClick={() => api.current?.focus()}>
-        Reset view
-      </button>
-      {props.view === "walk" && (
-        <div className="walk-pad">
-          <span>
-            Drag to look · WASD inside room · reviewed shared doors connect rooms · use room navigation when door evidence is unavailable
-          </span>
-          {[
-            ["w", "↑"],
-            ["a", "←"],
-            ["s", "↓"],
-            ["d", "→"],
-          ].map(([key, label]) => (
-            <button
-              key={key}
-              aria-label={`Walk ${label}`}
-              onPointerDown={(e) => {
-                e.currentTarget.setPointerCapture(e.pointerId);
-                api.current?.keys.add(key);
-              }}
-              onPointerUp={() => api.current?.keys.delete(key)}
-              onPointerCancel={() => api.current?.keys.delete(key)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

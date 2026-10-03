@@ -39,7 +39,26 @@ import {
   type RoomPoint,
   type SceneAppearance,
   type SiteElement,
+  type Wall,
 } from "./domain";
+import {
+  createManualOpening,
+  createManualWall,
+  moveManualOpening,
+  nearestWallForPoint,
+  patchManualOpening,
+  patchManualWall,
+  removeManualOpening,
+  removeManualWall,
+  setOpeningReviewed,
+  setWallReviewed,
+  wallLength,
+} from "./architectureAuthoring";
+import {
+  ArchitectureInspector,
+  ArchitectureOutliner,
+  ArchitectureToolbar,
+} from "./ArchitectureEditingPanels";
 import * as storage from "./storage";
 import * as cloud from "./cloud";
 import { rebindLocalProjectToEmptyCloud } from "./cloudIdentity";
@@ -160,6 +179,15 @@ export default function Studio() {
   const [showReferenceWorkspace, setShowReferenceWorkspace] = useState(false);
   const [showRoomMapper, setShowRoomMapper] = useState(false);
   const [showFloorReview, setShowFloorReview] = useState(false);
+  const [architectureTool, setArchitectureTool] = useState<
+    "select" | "wall" | "door" | "window"
+  >("select");
+  const [architectureFloorId, setArchitectureFloorId] = useState("");
+  const [wallThickness, setWallThickness] = useState(0.12);
+  const [wallHeight, setWallHeight] = useState(2.8);
+  const [openingWidth, setOpeningWidth] = useState(0.9);
+  const [openingHeight, setOpeningHeight] = useState(2.1);
+  const [openingSillHeight, setOpeningSillHeight] = useState(0.9);
   const [roomMapFloorId, setRoomMapFloorId] = useState("");
   const [roomMapUnit, setRoomMapUnit] = useState("Unit 101");
   const [roomMapName, setRoomMapName] = useState("Room");
@@ -271,6 +299,15 @@ export default function Studio() {
     setShowReferenceWorkspace(false);
     setShowRoomMapper(false);
     setShowFloorReview(false);
+    setArchitectureTool("select");
+    setArchitectureFloorId(
+      p.scene.rooms[0]?.floorId ?? p.scene.floors[0]?.id ?? "",
+    );
+    setWallThickness(0.12);
+    setWallHeight(2.8);
+    setOpeningWidth(0.9);
+    setOpeningHeight(2.1);
+    setOpeningSillHeight(0.9);
     setRoomMapFloorId(
       p.scene.rooms[0]?.floorId ?? p.scene.floors[0]?.id ?? "",
     );
@@ -757,6 +794,12 @@ export default function Studio() {
         setEditorFocus(false);
         return;
       }
+      if (event.key === "Escape" && architectureTool !== "select") {
+        event.preventDefault();
+        setArchitectureTool("select");
+        setMessage("");
+        return;
+      }
       if (event.key === "Escape") setShowFloorReview(false);
       if (review || busy) return;
       const target = event.target as HTMLElement | null;
@@ -789,7 +832,7 @@ export default function Studio() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [workspace, review, busy, project, editorFocus]);
+  }, [workspace, review, busy, project, editorFocus, architectureTool]);
   const openingSuggestions = useMemo(
     () =>
       project && smartAnalysis
@@ -816,6 +859,16 @@ export default function Studio() {
     ),
     item = scene.furniture.find((f) => f.id === selected),
     siteElement = scene.siteElements?.find((entry) => entry.id === selected),
+    selectedWall = scene.walls?.find((entry) => entry.id === selected),
+    selectedOpening = scene.openings?.find((entry) => entry.id === selected),
+    activeArchitectureFloorId =
+      architectureFloorId ||
+      selectedWall?.floorId ||
+      selectedOpening?.floorId ||
+      isolateFloorId ||
+      room?.floorId ||
+      scene.floors[0]?.id ||
+      "",
     floor = scene.floors.find((f) => f.id === room?.floorId),
     readiness = buildStudioReadiness(
       p,
@@ -1031,6 +1084,158 @@ export default function Studio() {
         ),
       },
     });
+  }
+
+  function architectureProject(nextScene: Project["scene"], message?: string) {
+    const next: Project = { ...p, scene: nextScene };
+    validateProject(next);
+    edit(next);
+    if (message) setMessage(message);
+    return next;
+  }
+
+  function patchSelectedWall(
+    change: Partial<Pick<Wall, "start" | "end" | "thickness" | "height">>,
+  ) {
+    if (!selectedWall) return;
+    try {
+      architectureProject(
+        patchManualWall(p.scene, selectedWall.id, change),
+        "Wall updated. Review it again before publishing.",
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Wall update failed.");
+    }
+  }
+
+  function patchSelectedOpening(change: Partial<Opening>) {
+    if (!selectedOpening) return;
+    try {
+      architectureProject(
+        patchManualOpening(p.scene, selectedOpening.id, {
+          ...(change.kind !== undefined ? { kind: change.kind } : {}),
+          ...(change.width !== undefined ? { width: change.width } : {}),
+          ...(change.height !== undefined ? { height: change.height } : {}),
+          ...(change.sillHeight !== undefined
+            ? { sillHeight: change.sillHeight }
+            : {}),
+        }),
+        "Opening updated. Review it again before publishing.",
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Opening update failed.");
+    }
+  }
+
+  function moveSelectedOpening(x: number, z: number) {
+    if (!selectedOpening) return;
+    try {
+      architectureProject(
+        moveManualOpening(p.scene, selectedOpening.id, [x, z]),
+        "Opening moved onto its host wall. Review it again before publishing.",
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Opening move failed.");
+    }
+  }
+
+  function startArchitectureTool(tool: typeof architectureTool) {
+    const floorId =
+      activeArchitectureFloorId || p.scene.floors[0]?.id || "";
+    if (!floorId) {
+      setError("Create or detect a floor before editing architecture.");
+      return;
+    }
+    setArchitectureFloorId(floorId);
+    setArchitectureTool(tool);
+    setShowReferenceWorkspace(false);
+    setShowRoomMapper(false);
+    setShowFloorReview(false);
+    setShowAssetShelf(false);
+    setView("building");
+    setCameraOrientation("top");
+    setIsolateFloorId(floorId);
+    if (tool !== "select") {
+      setSelected("");
+      setMesh("");
+      setSelectedModelNodeKey("");
+    }
+    setMessage(
+      tool === "wall"
+        ? "Wall tool active · drag on the plan to draw a wall."
+        : tool === "door"
+          ? "Door tool active · click a room-associated wall to place a door."
+          : tool === "window"
+            ? "Window tool active · click a room-associated wall to place a window."
+            : "Select a wall, door or window to edit it.",
+    );
+  }
+
+  function commitArchitectureWall(result: {
+    floorId: string;
+    start: RoomPoint;
+    end: RoomPoint;
+  }) {
+    try {
+      const built = createManualWall(
+        p.scene,
+        {
+          floorId: result.floorId,
+          start: result.start,
+          end: result.end,
+          thickness: wallThickness,
+          height: wallHeight,
+        },
+        id,
+      );
+      architectureProject(built.scene);
+      setSelected(built.wall.id);
+      setArchitectureFloorId(built.wall.floorId);
+      setArchitectureTool("select");
+      setMessage(
+        "Wall created · " + wallLength(built.wall).toFixed(2) + " m · " + built.wall.roomIds.length + " room link" + (built.wall.roomIds.length === 1 ? "" : "s") + ".",
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Wall creation failed.");
+    }
+  }
+
+  function commitArchitectureOpening(result: {
+    floorId: string;
+    point: RoomPoint;
+  }) {
+    if (architectureTool !== "door" && architectureTool !== "window") return;
+    const hit = nearestWallForPoint(p.scene, result.floorId, result.point, 0.75);
+    if (!hit) {
+      setError("Click directly on an editable wall to place the opening.");
+      return;
+    }
+    try {
+      const built = createManualOpening(
+        p.scene,
+        {
+          wallId: hit.wall.id,
+          kind: architectureTool,
+          x: result.point[0],
+          z: result.point[1],
+          width: openingWidth,
+          height: openingHeight,
+          ...(architectureTool === "window"
+            ? { sillHeight: openingSillHeight }
+            : {}),
+        },
+        id,
+      );
+      architectureProject(built.scene);
+      setSelected(built.opening.id);
+      setArchitectureFloorId(built.opening.floorId);
+      setArchitectureTool("select");
+      setMessage(
+        (built.opening.kind === "window" ? "Window" : "Door") + " placed on wall · review dimensions, then accept it.",
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Opening placement failed.");
+    }
   }
 
   function placeFurnitureOnCanvas(placement: {
@@ -1329,6 +1534,7 @@ export default function Studio() {
 
   function startVisualAlignment() {
     setShowFloorReview(false);
+    setArchitectureTool("select");
     setWorkspace("editor");
     setEditorFocus(false);
     setShowReferenceWorkspace(true);
@@ -1444,6 +1650,36 @@ export default function Studio() {
           ),
         },
       };
+    } else if (change.kind === "wall") {
+      next = {
+        ...p,
+        scene: patchManualWall(p.scene, change.id, {
+          ...(change.start !== undefined ? { start: change.start } : {}),
+          ...(change.end !== undefined ? { end: change.end } : {}),
+          ...(change.thickness !== undefined
+            ? { thickness: change.thickness }
+            : {}),
+          ...(change.height !== undefined ? { height: change.height } : {}),
+        }),
+      };
+    } else if (change.kind === "opening") {
+      let nextScene = p.scene;
+      if (change.x !== undefined || change.z !== undefined) {
+        const current = nextScene.openings?.find(
+          (entry) => entry.id === change.id,
+        );
+        if (!current) return;
+        nextScene = moveManualOpening(nextScene, change.id, [
+          change.x ?? current.x,
+          change.z ?? current.z,
+        ]);
+      }
+      if (change.width !== undefined || change.height !== undefined)
+        nextScene = patchManualOpening(nextScene, change.id, {
+          ...(change.width !== undefined ? { width: change.width } : {}),
+          ...(change.height !== undefined ? { height: change.height } : {}),
+        });
+      next = { ...p, scene: nextScene };
     } else if (change.kind === "room") {
       next = {
         ...p,
@@ -2093,6 +2329,16 @@ export default function Studio() {
       scene.rooms.find(
         (r) => r.id === scene.furniture.find((f) => f.id === key)?.roomId,
       );
+    const wall = scene.walls?.find((entry) => entry.id === key);
+    const opening = scene.openings?.find((entry) => entry.id === key);
+    if (wall || opening) {
+      const floorId = wall?.floorId ?? opening?.floorId ?? "";
+      setArchitectureFloorId(floorId);
+      setArchitectureTool("select");
+      setView("building");
+      setCameraOrientation("top");
+      setIsolateFloorId(floorId);
+    }
     if (r) {
       setRoomId(r.id);
       if (showRoomMapper) {
@@ -3549,6 +3795,13 @@ export default function Studio() {
             ))}
             </section>
           </details>
+          <ArchitectureOutliner
+            walls={scene.walls ?? []}
+            openings={scene.openings ?? []}
+            floorId={isolateFloorId}
+            selected={selected}
+            onSelect={select}
+          />
           {(scene.siteElements?.length ?? 0) > 0 && (
             <>
               <div className="section-label">SITE &amp; LANDSCAPE</div>
@@ -3710,6 +3963,7 @@ export default function Studio() {
               setRoomMapFloorId(floorId);
               setRoomMapUnit(room?.unit ?? roomMapUnit ?? "Unit 101");
               if (room) setSelected(room.id);
+              setArchitectureTool("select");
               setShowRoomMapper(true);
               setShowReferenceWorkspace(false);
               setShowAssetShelf(false);
@@ -3878,6 +4132,22 @@ export default function Studio() {
               ))}
             </div>
 
+            {view === "building" && (
+              <ArchitectureToolbar
+                floors={scene.floors}
+                activeFloorId={activeArchitectureFloorId}
+                tool={architectureTool}
+                disabled={Boolean(review) || busy}
+                onToolChange={startArchitectureTool}
+                onFloorChange={(floorId) => {
+                  setArchitectureFloorId(floorId);
+                  setIsolateFloorId(floorId);
+                  const target = scene.floors.find((entry) => entry.id === floorId);
+                  if (target) setSectionCutOffset(target.elevation + 1.5);
+                }}
+              />
+            )}
+
             {view === "rooms" && room && (
               <button
                 type="button"
@@ -3974,6 +4244,8 @@ export default function Studio() {
                     (view === "building" &&
                       !showReferenceWorkspace &&
                       !siteElement &&
+                      !selectedWall &&
+                      !selectedOpening &&
                       !(showRoomMapper && Boolean(room) && selected === room?.id))
                   }
                   title="Move selected object (W)"
@@ -3990,7 +4262,8 @@ export default function Studio() {
                     !(
                       (view === "rooms" && Boolean(item)) ||
                       (view === "building" && showReferenceWorkspace) ||
-                      Boolean(siteElement)
+                      Boolean(siteElement) ||
+                      Boolean(selectedWall)
                     )
                   }
                   title="Rotate selected object (E)"
@@ -4004,12 +4277,15 @@ export default function Studio() {
                   disabled={
                     Boolean(review) ||
                     busy ||
-                    (!siteElement &&
-                      !(
-                        view === "rooms" ||
-                        (view === "building" && showRoomMapper)
-                      )) ||
-                    (!siteElement && !room) ||
+                    !(
+                      Boolean(siteElement) ||
+                      Boolean(selectedWall) ||
+                      Boolean(selectedOpening) ||
+                      (view === "rooms" && Boolean(room) && !item) ||
+                      (view === "building" &&
+                        showRoomMapper &&
+                        Boolean(room))
+                    ) ||
                     Boolean(item)
                   }
                   title="Scale selected room (R)"
@@ -4063,6 +4339,7 @@ export default function Studio() {
                       setIsolateFloorId(next);
                       if (next) {
                         setRoomMapFloorId(next);
+                        setArchitectureFloorId(next);
                         const target = scene.floors.find((floor) => floor.id === next);
                         if (target) {
                           setSectionCutOffset(target.elevation + 1.5);
@@ -4190,6 +4467,32 @@ export default function Studio() {
             alignmentMode={showReferenceWorkspace}
             autoAlignRequest={autoAlignRequest}
             roomMapEnabled={showRoomMapper || showFloorReview}
+            architectureEditing={
+              view === "building" &&
+              !showReferenceWorkspace &&
+              !showRoomMapper &&
+              !showFloorReview
+            }
+            wallDraw={{
+              enabled:
+                architectureTool === "wall" &&
+                !showReferenceWorkspace &&
+                !showRoomMapper &&
+                !showFloorReview,
+              floorId: activeArchitectureFloorId,
+              snap: transformSnap,
+            }}
+            openingPlacement={{
+              enabled:
+                (architectureTool === "door" || architectureTool === "window") &&
+                !showReferenceWorkspace &&
+                !showRoomMapper &&
+                !showFloorReview,
+              floorId: activeArchitectureFloorId,
+              snap: transformSnap,
+            }}
+            onWallDraw={commitArchitectureWall}
+            onOpeningPlace={commitArchitectureOpening}
             roomDraw={{
               enabled:
                 showRoomMapper &&
@@ -4461,6 +4764,40 @@ export default function Studio() {
                 onFocus={() => setFocusRequest((value) => value + 1)}
                 />
               </details>
+            ) : selectedWall || selectedOpening ? (
+              <ArchitectureInspector
+                wall={selectedWall}
+                opening={selectedOpening}
+                onPatchWall={patchSelectedWall}
+                onPatchOpening={patchSelectedOpening}
+                onMoveOpening={moveSelectedOpening}
+                onAcceptWall={() =>
+                  architectureProject(
+                    setWallReviewed(p.scene, selectedWall!.id, true),
+                    "Wall accepted as human-reviewed architecture.",
+                  )
+                }
+                onRemoveWall={() => {
+                  try {
+                    architectureProject(removeManualWall(p.scene, selectedWall!.id));
+                    setSelected("");
+                    setMessage("Wall removed. Linked room review state was reset where needed.");
+                  } catch (reason) {
+                    setError(reason instanceof Error ? reason.message : "Wall removal failed.");
+                  }
+                }}
+                onAcceptOpening={() =>
+                  architectureProject(
+                    setOpeningReviewed(p.scene, selectedOpening!.id, true),
+                    selectedOpening!.kind + " accepted as human-reviewed architecture.",
+                  )
+                }
+                onRemoveOpening={() => {
+                  architectureProject(removeManualOpening(p.scene, selectedOpening!.id));
+                  setSelected("");
+                  setMessage("Opening removed.");
+                }}
+              />
             ) : siteElement ? (
               <>
                 <h2>
