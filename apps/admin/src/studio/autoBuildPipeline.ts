@@ -23,6 +23,10 @@ import {
   applyPhase2CadFusion,
   type Phase2CadFusionSummary,
 } from "./phase2CadFusion";
+import {
+  buildAutoBuildExecutionReport,
+  type AutoBuildExecutionReport,
+} from "./autoBuildReport";
 
 export interface AutoBuildPipelineOptions
   extends LegacyAutoBuildPipelineOptions {
@@ -44,6 +48,7 @@ export interface AutoBuildPipelineResult
   sourcePlan: AutoBuildSourcePlan;
   phase2CadFusion: Phase2CadFusionSummary;
   structuredEvidence: AutoBuildStructuredEvidenceSummary;
+  certificationReport: AutoBuildExecutionReport;
 }
 
 function unique(values: readonly string[]) {
@@ -94,23 +99,39 @@ export async function runAutoBuildPipeline(
     phase2.project,
     parsedRoomSheets.rows,
   );
+  const structuredEvidence: AutoBuildStructuredEvidenceSummary = {
+    ...structured.summary,
+    parseIssues: parsedRoomSheets.issues.length,
+  };
+  const issues = unique([
+    ...base.issues,
+    ...sourcePlan.planningIssues,
+    ...phase2.issues,
+    ...parsedRoomSheets.issues,
+    ...structured.issues,
+  ]);
+  const reportFiles = [...files, ...base.assets].filter(
+    (asset, index, all) => all.findIndex((candidate) => candidate.id === asset.id) === index,
+  );
+  const certificationReport = buildAutoBuildExecutionReport({
+    project: structured.project,
+    files: reportFiles,
+    analysis: base.analysis,
+    summary: base.summary,
+    phase2: phase2.summary,
+    structured: structuredEvidence,
+    issues,
+    sourcePlanMode: sourcePlan.mode,
+  });
 
   return {
     ...base,
     project: structured.project,
     sourcePlan,
     phase2CadFusion: phase2.summary,
-    structuredEvidence: {
-      ...structured.summary,
-      parseIssues: parsedRoomSheets.issues.length,
-    },
-    issues: unique([
-      ...base.issues,
-      ...sourcePlan.planningIssues,
-      ...phase2.issues,
-      ...parsedRoomSheets.issues,
-      ...structured.issues,
-    ]),
+    structuredEvidence,
+    certificationReport,
+    issues,
   };
 }
 
@@ -134,8 +155,10 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   const structuredText = structured.rowCount
     ? ` · CSV/TSV ${structured.applied}/${structured.matched} matched room measurement${structured.matched === 1 ? "" : "s"} applied${structuredReview ? ` · ${structuredReview} structured evidence item${structuredReview === 1 ? "" : "s"} need review` : ""}`
     : "";
+  const certification = result.certificationReport;
+  const certificationText = ` · certification ${certification.checkCoveragePercent}% (${certification.counts.blocked} blocked · ${certification.counts.needsReview} review)`;
 
-  return `${base}${phase2Text}${structuralText}${structuredText}.`;
+  return `${base}${phase2Text}${structuralText}${structuredText}${certificationText}.`;
 }
 
 /**
