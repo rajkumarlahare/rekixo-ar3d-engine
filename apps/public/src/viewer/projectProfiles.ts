@@ -5,6 +5,7 @@ import {
   type ModelProfileRuntime,
 } from "./modelProfiles";
 import type { ExperienceFeature, ExperienceMode } from "./experienceTypes";
+import { createSemanticStudioExperience } from "./semanticStudioExperience";
 
 export { applyModelProfileExterior, loadModelProfileMaterialEnhancer };
 export type { ExperienceFeature, ExperienceMode, ModelProfileRuntime };
@@ -13,6 +14,8 @@ export interface ExperienceRuntime {
   root: THREE.Object3D;
   rooms: ExperienceFeature[];
   features: ExperienceFeature[];
+  /** Whether reviewed Studio geometry should replace the source model in interior mode. */
+  replaceSourceModelInInterior?: boolean;
   roomEntry(id: string):
     | { point: THREE.Vector3; bounds: THREE.Box3; scale: number }
     | undefined;
@@ -30,13 +33,15 @@ export interface ModelProfileContext {
 }
 
 /**
- * Clean generic registry: there are no repository-baked project experiences.
- * Future project experiences must come from newly ingested/reviewed project data.
+ * Generic data-driven experience loader. Repository-baked project interiors are
+ * not allowed here; reviewed immutable Studio geometry is the reusable source.
  */
 export async function loadProfileExperience(
   _profile: ModelProfileRuntime | undefined,
-  _bounds: THREE.Box3,
-  _context: ModelProfileContext,
+  bounds: THREE.Box3,
+  context: ModelProfileContext,
 ): Promise<ExperienceRuntime | undefined> {
-  return undefined;
+  const semantic = createSemanticStudioExperience(bounds, context.mobile);
+  if (semantic) semantic.replaceSourceModelInInterior = true;
+  return semantic;
 }
