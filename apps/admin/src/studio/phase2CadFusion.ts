@@ -40,6 +40,7 @@ export interface Phase2CadFusionSummary {
   siteElementsPrepared: number;
   siteElementsReady: number;
   structuralEvidence: number;
+  structuralFootprints: number;
   structuralReviewOnly: number;
 }
 
@@ -61,10 +62,12 @@ const STRUCTURAL_KINDS = new Set([
   "stair",
   "lift",
   "column",
+  "beam",
   "slab",
   "roof",
   "duct",
   "balcony",
+  "boundary",
   "gate",
 ]);
 
@@ -79,10 +82,12 @@ function structuralRows(audit: SmartCadAudit) {
     ...document.objects.map((entry) => ({
       kind: entry.kind,
       id: entry.id,
+      footprint: Boolean(entry.bounds),
     })),
     ...document.inserts.map((entry) => ({
       kind: entry.kind,
       id: entry.id,
+      footprint: false,
     })),
   ].filter((entry) => STRUCTURAL_KINDS.has(entry.kind));
 }
@@ -91,16 +96,19 @@ export function phase2StructuralEvidenceCounts(
   analysis: Pick<SmartProjectAnalysis, "cadAudits">,
 ) {
   let structuralEvidence = 0;
+  let structuralFootprints = 0;
   let circulationEvidence = 0;
   for (const audit of analysis.cadAudits) {
     for (const entry of structuralRows(audit)) {
       structuralEvidence += 1;
+      if (entry.footprint) structuralFootprints += 1;
       if (entry.kind === "stair" || entry.kind === "lift")
         circulationEvidence += 1;
     }
   }
   return {
     structuralEvidence,
+    structuralFootprints,
     circulationEvidence,
     structuralReviewOnly: Math.max(
       0,
@@ -363,6 +371,7 @@ export function applyPhase2CadFusion(
     siteElementsPrepared: 0,
     siteElementsReady: 0,
     structuralEvidence: counts.structuralEvidence,
+    structuralFootprints: counts.structuralFootprints,
     structuralReviewOnly: counts.structuralReviewOnly,
   };
 
@@ -454,9 +463,13 @@ export function applyPhase2CadFusion(
     );
   }
 
+  if (counts.structuralFootprints)
+    issues.push(
+      `${counts.structuralFootprints} structural CAD footprint${counts.structuralFootprints === 1 ? "" : "s"} have source-backed 2D bounds ready for the dedicated structural scene primitive; no vertical dimension is invented from plan evidence.`,
+    );
   if (counts.structuralReviewOnly)
     issues.push(
-      `${counts.structuralReviewOnly} CAD structural object${counts.structuralReviewOnly === 1 ? "" : "s"} (column/slab/roof/duct/balcony/gate class) remain first-class source evidence; Phase 2 does not coerce them into wall/room geometry without a dedicated structural scene primitive.`,
+      `${counts.structuralReviewOnly} CAD structural object${counts.structuralReviewOnly === 1 ? "" : "s"} (column/beam/slab/roof/duct/balcony/boundary/gate class) remain first-class source evidence; Phase 2 does not coerce them into wall/room geometry without a dedicated structural scene primitive.`,
     );
 
   return {
@@ -476,6 +489,7 @@ export function applyPhase2CadFusion(
       siteElementsPrepared,
       siteElementsReady,
       structuralEvidence: counts.structuralEvidence,
+      structuralFootprints: counts.structuralFootprints,
       structuralReviewOnly: counts.structuralReviewOnly,
     },
     issues: unique(issues),
