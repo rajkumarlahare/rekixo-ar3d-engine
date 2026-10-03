@@ -6,6 +6,8 @@ on:
       - phase16/direct-architectural-editing-v2
     paths:
       - .github/workflows/phase16-v2-port.yml
+      - tests/reviewed-door-walkthrough.test.mjs
+      - tests/visual-plan-alignment.test.mjs
   workflow_dispatch:
 
 permissions:
