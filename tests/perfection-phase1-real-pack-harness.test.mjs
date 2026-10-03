@@ -6,8 +6,6 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 const script = path.resolve("scripts/certify-golden-source-pack.mjs");
-const knownPrivateFingerprint =
-  "1dce4dec093ef5707617c99ccb26ad3a5b6cb6c2d02b5efe4a171c852cc616e0";
 
 function run(args) {
   return spawnSync(process.execPath, [script, ...args], {
@@ -94,18 +92,22 @@ test("private golden runner fails closed when any source bytes change", () => {
   assert.match(verified.stderr, /certification is blocked/i);
 });
 
-test("public harness never embeds customer-specific names or fingerprints", () => {
+test("public harness stays generic and receives the real pack only at runtime", () => {
   const runner = fs.readFileSync(script, "utf8");
   const e2e = fs.readFileSync("e2e/golden-source-pack.spec.ts", "utf8");
+  const workflow = fs.readFileSync(
+    ".github/workflows/certify-golden-source-pack.yml",
+    "utf8",
+  );
 
-  for (const source of [runner, e2e]) {
-    assert.doesNotMatch(source, /Jyoti/i);
-    assert.doesNotMatch(source, new RegExp(knownPrivateFingerprint, "i"));
-  }
+  for (const source of [runner, e2e, workflow]) assert.doesNotMatch(source, /Jyoti/i);
 
   assert.match(e2e, /REKIXO_GOLDEN_PACK_DIR/);
   assert.match(e2e, /REKIXO_GOLDEN_MANIFEST/);
   assert.match(e2e, /REKIXO_DWG_PROCESSOR_URL/);
   assert.match(e2e, /test\.skip/);
   assert.match(e2e, /certification \\d\+% \\(0 blocked/);
+  assert.match(workflow, /workflow_dispatch/);
+  assert.match(workflow, /REKIXO_GOLDEN_MANIFEST_B64/);
+  assert.match(workflow, /> \/dev\/null/);
 });
