@@ -37,6 +37,7 @@ import {
   type Room,
   type RoomPoint,
   type SceneAppearance,
+  type SiteElement,
 } from "./domain";
 import * as storage from "./storage";
 import * as cloud from "./cloud";
@@ -818,6 +819,7 @@ export default function Studio() {
         isRemovableUnsourcedDraft(scene, room),
     ),
     item = scene.furniture.find((f) => f.id === selected),
+    siteElement = scene.siteElements?.find((entry) => entry.id === selected),
     floor = scene.floors.find((f) => f.id === room?.floorId),
     readiness = buildStudioReadiness(
       p,
@@ -1013,6 +1015,28 @@ export default function Studio() {
       },
     });
   }
+  function patchSiteElement(change: Partial<SiteElement>) {
+    if (!siteElement) return;
+    edit({
+      ...p,
+      scene: {
+        ...p.scene,
+        siteElements: (p.scene.siteElements ?? []).map((entry) =>
+          entry.id === siteElement.id
+            ? {
+                ...entry,
+                ...change,
+                reviewed: false,
+                reviewState: "suggested" as const,
+                origin: "manual" as const,
+                confidence: undefined,
+              }
+            : entry,
+        ),
+      },
+    });
+  }
+
   function placeFurnitureOnCanvas(placement: {
     kind: Kind;
     roomId: string;
@@ -1390,6 +1414,38 @@ export default function Studio() {
               ? { rotationY: change.rotationY }
               : {}),
           },
+        },
+      };
+    } else if (change.kind === "siteElement") {
+      next = {
+        ...p,
+        scene: {
+          ...p.scene,
+          siteElements: (p.scene.siteElements ?? []).map((candidate) =>
+            candidate.id === change.id
+              ? {
+                  ...candidate,
+                  ...(change.x !== undefined ? { x: change.x } : {}),
+                  ...(change.z !== undefined ? { z: change.z } : {}),
+                  ...(change.rotation !== undefined
+                    ? { rotation: change.rotation }
+                    : {}),
+                  ...(change.width !== undefined
+                    ? { width: change.width }
+                    : {}),
+                  ...(change.depth !== undefined
+                    ? { depth: change.depth }
+                    : {}),
+                  ...(change.height !== undefined
+                    ? { height: change.height }
+                    : {}),
+                  reviewed: false,
+                  reviewState: "suggested" as const,
+                  origin: "manual" as const,
+                  confidence: undefined,
+                }
+              : candidate,
+          ),
         },
       };
     } else if (change.kind === "room") {
@@ -2034,6 +2090,8 @@ export default function Studio() {
 
   function select(key: string) {
     setSelected(key);
+    setMesh("");
+    setSelectedModelNodeKey("");
     const r =
       scene.rooms.find((r) => r.id === key) ??
       scene.rooms.find(
@@ -3498,6 +3556,42 @@ export default function Studio() {
             ))}
             </section>
           </details>
+          {(scene.siteElements?.length ?? 0) > 0 && (
+            <>
+              <div className="section-label">SITE &amp; LANDSCAPE</div>
+              <div className="room-tree site-element-tree">
+                {(scene.siteElements ?? []).map((entry) => (
+                  <button
+                    type="button"
+                    key={entry.id}
+                    className={
+                      selected === entry.id
+                        ? "tree-room active"
+                        : "tree-room"
+                    }
+                    onClick={() => {
+                      setView("building");
+                      setSelected(entry.id);
+                      setMesh("");
+                      setSelectedModelNodeKey("");
+                    }}
+                  >
+                    <span>
+                      {entry.reviewed ? "◉" : "○"}{" "}
+                      {entry.kind
+                        .replaceAll("-", " ")
+                        .replace(/\b\w/g, (value) => value.toUpperCase())}
+                    </span>
+                    <small>
+                      {entry.origin === "cad-auto" ? "CAD source" : "Edited"}
+                      {" · "}
+                      {entry.width.toFixed(1)} × {entry.depth.toFixed(1)} m
+                    </small>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           <div className="section-label">
             PROJECT{" "}
             <button
@@ -3886,6 +3980,7 @@ export default function Studio() {
                     view === "walk" ||
                     (view === "building" &&
                       !showReferenceWorkspace &&
+                      !siteElement &&
                       !(showRoomMapper && Boolean(room) && selected === room?.id))
                   }
                   title="Move selected object (W)"
@@ -3901,7 +3996,8 @@ export default function Studio() {
                     busy ||
                     !(
                       (view === "rooms" && Boolean(item)) ||
-                      (view === "building" && showReferenceWorkspace)
+                      (view === "building" && showReferenceWorkspace) ||
+                      Boolean(siteElement)
                     )
                   }
                   title="Rotate selected object (E)"
@@ -3915,11 +4011,12 @@ export default function Studio() {
                   disabled={
                     Boolean(review) ||
                     busy ||
-                    !(
-                      view === "rooms" ||
-                      (view === "building" && showRoomMapper)
-                    ) ||
-                    !room ||
+                    (!siteElement &&
+                      !(
+                        view === "rooms" ||
+                        (view === "building" && showRoomMapper)
+                      )) ||
+                    (!siteElement && !room) ||
                     Boolean(item)
                   }
                   title="Scale selected room (R)"
@@ -4371,6 +4468,135 @@ export default function Studio() {
                 onFocus={() => setFocusRequest((value) => value + 1)}
                 />
               </details>
+            ) : siteElement ? (
+              <>
+                <h2>
+                  {siteElement.kind
+                    .replaceAll("-", " ")
+                    .replace(/\b\w/g, (value) => value.toUpperCase())}
+                </h2>
+                <p>
+                  {siteElement.origin === "cad-auto"
+                    ? "Source-backed site draft. Review it before publishing."
+                    : "Edited site element. Review it again before publishing."}
+                </p>
+                <label>
+                  Site type
+                  <select
+                    value={siteElement.kind}
+                    onChange={(event) =>
+                      patchSiteElement({
+                        kind: event.target.value as SiteElement["kind"],
+                      })
+                    }
+                  >
+                    <option value="garden">Garden</option>
+                    <option value="lawn">Lawn</option>
+                    <option value="path">Path</option>
+                    <option value="road">Road / driveway</option>
+                    <option value="parking">Parking</option>
+                    <option value="tree">Tree</option>
+                    <option value="plant">Plant / shrub</option>
+                    <option value="gate">Gate</option>
+                    <option value="outdoor-light">Outdoor light</option>
+                  </select>
+                </label>
+                {field("Position X", siteElement.x, (x) =>
+                  patchSiteElement({ x }),
+                )}
+                {field("Position Z", siteElement.z, (z) =>
+                  patchSiteElement({ z }),
+                )}
+                {field("Width", siteElement.width, (width) =>
+                  patchSiteElement({ width: Math.max(0.05, width) }),
+                )}
+                {field("Depth", siteElement.depth, (depth) =>
+                  patchSiteElement({ depth: Math.max(0.05, depth) }),
+                )}
+                {field("Height", siteElement.height, (height) =>
+                  patchSiteElement({ height: Math.max(0.01, height) }),
+                )}
+                {field(
+                  "Rotation °",
+                  siteElement.rotation,
+                  (rotation) => patchSiteElement({ rotation }),
+                  15,
+                )}
+                <label>
+                  Finish
+                  <input
+                    aria-label="Site element finish"
+                    type="color"
+                    value={siteElement.color}
+                    onChange={(event) =>
+                      patchSiteElement({ color: event.target.value })
+                    }
+                  />
+                </label>
+                {siteElement.sourceAssetId && (
+                  <small>
+                    Source evidence: {siteElement.sourceRef ?? "CAD entity"}
+                    {siteElement.confidence !== undefined
+                      ? " · confidence " + siteElement.confidence.toFixed(2)
+                      : ""}
+                  </small>
+                )}
+                <button
+                  className={siteElement.reviewed ? "" : "primary"}
+                  disabled={siteElement.reviewed}
+                  onClick={() => {
+                    const next: Project = {
+                      ...p,
+                      scene: {
+                        ...p.scene,
+                        siteElements: (p.scene.siteElements ?? []).map(
+                          (entry) =>
+                            entry.id === siteElement.id
+                              ? {
+                                  ...entry,
+                                  reviewed: true,
+                                  reviewState: "human_reviewed" as const,
+                                }
+                              : entry,
+                        ),
+                      },
+                    };
+                    try {
+                      validateProject(next);
+                      edit(next);
+                      setMessage(
+                        siteElement.kind.replaceAll("-", " ") +
+                          " accepted for the site plan.",
+                      );
+                    } catch (reason) {
+                      setError(
+                        reason instanceof Error
+                          ? reason.message
+                          : "Site element review failed.",
+                      );
+                    }
+                  }}
+                >
+                  {siteElement.reviewed ? "Reviewed" : "Accept site element"}
+                </button>
+                <button
+                  className="danger"
+                  onClick={() => {
+                    edit({
+                      ...p,
+                      scene: {
+                        ...p.scene,
+                        siteElements: (p.scene.siteElements ?? []).filter(
+                          (entry) => entry.id !== siteElement.id,
+                        ),
+                      },
+                    });
+                    setSelected("");
+                  }}
+                >
+                  Remove site element
+                </button>
+              </>
             ) : item ? (
               <>
                 <h2>{catalog[item.kind].name}</h2>

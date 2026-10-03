@@ -35,6 +35,36 @@ export interface Room {
 }
 export type FurnitureOrigin = "demo-auto" | "demo-repeat" | "source-auto";
 
+export type SiteElementKind =
+  | "garden"
+  | "lawn"
+  | "path"
+  | "road"
+  | "parking"
+  | "tree"
+  | "plant"
+  | "gate"
+  | "outdoor-light";
+export type SiteElementOrigin = "cad-auto" | "manual";
+
+export interface SiteElement {
+  id: string;
+  kind: SiteElementKind;
+  x: number;
+  z: number;
+  width: number;
+  depth: number;
+  height: number;
+  rotation: number;
+  color: string;
+  reviewed: boolean;
+  reviewState?: ReviewState;
+  origin: SiteElementOrigin;
+  confidence?: number;
+  sourceAssetId?: string;
+  sourceRef?: string;
+}
+
 export interface Furniture {
   id: string;
   kind: Kind;
@@ -182,6 +212,7 @@ export interface Scene {
   floors: Floor[];
   rooms: Room[];
   furniture: Furniture[];
+  siteElements?: SiteElement[];
   walls?: Wall[];
   openings?: Opening[];
   /** Source/authoring model used for analysis, mesh tags and Studio editing. */
@@ -564,6 +595,7 @@ export function newProject(name: string): Project {
       floors: [{ id: id(), name: "Ground", elevation: 0 }],
       rooms: [],
       furniture: [],
+      siteElements: [],
       walls: [],
       openings: [],
     },
@@ -588,6 +620,8 @@ export function validateScene(s: Scene): void {
     s.rooms.length > 500 ||
     !Array.isArray(s.furniture) ||
     s.furniture.length > 2000 ||
+    (s.siteElements !== undefined &&
+      (!Array.isArray(s.siteElements) || s.siteElements.length > 5000)) ||
     (s.walls !== undefined &&
       (!Array.isArray(s.walls) || s.walls.length > 10000)) ||
     (s.openings !== undefined &&
@@ -599,6 +633,7 @@ export function validateScene(s: Scene): void {
     !unique(s.floors) ||
     !unique(s.rooms) ||
     !unique(s.furniture) ||
+    (s.siteElements !== undefined && !unique(s.siteElements)) ||
     (s.walls !== undefined && !unique(s.walls)) ||
     (s.openings !== undefined && !unique(s.openings))
   )
@@ -907,6 +942,43 @@ export function validateScene(s: Scene): void {
     )
       throw Error("Invalid reviewed wall opening.");
   }
+  for (const site of s.siteElements ?? []) {
+    if (
+      ![
+        "garden",
+        "lawn",
+        "path",
+        "road",
+        "parking",
+        "tree",
+        "plant",
+        "gate",
+        "outdoor-light",
+      ].includes(site.kind) ||
+      !number(site.x, -10000, 10000) ||
+      !number(site.z, -10000, 10000) ||
+      !number(site.width, 0.05, 1000) ||
+      !number(site.depth, 0.05, 1000) ||
+      !number(site.height, 0.01, 100) ||
+      !number(site.rotation, -3600, 3600) ||
+      !color(site.color) ||
+      typeof site.reviewed !== "boolean" ||
+      !["cad-auto", "manual"].includes(site.origin) ||
+      (site.reviewState !== undefined &&
+        !["suggested", "auto_ready", "human_reviewed"].includes(
+          site.reviewState,
+        )) ||
+      (site.reviewState === "human_reviewed" && site.reviewed !== true) ||
+      (site.reviewed === true &&
+        site.reviewState !== undefined &&
+        site.reviewState !== "human_reviewed") ||
+      (site.confidence !== undefined && !number(site.confidence, 0, 1)) ||
+      (site.sourceAssetId !== undefined && !text(site.sourceAssetId, 100)) ||
+      (site.sourceRef !== undefined && !text(site.sourceRef, 500))
+    )
+      throw Error("Invalid site/landscape element.");
+  }
+
   for (const f of s.furniture) {
     const r = s.rooms.find((r) => r.id === f.roomId);
     if (
@@ -1019,6 +1091,9 @@ export function validateProject(p: Project): void {
       !p.assets.includes(s.referenceImageEvidence.assetId)
     )
       throw Error("Reference image evidence asset is missing.");
+    for (const site of s.siteElements ?? [])
+      if (site.sourceAssetId && !p.assets.includes(site.sourceAssetId))
+        throw Error("Site element source asset is missing.");
     for (const room of s.rooms)
       if (room.sourceAssetId && !p.assets.includes(room.sourceAssetId))
         throw Error("Room source asset is missing.");

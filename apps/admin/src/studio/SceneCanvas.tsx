@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import * as T from "three";
 import { disposeObjectResources } from "./threeResources";
+import type { TransformCommit, TransformMode } from "./sceneCanvasTransform";
+export type { TransformCommit, TransformMode } from "./sceneCanvasTransform";
 import {
   applyModelMaterialOverrides,
   applyModelNodeVisibility,
@@ -8,7 +10,14 @@ import {
   type ModelMaterialSummary,
 } from "./sceneCanvasModel";
 import { roomSurface } from "./sceneCanvasRooms";
-import { addFurnitureVisual } from "./furnitureVisual";
+import {
+  renderReviewedOpeningMarkers,
+  renderRoomFurniture,
+} from "./sceneCanvasRoomObjects";
+import {
+  renderSiteElements,
+  siteElementTransformChange,
+} from "./sceneCanvasSite";
 import {
   installCanvasFurnitureDrop,
   placeCanvasFurnitureAtPointer,
@@ -39,31 +48,6 @@ import {
 } from "./domain";
 
 export type View = "building" | "rooms" | "walk";
-export type TransformMode = "translate" | "rotate" | "scale";
-export type TransformCommit =
-  | {
-      kind: "room";
-      id: string;
-      x?: number;
-      z?: number;
-      width?: number;
-      depth?: number;
-      height?: number;
-    }
-  | {
-      kind: "furniture";
-      id: string;
-      x?: number;
-      z?: number;
-      rotation?: number;
-    }
-  | {
-      kind: "model";
-      x?: number;
-      y?: number;
-      z?: number;
-      rotationY?: number;
-    };
 export interface ModelNodeSummary {
   key: string;
   name: string;
@@ -151,6 +135,7 @@ export default function SceneCanvas(props: Props) {
     controls: OrbitControls;
     model: T.Group;
     rooms: T.Group;
+    site: T.Group;
     references: T.Group;
     keys: Set<string>;
     walkRoomId: string;
@@ -224,7 +209,9 @@ export default function SceneCanvas(props: Props) {
     scene.add(grid);
     const model = new T.Group(),
       rooms = new T.Group(),
+      site = new T.Group(),
       references = new T.Group();
+    site.name = "Studio site and landscape";
     references.name = "Studio reference layers";
     const roomDraft = new T.Mesh(
       new T.BoxGeometry(1, 0.06, 1),
@@ -243,7 +230,15 @@ export default function SceneCanvas(props: Props) {
     const polygonEdit = new T.Group();
     polygonEdit.name = "Room polygon edit handles";
     polygonEdit.renderOrder = 32;
-    scene.add(references, model, rooms, roomDraft, polygonDraft, polygonEdit);
+    scene.add(
+      references,
+      model,
+      site,
+      rooms,
+      roomDraft,
+      polygonDraft,
+      polygonEdit,
+    );
     const keys = new Set<string>();
     const selectables = new Map<string, T.Object3D>();
     const transform = new TransformControls(camera, renderer.domElement);
@@ -526,6 +521,7 @@ export default function SceneCanvas(props: Props) {
       controls,
       model,
       rooms,
+      site,
       references,
       keys,
       walkRoomId: props.roomId,
@@ -643,6 +639,19 @@ export default function SceneCanvas(props: Props) {
             depth: Math.max(0.5, selectedRoom.depth * Math.abs(target.scale.z)),
           });
         }
+        return;
+      }
+      const siteElement = current.scene.siteElements?.find(
+        (candidate) => candidate.id === current.selected,
+      );
+      if (siteElement) {
+        current.onTransformCommit(
+          siteElementTransformChange(
+            siteElement,
+            target,
+            current.transformMode ?? "translate",
+          ),
+        );
         return;
       }
       const furniture = current.scene.furniture.find(
@@ -1105,13 +1114,26 @@ export default function SceneCanvas(props: Props) {
         }
       }
       const hit = ray.intersectObjects(
-        latest.current.view === "building" ? model.children : rooms.children,
+        latest.current.view === "building"
+          ? [...site.children, ...model.children]
+          : rooms.children,
         true,
       )[0];
       if (hit) {
         if (latest.current.view === "building") {
           let n: T.Object3D | null = hit.object;
-          while (n && !n.userData.studioNodeKey && n !== model) n = n.parent;
+          while (
+            n &&
+            !n.userData.selectId &&
+            !n.userData.studioNodeKey &&
+            n !== model &&
+            n !== site
+          )
+            n = n.parent;
+          if (n?.userData.selectId) {
+            latest.current.onSelect(String(n.userData.selectId));
+            return;
+          }
           if (n?.userData.studioNodeKey) {
             const summary: ModelNodeSummary = {
               key: String(n.userData.studioNodeKey),
@@ -1623,6 +1645,7 @@ export default function SceneCanvas(props: Props) {
     r.model.rotation.y = T.MathUtils.degToRad(alignment.rotationY);
     r.model.scale.setScalar(props.scene.scale);
     r.references.visible = props.view !== "walk";
+    r.site.visible = props.view === "building";
     r.transform.detach();
     r.selectables.clear();
     for (const n of [...r.rooms.children]) {
@@ -1632,6 +1655,14 @@ export default function SceneCanvas(props: Props) {
     r.model.visible = props.view === "building";
     r.rooms.visible = props.view !== "building" || Boolean(props.roomMapEnabled);
     r.controls.enabled = props.view !== "walk";
+
+    renderSiteElements(
+      r.site,
+      props.view === "building" ? props.scene.siteElements ?? [] : [],
+      props.selected,
+      r.selectables,
+    );
+
     for (const room of props.scene.rooms) {
       if (props.view === "walk" && room.id !== props.roomId) continue;
       if (
@@ -1678,65 +1709,27 @@ export default function SceneCanvas(props: Props) {
         r.rooms.add(line);
       }
       if (props.roomMapEnabled && props.view === "building") continue;
-      for (const f of props.scene.furniture.filter(
-        (f) => f.roomId === room.id,
-      )) {
-        const g = new T.Group();
-        g.userData.selectId = f.id;
-        g.position.set(f.x, 0, f.z);
-        g.rotation.y = (f.rotation * Math.PI) / 180;
-        root.add(g);
-        r.selectables.set(f.id, g);
-        addFurnitureVisual(g, f);
-        if (f.id === props.selected) {
-          g.updateWorldMatrix(true, true);
-          r.rooms.add(new T.BoxHelper(g, 0xd67e34));
-        }
-      }
+      renderRoomFurniture(
+        root,
+        r.rooms,
+        room.id,
+        props.scene.furniture,
+        props.selected,
+        r.selectables,
+      );
     }
 
-    for (const opening of props.scene.openings ?? []) {
-      if (!opening.reviewed) continue;
-      if (
-        props.isolateFloorId &&
-        opening.floorId !== props.isolateFloorId
-      )
-        continue;
-      if (
-        props.view === "rooms" &&
-        props.soloRoomId &&
-        !opening.roomIds.includes(props.soloRoomId)
-      )
-        continue;
-      if (
-        props.view === "walk" &&
-        !opening.roomIds.includes(props.roomId)
-      )
-        continue;
-      const material = new T.MeshStandardMaterial({
-        color: opening.kind === "door" ? 0xd0a45d : 0x72b9d6,
-        transparent: true,
-        opacity:
-          props.roomMapEnabled && props.view === "building" ? 0.78 : 0.58,
-        depthWrite: false,
-        roughness: 0.45,
-        metalness: opening.kind === "window" ? 0.08 : 0,
-      });
-      const marker = new T.Mesh(
-        new T.BoxGeometry(
-          Math.max(0.08, opening.width),
-          Math.max(0.08, opening.height),
-          0.09,
-        ),
-        material,
-      );
-      marker.name = `Opening · ${opening.kind}`;
-      marker.position.set(opening.x, opening.y, opening.z);
-      marker.rotation.y = T.MathUtils.degToRad(opening.rotationY);
-      marker.renderOrder = 24;
-      marker.userData.openingId = opening.id;
-      r.rooms.add(marker);
-    }
+    renderReviewedOpeningMarkers(
+      r.rooms,
+      props.scene.openings ?? [],
+      {
+        view: props.view,
+        roomId: props.roomId,
+        isolateFloorId: props.isolateFloorId,
+        soloRoomId: props.soloRoomId,
+        roomMapEnabled: props.roomMapEnabled,
+      },
+    );
   }, [
     props.scene,
     props.selected,
@@ -1771,11 +1764,18 @@ export default function SceneCanvas(props: Props) {
     }
 
     const target = runtime.selectables.get(props.selected);
+    const isSiteElement = Boolean(
+      props.scene.siteElements?.some(
+        (element) => element.id === props.selected,
+      ),
+    );
     if (
       !target ||
       !props.transformEnabled ||
       props.view === "walk" ||
-      (props.view === "building" && !props.roomMapEnabled)
+      (props.view === "building" &&
+        !props.roomMapEnabled &&
+        !isSiteElement)
     )
       return;
 

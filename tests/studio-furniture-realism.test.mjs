@@ -7,8 +7,10 @@ const read = (file) => fs.readFileSync(file, "utf8");
 test("Studio furniture renderer uses detailed object construction instead of one primitive block", () => {
   const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
   const furniture = read("apps/admin/src/studio/furnitureVisual.ts");
+  const roomObjects = read("apps/admin/src/studio/sceneCanvasRoomObjects.ts");
 
-  assert.match(canvas, /addFurnitureVisual\(g, f\)/);
+  assert.match(canvas, /renderRoomFurniture/);
+  assert.match(roomObjects, /addFurnitureVisual\(root, item\)/);
   assert.doesNotMatch(canvas, /block\(\s*g,\s*f\.kind/);
 
   assert.match(furniture, /Sofa seat cushion/);

@@ -43,6 +43,7 @@ import {
 } from "./roomSemanticBinding";
 import { buildSourceAutoInterior } from "./autoInteriorDraft";
 import { fuseCadOpeningEvidence } from "./cadOpeningFusion";
+import { deriveSourceBackedSiteLandscape } from "./siteLandscapeDraft";
 import {
   inspectReferenceImage,
   looksLikeGeneratedPlanReference,
@@ -106,6 +107,10 @@ export interface AutoBuildPipelineResult {
     referenceImageConfidence: number;
     referenceVerticalEdgeStrength: number;
     referenceHorizontalEdgeStrength: number;
+    siteElementsPrepared: number;
+    siteElementsReady: number;
+    siteElementsReviewOnly: number;
+    siteElementsReplaced: number;
   };
   issues: string[];
 }
@@ -741,6 +746,13 @@ export async function runAutoBuildPipeline(
     );
   }
 
+  const siteDraft = deriveSourceBackedSiteLandscape(
+    analysis,
+    next.scene,
+  );
+  next = { ...next, scene: siteDraft.scene };
+  issues.push(...siteDraft.issues);
+
   const wallReview = markAutoReadyModelWalls(next.scene);
   next = { ...next, scene: wallReview.scene };
   const repeatReview = markAutoReadyRepeatedFloors(next.scene);
@@ -897,6 +909,10 @@ export async function runAutoBuildPipeline(
         next.scene.referenceImageEvidence?.verticalEdgeStrength ?? 0,
       referenceHorizontalEdgeStrength:
         next.scene.referenceImageEvidence?.horizontalEdgeStrength ?? 0,
+      siteElementsPrepared: siteDraft.created.length,
+      siteElementsReady: siteDraft.readyForReview,
+      siteElementsReviewOnly: siteDraft.reviewOnly,
+      siteElementsReplaced: siteDraft.replacedAutomatic,
     },
     issues: [...new Set([...issues, ...analysis.issues])],
   };
@@ -959,12 +975,16 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   const referenceImage = summary.referenceImageEvidenceReady
     ? ` · reference image: ${summary.referenceLightingMood || "unknown"} · ${summary.referencePaletteColors} rendered palette color${summary.referencePaletteColors === 1 ? "" : "s"} · visual structure evidence ready`
     : "";
+  const site = summary.siteElementsPrepared
+    ? ` · site/landscape: ${summary.siteElementsPrepared} source-backed element${summary.siteElementsPrepared === 1 ? "" : "s"} · ${summary.siteElementsReady} ready for review${summary.siteElementsReviewOnly ? ` · ${summary.siteElementsReviewOnly} evidence-only` : ""}`
+    : "";
   const review =
     result.issues.length +
     summary.openingReviewRemaining +
     summary.readyWallsPrepared +
     summary.readyRepeatsPrepared +
     summary.readyOpeningsPrepared +
-    summary.roomSemanticReviewRemaining;
-  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${topology}${walls}${repeats}${openings}${cadOpenings}${semantics}${interior}${referenceImage}${web}${textures}${materialFusion}${materialStyles}${resolvedTextures}${dwg}${pdf}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
+    summary.roomSemanticReviewRemaining +
+    summary.siteElementsPrepared;
+  return `Automatic build complete · ${summary.floors} floors · ${summary.walls} wall candidate${summary.walls === 1 ? "" : "s"} · ${summary.repeatedFloors} repeated floor${summary.repeatedFloors === 1 ? "" : "s"}${rooms}${topology}${walls}${repeats}${openings}${cadOpenings}${semantics}${interior}${referenceImage}${site}${web}${textures}${materialFusion}${materialStyles}${resolvedTextures}${dwg}${pdf}${review ? ` · ${review} review item${review === 1 ? "" : "s"}` : " · no blocking review item"}.`;
 }
