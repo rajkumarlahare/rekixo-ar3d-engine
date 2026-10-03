@@ -16,7 +16,7 @@ function walk(dir) {
   return out;
 }
 
-test("generic viewer and Studio use empty shared profile registries", () => {
+test("generic viewer and Studio keep shared profile registries project-neutral", () => {
   const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
   const studio = read("apps/admin/src/studio/SceneCanvas.tsx");
   const modelRegistry = read("packages/model-profiles/src/index.ts");
@@ -26,7 +26,9 @@ test("generic viewer and Studio use empty shared profile registries", () => {
   assert.match(studio, /@rekixo\/3d-model-profiles/);
   assert.match(viewer, /\.\/projectProfiles/);
   assert.match(modelRegistry, /return undefined/);
-  assert.match(projectRegistry, /return undefined/);
+  assert.match(projectRegistry, /createSemanticStudioExperience/);
+  assert.match(projectRegistry, /return semantic/);
+  assert.doesNotMatch(projectRegistry, /jyoti-paradise|Jyoti Paradise/i);
   assert.match(sourceRegistry, /studioSourceProfiles = \[\] as const/);
 });
 

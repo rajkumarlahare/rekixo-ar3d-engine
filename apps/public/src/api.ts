@@ -8,6 +8,12 @@ import {
   derivePublicSiteElementsFromStudio,
   setPublicRuntimeSiteElements,
 } from "./viewer/publicRuntimeContext";
+import {
+  clearSemanticInteriorRuntime,
+  deriveSemanticInteriorFromStudio,
+  setSemanticInteriorRuntime,
+  type SemanticInteriorRuntime,
+} from "./viewer/semanticInteriorRuntime";
 
 export class ExperienceApiError extends Error {
   status?: number;
@@ -24,6 +30,7 @@ export async function loadPublicExperience(
   signal?: AbortSignal,
 ): Promise<Public3DExperience> {
   clearPublicRuntimeSiteElements();
+  clearSemanticInteriorRuntime();
   const headers = { Accept: "application/json" };
   const [response, studioResponse] = await Promise.all([
     fetch(`${PUBLIC_BASE_PATH}/api/projects/${encodeURIComponent(slug)}`, {
@@ -56,24 +63,26 @@ export async function loadPublicExperience(
 
   const body = (await response.json()) as Record<string, unknown>;
   let siteElements = [] as Public3DExperience["siteElements"];
+  let semanticInterior: SemanticInteriorRuntime | undefined;
   if (studioResponse?.ok) {
     try {
       const studio = (await studioResponse.json()) as { project?: unknown };
       siteElements = derivePublicSiteElementsFromStudio(studio.project);
+      semanticInterior = deriveSemanticInteriorFromStudio(studio.project);
     } catch {
-      // Site/landscape is additive. A malformed optional Studio response must
-      // not take an otherwise valid published building offline.
+      // Reviewed Studio geometry is additive. A malformed optional Studio
+      // response must not take an otherwise valid published building offline.
       siteElements = [];
+      semanticInterior = undefined;
     }
   }
 
-  const enriched = siteElements?.length
-    ? { ...body, siteElements }
-    : body;
+  const enriched = siteElements?.length ? { ...body, siteElements } : body;
   try {
     assertPublic3DExperiencePayload(enriched);
   } catch (error) {
     clearPublicRuntimeSiteElements();
+    clearSemanticInteriorRuntime();
     throw new ExperienceApiError(
       error instanceof Error
         ? `3D project response is corrupted: ${error.message}`
@@ -83,5 +92,6 @@ export async function loadPublicExperience(
   }
 
   setPublicRuntimeSiteElements(siteElements ?? []);
+  setSemanticInteriorRuntime(semanticInterior);
   return enriched as unknown as Public3DExperience;
 }
