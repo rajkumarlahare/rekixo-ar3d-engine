@@ -147,7 +147,7 @@ test("Phase 11 public loader reads the immutable Studio release as additive site
   assert.match(api, /api\/releases\/projects\/\$\{encodeURIComponent\(slug\)\}\/studio/);
   assert.match(api, /derivePublicSiteElementsFromStudio/);
   assert.match(api, /setPublicRuntimeSiteElements/);
-  assert.match(api, /Site\/landscape is additive/);
+  assert.match(api, /Studio geometry is additive/);
   assert.match(context, /raw\.reviewed !== true/);
   assert.match(context, /modelTransform/);
 });
