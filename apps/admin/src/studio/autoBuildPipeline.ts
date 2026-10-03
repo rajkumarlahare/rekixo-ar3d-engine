@@ -3,24 +3,52 @@ import type { FbxSourceAudit } from "./sourceAudit";
 import {
   autoBuildSummaryMessage as legacyAutoBuildSummaryMessage,
   runAutoBuildPipeline as runModelBackedAutoBuildPipeline,
-  type AutoBuildPipelineOptions,
-  type AutoBuildPipelineResult,
+  type AutoBuildPipelineOptions as LegacyAutoBuildPipelineOptions,
+  type AutoBuildPipelineResult as LegacyAutoBuildPipelineResult,
 } from "./autoBuildPipelineLegacy";
 import { runCadOnlyAutoBuildPipeline } from "./cadOnlyAutoBuildPipeline";
+import {
+  buildAutoBuildSourcePlan,
+  type AutoBuildSourcePlan,
+} from "./autoBuildSourcePlan";
+import {
+  parseRoomSheetAssets,
+  type RoomSheetRow,
+} from "./roomSheet";
+import {
+  fuseRoomSheetEvidence,
+  type RoomSheetFusionSummary,
+} from "./roomSheetFusion";
 
-export type {
-  AutoBuildPipelineOptions,
-  AutoBuildPipelineResult,
-} from "./autoBuildPipelineLegacy";
+export interface AutoBuildPipelineOptions
+  extends LegacyAutoBuildPipelineOptions {
+  /**
+   * Optional pre-parsed structured evidence. Studio already parses room sheets
+   * for Source Fusion, while API/tests may omit this and let AutoBuild parse the
+   * attached CSV/TSV files itself.
+   */
+  roomSheetRows?: readonly RoomSheetRow[];
+}
 
-function hasSourceModel(files: readonly Asset[]) {
-  return files.some((file) => /\.(?:fbx|glb)$/i.test(file.name));
+export interface AutoBuildStructuredEvidenceSummary
+  extends RoomSheetFusionSummary {
+  parseIssues: number;
+}
+
+export interface AutoBuildPipelineResult
+  extends LegacyAutoBuildPipelineResult {
+  sourcePlan: AutoBuildSourcePlan;
+  structuredEvidence: AutoBuildStructuredEvidenceSummary;
+}
+
+function unique(values: readonly string[]) {
+  return [...new Set(values.filter(Boolean))];
 }
 
 /**
- * Routes AutoBuild by source authority. Existing FBX/GLB projects keep the
- * mature model-backed pipeline unchanged. Projects without a 3D model use the
- * conservative CAD-only reconstruction path instead of inventing model data.
+ * One shared AutoBuild entry point for model-backed and CAD-only projects.
+ * Routing is now derived from the same source plan that future processors can
+ * consume, instead of each caller independently deciding which files matter.
  */
 export async function runAutoBuildPipeline(
   project: Project,
@@ -28,20 +56,75 @@ export async function runAutoBuildPipeline(
   audits: readonly FbxSourceAudit[] = [],
   options: AutoBuildPipelineOptions = {},
 ): Promise<AutoBuildPipelineResult> {
-  if (hasSourceModel(files))
-    return runModelBackedAutoBuildPipeline(project, files, audits, options);
-  return runCadOnlyAutoBuildPipeline(project, files, audits, options);
+  const sourcePlan = buildAutoBuildSourcePlan(project, files);
+  const {
+    roomSheetRows: suppliedRoomSheetRows,
+    ...legacyOptions
+  } = options;
+  const parsedRoomSheets = suppliedRoomSheetRows
+    ? {
+        rows: [...suppliedRoomSheetRows],
+        issues: [] as string[],
+      }
+    : await parseRoomSheetAssets([...files]);
+
+  const base =
+    sourcePlan.mode === "model-backed"
+      ? await runModelBackedAutoBuildPipeline(
+          project,
+          files,
+          audits,
+          legacyOptions,
+        )
+      : await runCadOnlyAutoBuildPipeline(
+          project,
+          files,
+          audits,
+          legacyOptions,
+        );
+
+  const structured = fuseRoomSheetEvidence(
+    base.project,
+    parsedRoomSheets.rows,
+  );
+
+  return {
+    ...base,
+    project: structured.project,
+    sourcePlan,
+    structuredEvidence: {
+      ...structured.summary,
+      parseIssues: parsedRoomSheets.issues.length,
+    },
+    issues: unique([
+      ...base.issues,
+      ...sourcePlan.planningIssues,
+      ...parsedRoomSheets.issues,
+      ...structured.issues,
+    ]),
+  };
 }
 
 export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
-  return legacyAutoBuildSummaryMessage(result);
+  const base = legacyAutoBuildSummaryMessage(result);
+  const structured = result.structuredEvidence;
+  if (!structured.rowCount) return base;
+
+  const review =
+    structured.conflicts +
+    structured.ambiguous +
+    structured.unmatched +
+    structured.polygonReview +
+    structured.parseIssues;
+  return `${base} · CSV/TSV ${structured.applied}/${structured.matched} matched room measurement${structured.matched === 1 ? "" : "s"} applied${review ? ` · ${review} structured evidence item${review === 1 ? "" : "s"} need review` : ""}.`;
 }
 
 /**
  * The model-backed implementation intentionally lives in
- * autoBuildPipelineLegacy.ts so Phase 13 can add a CAD-only route without
- * rewriting the already-reviewed model path. These markers document the
- * delegated invariants that architecture source-gates assert remain present.
+ * autoBuildPipelineLegacy.ts so the mature source-recovery path stays stable
+ * while the shared source plan and structured-evidence layer evolve around it.
+ * These markers document delegated invariants that architecture source-gates
+ * assert remain present.
  *
  * prepareFbxWebModel · prepareSketchUpTextureRecovery · materialBindings
  * const recovery = await prepareSketchUpTextureRecovery
