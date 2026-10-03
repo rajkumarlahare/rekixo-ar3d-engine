@@ -9,6 +9,9 @@ dist/
 # Local/source architectural assets never belong in Git.
 source-assets/
 local-assets/
+.private/
+golden-certificates/
+*.golden-manifest.json
 *.fbx
 *.max
 *.dwg

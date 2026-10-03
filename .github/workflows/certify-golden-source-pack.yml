@@ -1,0 +1,145 @@
+name: Certify Private Golden Source Pack
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify-golden-source-pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GOLDEN_PACK_URL: ${{ secrets.REKIXO_GOLDEN_PACK_URL }}
+      GOLDEN_PACK_TOKEN: ${{ secrets.REKIXO_GOLDEN_PACK_TOKEN }}
+      GOLDEN_PACK_SHA256: ${{ secrets.REKIXO_GOLDEN_PACK_SHA256 }}
+      GOLDEN_MANIFEST_B64: ${{ secrets.REKIXO_GOLDEN_MANIFEST_B64 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm ci
+
+      - name: Prepare private source pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GOLDEN_PACK_URL"
+          test -n "$GOLDEN_PACK_SHA256"
+          test -n "$GOLDEN_MANIFEST_B64"
+          mkdir -p .private/golden/pack
+
+          if [ -n "$GOLDEN_PACK_TOKEN" ]; then
+            curl --fail --location --retry 3 \
+              --header "Authorization: Bearer $GOLDEN_PACK_TOKEN" \
+              "$GOLDEN_PACK_URL" \
+              --output .private/golden/pack.zip
+          else
+            curl --fail --location --retry 3 \
+              "$GOLDEN_PACK_URL" \
+              --output .private/golden/pack.zip
+          fi
+
+          printf '%s  %s\n' "$GOLDEN_PACK_SHA256" .private/golden/pack.zip \
+            | sha256sum --check --status
+          printf '%s' "$GOLDEN_MANIFEST_B64" \
+            | base64 --decode > .private/golden/manifest.json
+          unzip -q .private/golden/pack.zip -d .private/golden/pack
+
+      - name: Build pinned native DWG processor
+        run: >-
+          docker build
+          --file services/dwg-processor/Dockerfile
+          --tag rekixo-dwg-processor:golden
+          .
+
+      - name: Start native DWG processor
+        run: |
+          docker run --detach --rm \
+            --name rekixo-dwg-processor-golden \
+            --publish 18080:8080 \
+            rekixo-dwg-processor:golden
+
+      - name: Wait for DWG processor health
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:18080/health > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs rekixo-dwg-processor-golden || true
+          exit 1
+
+      - name: Certify exact source bytes and real DWG decode
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/certify-golden-source-pack.mjs verify \
+            --dir .private/golden/pack \
+            --manifest .private/golden/manifest.json \
+            --processor-url http://127.0.0.1:18080 \
+            --out .private/golden/certificate.json \
+            > /dev/null
+
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const source = JSON.parse(
+            fs.readFileSync(".private/golden/certificate.json", "utf8"),
+          );
+          const summary = {
+            schema: source.schema,
+            kind: source.kind,
+            overallStatus: source.overallStatus,
+            sourcePack: {
+              requiredRoles: source.sourcePack.requiredRoles,
+              matchedRoles: source.sourcePack.matchedRoles,
+              checks: source.sourcePack.checks.map(({ role, state, detail }) => ({
+                role,
+                state,
+                detail,
+              })),
+            },
+            dwg: source.dwg,
+          };
+          fs.writeFileSync(
+            ".private/golden/certificate-redacted.json",
+            `${JSON.stringify(summary, null, 2)}\n`,
+          );
+          NODE
+
+      - name: Install browser E2E runner
+        run: npx --no-install playwright install --with-deps chromium
+
+      - name: Run real six-file browser AutoBuild
+        env:
+          REKIXO_GOLDEN_PACK_DIR: .private/golden/pack
+          REKIXO_GOLDEN_MANIFEST: .private/golden/manifest.json
+          REKIXO_DWG_PROCESSOR_URL: http://127.0.0.1:18080
+        run: npm run test:e2e:golden
+
+      - name: Upload redacted certification summary
+        if: always() && hashFiles('.private/golden/certificate-redacted.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-source-certification-redacted
+          path: .private/golden/certificate-redacted.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Show DWG processor logs on failure
+        if: failure()
+        run: docker logs rekixo-dwg-processor-golden || true
+
+      - name: Stop DWG processor
+        if: always()
+        run: docker stop rekixo-dwg-processor-golden || true

@@ -1,0 +1,116 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import test from "node:test";
+
+const script = path.resolve("scripts/certify-golden-source-pack.mjs");
+
+function run(args) {
+  return spawnSync(process.execPath, [script, ...args], {
+    encoding: "utf8",
+  });
+}
+
+function makePack() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "rekixo-golden-"));
+  const dir = path.join(root, "pack");
+  fs.mkdirSync(dir);
+  const rows = [
+    ["building.fbx", "FBX fixture bytes"],
+    ["floor-plan.dwg", "AC1015 fixture bytes"],
+    ["materials.skb", "SKB fixture bytes"],
+    ["drawing.pdf", "%PDF-1.4 fixture bytes"],
+    ["reference.jpg", "JPEG fixture bytes"],
+    ["metadata.drs", '{"fixture":true}'],
+  ];
+  for (const [name, value] of rows)
+    fs.writeFileSync(path.join(dir, name), value);
+  return { root, dir };
+}
+
+test("private golden runner fingerprints six roles and verifies exact bytes", () => {
+  const { root, dir } = makePack();
+  const manifestPath = path.join(root, "pack.golden-manifest.json");
+  const certificatePath = path.join(root, "certificate.json");
+
+  const generated = run([
+    "manifest",
+    "--dir",
+    dir,
+    "--out",
+    manifestPath,
+    "--key",
+    "test-six-role-pack",
+  ]);
+  assert.equal(generated.status, 0, generated.stderr);
+
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  assert.equal(manifest.schema, 1);
+  assert.equal(manifest.sources.length, 6);
+  assert.deepEqual(
+    manifest.sources.map((source) => source.role),
+    ["model", "cad", "sketchup", "drawing", "visual", "metadata"],
+  );
+  for (const source of manifest.sources) {
+    assert.match(source.sha256, /^[a-f0-9]{64}$/);
+    assert.ok(source.size > 0);
+  }
+
+  const verified = run([
+    "verify",
+    "--dir",
+    dir,
+    "--manifest",
+    manifestPath,
+    "--allow-dwg-pending",
+    "--out",
+    certificatePath,
+  ]);
+  assert.equal(verified.status, 0, verified.stderr);
+  const certificate = JSON.parse(fs.readFileSync(certificatePath, "utf8"));
+  assert.equal(certificate.overallStatus, "pending");
+  assert.equal(certificate.sourcePack.matchedRoles, 6);
+  assert.equal(certificate.dwg.state, "pending");
+});
+
+test("private golden runner fails closed when any source bytes change", () => {
+  const { root, dir } = makePack();
+  const manifestPath = path.join(root, "pack.golden-manifest.json");
+  const generated = run(["manifest", "--dir", dir, "--out", manifestPath]);
+  assert.equal(generated.status, 0, generated.stderr);
+
+  fs.appendFileSync(path.join(dir, "building.fbx"), "tampered");
+  const verified = run([
+    "verify",
+    "--dir",
+    dir,
+    "--manifest",
+    manifestPath,
+    "--allow-dwg-pending",
+  ]);
+  assert.notEqual(verified.status, 0);
+  assert.match(verified.stderr, /certification is blocked/i);
+});
+
+test("public harness stays generic and receives the real pack only at runtime", () => {
+  const runner = fs.readFileSync(script, "utf8");
+  const e2e = fs.readFileSync("e2e/golden-source-pack.spec.ts", "utf8");
+  const workflow = fs.readFileSync(
+    ".github/workflows/certify-golden-source-pack.yml",
+    "utf8",
+  );
+
+  for (const source of [runner, e2e, workflow]) assert.doesNotMatch(source, /Jyoti/i);
+
+  assert.match(e2e, /REKIXO_GOLDEN_PACK_DIR/);
+  assert.match(e2e, /REKIXO_GOLDEN_MANIFEST/);
+  assert.match(e2e, /REKIXO_DWG_PROCESSOR_URL/);
+  assert.match(e2e, /test\.skip/);
+  assert.match(e2e, /certification/);
+  assert.match(e2e, /0 blocked/);
+  assert.match(workflow, /workflow_dispatch/);
+  assert.match(workflow, /REKIXO_GOLDEN_MANIFEST_B64/);
+  assert.match(workflow, /> \/dev\/null/);
+});
