@@ -112,15 +112,19 @@ function makeWalls(
   centre: RoomPoint,
 ) {
   const candidates = (audit.semanticSegments ?? [])
-    .filter((segment) => segment.kind === "wall" && segment.confidence >= 0.76)
+    .filter(
+      (segment) =>
+        segment.kind === "wall" && (segment.confidence ?? 0) >= 0.76,
+    )
     .map((segment, index): Wall | undefined => {
       const start = localPoint(segment.start, centre);
       const end = localPoint(segment.end, centre);
       if (Math.hypot(end[0] - start[0], end[1] - start[1]) < 0.12)
         return undefined;
+      const segmentConfidence = segment.confidence ?? 0;
       const confidence = Math.min(
         audit.kind === "dwg" ? 0.96 : 0.9,
-        segment.confidence,
+        segmentConfidence,
       );
       return {
         id: `wall-cad-only-${audit.assetId.slice(0, 12)}-${index + 1}`,
@@ -179,7 +183,10 @@ function openingRoomIds(
       wall,
       distance: pointSegmentDistance(point, wall.start, wall.end),
     }))
-    .filter((entry) => entry.distance <= Math.max(0.35, entry.wall.thickness * 2.5))
+    .filter(
+      (entry) =>
+        entry.distance <= Math.max(0.35, entry.wall.thickness * 2.5),
+    )
     .sort((left, right) => left.distance - right.distance);
   const result: string[] = [];
   for (const entry of nearby)
@@ -198,32 +205,37 @@ function makeOpenings(
     .filter(
       (segment) =>
         (segment.kind === "door" || segment.kind === "window") &&
-        segment.confidence >= 0.7,
+        (segment.confidence ?? 0) >= 0.7,
     )
     .flatMap((segment, index) => {
+      const kind: Opening["kind"] =
+        segment.kind === "door" ? "door" : "window";
+      const segmentConfidence = segment.confidence ?? 0;
       const start = localPoint(segment.start, centre);
       const end = localPoint(segment.end, centre);
       const width = Math.hypot(end[0] - start[0], end[1] - start[1]);
       if (
         !Number.isFinite(width) ||
         width < 0.25 ||
-        width > (segment.kind === "door" ? 3.5 : 8)
+        width > (kind === "door" ? 3.5 : 8)
       )
         return [];
       const x = (start[0] + end[0]) / 2;
       const z = (start[1] + end[1]) / 2;
-      const height = segment.kind === "door" ? 2.1 : 1.2;
-      const sillHeight = segment.kind === "window" ? 0.9 : undefined;
+      const height = kind === "door" ? 2.1 : 1.2;
+      const sillHeight = kind === "window" ? 0.9 : undefined;
       const opening: Opening = {
         id: `opening-cad-only-${audit.assetId.slice(0, 12)}-${index + 1}`,
         floorId: floor.id,
-        kind: segment.kind,
+        kind,
         roomIds: openingRoomIds([x, z], walls),
         x: Number(x.toFixed(4)),
         y: Number(
           (
             floor.elevation +
-            (segment.kind === "door" ? height / 2 : (sillHeight ?? 0) + height / 2)
+            (kind === "door"
+              ? height / 2
+              : (sillHeight ?? 0) + height / 2)
           ).toFixed(4),
         ),
         z: Number(z.toFixed(4)),
@@ -243,9 +255,10 @@ function makeOpenings(
         ),
         sourceOccurrence: index + 1,
         confidence: Number(
-          Math.min(segment.confidence, audit.kind === "dwg" ? 0.92 : 0.86).toFixed(
-            3,
-          ),
+          Math.min(
+            segmentConfidence,
+            audit.kind === "dwg" ? 0.92 : 0.86,
+          ).toFixed(3),
         ),
         reviewState: "suggested",
       };
@@ -259,7 +272,9 @@ export function buildCadOnlySceneDraft(
 ): CadOnlySceneDraftResult {
   const issues: string[] = [];
   if (analysis.modelAssetId)
-    throw Error("CAD-only reconstruction is only for projects without a source 3D model.");
+    throw Error(
+      "CAD-only reconstruction is only for projects without a source 3D model.",
+    );
   if (project.scene.rooms.length || project.scene.floors.length > 1)
     throw Error(
       "Model-less CAD AutoBuild requires an empty/default scene so existing authored rooms or multi-floor work is never overwritten.",
@@ -277,7 +292,9 @@ export function buildCadOnlySceneDraft(
   const floor = draftFloor(project, audit);
   const topology = makeWalls(audit, floor, centre);
   if (topology.walls.length < 3)
-    throw Error("CAD source does not contain enough reliable wall geometry to build a draft.");
+    throw Error(
+      "CAD source does not contain enough reliable wall geometry to build a draft.",
+    );
 
   const roomDraft = deriveAutoRoomDrafts(topology.walls, [floor], audit.assetId);
   let rooms = roomDraft.rooms;
@@ -313,7 +330,8 @@ export function buildCadOnlySceneDraft(
       evidence,
     );
     rooms = semantic.scene.rooms;
-    semanticLabelsApplied = semantic.roomNamesApplied + semantic.unitRoomsAssigned;
+    semanticLabelsApplied =
+      semantic.roomNamesApplied + semantic.unitRoomsAssigned;
     walls = linkWallsToRooms(walls, rooms);
     if (semantic.reviewRemaining)
       issues.push(
