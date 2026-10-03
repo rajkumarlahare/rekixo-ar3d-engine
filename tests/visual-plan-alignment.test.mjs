@@ -112,6 +112,7 @@ test("alignment mode locks camera and prevents vertical model movement", () => {
 test("alignment mode offers fine nudge controls and identifies the faded plan", () => {
   const studio = read("apps/admin/src/studio/Studio.tsx");
   const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+  const overlays = read("apps/admin/src/studio/SceneCanvasOverlays.tsx");
   const css = read("apps/admin/src/studio/studio-editor-core.css");
 
   assert.match(studio, /aria-label="Fine move"/);
@@ -119,7 +120,7 @@ test("alignment mode offers fine nudge controls and identifies the faded plan", 
   assert.match(studio, /Move model left 10 centimetres/);
   assert.match(studio, /aria-label="Fine rotate"/);
   assert.match(studio, /Fine rotate 1°/);
-  assert.match(canvas, /BLUE FADED = REFERENCE PLAN/);
+  assert.match(overlays, /BLUE FADED = REFERENCE PLAN/);
   assert.match(canvas, /Math\.min\(layer\.opacity, 0\.34\)/);
   assert.match(css, /\.alignment-canvas-legend/);
 });
