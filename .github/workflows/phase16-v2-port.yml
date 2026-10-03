@@ -120,13 +120,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm \
+          git rm -f -- \
             scripts/prepare-phase16-transform.mjs \
             scripts/apply-phase16-direct-editing.mjs \
             scripts/fix-phase16-script-literals.mjs \
             scripts/refactor-phase16-studio.mjs \
-            scripts/refactor-phase16-canvas.mjs \
-            .github/workflows/phase16-v2-port.yml
+            scripts/refactor-phase16-canvas.mjs
           git add \
             apps/admin/src/studio/SceneCanvas.tsx \
             apps/admin/src/studio/Studio.tsx \
