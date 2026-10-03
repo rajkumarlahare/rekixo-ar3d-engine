@@ -4,6 +4,8 @@ import {
   validProjectSlug,
 } from "../../../shared/project-slug-policy.js";
 
+export * from "./editor";
+
 export {
   RESERVED_PROJECT_SLUGS,
   normalizeProjectSlug,
