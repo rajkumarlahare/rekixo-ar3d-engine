@@ -192,6 +192,15 @@ function assertSiteElements(value: unknown) {
         "plant",
         "gate",
         "outdoor-light",
+        "column",
+        "beam",
+        "slab",
+        "roof",
+        "duct",
+        "balcony",
+        "boundary",
+        "stair",
+        "lift",
       ].includes(String(site.kind)) ||
       !finiteNumber(site.x) ||
       !finiteNumber(site.y) ||
@@ -207,6 +216,7 @@ function assertSiteElements(value: unknown) {
       Number(site.height) > 100 ||
       !finiteNumber(site.rotation) ||
       !color(site.color) ||
+      (site.shape !== undefined && !["box", "cylinder"].includes(String(site.shape))) ||
       ids.has(String(site.id))
     )
       throw Error("Invalid public site element.");
