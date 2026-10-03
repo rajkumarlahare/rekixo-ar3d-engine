@@ -35,7 +35,7 @@ export interface Room {
 }
 export type FurnitureOrigin = "demo-auto" | "demo-repeat" | "source-auto";
 
-export type SiteElementKind =
+export type LandscapeSiteElementKind =
   | "garden"
   | "lawn"
   | "path"
@@ -45,12 +45,45 @@ export type SiteElementKind =
   | "plant"
   | "gate"
   | "outdoor-light";
-export type SiteElementOrigin = "cad-auto" | "manual";
+
+export type StructuralElementKind =
+  | "column"
+  | "beam"
+  | "slab"
+  | "roof"
+  | "duct"
+  | "balcony"
+  | "boundary"
+  | "stair"
+  | "lift";
+
+export const STRUCTURAL_ELEMENT_KINDS: readonly StructuralElementKind[] = [
+  "column",
+  "beam",
+  "slab",
+  "roof",
+  "duct",
+  "balcony",
+  "boundary",
+  "stair",
+  "lift",
+];
+
+export type SiteElementKind = LandscapeSiteElementKind | StructuralElementKind;
+export type SiteElementOrigin = "cad-auto" | "model-cad-auto" | "manual";
+
+export function isStructuralElementKind(
+  kind: SiteElementKind,
+): kind is StructuralElementKind {
+  return (STRUCTURAL_ELEMENT_KINDS as readonly string[]).includes(kind);
+}
 
 export interface SiteElement {
   id: string;
   kind: SiteElementKind;
   x: number;
+  /** Base elevation. Landscape/site elements omit this and remain at ground. */
+  y?: number;
   z: number;
   width: number;
   depth: number;
@@ -61,8 +94,21 @@ export interface SiteElement {
   reviewState?: ReviewState;
   origin: SiteElementOrigin;
   confidence?: number;
+  floorId?: string;
   sourceAssetId?: string;
   sourceRef?: string;
+  sourceNodeName?: string;
+  sourceOccurrence?: number;
+  /** Conservative display envelope; exact structural fabrication geometry is not implied. */
+  shape?: "box" | "cylinder";
+}
+
+export interface StructuralElement extends SiteElement {
+  kind: StructuralElementKind;
+  y: number;
+  floorId: string;
+  origin: "model-cad-auto" | "manual";
+  shape: "box" | "cylinder";
 }
 
 export interface Furniture {
@@ -212,6 +258,7 @@ export interface Scene {
   floors: Floor[];
   rooms: Room[];
   furniture: Furniture[];
+  /** Landscape plus reviewed structural-envelope primitives; kind is the discriminant. */
   siteElements?: SiteElement[];
   walls?: Wall[];
   openings?: Opening[];
@@ -943,6 +990,7 @@ export function validateScene(s: Scene): void {
       throw Error("Invalid reviewed wall opening.");
   }
   for (const site of s.siteElements ?? []) {
+    const structural = isStructuralElementKind(site.kind);
     if (
       ![
         "garden",
@@ -954,6 +1002,7 @@ export function validateScene(s: Scene): void {
         "plant",
         "gate",
         "outdoor-light",
+        ...STRUCTURAL_ELEMENT_KINDS,
       ].includes(site.kind) ||
       !number(site.x, -10000, 10000) ||
       !number(site.z, -10000, 10000) ||
@@ -963,7 +1012,29 @@ export function validateScene(s: Scene): void {
       !number(site.rotation, -3600, 3600) ||
       !color(site.color) ||
       typeof site.reviewed !== "boolean" ||
-      !["cad-auto", "manual"].includes(site.origin) ||
+      !["cad-auto", "model-cad-auto", "manual"].includes(site.origin) ||
+      (site.y !== undefined && !number(site.y, -1000, 5000)) ||
+      (site.floorId !== undefined &&
+        !s.floors.some((floor) => floor.id === site.floorId)) ||
+      (site.sourceNodeName !== undefined && !text(site.sourceNodeName, 500)) ||
+      (site.sourceOccurrence !== undefined &&
+        (!Number.isInteger(site.sourceOccurrence) ||
+          site.sourceOccurrence < 1 ||
+          site.sourceOccurrence > 100000 ||
+          !site.sourceNodeName)) ||
+      (site.shape !== undefined && !["box", "cylinder"].includes(site.shape)) ||
+      (structural &&
+        (!number(site.y, -1000, 5000) ||
+          !site.floorId ||
+          !s.floors.some((floor) => floor.id === site.floorId) ||
+          !["model-cad-auto", "manual"].includes(site.origin) ||
+          !site.shape)) ||
+      (!structural && site.origin === "model-cad-auto") ||
+      (site.origin === "model-cad-auto" &&
+        (!site.sourceAssetId ||
+          !site.sourceNodeName ||
+          !Number.isInteger(site.sourceOccurrence) ||
+          site.confidence === undefined)) ||
       (site.reviewState !== undefined &&
         !["suggested", "auto_ready", "human_reviewed"].includes(
           site.reviewState,
@@ -976,7 +1047,7 @@ export function validateScene(s: Scene): void {
       (site.sourceAssetId !== undefined && !text(site.sourceAssetId, 100)) ||
       (site.sourceRef !== undefined && !text(site.sourceRef, 500))
     )
-      throw Error("Invalid site/landscape element.");
+      throw Error("Invalid site/landscape or structural element.");
   }
 
   for (const f of s.furniture) {
