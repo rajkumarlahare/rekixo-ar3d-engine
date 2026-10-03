@@ -12,8 +12,14 @@ function replaceOne(needle, replacement, label) {
 
 replaceOne(
   `import {\n  openingTransformChange,\n  renderArchitectureElements,\n  wallTransformChange,\n} from "./sceneCanvasArchitecture";\n`,
-  `import {\n  createArchitectureCanvasController,\n  type ArchitectureCanvasProps,\n} from "./sceneCanvasArchitectureController";\n`,
+  `import {\n  architectureAuthoringActive,\n  architectureSelectionKind,\n  createArchitectureCanvasController,\n  renderArchitectureCanvas,\n  type ArchitectureCanvasProps,\n} from "./sceneCanvasArchitectureController";\n`,
   "architecture controller import",
+);
+
+replaceOne(
+  `import CanvasAuthoringHints from "./CanvasAuthoringHints";\n`,
+  `import SceneCanvasOverlays from "./SceneCanvasOverlays";\n`,
+  "canvas overlay import",
 );
 
 replaceOne(
@@ -22,7 +28,11 @@ replaceOne(
   "architecture result type extraction",
 );
 
-replaceOne(`interface Props {\n`, `interface Props extends ArchitectureCanvasProps {\n`, "architecture props extension");
+replaceOne(
+  `interface Props {\n`,
+  `interface Props extends ArchitectureCanvasProps {\n`,
+  "architecture props extension",
+);
 
 replaceOne(
   `  architectureEditing?: boolean;\n  wallDraw?: {\n    enabled: boolean;\n    floorId: string;\n    snap: boolean;\n  };\n  openingPlacement?: {\n    enabled: boolean;\n    floorId: string;\n    snap: boolean;\n  };\n  onWallDraw?: (result: WallDrawResult) => void;\n  onOpeningPlace?: (result: OpeningPlacementResult) => void;\n`,
@@ -92,20 +102,26 @@ replaceOne(
 
 replaceOne(
   `    renderArchitectureElements(\n      r.architecture,\n      props.scene,\n      props.selected,\n      r.selectables,\n      {\n        visible: props.view === "building" && Boolean(props.architectureEditing),\n        floorId: props.isolateFloorId,\n      },\n    );\n`,
-  `    architectureController.render(r.selectables, props.isolateFloorId);\n`,
+  `    renderArchitectureCanvas(r.architecture, props, r.selectables, props.isolateFloorId);\n`,
   "architecture rendering extraction",
 );
 
 replaceOne(
   `    const isArchitectureWall = Boolean(\n      props.scene.walls?.some((wall) => wall.id === props.selected),\n    );\n    const isArchitectureOpening = Boolean(\n      props.scene.openings?.some((opening) => opening.id === props.selected),\n    );\n`,
-  `    const architectureSelection = architectureController.selectionKind();\n    const isArchitectureWall = architectureSelection === "wall";\n    const isArchitectureOpening = architectureSelection === "opening";\n`,
+  `    const architectureSelection = architectureSelectionKind(props.scene, props.selected);\n    const isArchitectureWall = architectureSelection === "wall";\n    const isArchitectureOpening = architectureSelection === "opening";\n`,
   "architecture selection extraction",
 );
 
 replaceOne(
   `  const authoringActive = Boolean(\n    props.wallDraw?.enabled ||\n      props.openingPlacement?.enabled ||\n      props.roomDraw?.enabled ||\n      props.roomStamp?.enabled ||\n      props.roomPolygonDraw?.enabled ||\n      props.furniturePlacement?.enabled,\n  );\n`,
-  `  const authoringActive = Boolean(\n    architectureController.authoringActive() ||\n      props.roomDraw?.enabled || props.roomStamp?.enabled ||\n      props.roomPolygonDraw?.enabled || props.furniturePlacement?.enabled,\n  );\n`,
+  `  const authoringActive = Boolean(\n    architectureAuthoringActive(props) || props.roomDraw?.enabled ||\n      props.roomStamp?.enabled || props.roomPolygonDraw?.enabled ||\n      props.furniturePlacement?.enabled,\n  );\n`,
   "architecture authoring extraction",
+);
+
+replaceOne(
+  `      {status && (\n        <div className="canvas-status" role="status">\n          {status}\n        </div>\n      )}\n      <CanvasAuthoringHints\n        furniture={Boolean(props.furniturePlacement?.enabled)}\n        stamp={Boolean(props.roomStamp?.enabled)}\n        room={Boolean(props.roomDraw?.enabled)}\n        polygon={Boolean(props.roomPolygonDraw?.enabled)}\n      />\n      {props.alignmentMode && (\n        <div className="alignment-canvas-legend" aria-label="Alignment canvas legend">\n          <span className="model-key">3D MODEL</span>\n          <span className="plan-key">BLUE FADED = REFERENCE PLAN</span>\n          <small>Move only on the flat X/Z plane · camera rotation is locked</small>\n        </div>\n      )}\n      <button className="reset-camera" onClick={() => api.current?.focus()}>\n        Reset view\n      </button>\n      {props.view === "walk" && (\n        <div className="walk-pad">\n          <span>\n            Drag to look · WASD inside room · reviewed shared doors connect rooms · use room navigation when door evidence is unavailable\n          </span>\n          {[\n            ["w", "↑"],\n            ["a", "←"],\n            ["s", "↓"],\n            ["d", "→"],\n          ].map(([key, label]) => (\n            <button\n              key={key}\n              aria-label={\`Walk ${"${label}"}\`}\n              onPointerDown={(e) => {\n                e.currentTarget.setPointerCapture(e.pointerId);\n                api.current?.keys.add(key);\n              }}\n              onPointerUp={() => api.current?.keys.delete(key)}\n              onPointerCancel={() => api.current?.keys.delete(key)}\n            >\n              {label}\n            </button>\n          ))}\n        </div>\n      )}\n`,
+  `      <SceneCanvasOverlays\n        status={status}\n        alignmentMode={props.alignmentMode}\n        view={props.view}\n        furnitureActive={Boolean(props.furniturePlacement?.enabled)}\n        stampActive={Boolean(props.roomStamp?.enabled)}\n        roomActive={Boolean(props.roomDraw?.enabled)}\n        polygonActive={Boolean(props.roomPolygonDraw?.enabled)}\n        onReset={() => api.current?.focus()}\n        onWalkKey={(key, active) => active ? api.current?.keys.add(key) : api.current?.keys.delete(key)}\n      />\n`,
+  "canvas overlays extraction",
 );
 
 fs.writeFileSync(path, source);
