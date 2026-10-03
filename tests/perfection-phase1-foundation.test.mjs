@@ -20,7 +20,7 @@ test("Phase 1 golden manifest fingerprints exactly six generic source roles", ()
   assert.match(manifest, /buildGoldenSourceManifest/);
   assert.match(manifest, /verifyGoldenSourceManifest/);
   assert.match(manifest, /\^\[a-f0-9\]\{64\}\$/i);
-  assert.match(manifest, /file\.projectId !== project\.id/);
+  assert.match(manifest, /file\.projectId === project\.id/);
   assert.match(manifest, /asset\.blob\.size !== expectation\.size/);
   assert.match(manifest, /hash-mismatch/);
   assert.match(manifest, /size-mismatch/);
