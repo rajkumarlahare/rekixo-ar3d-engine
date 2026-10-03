@@ -5,6 +5,7 @@ on:
     branches:
       - phase16/direct-architectural-editing
     paths:
+      - scripts/prepare-phase16-transform.mjs
       - scripts/apply-phase16-direct-editing.mjs
       - scripts/fix-phase16-script-literals.mjs
       - scripts/refactor-phase16-studio.mjs
@@ -32,6 +33,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Prepare architecture transform contract
+        run: node scripts/prepare-phase16-transform.mjs
 
       - name: Repair integration script literals
         run: node scripts/fix-phase16-script-literals.mjs
@@ -71,7 +75,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm scripts/apply-phase16-direct-editing.mjs scripts/fix-phase16-script-literals.mjs scripts/refactor-phase16-studio.mjs scripts/refactor-phase16-canvas.mjs .github/workflows/phase16-apply-direct-editing.yml
-          git add apps/admin/src/studio/SceneCanvas.tsx apps/admin/src/studio/Studio.tsx apps/admin/src/studio/ArchitectureEditingPanels.tsx apps/admin/src/studio/sceneCanvasArchitectureController.ts
+          git rm scripts/prepare-phase16-transform.mjs scripts/apply-phase16-direct-editing.mjs scripts/fix-phase16-script-literals.mjs scripts/refactor-phase16-studio.mjs scripts/refactor-phase16-canvas.mjs .github/workflows/phase16-apply-direct-editing.yml
+          git add apps/admin/src/studio/SceneCanvas.tsx apps/admin/src/studio/Studio.tsx apps/admin/src/studio/sceneCanvasTransform.ts apps/admin/src/studio/ArchitectureEditingPanels.tsx apps/admin/src/studio/sceneCanvasArchitectureController.ts
           git commit -m "Phase 16: wire direct architectural editing into Studio"
           git push origin HEAD:phase16/direct-architectural-editing
