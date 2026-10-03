@@ -92,10 +92,15 @@ export function evaluateSourcePackReadiness(
       `${invalidSourceRecords.length} source file record${invalidSourceRecords.length === 1 ? "" : "s"} failed project/hash/byte-size integrity checks.`,
     );
 
-  const modelRole = roles.find((role) => role.key === "model")!;
-  if (!modelRole.present) {
+  const modelRole = roles.find((entry) => entry.key === "model")!;
+  const cad = roles.find((entry) => entry.key === "cad")!;
+  if (!modelRole.present && !cad.present) {
     blockingIssues.push(
-      "Attach an FBX or GLB source model before automatic building.",
+      "Attach an FBX/GLB model or a DWG/DXF plan before automatic building.",
+    );
+  } else if (!modelRole.present) {
+    reviewIssues.push(
+      "No 3D model is attached. Rekixo can build a model-less parametric draft only when one CAD source resolves to reliable metre wall geometry; generated walls/openings remain reviewable before publication.",
     );
   } else {
     const selected = project.scene.modelId
@@ -109,31 +114,30 @@ export function evaluateSourcePackReadiness(
       );
   }
 
-  const cad = roles.find((role) => role.key === "cad")!;
   if (!cad.present)
     reviewIssues.push(
       "No CAD source is attached; wall dimensions will rely on model/manual review.",
     );
 
-  const sketchup = roles.find((role) => role.key === "sketchup")!;
+  const sketchup = roles.find((entry) => entry.key === "sketchup")!;
   if (!sketchup.present)
     reviewIssues.push(
       "No SketchUp source is attached; material recovery may depend on FBX/visual references.",
     );
 
-  const drawing = roles.find((role) => role.key === "drawing")!;
+  const drawing = roles.find((entry) => entry.key === "drawing")!;
   if (!drawing.present)
     reviewIssues.push(
       "No PDF drawing is attached; plan alignment and room labels may need manual review.",
     );
 
-  const visual = roles.find((role) => role.key === "visual")!;
+  const visual = roles.find((entry) => entry.key === "visual")!;
   if (!visual.present)
     reviewIssues.push(
       "No exterior visual reference is attached; facade finish review will be limited.",
     );
 
-  const metadata = roles.find((role) => role.key === "metadata")!;
+  const metadata = roles.find((entry) => entry.key === "metadata")!;
   if (!metadata.present)
     reviewIssues.push(
       "No render metadata source is attached; external resource linkage may be incomplete.",
@@ -148,7 +152,7 @@ export function evaluateSourcePackReadiness(
   for (const item of fusion?.items ?? []) {
     if (item.extension === "dwg" && item.support === "needs-conversion")
       reviewIssues.push(
-        "DWG is preserved and inspected, but editable AEC geometry still requires the controlled CAD provider.",
+        "DWG is preserved and inspected; model-less geometry requires the controlled CAD processor before Rekixo will reconstruct walls.",
       );
     if (
       (item.extension === "skb" || item.extension === "skp") &&
@@ -159,10 +163,12 @@ export function evaluateSourcePackReadiness(
       );
   }
 
-  const completeSupportPack = roles.every((role) => role.present);
+  const completeSupportPack = roles.every((entry) => entry.present);
   const autoBuildReady =
-    modelRole.present && sourceIntegrityReady && blockingIssues.length === 0;
-  const presentCount = roles.filter((role) => role.present).length;
+    (modelRole.present || cad.present) &&
+    sourceIntegrityReady &&
+    blockingIssues.length === 0;
+  const presentCount = roles.filter((entry) => entry.present).length;
   const pipelineState =
     files.length === 0 ? "waiting" : autoBuildReady ? "ready" : "blocked";
 
