@@ -1,0 +1,53 @@
+name: Verify Production Building Demo
+
+on:
+  workflow_run:
+    workflows: ["Deploy Rekixo AR3D Engine"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      project_slug:
+        description: Optional active Building project slug to verify strictly.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rekixo-production-building-demo-qa
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out production verifier
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verify live Building demo readiness
+        env:
+          REKIXO_PUBLIC_ORIGIN: https://ar3dstudio.in
+          REKIXO_DEMO_PROJECT_SLUG: ${{ inputs.project_slug || vars.REKIXO_DEMO_PROJECT_SLUG }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$(mktemp)"
+          node scripts/verify-production-building-demo.mjs | tee "$OUT"
+          {
+            echo "## Production Building demo QA"
+            echo '```text'
+            cat "$OUT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          rm -f "$OUT"
