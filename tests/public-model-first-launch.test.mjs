@@ -8,9 +8,10 @@ test("demo launch keeps the published source model as public visual authority", 
   const profiles = read("apps/public/src/viewer/projectProfiles.ts");
 
   assert.match(profiles, /Demo Launch Phase 1 rule/);
-  assert.match(profiles, /imported FBX\/GLB is the public visual source of truth/);
-  assert.match(profiles, /return undefined;/);
-  assert.doesNotMatch(profiles, /createSemanticStudioExperience\(/);
+  assert.match(profiles, /createSemanticStudioExperience/);
+  assert.match(profiles, /replaceSourceModelInInterior\s*=\s*false/);
+  assert.match(profiles, /return semantic;/);
+  assert.doesNotMatch(profiles, /jyoti-paradise|Jyoti Paradise/i);
 });
 
 test("demo launch plan locks model-first scope and defers non-launch engine work", () => {
