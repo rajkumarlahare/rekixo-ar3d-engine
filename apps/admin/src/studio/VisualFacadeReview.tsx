@@ -62,8 +62,8 @@ export default function VisualFacadeReview({
       ) : (
         <fieldset disabled={disabled}>
           <p data-testid="visual-reference-summary">
-            Primary reference: {primaryName ?? "Analyzed image"} · Evidence
-            confidence {Math.round(plan.evidenceConfidence * 100)}% · {plan.counts.regions}{" "}
+            Reference: {primaryName ?? "Analyzed image"} · Evidence confidence{" "}
+            {Math.round(plan.evidenceConfidence * 100)}% · {plan.counts.regions}{" "}
             color region{plan.counts.regions === 1 ? "" : "s"} across {plan.counts.references}{" "}
             reference{plan.counts.references === 1 ? "" : "s"}
           </p>
