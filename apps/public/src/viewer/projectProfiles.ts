@@ -33,8 +33,10 @@ export interface ModelProfileContext {
 }
 
 /**
- * Generic data-driven experience loader. Repository-baked project interiors are
- * not allowed here; reviewed immutable Studio geometry is the reusable source.
+ * Demo Launch Phase 1 rule: the imported FBX/GLB stays the public visual source
+ * of truth. Reviewed Studio geometry remains available as an additive semantic
+ * experience for later walkthrough/floor work, but it must not claim authority
+ * to replace the source model during the launch track.
  */
 export async function loadProfileExperience(
   _profile: ModelProfileRuntime | undefined,
@@ -42,6 +44,6 @@ export async function loadProfileExperience(
   context: ModelProfileContext,
 ): Promise<ExperienceRuntime | undefined> {
   const semantic = createSemanticStudioExperience(bounds, context.mobile);
-  if (semantic) semantic.replaceSourceModelInInterior = true;
+  if (semantic) semantic.replaceSourceModelInInterior = false;
   return semantic;
 }
