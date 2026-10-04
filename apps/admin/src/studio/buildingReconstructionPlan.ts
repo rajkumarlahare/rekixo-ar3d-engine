@@ -271,7 +271,9 @@ function registrationFor(
     compatible: registration.compatible,
     ambiguous: registration.ambiguous,
     confidence: Number(registration.confidence.toFixed(3)),
-    reason: registration.reason,
+    reason:
+      registration.reason ??
+      "CAD-to-model registration completed without an explicit processor reason.",
   };
 }
 
