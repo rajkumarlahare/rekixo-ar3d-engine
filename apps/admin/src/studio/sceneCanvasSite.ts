@@ -2,6 +2,7 @@ import * as T from "three";
 import type { SiteElement } from "./domain";
 import { disposeObjectResources } from "./threeResources";
 import { addSiteElementVisual } from "./siteElementVisual";
+import { addPlanResizeHandles } from "./sceneCanvasPlanResizeHandles";
 
 export type SiteElementTransformMode = "translate" | "rotate" | "scale";
 
@@ -65,6 +66,10 @@ export function renderSiteElements(
     if (element.id === selected) {
       root.updateWorldMatrix(true, true);
       group.add(new T.BoxHelper(root, 0x4f9c6c));
+      addPlanResizeHandles(root, element.width, element.depth, {
+        y: Math.max(0.14, element.height + 0.1),
+        color: 0x4f9c6c,
+      });
     }
   }
 }

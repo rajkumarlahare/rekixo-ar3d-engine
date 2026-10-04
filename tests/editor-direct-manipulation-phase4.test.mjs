@@ -61,6 +61,35 @@ test("smart edge snap aligns footprint edges without changing object size", asyn
   );
 });
 
+test("corner resize keeps the opposite corner fixed and enforces minimum dimensions", async () => {
+  const { resolvePlanCornerResize } = await loadTs(
+    "packages/engine-core/src/editor/directDrag.ts",
+  );
+
+  assert.deepEqual(resolvePlanCornerResize([4, 6], "se", [3, 5]), {
+    centre: [0.5, 1],
+    width: 5,
+    depth: 8,
+    cornerPoint: [3, 5],
+  });
+  assert.deepEqual(
+    resolvePlanCornerResize([4, 6], "nw", [1.9, 2.9], {
+      minWidth: 0.5,
+      minDepth: 0.5,
+    }),
+    {
+      centre: [1.75, 2.75],
+      width: 0.5,
+      depth: 0.5,
+      cornerPoint: [1.5, 2.5],
+    },
+  );
+  assert.throws(
+    () => resolvePlanCornerResize([0, 6], "se", [1, 1]),
+    /positive/i,
+  );
+});
+
 test("direct manipulation controller is pointer-owned, cancel-safe and commits only at gesture end", () => {
   const source = fs.readFileSync(
     "apps/admin/src/studio/sceneCanvasDirectManipulation.ts",
@@ -72,6 +101,7 @@ test("direct manipulation controller is pointer-owned, cancel-safe and commits o
   assert.match(source, /finishPointerGesture/);
   assert.match(source, /event\.type === "pointercancel"/);
   assert.match(source, /session\.previewTarget\.position\.copy\(session\.startLocal\)/);
+  assert.match(source, /session\.previewTarget\.scale\.copy\(session\.startScale\)/);
   assert.match(source, /completion\.kind === "tap"/);
   assert.match(source, /completion\.kind === "cancel"/);
 
@@ -82,13 +112,25 @@ test("direct manipulation controller is pointer-owned, cancel-safe and commits o
   assert.match(source.slice(upStart), /config\.onTransformCommit\?\.\(change\)/);
 });
 
-test("direct manipulation covers smart edge snapping and editable wall endpoint resizing", () => {
+test("direct manipulation covers smart edge snapping, wall endpoints and plan corner resizing", () => {
   const source = fs.readFileSync(
     "apps/admin/src/studio/sceneCanvasDirectManipulation.ts",
     "utf8",
   );
   const architecture = fs.readFileSync(
     "apps/admin/src/studio/sceneCanvasArchitecture.ts",
+    "utf8",
+  );
+  const handles = fs.readFileSync(
+    "apps/admin/src/studio/sceneCanvasPlanResizeHandles.ts",
+    "utf8",
+  );
+  const rooms = fs.readFileSync(
+    "apps/admin/src/studio/sceneCanvasRooms.ts",
+    "utf8",
+  );
+  const site = fs.readFileSync(
+    "apps/admin/src/studio/sceneCanvasSite.ts",
     "utf8",
   );
 
@@ -107,9 +149,19 @@ test("direct manipulation covers smart edge snapping and editable wall endpoint 
   assert.match(source, /setWallEndpointPosition/);
   assert.match(source, /Wall endpoint resized/);
   assert.match(source, /Math\.hypot\(x - fixed\[0\], z - fixed\[1\]\) < 0\.2/);
+  assert.match(source, /planResizeHandle/);
+  assert.match(source, /resolvePlanCornerResize/);
+  assert.match(source, /setPlanCornerResize/);
+  assert.match(source, /resizeCorner/);
+  assert.match(source, /Resize · W/);
   assert.match(architecture, /addWallEndpointHandle/);
   assert.match(architecture, /new T\.SphereGeometry\(0\.32/);
   assert.match(architecture, /userData\.wallEndpoint = endpoint/);
+  assert.match(handles, /new T\.SphereGeometry\(0\.3/);
+  assert.match(handles, /userData\.planResizeCorner = corner/);
+  assert.match(rooms, /!room\.polygon\?\.length/);
+  assert.match(rooms, /addPlanResizeHandles/);
+  assert.match(site, /addPlanResizeHandles/);
 });
 
 test("production SceneCanvas routes pointer down, move and up through direct manipulation", () => {
