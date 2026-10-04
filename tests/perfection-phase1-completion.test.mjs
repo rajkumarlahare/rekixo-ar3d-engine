@@ -35,7 +35,7 @@ function transpile(source, fileName, jsx = false) {
     compilerOptions: {
       module: ts.ModuleKind.ESNext,
       target: ts.ScriptTarget.ES2022,
-      jsx: jsx ? ts.JsxEmit.ReactJSX : undefined,
+      ...(jsx ? { jsx: ts.JsxEmit.ReactJSX } : {}),
     },
   });
   const errors = (result.diagnostics ?? []).filter(

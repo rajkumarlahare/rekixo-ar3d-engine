@@ -22,16 +22,61 @@ const domainCode = compile("apps/admin/src/studio/domain.ts").replace(
 const domainUrl = url(domainCode);
 const domain = await import(domainUrl);
 
+const integrityUrl = url(
+  compile("apps/admin/src/studio/sceneGeometryIntegrity.ts").replace(
+    /(["'])\.\/domain\1/,
+    JSON.stringify(domainUrl),
+  ),
+);
+const reviewQueueUrl = url(
+  compile("apps/admin/src/studio/actionableReviewQueue.ts"),
+);
+
 let readinessCode = compile("apps/admin/src/studio/readiness.ts");
 readinessCode = readinessCode.replace(
   /(["'])\.\/domain\1/,
   JSON.stringify(domainUrl),
 );
+readinessCode = readinessCode
+  .replace(/(["'])\.\/sceneGeometryIntegrity\1/, JSON.stringify(integrityUrl))
+  .replace(/(["'])\.\/actionableReviewQueue\1/, JSON.stringify(reviewQueueUrl));
 const readiness = await import(url(readinessCode));
 
 const workerSnapshot = await import(
   url(read("workers/studio-draft-validation.mjs")),
 );
+
+test("publish readiness blocks duplicate floor geometry and recovers after correction", () => {
+  const project = domain.newProject("Geometry gate");
+  project.assets = ["web-glb"];
+  project.scene.modelId = "web-glb";
+  project.cloud = { revision: 1, syncedAt: "2026-10-03T00:00:00Z" };
+  const files = [{
+    id: "web-glb", projectId: project.id, name: "web.glb",
+    type: "model/gltf-binary", size: 4, hash: "a".repeat(64),
+    blob: new Blob(["test"]),
+  }];
+  const inspect = () => readiness.buildStudioReadiness(
+    project, files, false, { authenticated: true }, [],
+  );
+  assert.equal(inspect().publishable, true);
+
+  project.scene.floors.push({
+    id: "duplicate-floor", name: "Duplicate", elevation: 0,
+  });
+  const blocked = inspect();
+  assert.equal(blocked.publishable, false);
+  assert.ok(blocked.blockers.some((item) => item.id === "scene-integrity"));
+  const action = blocked.reviewQueue.blockers.find(
+    (item) => item.entityId === "duplicate-floor",
+  );
+  assert.ok(action);
+  assert.match(action.action, /Correct or merge/);
+
+  project.scene.floors[1].elevation = 3;
+  assert.equal(inspect().publishable, true);
+  assert.equal(inspect().geometryIntegrity.counts.blocker, 0);
+});
 
 test("Studio scene can retain FBX for authoring and a distinct GLB for publish", () => {
   const project = domain.newProject("Dual model");
