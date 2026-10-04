@@ -783,17 +783,7 @@ export default function SceneCanvas(props: Props) {
       return snapRoomPoint(target, floor.id, snap, excludeRoomId);
     };
 
-    const directManipulation = createDirectManipulationController({
-      getConfig: () => latest.current,
-      renderer,
-      camera,
-      controls,
-      transform,
-      selectables,
-      pointOnFloor,
-      snapPlanPoint: snapRoomPoint,
-      setStatus,
-    });
+    const directManipulation = createDirectManipulationController({ getConfig: () => latest.current, renderer, camera, controls, transform, selectables, pointOnFloor, snapPlanPoint: snapRoomPoint, setStatus });
 
     const roomPlanePoint = (
       event: PointerEvent,
@@ -1010,10 +1000,7 @@ export default function SceneCanvas(props: Props) {
     };
     const click = (e: PointerEvent) => {
       if (architectureController.pointerUp(e)) return;
-      if (directManipulation.pointerUp(e)) {
-        point = undefined;
-        return;
-      }
+      if (directManipulation.pointerUp(e)) { point = undefined; return; }
       if (vertexDrag) {
         const current = vertexDrag;
         const target = roomPlanePoint(e, current.roomId);
@@ -2041,11 +2028,7 @@ export default function SceneCanvas(props: Props) {
     runtime.controls.enablePan = false;
     runtime.focus();
   }, [props.alignmentMode]);
-  const authoringActive = Boolean(
-    architectureAuthoringActive(props) || props.roomDraw?.enabled ||
-      props.roomStamp?.enabled || props.roomPolygonDraw?.enabled ||
-      props.furniturePlacement?.enabled,
-  );
+  const authoringActive = Boolean(architectureAuthoringActive(props) || props.roomDraw?.enabled || props.roomStamp?.enabled || props.roomPolygonDraw?.enabled || props.furniturePlacement?.enabled);
   return (
     <div className={authoringActive ? "canvas-wrap room-draw-active" : "canvas-wrap"}>
       <div className="studio-canvas" ref={host} />
