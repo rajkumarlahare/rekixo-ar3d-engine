@@ -1,0 +1,1046 @@
+diff --git a/apps/admin/src/studio/sceneCanvasTransform.ts b/apps/admin/src/studio/sceneCanvasTransform.ts
+index 4ee1185..fef8ac1 100644
+--- a/apps/admin/src/studio/sceneCanvasTransform.ts
++++ b/apps/admin/src/studio/sceneCanvasTransform.ts
+@@ -2,7 +2,7 @@ import type { RoomPoint } from "./domain";
+ 
+ export type TransformMode = "translate" | "rotate" | "scale";
+ 
+-export type TransformCommit =
++export type AtomicTransformCommit =
+   | {
+       kind: "room";
+       id: string;
+@@ -51,3 +51,8 @@ export type TransformCommit =
+       z?: number;
+       rotationY?: number;
+     };
++
++export type TransformCommit =
++  | AtomicTransformCommit
++  | { kind: "batch"; changes: AtomicTransformCommit[] };
++
+diff --git a/apps/admin/src/studio/sceneTransformApply.ts b/apps/admin/src/studio/sceneTransformApply.ts
+new file mode 100644
+index 0000000..2c62655
+--- /dev/null
++++ b/apps/admin/src/studio/sceneTransformApply.ts
+@@ -0,0 +1,256 @@
++import {
++  moveManualOpening,
++  patchManualOpening,
++  patchManualWall,
++} from "./architectureAuthoring";
++import {
++  roomGeometryFromPolygon,
++  type RoomPoint,
++  type Scene,
++} from "./domain";
++import type {
++  AtomicTransformCommit,
++  TransformCommit,
++} from "./sceneCanvasTransform";
++
++function applyAtomicTransform(
++  scene: Scene,
++  change: AtomicTransformCommit,
++): Scene {
++  if (change.kind === "model") {
++    const current = scene.modelTransform ?? { x: 0, y: 0, z: 0, rotationY: 0 };
++    return {
++      ...scene,
++      modelTransform: {
++        ...current,
++        ...(change.x !== undefined ? { x: change.x } : {}),
++        ...(change.y !== undefined ? { y: change.y } : {}),
++        ...(change.z !== undefined ? { z: change.z } : {}),
++        ...(change.rotationY !== undefined
++          ? { rotationY: change.rotationY }
++          : {}),
++      },
++    };
++  }
++  if (change.kind === "siteElement")
++    return {
++      ...scene,
++      siteElements: (scene.siteElements ?? []).map((candidate) =>
++        candidate.id === change.id
++          ? {
++              ...candidate,
++              ...(change.x !== undefined ? { x: change.x } : {}),
++              ...(change.z !== undefined ? { z: change.z } : {}),
++              ...(change.rotation !== undefined
++                ? { rotation: change.rotation }
++                : {}),
++              ...(change.width !== undefined ? { width: change.width } : {}),
++              ...(change.depth !== undefined ? { depth: change.depth } : {}),
++              ...(change.height !== undefined ? { height: change.height } : {}),
++              reviewed: false,
++              reviewState: "suggested" as const,
++              origin: "manual" as const,
++              confidence: undefined,
++            }
++          : candidate,
++      ),
++    };
++  if (change.kind === "wall")
++    return patchManualWall(scene, change.id, {
++      ...(change.start !== undefined ? { start: change.start } : {}),
++      ...(change.end !== undefined ? { end: change.end } : {}),
++      ...(change.thickness !== undefined ? { thickness: change.thickness } : {}),
++      ...(change.height !== undefined ? { height: change.height } : {}),
++    });
++  if (change.kind === "opening") {
++    let next = scene;
++    if (change.x !== undefined || change.z !== undefined) {
++      const current = next.openings?.find((entry) => entry.id === change.id);
++      if (!current) return scene;
++      next = moveManualOpening(next, change.id, [
++        change.x ?? current.x,
++        change.z ?? current.z,
++      ]);
++    }
++    if (change.width !== undefined || change.height !== undefined)
++      next = patchManualOpening(next, change.id, {
++        ...(change.width !== undefined ? { width: change.width } : {}),
++        ...(change.height !== undefined ? { height: change.height } : {}),
++      });
++    return next;
++  }
++  if (change.kind === "room")
++    return {
++      ...scene,
++      rooms: scene.rooms.map((candidate) => {
++        if (candidate.id !== change.id) return candidate;
++        let polygon = candidate.polygon?.map(
++          (point) => [point[0], point[1]] as RoomPoint,
++        );
++        if (polygon?.length) {
++          if (change.x !== undefined || change.z !== undefined) {
++            const dx = (change.x ?? candidate.x) - candidate.x;
++            const dz = (change.z ?? candidate.z) - candidate.z;
++            polygon = polygon.map(([x, z]) => [x + dx, z + dz] as RoomPoint);
++          }
++          if (change.width !== undefined || change.depth !== undefined) {
++            const scaleX = change.width !== undefined ? change.width / candidate.width : 1;
++            const scaleZ = change.depth !== undefined ? change.depth / candidate.depth : 1;
++            polygon = polygon.map(
++              ([x, z]) =>
++                [
++                  candidate.x + (x - candidate.x) * scaleX,
++                  candidate.z + (z - candidate.z) * scaleZ,
++                ] as RoomPoint,
++            );
++          }
++          const geometry = roomGeometryFromPolygon(polygon);
++          return {
++            ...candidate,
++            ...geometry,
++            verified: false,
++            ...(change.height !== undefined ? { height: change.height } : {}),
++          };
++        }
++        return {
++          ...candidate,
++          verified: false,
++          ...(change.x !== undefined ? { x: change.x } : {}),
++          ...(change.z !== undefined ? { z: change.z } : {}),
++          ...(change.width !== undefined ? { width: change.width } : {}),
++          ...(change.depth !== undefined ? { depth: change.depth } : {}),
++          ...(change.height !== undefined ? { height: change.height } : {}),
++        };
++      }),
++    };
++  return {
++    ...scene,
++    furniture: scene.furniture.map((candidate) =>
++      candidate.id === change.id
++        ? {
++            ...candidate,
++            ...(change.x !== undefined ? { x: change.x } : {}),
++            ...(change.z !== undefined ? { z: change.z } : {}),
++            ...(change.rotation !== undefined ? { rotation: change.rotation } : {}),
++          }
++        : candidate,
++    ),
++  };
++}
++
++export function applyTransformCommit(scene: Scene, change: TransformCommit) {
++  return change.kind === "batch"
++    ? change.changes.reduce(applyAtomicTransform, scene)
++    : applyAtomicTransform(scene, change);
++}
++
++export function nudgePlanDelta(
++  key: string,
++  modifiers: { shiftKey?: boolean; altKey?: boolean } = {},
++): readonly [number, number] | undefined {
++  const step = modifiers.altKey ? 0.01 : modifiers.shiftKey ? 0.5 : 0.1;
++  switch (key.toLowerCase()) {
++    case "arrowleft":
++      return [-step, 0];
++    case "arrowright":
++      return [step, 0];
++    case "arrowup":
++      return [0, -step];
++    case "arrowdown":
++      return [0, step];
++    default:
++      return undefined;
++  }
++}
++
++type TranslationEntity =
++  | { kind: "room"; id: string; floorId: string; x: number; z: number }
++  | { kind: "furniture"; id: string; roomId: string; x: number; z: number }
++  | { kind: "siteElement"; id: string; floorId?: string; x: number; z: number };
++
++function translationEntity(scene: Scene, id: string): TranslationEntity | undefined {
++  const room = scene.rooms.find((entry) => entry.id === id);
++  if (room)
++    return {
++      kind: "room",
++      id: room.id,
++      floorId: room.floorId,
++      x: room.x,
++      z: room.z,
++    };
++  const furniture = scene.furniture.find((entry) => entry.id === id);
++  if (furniture)
++    return {
++      kind: "furniture",
++      id: furniture.id,
++      roomId: furniture.roomId,
++      x: furniture.x,
++      z: furniture.z,
++    };
++  const site = scene.siteElements?.find((entry) => entry.id === id);
++  if (site)
++    return {
++      kind: "siteElement",
++      id: site.id,
++      floorId: site.floorId,
++      x: site.x,
++      z: site.z,
++    };
++  return undefined;
++}
++
++export function buildTranslationCommit(
++  scene: Scene,
++  ids: readonly string[],
++  dx: number,
++  dz: number,
++): TransformCommit | undefined {
++  if (!Number.isFinite(dx) || !Number.isFinite(dz) || (!dx && !dz)) return undefined;
++  const uniqueIds = [...new Set(ids.filter(Boolean))];
++  const entities = uniqueIds.map((id) => translationEntity(scene, id));
++  if (!entities.length || entities.some((entry) => !entry)) return undefined;
++  const rows = entities as TranslationEntity[];
++  const first = rows[0];
++  if (rows.some((entry) => entry.kind !== first.kind)) return undefined;
++  if (
++    first.kind === "room" &&
++    rows.some((entry) => entry.kind !== "room" || entry.floorId !== first.floorId)
++  )
++    return undefined;
++  if (
++    first.kind === "furniture" &&
++    rows.some((entry) => entry.kind !== "furniture" || entry.roomId !== first.roomId)
++  )
++    return undefined;
++  if (
++    first.kind === "siteElement" &&
++    rows.some(
++      (entry) =>
++        entry.kind !== "siteElement" || (entry.floorId ?? "") !== (first.floorId ?? ""),
++    )
++  )
++    return undefined;
++
++  const changes: AtomicTransformCommit[] = rows.map((entry) => ({
++    kind: entry.kind,
++    id: entry.id,
++    x: Number((entry.x + dx).toFixed(6)),
++    z: Number((entry.z + dz).toFixed(6)),
++  }));
++  return changes.length === 1 ? changes[0] : { kind: "batch", changes };
++}
++
+diff --git a/apps/admin/src/studio/Studio.tsx b/apps/admin/src/studio/Studio.tsx
+index c01aeaa..a10df48 100644
+--- a/apps/admin/src/studio/Studio.tsx
++++ b/apps/admin/src/studio/Studio.tsx
+@@ -128,6 +128,7 @@ import {
+   projectAheadOfCloud,
+   withLocalSaveTimestamp,
+ } from "./localDraftState";
++import { applyTransformCommit } from "./sceneTransformApply";
+ import "./studio.css";
+ import "./studio-operations.css";
+ import "./studio-superadmin-theme.css";
+@@ -150,6 +151,7 @@ export default function Studio() {
+     [files, setFiles] = useState<Asset[]>([]),
+     [roomId, setRoomId] = useState(""),
+     [selected, setSelected] = useState(""),
++    [selectedIds, setSelectedIds] = useState<string[]>([]),
+     [view, setView] = useState<View>("rooms"),
+     [busy, setBusy] = useState(false),
+     [message, setMessage] = useState(""),
+@@ -324,7 +326,9 @@ export default function Studio() {
+     localEditSerial.current += 1;
+     setProject(p);
+     setRoomId(p.scene.rooms[0]?.id ?? "");
+-    setSelected(p.scene.rooms[0]?.id ?? "");
++    const initialSelection = p.scene.rooms[0]?.id ?? "";
++    setSelected(initialSelection);
++    setSelectedIds(initialSelection ? [initialSelection] : []);
+     setReview("");
+     setWorkspace("builder");
+     setEditorFocus(false);
+@@ -417,6 +421,13 @@ export default function Studio() {
+       setSelectedMaterial(modelMaterials[0].name);
+   }, [modelMaterials, selectedMaterial]);
++  useEffect(() => {
++    setSelectedIds((current) => {
++      if (!selected) return [];
++      return current.includes(selected) ? current : [selected];
++    });
++  }, [selected]);
+   useEffect(() => {
+     const guard = (e: BeforeUnloadEvent) => {
+       if (dirty) {
+@@ -1584,155 +1595,15 @@ export default function Studio() {
+   }
+   function commitCanvasTransform(change: TransformCommit) {
+     if (review || busy) return;
+-    let next: Project;
+-    if (change.kind === "model") {
+-      next = {
+-        ...p,
+-        scene: {
+-          ...p.scene,
+-          modelTransform: {
+-            ...modelTransform,
+-            ...(change.x !== undefined ? { x: change.x } : {}),
+-            ...(change.y !== undefined ? { y: change.y } : {}),
+-            ...(change.z !== undefined ? { z: change.z } : {}),
+-            ...(change.rotationY !== undefined
+-              ? { rotationY: change.rotationY }
+-              : {}),
+-          },
+-        },
+-      };
+-    } else if (change.kind === "siteElement") {
+-      next = {
+-        ...p,
+-        scene: {
+-          ...p.scene,
+-          siteElements: (p.scene.siteElements ?? []).map((candidate) =>
+-            candidate.id === change.id
+-              ? {
+-                  ...candidate,
+-                  ...(change.x !== undefined ? { x: change.x } : {}),
+-                  ...(change.z !== undefined ? { z: change.z } : {}),
+-                  ...(change.rotation !== undefined
+-                    ? { rotation: change.rotation }
+-                    : {}),
+-                  ...(change.width !== undefined
+-                    ? { width: change.width }
+-                    : {}),
+-                  ...(change.depth !== undefined
+-                    ? { depth: change.depth }
+-                    : {}),
+-                  ...(change.height !== undefined
+-                    ? { height: change.height }
+-                    : {}),
+-                  reviewed: false,
+-                  reviewState: "suggested" as const,
+-                  origin: "manual" as const,
+-                  confidence: undefined,
+-                }
+-              : candidate,
+-          ),
+-        },
+-      };
+-    } else if (change.kind === "wall") {
+-      next = {
+-        ...p,
+-        scene: patchManualWall(p.scene, change.id, {
+-          ...(change.start !== undefined ? { start: change.start } : {}),
+-          ...(change.end !== undefined ? { end: change.end } : {}),
+-          ...(change.thickness !== undefined
+-            ? { thickness: change.thickness }
+-            : {}),
+-          ...(change.height !== undefined ? { height: change.height } : {}),
+-        }),
+-      };
+-    } else if (change.kind === "opening") {
+-      let nextScene = p.scene;
+-      if (change.x !== undefined || change.z !== undefined) {
+-        const current = nextScene.openings?.find(
+-          (entry) => entry.id === change.id,
+-        );
+-        if (!current) return;
+-        nextScene = moveManualOpening(nextScene, change.id, [
+-          change.x ?? current.x,
+-          change.z ?? current.z,
+-        ]);
+-      }
+-      if (change.width !== undefined || change.height !== undefined)
+-        nextScene = patchManualOpening(nextScene, change.id, {
+-          ...(change.width !== undefined ? { width: change.width } : {}),
+-          ...(change.height !== undefined ? { height: change.height } : {}),
+-        });
+-      next = { ...p, scene: nextScene };
+-    } else if (change.kind === "room") {
+-      next = {
+-        ...p,
+-        scene: {
+-          ...p.scene,
+-          rooms: p.scene.rooms.map((candidate) => {
+-            if (candidate.id !== change.id) return candidate;
+-            let polygon = candidate.polygon?.map(
+-              (point) => [point[0], point[1]] as RoomPoint,
+-            );
+-            if (polygon?.length) {
+-              if (change.x !== undefined || change.z !== undefined) {
+-                const dx = (change.x ?? candidate.x) - candidate.x;
+-                const dz = (change.z ?? candidate.z) - candidate.z;
+-                polygon = polygon.map(
+-                  ([x, z]) => [x + dx, z + dz] as RoomPoint,
+-                );
+-              }
+-              if (change.width !== undefined || change.depth !== undefined) {
+-                const scaleX =
+-                  change.width !== undefined
+-                    ? change.width / candidate.width
+-                    : 1;
+-                const scaleZ =
+-                  change.depth !== undefined
+-                    ? change.depth / candidate.depth
+-                    : 1;
+-                polygon = polygon.map(
+-                  ([x, z]) =>
+-                    [
+-                      candidate.x + (x - candidate.x) * scaleX,
+-                      candidate.z + (z - candidate.z) * scaleZ,
+-                    ] as RoomPoint,
+-                );
+-              }
+-              const geometry = roomGeometryFromPolygon(polygon);
+-              return {
+-                ...candidate,
+-                ...geometry,
+-                verified: false,
+-                ...(change.height !== undefined
+-                  ? { height: change.height }
+-                  : {}),
+-              };
+-            }
+-            return {
+-              ...candidate,
+-              verified: false,
+-              ...(change.x !== undefined ? { x: change.x } : {}),
+-              ...(change.z !== undefined ? { z: change.z } : {}),
+-              ...(change.width !== undefined ? { width: change.width } : {}),
+-              ...(change.depth !== undefined ? { depth: change.depth } : {}),
+-              ...(change.height !== undefined ? { height: change.height } : {}),
+-            };
+-          }),
+-        },
+-      };
+-    } else {
+-      next = {
+-        ...p,
+-        scene: {
+-          ...p.scene,
+-          furniture: p.scene.furniture.map((candidate) =>
+-            candidate.id === change.id
+-              ? {
+-                  ...candidate,
+-                  ...(change.x !== undefined ? { x: change.x } : {}),
+-                  ...(change.z !== undefined ? { z: change.z } : {}),
+-                  ...(change.rotation !== undefined
+-                    ? { rotation: change.rotation }
+-                    : {}),
+-                }
+-              : candidate,
+-          ),
+-        },
+-      };
+-    }
+     try {
++      const next: Project = { ...p, scene: applyTransformCommit(p.scene, change) };
+       validateProject(next);
+       edit(next);
+     } catch (reason) {
+@@ -2381,8 +2252,12 @@ export default function Studio() {
+-  function select(key: string) {
++  function select(key: string, selection: readonly string[] = key ? [key] : []) {
+     setSelected(key);
++    setSelectedIds([...new Set(selection.filter(Boolean))]);
+     setMesh("");
+     setSelectedModelNodeKey("");
+@@ -4799,6 +4674,8 @@ export default function Studio() {
+             scene={scene}
+             roomId={roomId}
+             selected={selected}
++            selectedIds={selectedIds}
++            onSelectionChange={(ids, primary) => select(primary, ids)}
+             selectedMesh={mesh}
+             selectedMeshKey={selectedModelNodeKey}
+             view={view}
+
+diff --git a/apps/admin/src/studio/SceneCanvas.tsx b/apps/admin/src/studio/SceneCanvas.tsx
+index 4d2fa74..196aaa2 100644
+--- a/apps/admin/src/studio/SceneCanvas.tsx
++++ b/apps/admin/src/studio/SceneCanvas.tsx
+@@ -27,6 +27,10 @@ import {
+   renderArchitectureCanvas,
+   type ArchitectureCanvasProps,
+ } from "./sceneCanvasArchitectureController";
++import {
++  buildTranslationCommit,
++  nudgePlanDelta,
++} from "./sceneTransformApply";
+ import { createDirectManipulationController } from "./sceneCanvasDirectManipulation";
+@@ -73,7 +77,9 @@ interface Props extends ArchitectureCanvasProps {
+   roomId: string;
+   view: View;
+   selected: string;
++  selectedIds?: readonly string[];
+   onSelect: (id: string) => void;
++  onSelectionChange?: (ids: string[], primary: string) => void;
+   onMesh: (name: string) => void;
+@@ -153,6 +159,7 @@ export default function SceneCanvas(props: Props) {
+     polygonDraft: T.Group;
+     polygonEdit: T.Group;
++    multiSelection: T.Group;
+     clearPolygonDraft: () => void;
+@@ -232,6 +239,9 @@ export default function SceneCanvas(props: Props) {
+     const polygonEdit = new T.Group();
+     polygonEdit.name = "Room polygon edit handles";
+     polygonEdit.renderOrder = 32;
++    const multiSelection = new T.Group();
++    multiSelection.name = "Multi-selection outlines";
++    multiSelection.renderOrder = 48;
+     scene.add(
+@@ -245,6 +255,7 @@ export default function SceneCanvas(props: Props) {
+       wallDraft,
+       polygonDraft,
+       polygonEdit,
++      multiSelection,
+     );
+@@ -306,11 +317,50 @@ export default function SceneCanvas(props: Props) {
+       vectors.forEach((point, index) => {
+         const marker = new T.Mesh(
+-          new T.SphereGeometry(0.12, 14, 10),
++          new T.SphereGeometry(0.13, 14, 10),
+           new T.MeshBasicMaterial({ color: 0x8d84ff }),
+         );
+         marker.position.copy(point);
+         marker.userData.roomVertexIndex = index;
+         marker.userData.roomId = room.id;
+         polygonEdit.add(marker);
++
++        const touch = new T.Mesh(
++          new T.SphereGeometry(0.32, 12, 8),
++          new T.MeshBasicMaterial({
++            transparent: true,
++            opacity: 0,
++            depthWrite: false,
++            depthTest: false,
++          }),
++        );
++        touch.position.copy(point);
++        touch.userData.roomVertexIndex = index;
++        touch.userData.roomId = room.id;
++        touch.name = `Polygon corner ${index + 1} touch target`;
++        polygonEdit.add(touch);
++
++        const next = vectors[(index + 1) % vectors.length];
++        const midpoint = point.clone().add(next).multiplyScalar(0.5);
++        const insert = new T.Mesh(
++          new T.SphereGeometry(0.075, 12, 8),
++          new T.MeshBasicMaterial({ color: 0xffc56d, depthTest: false }),
++        );
++        insert.position.copy(midpoint);
++        insert.userData.roomEdgeInsertIndex = index + 1;
++        insert.userData.roomId = room.id;
++        insert.renderOrder = 34;
++        polygonEdit.add(insert);
++        const insertTouch = new T.Mesh(
++          new T.SphereGeometry(0.27, 10, 8),
++          new T.MeshBasicMaterial({
++            transparent: true,
++            opacity: 0,
++            depthWrite: false,
++            depthTest: false,
++          }),
++        );
++        insertTouch.position.copy(midpoint);
++        insertTouch.userData.roomEdgeInsertIndex = index + 1;
++        insertTouch.userData.roomId = room.id;
++        insertTouch.name = `Insert polygon corner after ${index + 1}`;
++        polygonEdit.add(insertTouch);
+       });
+@@ -627,6 +677,7 @@ export default function SceneCanvas(props: Props) {
+       polygonDraft,
+       polygonEdit,
++      multiSelection,
+       clearPolygonDraft,
+@@ -679,6 +730,37 @@ export default function SceneCanvas(props: Props) {
+         return;
+       }
++      if (latest.current.view !== "walk") {
++        const delta = nudgePlanDelta(e.key, {
++          shiftKey: e.shiftKey,
++          altKey: e.altKey,
++        });
++        const editorBusy = Boolean(
++          latest.current.furniturePlacement?.enabled ||
++            latest.current.roomDraw?.enabled ||
++            latest.current.roomStamp?.enabled ||
++            latest.current.roomPolygonDraw?.enabled ||
++            latest.current.roomPolygonEdit?.enabled ||
++            architectureAuthoringActive(latest.current),
++        );
++        if (
++          delta &&
++          !editorBusy &&
++          latest.current.transformEnabled &&
++          (latest.current.transformMode ?? "translate") === "translate" &&
++          latest.current.selected
++        ) {
++          const ids = latest.current.selectedIds?.length
++            ? latest.current.selectedIds
++            : [latest.current.selected];
++          const change = buildTranslationCommit(
++            latest.current.scene,
++            ids,
++            delta[0],
++            delta[1],
++          );
++          if (change) {
++            e.preventDefault();
++            latest.current.onTransformCommit?.(change);
++            setStatus(
++              `${ids.length > 1 ? `${ids.length} objects` : "Object"} nudged ${Math.hypot(...delta).toFixed(2)} m · Alt 0.01 m · Arrow 0.10 m · Shift 0.50 m.`,
++            );
++          }
++        }
++        return;
++      }
+       if (latest.current.view !== "walk") return;
+@@ -736,6 +818,8 @@ export default function SceneCanvas(props: Props) {
+         | {
+             roomId: string;
+             index: number;
+             points: RoomPoint[];
++            originalPoints: RoomPoint[];
+             floorId: string;
+           }
+         | undefined;
+@@ -843,6 +927,27 @@ export default function SceneCanvas(props: Props) {
+         const hit = raycaster.intersectObjects(polygonEdit.children, true)[0];
+         const index = hit?.object.userData.roomVertexIndex;
++        const insertIndex = hit?.object.userData.roomEdgeInsertIndex;
+         const roomId = hit?.object.userData.roomId;
+         const targetRoom =
+@@ -850,6 +955,22 @@ export default function SceneCanvas(props: Props) {
+             ? latest.current.scene.rooms.find((room) => room.id === roomId)
+             : undefined;
++        if (
++          targetRoom?.polygon?.length &&
++          Number.isInteger(insertIndex) &&
++          insertIndex >= 1 &&
++          insertIndex <= targetRoom.polygon.length
++        ) {
++          const left = targetRoom.polygon[insertIndex - 1];
++          const right = targetRoom.polygon[insertIndex % targetRoom.polygon.length];
++          const next = targetRoom.polygon.map(([x, z]) => [x, z] as RoomPoint);
++          next.splice(insertIndex, 0, [
++            Number(((left[0] + right[0]) / 2).toFixed(3)),
++            Number(((left[1] + right[1]) / 2).toFixed(3)),
++          ]);
++          latest.current.onRoomPolygonChange?.(targetRoom.id, next);
++          setStatus(`Corner inserted · ${next.length} polygon corners.`);
++          return;
++        }
+         if (
+@@ -864,9 +985,12 @@ export default function SceneCanvas(props: Props) {
+           vertexDrag = {
+             roomId: targetRoom.id,
+             index,
+-            points: targetRoom.polygon.map(
++            points: targetRoom.polygon.map(
+               ([x, z]) => [x, z] as RoomPoint,
+             ),
++            originalPoints: targetRoom.polygon.map(
++              ([x, z]) => [x, z] as RoomPoint,
++            ),
+             floorId: targetRoom.floorId,
+           };
+@@ -940,6 +1064,10 @@ export default function SceneCanvas(props: Props) {
+           );
+           api.current?.renderPolygonEdit(room, vertexDrag.points);
++          setStatus(
++            `Corner ${vertexDrag.index + 1}/${vertexDrag.points.length} · X ${target.x.toFixed(2)} m · Z ${target.z.toFixed(2)} m${latest.current.roomPolygonEdit?.snap ? " · snap" : ""}`,
++          );
+         }
+         return;
+@@ -988,6 +1116,14 @@ export default function SceneCanvas(props: Props) {
+       if (vertexDrag) {
+         const current = vertexDrag;
++        if (e.type === "pointercancel") {
++          const room = latest.current.scene.rooms.find((entry) => entry.id === current.roomId);
++          api.current?.renderPolygonEdit(room, current.originalPoints);
++          vertexDrag = undefined;
++          point = undefined;
++          controls.enabled = latest.current.view !== "walk";
++          setStatus("Polygon corner edit cancelled.");
++          return;
++        }
+         const target = roomPlanePoint(e, current.roomId);
+@@ -1067,6 +1203,24 @@ export default function SceneCanvas(props: Props) {
+       ray.setFromCamera(
+@@
+         camera,
+       );
++      const selectCanvasId = (id: string) => {
++        if (e.shiftKey && latest.current.onSelectionChange) {
++          const previous = latest.current.selectedIds?.length
++            ? [...latest.current.selectedIds]
++            : latest.current.selected
++              ? [latest.current.selected]
++              : [];
++          const next = previous.includes(id)
++            ? previous.filter((entry) => entry !== id)
++            : [...previous, id];
++          const primary = next.includes(id) ? id : (next.at(-1) ?? "");
++          latest.current.onSelectionChange(next, primary);
++          setStatus(next.length > 1 ? `${next.length} objects selected · drag one to move the group.` : "");
++          return;
++        }
++        latest.current.onSelect(id);
++      };
+       const roomHit =
+@@ -1081,7 +1235,7 @@ export default function SceneCanvas(props: Props) {
+         while (selectedRoomNode && !selectedRoomNode.userData.selectId)
+           selectedRoomNode = selectedRoomNode.parent;
+         if (selectedRoomNode?.userData.selectId) {
+-          latest.current.onSelect(selectedRoomNode.userData.selectId);
++          selectCanvasId(String(selectedRoomNode.userData.selectId));
+           return;
+         }
+@@ -1106,7 +1260,7 @@ export default function SceneCanvas(props: Props) {
+             n = n.parent;
+           if (n?.userData.selectId) {
+-            latest.current.onSelect(String(n.userData.selectId));
++            selectCanvasId(String(n.userData.selectId));
+             return;
+           }
+@@ -1124,7 +1278,7 @@ export default function SceneCanvas(props: Props) {
+         if (latest.current.view !== "building") {
+           let n: T.Object3D | null = hit.object;
+           while (n && !n.userData.selectId) n = n.parent;
+-          if (n) latest.current.onSelect(n.userData.selectId);
++          if (n) selectCanvasId(String(n.userData.selectId));
+         }
+@@ -1671,6 +1825,17 @@ export default function SceneCanvas(props: Props) {
+     renderReviewedOpeningMarkers(
+@@
+       },
+     );
++    for (const child of [...r.multiSelection.children]) {
++      r.multiSelection.remove(child);
++      disposeObjectResources(child);
++    }
++    for (const id of props.selectedIds ?? []) {
++      if (id === props.selected) continue;
++      const target = r.selectables.get(id);
++      if (!target || !target.visible) continue;
++      target.updateWorldMatrix(true, true);
++      const helper = new T.BoxHelper(target, 0x2bc7ff);
++      helper.renderOrder = 48;
++      r.multiSelection.add(helper);
++    }
+   }, [
+     props.scene,
+     props.selected,
++    props.selectedIds,
+@@ -1724,6 +1889,7 @@ export default function SceneCanvas(props: Props) {
+     const target = runtime.selectables.get(props.selected);
++    if ((props.selectedIds?.length ?? 0) > 1) return;
+     const isSiteElement = Boolean(
+@@ -1761,6 +1927,7 @@ export default function SceneCanvas(props: Props) {
+     props.selected,
++    props.selectedIds,
+     props.transformMode,
+
+diff --git a/apps/admin/src/studio/sceneCanvasDirectManipulation.ts b/apps/admin/src/studio/sceneCanvasDirectManipulation.ts
+index 3099033..9780630 100644
+--- a/apps/admin/src/studio/sceneCanvasDirectManipulation.ts
++++ b/apps/admin/src/studio/sceneCanvasDirectManipulation.ts
+@@ -30,6 +30,7 @@ export interface DirectManipulationConfig {
+   scene: Scene;
+   selected: string;
++  selectedIds?: readonly string[];
+   view: "building" | "rooms" | "walk";
+@@ -70,6 +71,14 @@ interface OpeningResizePreview {
+   height: number;
+ }
++
++interface GroupMoveMember {
++  id: string;
++  entity: Extract<DirectEntity, { kind: "room" | "furniture" | "site" }>;
++  target: T.Object3D;
++  startLocal: T.Vector3;
++  originWorld: readonly [number, number];
++}
+ 
+ interface DragSession {
+@@ -96,6 +105,8 @@ interface DragSession {
+   furnitureRotationHandle?: boolean;
+   rotationPreview?: number;
+   snapApplied?: boolean;
++  groupMove?: GroupMoveMember[];
++  moveDelta?: readonly [number, number];
+ }
+@@ -321,7 +332,11 @@ function edgeSnapTargets(
+ function edgeSnapTargets(
+   config: DirectManipulationConfig,
+   entity: DirectEntity,
++  excludedIds: ReadonlySet<string> = new Set(),
+ ): MutableEdgeSnapTargets {
+@@ -335,7 +350,7 @@ function edgeSnapTargets(
+     if (owner) addRoomTargets(targets, owner);
+     for (const item of config.scene.furniture) {
+       if (
+-        item.id === entity.value.id ||
++        item.id === entity.value.id || excludedIds.has(item.id) ||
+         item.roomId !== entity.value.roomId
+@@ -357,6 +372,7 @@ function edgeSnapTargets(
+     if (floorId && room.floorId !== floorId) continue;
+     if (entity.kind === "room" && room.id === entity.value.id) continue;
++    if (excludedIds.has(room.id)) continue;
+@@ -368,6 +384,7 @@ function edgeSnapTargets(
+     for (const item of config.scene.siteElements ?? []) {
+       if (item.id === entity.value.id) continue;
++      if (excludedIds.has(item.id)) continue;
+@@ -385,6 +402,60 @@ function edgeSnapTargets(
+   return targets;
+ }
++
++function groupMoveMembers(
++  config: DirectManipulationConfig,
++  options: DirectManipulationOptions,
++  primary: DirectEntity,
++) {
++  const ids = [...new Set(config.selectedIds ?? [])];
++  if (ids.length < 2 || !ids.includes(primary.value.id)) return undefined;
++  if (primary.kind !== "room" && primary.kind !== "furniture" && primary.kind !== "site")
++    return undefined;
++  const entities = ids.map((id) => directEntity(config, id));
++  if (entities.some((entry) => !entry || entry.kind !== primary.kind)) return undefined;
++  const rows = entities as Extract<DirectEntity, { kind: typeof primary.kind }>[];
++  if (
++    primary.kind === "room" &&
++    rows.some((entry) => entry.kind !== "room" || entry.floorId !== primary.floorId)
++  )
++    return undefined;
++  if (
++    primary.kind === "furniture" &&
++    rows.some(
++      (entry) =>
++        entry.kind !== "furniture" || entry.value.roomId !== primary.value.roomId,
++    )
++  )
++    return undefined;
++  if (
++    primary.kind === "site" &&
++    rows.some(
++      (entry) =>
++        entry.kind !== "site" ||
++        (entry.value.floorId ?? "") !== (primary.value.floorId ?? ""),
++    )
++  )
++    return undefined;
++
++  const members: GroupMoveMember[] = [];
++  for (const entity of rows) {
++    const target = options.selectables.get(entity.value.id);
++    if (!target) return undefined;
++    target.updateWorldMatrix(true, true);
++    const world = target.getWorldPosition(new T.Vector3());
++    members.push({
++      id: entity.value.id,
++      entity: entity as GroupMoveMember["entity"],
++      target,
++      startLocal: target.position.clone(),
++      originWorld: [world.x, world.z],
++    });
++  }
++  return members;
++}
+ 
+ function setWorldPlanPosition(
+@@ -407,6 +478,8 @@ function setWorldPlanPosition(
+   let [x, z] = resolveDirectPlanDrag(
+@@ -416,13 +489,17 @@ function setWorldPlanPosition(
+ 
+   if (config.snap) {
+     const halfExtents = entityHalfExtents(session.entity);
++    const excludedIds = new Set(session.groupMove?.map((entry) => entry.id) ?? []);
+     if (halfExtents) {
+       const edge = resolveEdgeSnap(
+         [x, z],
+         halfExtents,
+-        edgeSnapTargets(config, session.entity),
++        edgeSnapTargets(config, session.entity, excludedIds),
+@@ -452,6 +529,22 @@ function setWorldPlanPosition(
+   session.target.position.z = local.z;
+   session.target.updateWorldMatrix(true, true);
++  const delta: readonly [number, number] = [
++    x - session.originWorld[0],
++    z - session.originWorld[1],
++  ];
++  session.moveDelta = delta;
++  for (const member of session.groupMove ?? []) {
++    if (member.id === session.id) continue;
++    const memberWorld = new T.Vector3(
++      member.originWorld[0] + delta[0],
++      session.planeY,
++      member.originWorld[1] + delta[1],
++    );
++    const memberLocal = member.target.parent
++      ? member.target.parent.worldToLocal(memberWorld.clone())
++      : memberWorld;
++    member.target.position.x = memberLocal.x;
++    member.target.position.z = memberLocal.z;
++    member.target.updateWorldMatrix(true, true);
++  }
+ }
+@@ -682,6 +775,28 @@ function transformCommit(session: DragSession): TransformCommit | undefined {
++  if (session.groupMove?.length && session.moveDelta) {
++    const [dx, dz] = session.moveDelta;
++    if (Math.hypot(dx, dz) <= 1e-7) return undefined;
++    return {
++      kind: "batch",
++      changes: session.groupMove.map((member) => ({
++        kind:
++          member.entity.kind === "site"
++            ? "siteElement"
++            : member.entity.kind,
++        id: member.id,
++        x: Number((member.entity.value.x + dx).toFixed(6)),
++        z: Number((member.entity.value.z + dz).toFixed(6)),
++      })),
++    };
++  }
+   if (session.openingResizeCorner && session.openingResizePreview) {
+@@ -777,6 +892,7 @@ export function createDirectManipulationController(options: DirectManipulationOptions) {
+       if (
+         active ||
+         event.button !== 0 ||
++        event.shiftKey ||
+         config.view === "walk" ||
+@@ -818,6 +934,13 @@ export function createDirectManipulationController(options: DirectManipulationOptions) {
+       const furnitureRotationHandle =
+         entity.kind === "furniture" && isFurnitureRotationHandle(hit?.object ?? null);
++      const groupMove =
++        !endpointHit &&
++        !resizeAllowed &&
++        !openingResizeCorner &&
++        !furnitureRotationHandle
++          ? groupMoveMembers(config, options, entity)
++          : undefined;
+@@ -860,6 +983,7 @@ export function createDirectManipulationController(options: DirectManipulationOptions) {
+         furnitureRotationHandle,
++        groupMove,
+       };
+@@ -917,6 +1041,10 @@ export function createDirectManipulationController(options: DirectManipulationOptions) {
+       if (completion.kind === "cancel") {
++        for (const member of session.groupMove ?? [])
++          if (member.id !== session.id)
++            member.target.position.copy(member.startLocal);
+         session.previewTarget.position.copy(session.startLocal);
+@@ -930,7 +1058,11 @@ export function createDirectManipulationController(options: DirectManipulationOptions) {
+       if (completion.kind === "tap") {
+         release(session);
+-        options.getConfig().onSelect(session.id);
++        const selectedIds = options.getConfig().selectedIds ?? [];
++        if (!(selectedIds.length > 1 && selectedIds.includes(session.id)))
++          options.getConfig().onSelect(session.id);
+         return true;
+@@ -950,7 +1082,9 @@ export function createDirectManipulationController(options: DirectManipulationOptions) {
+       const change = transformCommit(session);
+       release(session);
+       const config = options.getConfig();
+-      config.onSelect(session.id);
++      if (!(session.groupMove?.length && (config.selectedIds?.length ?? 0) > 1))
++        config.onSelect(session.id);
+       if (change) config.onTransformCommit?.(change);
+@@ -964,6 +1098,8 @@ export function createDirectManipulationController(options: DirectManipulationOptions) {
+               : "Wall endpoint resized · one undo step."
++            : session.groupMove?.length
++              ? `${session.groupMove.length} objects moved together · one undo step.`
+             : session.snapApplied
+
+diff --git a/tests/perfection-phase4-multiselect-nudge-polygon.test.mjs b/tests/perfection-phase4-multiselect-nudge-polygon.test.mjs
+new file mode 100644
+index 0000000..8f5a916
+--- /dev/null
++++ b/tests/perfection-phase4-multiselect-nudge-polygon.test.mjs
+@@ -0,0 +1,63 @@
++import assert from "node:assert/strict";
++import fs from "node:fs";
++import test from "node:test";
++
++const read = (path) => fs.readFileSync(path, "utf8");
++const transform = read("apps/admin/src/studio/sceneCanvasTransform.ts");
++const apply = read("apps/admin/src/studio/sceneTransformApply.ts");
++const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
++const direct = read("apps/admin/src/studio/sceneCanvasDirectManipulation.ts");
++const studio = read("apps/admin/src/studio/Studio.tsx");
++
++test("Phase 4 batches group moves into one transform transaction", () => {
++  assert.match(transform, /kind: "batch"; changes: AtomicTransformCommit\[\]/);
++  assert.match(apply, /change\.kind === "batch"/);
++  assert.match(direct, /groupMove\?\.length/);
++  assert.match(direct, /kind: "batch"/);
++  assert.match(studio, /applyTransformCommit\(p\.scene, change\)/);
++});
++
++test("Phase 4 keeps multi-select explicit and prevents Shift from starting a drag", () => {
++  assert.match(canvas, /selectedIds\?: readonly string\[\]/);
++  assert.match(canvas, /onSelectionChange\?:/);
++  assert.match(canvas, /e\.shiftKey && latest\.current\.onSelectionChange/);
++  assert.match(direct, /event\.shiftKey/);
++  assert.match(studio, /selectedIds, setSelectedIds/);
++});
++
++test("Phase 4 keyboard nudging has fine, normal and coarse precision", () => {
++  assert.match(apply, /modifiers\.altKey \? 0\.01 : modifiers\.shiftKey \? 0\.5 : 0\.1/);
++  assert.match(apply, /case "arrowleft"/);
++  assert.match(apply, /case "arrowup"/);
++  assert.match(canvas, /buildTranslationCommit/);
++  assert.match(canvas, /Alt 0\.01 m/);
++});
++
++test("Phase 4 polygon editing has touch targets, insertion and cancellation safety", () => {
++  assert.match(canvas, /Polygon corner .* touch target/);
++  assert.match(canvas, /roomEdgeInsertIndex/);
++  assert.match(canvas, /next\.splice\(insertIndex, 0/);
++  assert.match(canvas, /e\.type === "pointercancel"/);
++  assert.match(canvas, /originalPoints/);
++  assert.match(canvas, /Polygon corner edit cancelled/);
++});
++
++test("Phase 4 renders secondary selection outlines and disables single-object gizmo", () => {
++  assert.match(canvas, /Multi-selection outlines/);
++  assert.match(canvas, /new T\.BoxHelper\(target, 0x2bc7ff\)/);
++  assert.match(canvas, /\(props\.selectedIds\?\.length \?\? 0\) > 1/);
++});
