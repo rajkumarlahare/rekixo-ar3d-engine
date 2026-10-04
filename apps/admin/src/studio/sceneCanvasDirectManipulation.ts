@@ -4,7 +4,9 @@ import {
   finishPointerGesture,
   resolveDirectPlanDrag,
   resolveEdgeSnap,
+  resolvePlanCornerResize,
   updatePointerGesture,
+  type PlanResizeCorner,
   type PointerGestureSession,
 } from "@rekixo/3d-engine-core";
 import {
@@ -54,6 +56,12 @@ type DirectEntity =
 type WallEndpoint = "start" | "end";
 type MutableEdgeSnapTargets = { x: number[]; z: number[] };
 
+interface ResizePreview {
+  centreWorld: [number, number];
+  width: number;
+  depth: number;
+}
+
 interface DragSession {
   gesture: PointerGestureSession;
   id: string;
@@ -61,12 +69,15 @@ interface DragSession {
   target: T.Object3D;
   previewTarget: T.Object3D;
   startLocal: T.Vector3;
+  startScale: T.Vector3;
   originWorld: readonly [number, number];
   grabWorld: readonly [number, number];
   planeY: number;
   previousCursor: string;
   wallEndpoint?: WallEndpoint;
   endpointWorld?: [number, number];
+  resizeCorner?: PlanResizeCorner;
+  resizePreview?: ResizePreview;
   snapApplied?: boolean;
 }
 
@@ -161,6 +172,18 @@ function wallEndpointHandle(node: T.Object3D | null) {
     current = current.parent;
   }
   return hit;
+}
+
+function planResizeHandle(node: T.Object3D | null) {
+  let current = node;
+  while (current) {
+    const corner = current.userData.planResizeCorner;
+    if (corner === "nw" || corner === "ne" || corner === "se" || corner === "sw")
+      return corner as PlanResizeCorner;
+    if (current.userData.selectId) break;
+    current = current.parent;
+  }
+  return undefined;
 }
 
 function pointerRay(
@@ -361,6 +384,82 @@ function setWorldPlanPosition(
   session.target.updateWorldMatrix(true, true);
 }
 
+function resizeEntitySize(entity: DirectEntity) {
+  if (entity.kind === "room" || entity.kind === "site")
+    return [entity.value.width, entity.value.depth] as const;
+  return undefined;
+}
+
+function resizeRotationRadians(entity: DirectEntity) {
+  return entity.kind === "site" ? T.MathUtils.degToRad(entity.value.rotation) : 0;
+}
+
+function setPlanCornerResize(
+  options: DirectManipulationOptions,
+  session: DragSession,
+  pointer: T.Vector3,
+) {
+  if (!session.resizeCorner) return false;
+  const size = resizeEntitySize(session.entity);
+  if (!size) return false;
+  const config = options.getConfig();
+  let pointerX = pointer.x;
+  let pointerZ = pointer.z;
+  let snapped = false;
+
+  if (config.snap) {
+    const edge = resolveEdgeSnap(
+      [pointerX, pointerZ],
+      [0, 0],
+      edgeSnapTargets(config, session.entity),
+      { tolerance: 0.18 },
+    );
+    pointerX = edge.point[0];
+    pointerZ = edge.point[1];
+    snapped = edge.snappedX || edge.snappedZ;
+  }
+
+  const rotation = resizeRotationRadians(session.entity);
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+  const dx = pointerX - session.originWorld[0];
+  const dz = pointerZ - session.originWorld[1];
+  const pointerLocal: [number, number] = [
+    cos * dx - sin * dz,
+    sin * dx + cos * dz,
+  ];
+  const minimum = session.entity.kind === "site" ? 0.05 : 0.2;
+  const resize = resolvePlanCornerResize(size, session.resizeCorner, pointerLocal, {
+    minWidth: minimum,
+    minDepth: minimum,
+  });
+  const offsetX = cos * resize.centre[0] + sin * resize.centre[1];
+  const offsetZ = -sin * resize.centre[0] + cos * resize.centre[1];
+  const centreWorld: [number, number] = [
+    Number((session.originWorld[0] + offsetX).toFixed(6)),
+    Number((session.originWorld[1] + offsetZ).toFixed(6)),
+  ];
+  const world = new T.Vector3(centreWorld[0], session.planeY, centreWorld[1]);
+  const local = session.target.parent
+    ? session.target.parent.worldToLocal(world.clone())
+    : world;
+  session.target.position.x = local.x;
+  session.target.position.z = local.z;
+  session.target.scale.x = session.startScale.x * (resize.width / size[0]);
+  session.target.scale.z = session.startScale.z * (resize.depth / size[1]);
+  session.target.updateWorldMatrix(true, true);
+  session.resizePreview = {
+    centreWorld,
+    width: resize.width,
+    depth: resize.depth,
+  };
+  session.snapApplied = snapped;
+  options.setStatus(
+    `Resize · W ${resize.width.toFixed(2)} m × D ${resize.depth.toFixed(2)} m${snapped ? " · snap" : ""}`,
+  );
+  return true;
+}
+
 function setWallEndpointPosition(
   options: DirectManipulationOptions,
   session: DragSession,
@@ -407,6 +506,36 @@ function setWallEndpointPosition(
 }
 
 function transformCommit(session: DragSession): TransformCommit | undefined {
+  if (session.resizeCorner && session.resizePreview) {
+    const { centreWorld, width, depth } = session.resizePreview;
+    const value = session.entity.value;
+    if (session.entity.kind !== "room" && session.entity.kind !== "site")
+      return undefined;
+    if (
+      Math.abs(centreWorld[0] - value.x) <= 1e-6 &&
+      Math.abs(centreWorld[1] - value.z) <= 1e-6 &&
+      Math.abs(width - value.width) <= 1e-6 &&
+      Math.abs(depth - value.depth) <= 1e-6
+    )
+      return undefined;
+    return session.entity.kind === "room"
+      ? {
+          kind: "room",
+          id: value.id,
+          x: centreWorld[0],
+          z: centreWorld[1],
+          width,
+          depth,
+        }
+      : {
+          kind: "siteElement",
+          id: value.id,
+          x: centreWorld[0],
+          z: centreWorld[1],
+          width,
+          depth,
+        };
+  }
   if (session.entity.kind === "room")
     return {
       kind: "room",
@@ -498,16 +627,24 @@ export function createDirectManipulationController(options: DirectManipulationOp
 
       const endpointHit =
         entity.kind === "wall" ? wallEndpointHandle(hit?.object ?? null) : undefined;
+      const resizeCorner = planResizeHandle(hit?.object ?? null);
+      const resizeAllowed = Boolean(
+        resizeCorner &&
+          (entity.kind === "site" ||
+            (entity.kind === "room" && !entity.value.polygon?.length)),
+      );
       const previewTarget = endpointHit?.node ?? target;
       previewTarget.updateWorldMatrix(true, true);
-      const world = previewTarget.getWorldPosition(new T.Vector3());
+      target.updateWorldMatrix(true, true);
+      const targetWorld = target.getWorldPosition(new T.Vector3());
+      const previewWorld = previewTarget.getWorldPosition(new T.Vector3());
       const endpointWorld =
         entity.kind === "wall" && endpointHit
           ? ([...entity.value[endpointHit.endpoint]] as [number, number])
           : undefined;
       const probe: Pick<DragSession, "entity" | "planeY"> = {
         entity,
-        planeY: world.y,
+        planeY: targetWorld.y,
       };
       const grab = entityPointerPoint(options, probe, event);
       if (!grab) return false;
@@ -519,17 +656,27 @@ export function createDirectManipulationController(options: DirectManipulationOp
         target,
         previewTarget,
         startLocal: previewTarget.position.clone(),
-        originWorld: endpointWorld ?? [world.x, world.z],
+        startScale: previewTarget.scale.clone(),
+        originWorld: resizeAllowed
+          ? [targetWorld.x, targetWorld.z]
+          : endpointWorld ?? [previewWorld.x, previewWorld.z],
         grabWorld: [grab.x, grab.z],
-        planeY: world.y,
+        planeY: targetWorld.y,
         previousCursor: options.renderer.domElement.style.cursor,
         wallEndpoint: endpointHit?.endpoint,
         endpointWorld,
+        resizeCorner: resizeAllowed ? resizeCorner : undefined,
       };
       options.controls.enabled = false;
       options.transform.enabled = false;
       options.renderer.domElement.setPointerCapture(event.pointerId);
-      options.renderer.domElement.style.cursor = endpointHit ? "crosshair" : "grab";
+      options.renderer.domElement.style.cursor = resizeAllowed
+        ? resizeCorner === "nw" || resizeCorner === "se"
+          ? "nwse-resize"
+          : "nesw-resize"
+        : endpointHit
+          ? "crosshair"
+          : "grab";
       return true;
     },
 
@@ -541,9 +688,11 @@ export function createDirectManipulationController(options: DirectManipulationOp
       if (!update.session.activated) return true;
       const pointer = entityPointerPoint(options, active, event);
       if (pointer) {
-        if (active.wallEndpoint) setWallEndpointPosition(options, active, pointer);
+        if (active.resizeCorner) setPlanCornerResize(options, active, pointer);
+        else if (active.wallEndpoint) setWallEndpointPosition(options, active, pointer);
         else setWorldPlanPosition(options, active, pointer);
-        options.renderer.domElement.style.cursor = "grabbing";
+        if (!active.resizeCorner)
+          options.renderer.domElement.style.cursor = "grabbing";
       }
       return true;
     },
@@ -559,6 +708,7 @@ export function createDirectManipulationController(options: DirectManipulationOp
       active = undefined;
       if (completion.kind === "cancel") {
         session.previewTarget.position.copy(session.startLocal);
+        session.previewTarget.scale.copy(session.startScale);
         session.previewTarget.updateWorldMatrix(true, true);
         release(session);
         options.setStatus("");
@@ -573,7 +723,8 @@ export function createDirectManipulationController(options: DirectManipulationOp
 
       const pointer = entityPointerPoint(options, session, event);
       if (pointer) {
-        if (session.wallEndpoint) setWallEndpointPosition(options, session, pointer);
+        if (session.resizeCorner) setPlanCornerResize(options, session, pointer);
+        else if (session.wallEndpoint) setWallEndpointPosition(options, session, pointer);
         else setWorldPlanPosition(options, session, pointer);
       }
       const change = transformCommit(session);
@@ -586,13 +737,15 @@ export function createDirectManipulationController(options: DirectManipulationOp
         return true;
       }
       options.setStatus(
-        session.wallEndpoint
-          ? session.snapApplied
-            ? "Wall endpoint resized · smart snap applied · one undo step."
-            : "Wall endpoint resized · one undo step."
-          : session.snapApplied
-            ? "Moved directly · smart edge snap applied · one undo step."
-            : "Moved directly · one undo step.",
+        session.resizeCorner && session.resizePreview
+          ? `Resized directly · W ${session.resizePreview.width.toFixed(2)} m × D ${session.resizePreview.depth.toFixed(2)} m${session.snapApplied ? " · smart snap" : ""} · one undo step.`
+          : session.wallEndpoint
+            ? session.snapApplied
+              ? "Wall endpoint resized · smart snap applied · one undo step."
+              : "Wall endpoint resized · one undo step."
+            : session.snapApplied
+              ? "Moved directly · smart edge snap applied · one undo step."
+              : "Moved directly · one undo step.",
       );
       return true;
     },
