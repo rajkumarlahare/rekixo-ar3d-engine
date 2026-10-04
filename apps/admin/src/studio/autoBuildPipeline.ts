@@ -47,6 +47,10 @@ import {
   buildBuildingReconstructionPlan,
   type BuildingReconstructionPlan,
 } from "./buildingReconstructionPlan";
+import {
+  applyBuildingReconstructionPlan,
+  type BuildingReconstructionExecution,
+} from "./applyBuildingReconstruction";
 
 export interface AutoBuildPipelineOptions
   extends LegacyAutoBuildPipelineOptions {
@@ -70,6 +74,7 @@ export interface AutoBuildPipelineResult
   structuredEvidence: AutoBuildStructuredEvidenceSummary;
   sourceIntelligence: DeepSourceIntelligenceReport;
   reconstructionPlan: BuildingReconstructionPlan;
+  reconstructionExecution: BuildingReconstructionExecution;
   certificationReport: AutoBuildExecutionReport;
   sceneFingerprint: NormalizedSceneFingerprint;
   geometryIntegrity: SceneGeometryIntegrityReport;
@@ -82,10 +87,10 @@ function unique(values: readonly string[]) {
 
 /**
  * One shared AutoBuild entry point for model-backed and CAD-only projects.
- * Routing is derived from one source plan. Phase 2 fuses safely resolved CAD
- * semantics back into the scene and classifies all attached evidence. Phase 3
- * turns that intelligence into an explicit floor-by-floor reconstruction plan
- * without overwriting human-reviewed geometry or guessing source authority.
+ * Deep source intelligence is resolved first, Phase 3 then executes only
+ * floor/source rows that are still safe against the live scene, and Phase 2
+ * semantic/opening/structural fusion runs afterwards against the reconstructed
+ * topology. Human-reviewed geometry is never overwritten by this path.
  */
 export async function runAutoBuildPipeline(
   project: Project,
@@ -120,7 +125,25 @@ export async function runAutoBuildPipeline(
           legacyOptions,
         );
 
-  const phase2 = applyPhase2CadFusion(base.project, base.analysis);
+  const sourceIntelligence = await buildDeepSourceIntelligence(
+    files,
+    base.analysis,
+  );
+  const reconstructionPlan = buildBuildingReconstructionPlan(
+    base.project,
+    base.analysis,
+    sourceIntelligence,
+  );
+  const reconstructionExecution = applyBuildingReconstructionPlan(
+    base.project,
+    base.analysis,
+    reconstructionPlan,
+  );
+
+  const phase2 = applyPhase2CadFusion(
+    reconstructionExecution.project,
+    base.analysis,
+  );
   const structured = fuseRoomSheetEvidence(
     phase2.project,
     parsedRoomSheets.rows,
@@ -129,23 +152,15 @@ export async function runAutoBuildPipeline(
     ...structured.summary,
     parseIssues: parsedRoomSheets.issues.length,
   };
-  const sourceIntelligence = await buildDeepSourceIntelligence(
-    files,
-    base.analysis,
-  );
-  const reconstructionPlan = buildBuildingReconstructionPlan(
-    structured.project,
-    base.analysis,
-    sourceIntelligence,
-  );
   const issues = unique([
     ...base.issues,
     ...sourcePlan.planningIssues,
+    ...sourceIntelligence.issues,
+    ...reconstructionPlan.issues,
+    ...reconstructionExecution.issues,
     ...phase2.issues,
     ...parsedRoomSheets.issues,
     ...structured.issues,
-    ...sourceIntelligence.issues,
-    ...reconstructionPlan.issues,
   ]);
   const reportFiles = [...files, ...base.assets].filter(
     (asset, index, all) => all.findIndex((candidate) => candidate.id === asset.id) === index,
@@ -179,6 +194,7 @@ export async function runAutoBuildPipeline(
     structuredEvidence,
     sourceIntelligence,
     reconstructionPlan,
+    reconstructionExecution,
     certificationReport,
     sceneFingerprint,
     geometryIntegrity,
@@ -211,12 +227,18 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   const intelligenceText = ` · source intelligence ${intelligence.counts.classifiedPdfPages} PDF page${intelligence.counts.classifiedPdfPages === 1 ? "" : "s"} classified · ${intelligence.counts.resolvedFloorAssignments} floor role${intelligence.counts.resolvedFloorAssignments === 1 ? "" : "s"} resolved · ${intelligence.counts.authorityReview} authority review · ${intelligence.counts.conflicts} conflict${intelligence.counts.conflicts === 1 ? "" : "s"}`;
   const reconstruction = result.reconstructionPlan;
   const reconstructionText = ` · Phase 3 reconstruction ${reconstruction.counts.autoReadyFloors}/${reconstruction.counts.explicitCadFloors} explicit CAD floor${reconstruction.counts.explicitCadFloors === 1 ? "" : "s"} auto-ready${reconstruction.counts.preservedFloors ? ` · ${reconstruction.counts.preservedFloors} preserved` : ""}${reconstruction.counts.reviewFloors + reconstruction.counts.unassignedCadSources ? ` · ${reconstruction.counts.reviewFloors + reconstruction.counts.unassignedCadSources} review` : ""}`;
+  const execution = result.reconstructionExecution;
+  const executionText = execution.appliedFloorIds.length
+    ? ` · Phase 3 applied ${execution.appliedFloorIds.length} floor${execution.appliedFloorIds.length === 1 ? "" : "s"} · ${execution.wallsPrepared} source-backed wall${execution.wallsPrepared === 1 ? "" : "s"} · ${execution.roomsPrepared} room draft${execution.roomsPrepared === 1 ? "" : "s"}`
+    : execution.skippedFloorIds.length
+      ? ` · Phase 3 execution preserved ${execution.skippedFloorIds.length} floor${execution.skippedFloorIds.length === 1 ? "" : "s"} for review`
+      : "";
   const certification = result.certificationReport;
   const certificationText = ` · certification ${certification.checkCoveragePercent}% (${certification.counts.blocked} blocked · ${certification.counts.needsReview} review)`;
   const integrityText = ` · geometry ${result.geometryIntegrity.counts.blocker} blocked · ${result.geometryIntegrity.counts.review} review`;
   const replayText = ` · scene ${result.sceneFingerprint.hash.slice(0, 12)}…`;
 
-  return `${base}${phase2Text}${structuralText}${structuredText}${intelligenceText}${reconstructionText}${certificationText}${integrityText}${replayText}.`;
+  return `${base}${phase2Text}${structuralText}${structuredText}${intelligenceText}${reconstructionText}${executionText}${certificationText}${integrityText}${replayText}.`;
 }
 
 /**
@@ -244,5 +266,6 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
  * applySourceBackedStructuralPrimitives · structuralPrepared
  * buildDeepSourceIntelligence · sourceIntelligence · authorityMatrix
  * buildBuildingReconstructionPlan · reconstructionPlan · auto-ready
+ * applyBuildingReconstructionPlan · reconstructionExecution · human-reviewed geometry
  * scene.publishModelId · scene.modelId
  */
