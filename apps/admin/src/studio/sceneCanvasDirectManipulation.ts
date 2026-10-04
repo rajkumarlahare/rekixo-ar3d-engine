@@ -5,7 +5,6 @@ import {
   resolveDirectPlanDrag,
   resolveEdgeSnap,
   updatePointerGesture,
-  type EdgeSnapTargets,
   type PointerGestureSession,
 } from "@rekixo/3d-engine-core";
 import {
@@ -53,6 +52,7 @@ type DirectEntity =
   | { kind: "opening"; value: Opening; floorId: string };
 
 type WallEndpoint = "start" | "end";
+type MutableEdgeSnapTargets = { x: number[]; z: number[] };
 
 interface DragSession {
   gesture: PointerGestureSession;
@@ -239,7 +239,7 @@ function entityHalfExtents(entity: DirectEntity) {
   return undefined;
 }
 
-function addRoomTargets(targets: Required<EdgeSnapTargets>, room: Room) {
+function addRoomTargets(targets: MutableEdgeSnapTargets, room: Room) {
   for (const [x, z] of roomBoundaryPoints(room)) {
     targets.x.push(x);
     targets.z.push(z);
@@ -247,7 +247,7 @@ function addRoomTargets(targets: Required<EdgeSnapTargets>, room: Room) {
 }
 
 function addBoxTargets(
-  targets: Required<EdgeSnapTargets>,
+  targets: MutableEdgeSnapTargets,
   x: number,
   z: number,
   halfExtents: readonly [number, number],
@@ -259,8 +259,8 @@ function addBoxTargets(
 function edgeSnapTargets(
   config: DirectManipulationConfig,
   entity: DirectEntity,
-): Required<EdgeSnapTargets> {
-  const targets: Required<EdgeSnapTargets> = { x: [], z: [] };
+): MutableEdgeSnapTargets {
+  const targets: MutableEdgeSnapTargets = { x: [], z: [] };
   const floorId = "floorId" in entity ? entity.floorId : entity.value.floorId;
 
   if (entity.kind === "furniture") {
