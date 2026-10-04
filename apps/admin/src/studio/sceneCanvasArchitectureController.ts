@@ -1,5 +1,11 @@
 import * as T from "three";
-import { isPointerTap, type PlanSegment } from "@rekixo/3d-engine-core";
+import {
+  beginPointerGesture,
+  finishPointerGesture,
+  updatePointerGesture,
+  type PlanSegment,
+  type PointerGestureSession,
+} from "@rekixo/3d-engine-core";
 import type { RoomPoint, Scene } from "./domain";
 import type { TransformCommit, TransformMode } from "./sceneCanvasTransform";
 import {
@@ -56,12 +62,6 @@ interface ArchitectureControllerOptions {
   setStatus: (message: string) => void;
 }
 
-interface PointerStart {
-  id: number;
-  x: number;
-  y: number;
-}
-
 function createWallDraft() {
   const draft = new T.Mesh(
     new T.BoxGeometry(1, 0.07, 0.09),
@@ -107,7 +107,8 @@ export function createArchitectureCanvasController(
   group.name = "Studio editable architecture";
   const wallDraft = createWallDraft();
   let wallDrawStart: T.Vector3 | undefined;
-  let openingPointer: PointerStart | undefined;
+  let wallGesture: PointerGestureSession | undefined;
+  let openingGesture: PointerGestureSession | undefined;
 
   const planePoint = (event: PointerEvent) => {
     const config = options.getConfig();
@@ -152,10 +153,12 @@ export function createArchitectureCanvasController(
     pointerDown(event: PointerEvent) {
       const config = options.getConfig();
       if (event.button !== 0 || config.view !== "building") return false;
+      if (wallGesture || openingGesture) return true;
       if (config.wallDraw?.enabled) {
         const start = planePoint(event);
         if (!start) return false;
         wallDrawStart = start;
+        wallGesture = beginPointerGesture(event);
         wallDraft.visible = false;
         options.controls.enabled = false;
         options.renderer.domElement.setPointerCapture(event.pointerId);
@@ -163,11 +166,7 @@ export function createArchitectureCanvasController(
         return true;
       }
       if (config.openingPlacement?.enabled) {
-        openingPointer = {
-          id: event.pointerId,
-          x: event.clientX,
-          y: event.clientY,
-        };
+        openingGesture = beginPointerGesture(event);
         options.controls.enabled = false;
         options.renderer.domElement.setPointerCapture(event.pointerId);
         return true;
@@ -176,32 +175,52 @@ export function createArchitectureCanvasController(
     },
 
     pointerMove(event: PointerEvent) {
-      if (!wallDrawStart || !options.getConfig().wallDraw?.enabled) return false;
-      const end = planePoint(event);
-      if (end) {
-        const dx = end.x - wallDrawStart.x;
-        const dz = end.z - wallDrawStart.z;
-        wallDraft.position.set(
-          (end.x + wallDrawStart.x) / 2,
-          wallDrawStart.y + 0.05,
-          (end.z + wallDrawStart.z) / 2,
-        );
-        wallDraft.rotation.y = Math.atan2(-dz, dx);
-        wallDraft.scale.set(Math.max(0.01, Math.hypot(dx, dz)), 1, 1);
-        wallDraft.visible = true;
+      if (wallGesture && wallDrawStart) {
+        const update = updatePointerGesture(wallGesture, event);
+        if (!update.accepted) return true;
+        wallGesture = update.session;
+        if (!options.getConfig().wallDraw?.enabled) return true;
+        const end = planePoint(event);
+        if (end) {
+          const dx = end.x - wallDrawStart.x;
+          const dz = end.z - wallDrawStart.z;
+          wallDraft.position.set(
+            (end.x + wallDrawStart.x) / 2,
+            wallDrawStart.y + 0.05,
+            (end.z + wallDrawStart.z) / 2,
+          );
+          wallDraft.rotation.y = Math.atan2(-dz, dx);
+          wallDraft.scale.set(Math.max(0.01, Math.hypot(dx, dz)), 1, 1);
+          wallDraft.visible = true;
+        }
+        return true;
       }
-      return true;
+      if (openingGesture) {
+        const update = updatePointerGesture(openingGesture, event);
+        if (update.accepted) openingGesture = update.session;
+        return true;
+      }
+      return false;
     },
 
     pointerUp(event: PointerEvent) {
-      if (wallDrawStart) {
+      const cancelled = event.type === "pointercancel";
+      if (wallGesture && wallDrawStart) {
+        const completion = finishPointerGesture(wallGesture, event, { cancelled });
+        if (!completion.accepted) return true;
         const start = wallDrawStart;
         const config = options.getConfig();
-        const end = planePoint(event);
+        const end = cancelled ? undefined : planePoint(event);
         const floorId = config.wallDraw?.floorId;
+        const pointerId = wallGesture.pointerId;
+        wallGesture = undefined;
         wallDrawStart = undefined;
         wallDraft.visible = false;
-        releasePointer(event.pointerId);
+        releasePointer(pointerId);
+        if (cancelled) {
+          options.setStatus("");
+          return true;
+        }
         if (end && floorId) {
           const length = Math.hypot(end.x - start.x, end.z - start.z);
           if (length >= 0.2) {
@@ -217,16 +236,14 @@ export function createArchitectureCanvasController(
         }
         return true;
       }
-      if (openingPointer) {
-        const start = openingPointer;
+      if (openingGesture) {
+        const completion = finishPointerGesture(openingGesture, event, { cancelled });
+        if (!completion.accepted) return true;
         const config = options.getConfig();
-        openingPointer = undefined;
-        releasePointer(event.pointerId);
-        if (
-          start.id !== event.pointerId ||
-          !isPointerTap({ clientX: start.x, clientY: start.y }, event)
-        )
-          return true;
+        const pointerId = openingGesture.pointerId;
+        openingGesture = undefined;
+        releasePointer(pointerId);
+        if (completion.kind !== "tap") return true;
         const target = planePoint(event);
         const floorId = config.openingPlacement?.floorId;
         if (target && floorId)
