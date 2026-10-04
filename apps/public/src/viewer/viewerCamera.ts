@@ -12,6 +12,7 @@ const DEFAULT_FOV = 42;
 const MIN_PRESENTATION_FOV = 20;
 const MAX_PRESENTATION_FOV = 75;
 const DEFAULT_CAMERA_OFFSET = new THREE.Vector3(8, 6, 9);
+const MAX_ARCHITECTURAL_ELEVATION_RATIO = 0.52;
 
 function finiteTuple(value: readonly number[]) {
   return value.length === 3 && value.every((item) => Number.isFinite(item));
@@ -21,12 +22,20 @@ function finiteVector(value: THREE.Vector3) {
   return Number.isFinite(value.x) && Number.isFinite(value.y) && Number.isFinite(value.z);
 }
 
+function reduceTopDownLaunchAngle(position: THREE.Vector3, target: THREE.Vector3) {
+  const delta = position.clone().sub(target);
+  const horizontalDistance = Math.hypot(delta.x, delta.z);
+  if (!Number.isFinite(horizontalDistance) || horizontalDistance < 0.5) return;
+  const maxVertical = horizontalDistance * MAX_ARCHITECTURAL_ELEVATION_RATIO;
+  if (delta.y > maxVertical) position.y = target.y + maxVertical;
+}
+
 /**
- * Launch Phase 1 camera gate.
+ * Launch camera safety + composition gate.
  *
- * Published project presets are data, so keep them authoritative when valid,
- * but never allow NaN/Infinity, a zero-length look vector or an extreme FOV to
- * make the approved source model disappear from the customer viewer.
+ * Published project presets remain authoritative for target, azimuth and distance,
+ * but the first customer-facing frame avoids an extreme top-down angle. This only
+ * changes camera composition; it never changes model geometry or project facts.
  */
 export function normalizeCameraPreset(preset: CameraPreset3D): HomeView {
   const target = finiteTuple(preset.target)
@@ -39,6 +48,7 @@ export function normalizeCameraPreset(preset: CameraPreset3D): HomeView {
   if (position.distanceToSquared(target) < 0.01) {
     position.copy(target).add(DEFAULT_CAMERA_OFFSET);
   }
+  reduceTopDownLaunchAngle(position, target);
 
   const requestedFov = preset.fov ?? DEFAULT_FOV;
   const fov = Number.isFinite(requestedFov)
@@ -71,7 +81,7 @@ export function fitCamera(
   );
   const halfFov = THREE.MathUtils.degToRad(camera.fov * 0.5);
   const distance = Math.max(radius / Math.sin(halfFov), radius * 2.1);
-  const direction = new THREE.Vector3(1, 0.72, 1).normalize();
+  const direction = new THREE.Vector3(1, 0.46, 1).normalize();
 
   camera.position.copy(
     center.clone().add(direction.multiplyScalar(distance * 0.72)),
