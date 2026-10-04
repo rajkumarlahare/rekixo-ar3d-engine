@@ -21,7 +21,11 @@ import {
 } from "./domain";
 import { hostWallForOpening, wallLength } from "./architectureAuthoring";
 import { disposeObjectResources } from "./threeResources";
-import type { TransformCommit, TransformMode } from "./sceneCanvasTransform";
+import type {
+  AtomicTransformCommit,
+  TransformCommit,
+  TransformMode,
+} from "./sceneCanvasTransform";
 import {
   openingTransformChange,
   wallTransformChange,
@@ -30,6 +34,7 @@ import {
 export interface DirectManipulationConfig {
   scene: Scene;
   selected: string;
+  selectedIds?: readonly string[];
   view: "building" | "rooms" | "walk";
   transformMode?: TransformMode;
   transformEnabled?: boolean;
@@ -72,6 +77,14 @@ interface OpeningResizePreview {
   height: number;
 }
 
+interface GroupMoveMember {
+  id: string;
+  entity: Extract<DirectEntity, { kind: "room" | "furniture" | "site" }>;
+  target: T.Object3D;
+  startLocal: T.Vector3;
+  originWorld: readonly [number, number];
+}
+
 interface DragSession {
   gesture: PointerGestureSession;
   id: string;
@@ -95,6 +108,8 @@ interface DragSession {
   furnitureRotationHandle?: boolean;
   rotationPreview?: number;
   snapApplied?: boolean;
+  groupMove?: GroupMoveMember[];
+  moveDelta?: readonly [number, number];
 }
 
 interface DirectManipulationOptions {
@@ -461,6 +476,7 @@ function addBoxTargets(
 function edgeSnapTargets(
   config: DirectManipulationConfig,
   entity: DirectEntity,
+  excludedIds: ReadonlySet<string> = new Set(),
 ): MutableEdgeSnapTargets {
   const targets: MutableEdgeSnapTargets = { x: [], z: [] };
   const floorId = "floorId" in entity ? entity.floorId : entity.value.floorId;
@@ -473,6 +489,7 @@ function edgeSnapTargets(
     for (const item of config.scene.furniture) {
       if (
         item.id === entity.value.id ||
+        excludedIds.has(item.id) ||
         item.roomId !== entity.value.roomId
       )
         continue;
@@ -494,6 +511,7 @@ function edgeSnapTargets(
   for (const room of config.scene.rooms) {
     if (floorId && room.floorId !== floorId) continue;
     if (entity.kind === "room" && room.id === entity.value.id) continue;
+    if (excludedIds.has(room.id)) continue;
     addRoomTargets(targets, room);
   }
   for (const wall of config.scene.walls ?? []) {
@@ -505,6 +523,7 @@ function edgeSnapTargets(
   if (entity.kind === "site")
     for (const item of config.scene.siteElements ?? []) {
       if (item.id === entity.value.id) continue;
+      if (excludedIds.has(item.id)) continue;
       if (floorId && item.floorId && item.floorId !== floorId) continue;
       addBoxTargets(
         targets,
@@ -515,6 +534,58 @@ function edgeSnapTargets(
     }
 
   return targets;
+}
+
+function groupMoveMembers(
+  config: DirectManipulationConfig,
+  options: DirectManipulationOptions,
+  primary: DirectEntity,
+) {
+  const ids = [...new Set(config.selectedIds ?? [])];
+  if (ids.length < 2 || !ids.includes(primary.value.id)) return undefined;
+  if (primary.kind !== "room" && primary.kind !== "furniture" && primary.kind !== "site")
+    return undefined;
+  const entities = ids.map((id) => directEntity(config, id));
+  if (entities.some((entry) => !entry || entry.kind !== primary.kind)) return undefined;
+  const rows = entities as GroupMoveMember["entity"][];
+  if (
+    primary.kind === "room" &&
+    rows.some((entry) => entry.kind !== "room" || entry.floorId !== primary.floorId)
+  )
+    return undefined;
+  if (
+    primary.kind === "furniture" &&
+    rows.some(
+      (entry) =>
+        entry.kind !== "furniture" || entry.value.roomId !== primary.value.roomId,
+    )
+  )
+    return undefined;
+  if (
+    primary.kind === "site" &&
+    rows.some(
+      (entry) =>
+        entry.kind !== "site" ||
+        (entry.value.floorId ?? "") !== (primary.value.floorId ?? ""),
+    )
+  )
+    return undefined;
+
+  const members: GroupMoveMember[] = [];
+  for (const entity of rows) {
+    const target = options.selectables.get(entity.value.id);
+    if (!target) return undefined;
+    target.updateWorldMatrix(true, true);
+    const world = target.getWorldPosition(new T.Vector3());
+    members.push({
+      id: entity.value.id,
+      entity,
+      target,
+      startLocal: target.position.clone(),
+      originWorld: [world.x, world.z],
+    });
+  }
+  return members;
 }
 
 function setWorldPlanPosition(
@@ -543,8 +614,9 @@ function setWorldPlanPosition(
 
   if (config.snap) {
     const halfExtents = entityHalfExtents(session.entity);
+    const excludedIds = new Set(session.groupMove?.map((entry) => entry.id) ?? []);
     if (halfExtents) {
-      const targets = edgeSnapTargets(config, session.entity);
+      const targets = edgeSnapTargets(config, session.entity, excludedIds);
       const edge = resolveEdgeSnap([x, z], halfExtents, targets, {
         tolerance: 0.18,
       });
@@ -582,6 +654,25 @@ function setWorldPlanPosition(
   session.target.position.x = local.x;
   session.target.position.z = local.z;
   session.target.updateWorldMatrix(true, true);
+  const delta: readonly [number, number] = [
+    x - session.originWorld[0],
+    z - session.originWorld[1],
+  ];
+  session.moveDelta = delta;
+  for (const member of session.groupMove ?? []) {
+    if (member.id === session.id) continue;
+    const memberWorld = new T.Vector3(
+      member.originWorld[0] + delta[0],
+      session.planeY,
+      member.originWorld[1] + delta[1],
+    );
+    const memberLocal = member.target.parent
+      ? member.target.parent.worldToLocal(memberWorld.clone())
+      : memberWorld;
+    member.target.position.x = memberLocal.x;
+    member.target.position.z = memberLocal.z;
+    member.target.updateWorldMatrix(true, true);
+  }
 }
 
 function resizeEntitySize(entity: DirectEntity) {
@@ -888,7 +979,26 @@ function setFurnitureRotation(
   return true;
 }
 
+function groupTransformCommit(session: DragSession): TransformCommit | undefined {
+  if (!session.groupMove?.length || !session.moveDelta) return undefined;
+  const [dx, dz] = session.moveDelta;
+  if (Math.hypot(dx, dz) <= 1e-7) return undefined;
+  const changes: AtomicTransformCommit[] = session.groupMove.map((member) => {
+    const common = {
+      id: member.id,
+      x: Number((member.entity.value.x + dx).toFixed(6)),
+      z: Number((member.entity.value.z + dz).toFixed(6)),
+    };
+    if (member.entity.kind === "site") return { kind: "siteElement", ...common };
+    if (member.entity.kind === "room") return { kind: "room", ...common };
+    return { kind: "furniture", ...common };
+  });
+  return { kind: "batch", changes };
+}
+
 function transformCommit(session: DragSession): TransformCommit | undefined {
+  const group = groupTransformCommit(session);
+  if (group) return group;
   if (session.openingResizeCorner && session.openingResizePreview) {
     if (session.entity.kind !== "opening") return undefined;
     const preview = session.openingResizePreview;
@@ -1045,6 +1155,7 @@ export function createDirectManipulationController(
       if (
         active ||
         event.button !== 0 ||
+        event.shiftKey ||
         config.view === "walk" ||
         !config.transformEnabled ||
         (config.transformMode ?? "translate") !== "translate" ||
@@ -1086,6 +1197,22 @@ export function createDirectManipulationController(
       const rotationHandle =
         entity.kind === "furniture" &&
         isFurnitureRotationHandle(hit?.object ?? null);
+      const groupMove =
+        !endpointHit &&
+        !resizeAllowed &&
+        !openingCorner &&
+        !rotationHandle
+          ? groupMoveMembers(config, options, entity)
+          : undefined;
+      const selectedGroup =
+        (config.selectedIds?.length ?? 0) > 1 &&
+        Boolean(config.selectedIds?.includes(id));
+      if (selectedGroup && !groupMove && !endpointHit && !resizeAllowed && !openingCorner && !rotationHandle) {
+        options.setStatus(
+          "Group move supports same-floor rooms, same-room furniture, or compatible site objects. Adjust the selection first.",
+        );
+        return true;
+      }
       const previewTarget = endpointHit?.node ?? target;
       previewTarget.updateWorldMatrix(true, true);
       target.updateWorldMatrix(true, true);
@@ -1135,6 +1262,7 @@ export function createDirectManipulationController(
         resizeCorner: resizeAllowed ? resizeCorner : undefined,
         openingResizeCorner: openingCorner,
         furnitureRotationHandle: rotationHandle,
+        groupMove,
       };
       options.controls.enabled = false;
       options.transform.enabled = false;
@@ -1190,6 +1318,8 @@ export function createDirectManipulationController(
       const session = active;
       active = undefined;
       if (completion.kind === "cancel") {
+        for (const member of session.groupMove ?? [])
+          if (member.id !== session.id) member.target.position.copy(member.startLocal);
         session.previewTarget.position.copy(session.startLocal);
         session.previewTarget.scale.copy(session.startScale);
         session.previewTarget.rotation.y = session.startRotationY;
@@ -1201,7 +1331,9 @@ export function createDirectManipulationController(
 
       if (completion.kind === "tap") {
         release(session);
-        options.getConfig().onSelect(session.id);
+        const selectedIds = options.getConfig().selectedIds ?? [];
+        if (!(selectedIds.length > 1 && selectedIds.includes(session.id)))
+          options.getConfig().onSelect(session.id);
         return true;
       }
 
@@ -1220,7 +1352,8 @@ export function createDirectManipulationController(
       const change = transformCommit(session);
       release(session);
       const config = options.getConfig();
-      config.onSelect(session.id);
+      if (!(session.groupMove?.length && (config.selectedIds?.length ?? 0) > 1))
+        config.onSelect(session.id);
       if (change) config.onTransformCommit?.(change);
       if (!change) {
         options.setStatus("");
@@ -1238,7 +1371,9 @@ export function createDirectManipulationController(
                 ? session.snapApplied
                   ? "Wall endpoint resized · smart snap applied · one undo step."
                   : "Wall endpoint resized · one undo step."
-                : session.snapApplied
+                : session.groupMove?.length
+                  ? `${session.groupMove.length} objects moved together · one undo step.`
+                  : session.snapApplied
                   ? "Moved directly · smart edge snap applied · one undo step."
                   : "Moved directly · one undo step.",
       );

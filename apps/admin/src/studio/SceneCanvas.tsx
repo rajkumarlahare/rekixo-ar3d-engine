@@ -30,6 +30,18 @@ import {
   renderArchitectureCanvas,
   type ArchitectureCanvasProps,
 } from "./sceneCanvasArchitectureController";
+import {
+  activeRoomAuthoringConfig,
+  clearPolygonDraftVisual,
+  insertPolygonMidpoint,
+  polygonDraftResult,
+  redrawPolygonDraftVisual,
+  renderMultiSelectionOutlines,
+  renderPolygonEditVisual,
+  resolveCanvasNudge,
+  toggleCanvasSelection,
+  updateRoomDraftVisual,
+} from "./sceneCanvasEditorUx";
 import { createDirectManipulationController } from "./sceneCanvasDirectManipulation";
 import {
   installCanvasFurnitureDrop,
@@ -81,7 +93,9 @@ interface Props extends ArchitectureCanvasProps {
   roomId: string;
   view: View;
   selected: string;
+  selectedIds?: readonly string[];
   onSelect: (id: string) => void;
+  onSelectionChange?: (ids: string[], primary: string) => void;
   onMesh: (name: string) => void;
   onModelNodeSelect?: (node: ModelNodeSummary) => void;
   selectedMesh?: string;
@@ -165,6 +179,7 @@ export default function SceneCanvas(props: Props) {
     wallDraft: T.Mesh;
     polygonDraft: T.Group;
     polygonEdit: T.Group;
+    multiSelection: T.Group;
     clearPolygonDraft: () => void;
     renderPolygonEdit: (room?: Room, points?: RoomPoint[]) => void;
     focus: () => void;
@@ -254,6 +269,9 @@ export default function SceneCanvas(props: Props) {
     const polygonEdit = new T.Group();
     polygonEdit.name = "Room polygon edit handles";
     polygonEdit.renderOrder = 32;
+    const multiSelection = new T.Group();
+    multiSelection.name = "Multi-selection outlines";
+    multiSelection.renderOrder = 48;
     scene.add(
       references,
       model,
@@ -264,6 +282,7 @@ export default function SceneCanvas(props: Props) {
       wallDraft,
       polygonDraft,
       polygonEdit,
+      multiSelection,
     );
     const keys = new Set<string>();
     const selectables = new Map<string, T.Object3D>();
@@ -280,86 +299,23 @@ export default function SceneCanvas(props: Props) {
       };
     };
     const polygonDraftPoints: T.Vector3[] = [];
-    const clearPolygonDraft = () => {
-      polygonDraftPoints.length = 0;
-      for (const child of [...polygonDraft.children]) {
-        polygonDraft.remove(child);
-        disposeObjectResources(child);
-      }
-    };
+    const clearPolygonDraft = () =>
+      clearPolygonDraftVisual(polygonDraft, polygonDraftPoints);
     const renderPolygonEdit = (room?: Room, points?: RoomPoint[]) => {
-      for (const child of [...polygonEdit.children]) {
-        polygonEdit.remove(child);
-        disposeObjectResources(child);
-      }
-      if (!room?.polygon?.length) return;
       const floorY =
         latest.current.scene.floors.find(
-          (floor) => floor.id === room.floorId,
+          (floor) => floor.id === room?.floorId,
         )?.elevation ?? 0;
-      const source = points ?? room.polygon;
-      const vectors = source.map(
-        ([x, z]) => new T.Vector3(x, floorY + 0.11, z),
-      );
-      if (vectors.length >= 3) {
-        const loop = new T.LineLoop(
-          new T.BufferGeometry().setFromPoints(vectors),
-          new T.LineBasicMaterial({
-            color: 0xb9b2ff,
-            transparent: true,
-            opacity: 0.98,
-          }),
-        );
-        polygonEdit.add(loop);
-      }
-      vectors.forEach((point, index) => {
-        const marker = new T.Mesh(
-          new T.SphereGeometry(0.12, 14, 10),
-          new T.MeshBasicMaterial({ color: 0x8d84ff }),
-        );
-        marker.position.copy(point);
-        marker.userData.roomVertexIndex = index;
-        marker.userData.roomId = room.id;
-        polygonEdit.add(marker);
-      });
+      renderPolygonEditVisual(polygonEdit, room, floorY, points);
     };
-    const redrawPolygonDraft = (hover?: T.Vector3) => {
-      for (const child of [...polygonDraft.children]) {
-        polygonDraft.remove(child);
-        disposeObjectResources(child);
-      }
-      const points = hover
-        ? [...polygonDraftPoints, hover]
-        : [...polygonDraftPoints];
-      if (points.length >= 2) {
-        const geometry = new T.BufferGeometry().setFromPoints(points);
-        const line = new T.Line(
-          geometry,
-          new T.LineBasicMaterial({
-            color: 0x8d84ff,
-            transparent: true,
-            opacity: 0.95,
-          }),
-        );
-        polygonDraft.add(line);
-      }
-      for (const point of polygonDraftPoints) {
-        const marker = new T.Mesh(
-          new T.SphereGeometry(0.09, 12, 8),
-          new T.MeshBasicMaterial({ color: 0xb9b2ff }),
-        );
-        marker.position.copy(point);
-        polygonDraft.add(marker);
-      }
-    };
+    const redrawPolygonDraft = (hover?: T.Vector3) =>
+      redrawPolygonDraftVisual(polygonDraft, polygonDraftPoints, hover);
     const finishPolygonDraft = () => {
-      if (polygonDraftPoints.length < 3) {
+      const points = polygonDraftResult(polygonDraftPoints);
+      if (!points) {
         setStatus("Add at least 3 corners before finishing the room.");
         return;
       }
-      const points = polygonDraftPoints.map(
-        (point) => [Number(point.x.toFixed(3)), Number(point.z.toFixed(3))] as RoomPoint,
-      );
       latest.current.onRoomPolygonDraw?.(points);
       clearPolygonDraft();
       setStatus("");
@@ -564,6 +520,7 @@ export default function SceneCanvas(props: Props) {
       wallDraft,
       polygonDraft,
       polygonEdit,
+      multiSelection,
       clearPolygonDraft,
       renderPolygonEdit,
       focus,
@@ -598,7 +555,32 @@ export default function SceneCanvas(props: Props) {
         }
         return;
       }
-      if (latest.current.view !== "walk") return;
+      if (latest.current.view !== "walk") {
+        const nudge = resolveCanvasNudge(
+          {
+            scene: latest.current.scene,
+            selected: latest.current.selected,
+            selectedIds: latest.current.selectedIds,
+            transformEnabled: latest.current.transformEnabled,
+            transformMode: latest.current.transformMode,
+            editorBusy: Boolean(
+              latest.current.furniturePlacement?.enabled ||
+                latest.current.roomDraw?.enabled ||
+                latest.current.roomStamp?.enabled ||
+                latest.current.roomPolygonDraw?.enabled ||
+                latest.current.roomPolygonEdit?.enabled ||
+                architectureAuthoringActive(latest.current),
+            ),
+          },
+          e,
+        );
+        if (nudge) {
+          e.preventDefault();
+          latest.current.onTransformCommit?.(nudge.change);
+          setStatus(nudge.status);
+        }
+        return;
+      }
       if (
         [
           "w",
@@ -718,6 +700,7 @@ export default function SceneCanvas(props: Props) {
           roomId: string;
           index: number;
           points: RoomPoint[];
+          originalPoints: RoomPoint[];
           floorId: string;
         }
       | undefined;
@@ -789,27 +772,11 @@ export default function SceneCanvas(props: Props) {
       event: PointerEvent,
       excludeRoomId?: string,
     ) => {
-      const rectangle = latest.current.roomDraw;
-      const stamp = latest.current.roomStamp;
-      const polygon = latest.current.roomPolygonDraw;
-      const edit = latest.current.roomPolygonEdit;
-      const config = rectangle?.enabled
-        ? rectangle
-        : stamp?.enabled
-          ? stamp
-          : polygon?.enabled
-            ? polygon
-            : edit?.enabled
-            ? {
-                enabled: true,
-                floorId:
-                  latest.current.scene.rooms.find(
-                    (room) => room.id === edit.roomId,
-                  )?.floorId ?? "",
-                snap: edit.snap,
-              }
-            : undefined;
-      if (!config?.enabled || !config.floorId) return undefined;
+      const config = activeRoomAuthoringConfig(
+        latest.current.scene,
+        latest.current,
+      );
+      if (!config?.floorId) return undefined;
       return pointOnFloor(
         event.clientX,
         event.clientY,
@@ -817,18 +784,6 @@ export default function SceneCanvas(props: Props) {
         config.snap,
         excludeRoomId,
       );
-    };
-
-    const updateRoomDraft = (start: T.Vector3, end: T.Vector3) => {
-      const width = Math.max(0.01, Math.abs(end.x - start.x));
-      const depth = Math.max(0.01, Math.abs(end.z - start.z));
-      roomDraft.position.set(
-        (start.x + end.x) / 2,
-        start.y,
-        (start.z + end.z) / 2,
-      );
-      roomDraft.scale.set(width, 1, depth);
-      roomDraft.visible = true;
     };
 
     const pointerDown = (e: PointerEvent) => {
@@ -850,11 +805,20 @@ export default function SceneCanvas(props: Props) {
         );
         const hit = raycaster.intersectObjects(polygonEdit.children, true)[0];
         const index = hit?.object.userData.roomVertexIndex;
+        const insertIndex = hit?.object.userData.roomEdgeInsertIndex;
         const roomId = hit?.object.userData.roomId;
         const targetRoom =
           typeof roomId === "string"
             ? latest.current.scene.rooms.find((room) => room.id === roomId)
             : undefined;
+        if (targetRoom?.polygon?.length && Number.isInteger(insertIndex)) {
+          const next = insertPolygonMidpoint(targetRoom.polygon, insertIndex);
+          if (next) {
+            latest.current.onRoomPolygonChange?.(targetRoom.id, next);
+            setStatus(`Corner inserted · ${next.length} polygon corners.`);
+            return;
+          }
+        }
         if (
           targetRoom?.polygon?.length &&
           Number.isInteger(index) &&
@@ -865,6 +829,9 @@ export default function SceneCanvas(props: Props) {
             roomId: targetRoom.id,
             index,
             points: targetRoom.polygon.map(
+              ([x, z]) => [x, z] as RoomPoint,
+            ),
+            originalPoints: targetRoom.polygon.map(
               ([x, z]) => [x, z] as RoomPoint,
             ),
             floorId: targetRoom.floorId,
@@ -963,6 +930,9 @@ export default function SceneCanvas(props: Props) {
             (entry) => entry.id === vertexDrag?.roomId,
           );
           api.current?.renderPolygonEdit(room, vertexDrag.points);
+          setStatus(
+            `Corner ${vertexDrag.index + 1}/${vertexDrag.points.length} · X ${target.x.toFixed(2)} m · Z ${target.z.toFixed(2)} m${latest.current.roomPolygonEdit?.snap ? " · snap" : ""}`,
+          );
         }
         return;
       }
@@ -984,7 +954,7 @@ export default function SceneCanvas(props: Props) {
       }
       if (roomDrawStart && latest.current.roomDraw?.enabled) {
         const end = roomPlanePoint(e);
-        if (end) updateRoomDraft(roomDrawStart, end);
+        if (end) updateRoomDraftVisual(roomDraft, roomDrawStart, end);
         return;
       }
       if (directManipulation.pointerMove(e)) return;
@@ -1003,6 +973,15 @@ export default function SceneCanvas(props: Props) {
       if (directManipulation.pointerUp(e)) { point = undefined; return; }
       if (vertexDrag) {
         const current = vertexDrag;
+        if (e.type === "pointercancel") {
+          const room = latest.current.scene.rooms.find((entry) => entry.id === current.roomId);
+          api.current?.renderPolygonEdit(room, current.originalPoints);
+          vertexDrag = undefined;
+          point = undefined;
+          controls.enabled = latest.current.view !== "walk";
+          setStatus("Polygon corner edit cancelled.");
+          return;
+        }
         const target = roomPlanePoint(e, current.roomId);
         if (target)
           current.points[current.index] = [target.x, target.z];
@@ -1129,6 +1108,19 @@ export default function SceneCanvas(props: Props) {
         ),
         camera,
       );
+      const selectCanvasId = (id: string) => {
+        if (!e.shiftKey || !latest.current.onSelectionChange) {
+          latest.current.onSelect(id);
+          return;
+        }
+        const selection = toggleCanvasSelection(
+          latest.current.selectedIds,
+          latest.current.selected,
+          id,
+        );
+        latest.current.onSelectionChange(selection.ids, selection.primary);
+        setStatus(selection.status);
+      };
       const roomHit =
         latest.current.view === "building" && latest.current.roomMapEnabled
           ? ray.intersectObjects(rooms.children, true)[0]
@@ -1138,7 +1130,7 @@ export default function SceneCanvas(props: Props) {
         while (selectedRoomNode && !selectedRoomNode.userData.selectId)
           selectedRoomNode = selectedRoomNode.parent;
         if (selectedRoomNode?.userData.selectId) {
-          latest.current.onSelect(selectedRoomNode.userData.selectId);
+          selectCanvasId(String(selectedRoomNode.userData.selectId));
           return;
         }
       }
@@ -1161,7 +1153,7 @@ export default function SceneCanvas(props: Props) {
           )
             n = n.parent;
           if (n?.userData.selectId) {
-            latest.current.onSelect(String(n.userData.selectId));
+            selectCanvasId(String(n.userData.selectId));
             return;
           }
           if (n?.userData.studioNodeKey) {
@@ -1179,7 +1171,7 @@ export default function SceneCanvas(props: Props) {
         if (latest.current.view !== "building") {
           let n: T.Object3D | null = hit.object;
           while (n && !n.userData.selectId) n = n.parent;
-          if (n) latest.current.onSelect(n.userData.selectId);
+          if (n) selectCanvasId(String(n.userData.selectId));
         }
       }
     };
@@ -1761,9 +1753,16 @@ export default function SceneCanvas(props: Props) {
         roomMapEnabled: props.roomMapEnabled,
       },
     );
+    renderMultiSelectionOutlines(
+      r.multiSelection,
+      r.selectables,
+      props.selectedIds,
+      props.selected,
+    );
   }, [
     props.scene,
     props.selected,
+    props.selectedIds,
     props.view,
     props.roomId,
     props.isolateFloorId,
@@ -1796,6 +1795,7 @@ export default function SceneCanvas(props: Props) {
     }
 
     const target = runtime.selectables.get(props.selected);
+    if ((props.selectedIds?.length ?? 0) > 1) return;
     const isSiteElement = Boolean(
       props.scene.siteElements?.some(
         (element) => element.id === props.selected,
@@ -1835,6 +1835,7 @@ export default function SceneCanvas(props: Props) {
     runtime.transform.attach(target);
   }, [
     props.selected,
+    props.selectedIds,
     props.transformMode,
     props.transformEnabled,
     props.modelTransformEnabled,

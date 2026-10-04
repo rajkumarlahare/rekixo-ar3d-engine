@@ -2,7 +2,7 @@ import type { RoomPoint } from "./domain";
 
 export type TransformMode = "translate" | "rotate" | "scale";
 
-export type TransformCommit =
+export type AtomicTransformCommit =
   | {
       kind: "room";
       id: string;
@@ -52,3 +52,7 @@ export type TransformCommit =
       z?: number;
       rotationY?: number;
     };
+
+export type TransformCommit =
+  | AtomicTransformCommit
+  | { kind: "batch"; changes: AtomicTransformCommit[] };

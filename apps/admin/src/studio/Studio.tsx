@@ -134,6 +134,7 @@ import {
   projectAheadOfCloud,
   withLocalSaveTimestamp,
 } from "./localDraftState";
+import { applyTransformCommit } from "./sceneTransformApply";
 import "./studio.css";
 import "./studio-operations.css";
 import "./studio-superadmin-theme.css";
@@ -155,6 +156,7 @@ export default function Studio() {
     [files, setFiles] = useState<Asset[]>([]),
     [roomId, setRoomId] = useState(""),
     [selected, setSelected] = useState(""),
+    [selectedIds, setSelectedIds] = useState<string[]>([]),
     [view, setView] = useState<View>("rooms"),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState(""),
@@ -322,7 +324,9 @@ export default function Studio() {
     localEditSerial.current += 1;
     setProject(p);
     setRoomId(p.scene.rooms[0]?.id ?? "");
-    setSelected(p.scene.rooms[0]?.id ?? "");
+    const initialSelection = p.scene.rooms[0]?.id ?? "";
+    setSelected(initialSelection);
+    setSelectedIds(initialSelection ? [initialSelection] : []);
     setReview("");
     setWorkspace("builder");
     setEditorFocus(false);
@@ -447,6 +451,12 @@ export default function Studio() {
     if (!modelMaterials.some((material) => material.name === selectedMaterial))
       setSelectedMaterial(modelMaterials[0].name);
   }, [modelMaterials, selectedMaterial]);
+  useEffect(() => {
+    setSelectedIds((current) => {
+      if (!selected) return [];
+      return current.includes(selected) ? current : [selected];
+    });
+  }, [selected]);
   useEffect(() => {
     const guard = (e: BeforeUnloadEvent) => {
       if (dirty) {
@@ -1601,163 +1611,11 @@ export default function Studio() {
   }
   function commitCanvasTransform(change: TransformCommit) {
     if (review || busy) return;
-    let next: Project;
-    if (change.kind === "model") {
-      next = {
-        ...p,
-        scene: {
-          ...p.scene,
-          modelTransform: {
-            ...modelTransform,
-            ...(change.x !== undefined ? { x: change.x } : {}),
-            ...(change.y !== undefined ? { y: change.y } : {}),
-            ...(change.z !== undefined ? { z: change.z } : {}),
-            ...(change.rotationY !== undefined
-              ? { rotationY: change.rotationY }
-              : {}),
-          },
-        },
-      };
-    } else if (change.kind === "siteElement") {
-      next = {
-        ...p,
-        scene: {
-          ...p.scene,
-          siteElements: (p.scene.siteElements ?? []).map((candidate) =>
-            candidate.id === change.id
-              ? {
-                  ...candidate,
-                  ...(change.x !== undefined ? { x: change.x } : {}),
-                  ...(change.z !== undefined ? { z: change.z } : {}),
-                  ...(change.rotation !== undefined
-                    ? { rotation: change.rotation }
-                    : {}),
-                  ...(change.width !== undefined
-                    ? { width: change.width }
-                    : {}),
-                  ...(change.depth !== undefined
-                    ? { depth: change.depth }
-                    : {}),
-                  ...(change.height !== undefined
-                    ? { height: change.height }
-                    : {}),
-                  reviewed: false,
-                  reviewState: "suggested" as const,
-                  origin: "manual" as const,
-                  confidence: undefined,
-                }
-              : candidate,
-          ),
-        },
-      };
-    } else if (change.kind === "wall") {
-      next = {
-        ...p,
-        scene: patchManualWall(p.scene, change.id, {
-          ...(change.start !== undefined ? { start: change.start } : {}),
-          ...(change.end !== undefined ? { end: change.end } : {}),
-          ...(change.thickness !== undefined
-            ? { thickness: change.thickness }
-            : {}),
-          ...(change.height !== undefined ? { height: change.height } : {}),
-        }),
-      };
-    } else if (change.kind === "opening") {
-      let nextScene = p.scene;
-      if (change.x !== undefined || change.z !== undefined) {
-        const current = nextScene.openings?.find(
-          (entry) => entry.id === change.id,
-        );
-        if (!current) return;
-        nextScene = moveManualOpening(nextScene, change.id, [
-          change.x ?? current.x,
-          change.z ?? current.z,
-        ]);
-      }
-      if (change.width !== undefined || change.height !== undefined)
-        nextScene = patchManualOpening(nextScene, change.id, {
-          ...(change.width !== undefined ? { width: change.width } : {}),
-          ...(change.height !== undefined ? { height: change.height } : {}),
-        });
-      next = { ...p, scene: nextScene };
-    } else if (change.kind === "room") {
-      next = {
-        ...p,
-        scene: {
-          ...p.scene,
-          rooms: p.scene.rooms.map((candidate) => {
-            if (candidate.id !== change.id) return candidate;
-            let polygon = candidate.polygon?.map(
-              (point) => [point[0], point[1]] as RoomPoint,
-            );
-            if (polygon?.length) {
-              if (change.x !== undefined || change.z !== undefined) {
-                const dx = (change.x ?? candidate.x) - candidate.x;
-                const dz = (change.z ?? candidate.z) - candidate.z;
-                polygon = polygon.map(
-                  ([x, z]) => [x + dx, z + dz] as RoomPoint,
-                );
-              }
-              if (change.width !== undefined || change.depth !== undefined) {
-                const scaleX =
-                  change.width !== undefined
-                    ? change.width / candidate.width
-                    : 1;
-                const scaleZ =
-                  change.depth !== undefined
-                    ? change.depth / candidate.depth
-                    : 1;
-                polygon = polygon.map(
-                  ([x, z]) =>
-                    [
-                      candidate.x + (x - candidate.x) * scaleX,
-                      candidate.z + (z - candidate.z) * scaleZ,
-                    ] as RoomPoint,
-                );
-              }
-              const geometry = roomGeometryFromPolygon(polygon);
-              return {
-                ...candidate,
-                ...geometry,
-                verified: false,
-                ...(change.height !== undefined
-                  ? { height: change.height }
-                  : {}),
-              };
-            }
-            return {
-              ...candidate,
-              verified: false,
-              ...(change.x !== undefined ? { x: change.x } : {}),
-              ...(change.z !== undefined ? { z: change.z } : {}),
-              ...(change.width !== undefined ? { width: change.width } : {}),
-              ...(change.depth !== undefined ? { depth: change.depth } : {}),
-              ...(change.height !== undefined ? { height: change.height } : {}),
-            };
-          }),
-        },
-      };
-    } else {
-      next = {
-        ...p,
-        scene: {
-          ...p.scene,
-          furniture: p.scene.furniture.map((candidate) =>
-            candidate.id === change.id
-              ? {
-                  ...candidate,
-                  ...(change.x !== undefined ? { x: change.x } : {}),
-                  ...(change.z !== undefined ? { z: change.z } : {}),
-                  ...(change.rotation !== undefined
-                    ? { rotation: change.rotation }
-                    : {}),
-                }
-              : candidate,
-          ),
-        },
-      };
-    }
     try {
+      const next: Project = {
+        ...p,
+        scene: applyTransformCommit(p.scene, change),
+      };
       validateProject(next);
       edit(next);
     } catch (reason) {
@@ -2320,8 +2178,9 @@ export default function Studio() {
     }
   }
 
-  function select(key: string) {
+  function select(key: string, selection: readonly string[] = key ? [key] : []) {
     setSelected(key);
+    setSelectedIds([...new Set(selection.filter(Boolean))]);
     setMesh("");
     setSelectedModelNodeKey("");
     const r =
@@ -4458,6 +4317,8 @@ export default function Studio() {
             scene={scene}
             roomId={roomId}
             selected={selected}
+            selectedIds={selectedIds}
+            onSelectionChange={(ids, primary) => select(primary, ids)}
             selectedMesh={mesh}
             selectedMeshKey={selectedModelNodeKey}
             view={view}
