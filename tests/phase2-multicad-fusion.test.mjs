@@ -31,10 +31,19 @@ function transpile(source, fileName) {
   );
 }
 
-test("Phase 2 CAD fusion compiles and is wired after mature AutoBuild", () => {
+test("Phase 2 CAD fusion compiles and is wired after mature AutoBuild reconstruction", () => {
   transpile(fusion, "phase2CadFusion.ts");
   transpile(pipeline, "autoBuildPipeline.ts");
-  assert.match(pipeline, /applyPhase2CadFusion\(base\.project, base\.analysis\)/);
+  assert.match(pipeline, /applyBuildingReconstructionPlan\(/);
+  assert.match(
+    pipeline,
+    /applyPhase2CadFusion\(\s*reconstructionExecution\.project,\s*base\.analysis/,
+  );
+  assert.ok(
+    pipeline.indexOf("applyBuildingReconstructionPlan(") <
+      pipeline.indexOf("applyPhase2CadFusion("),
+    "source-backed reconstruction must execute before Phase 2 semantic/opening fusion",
+  );
   assert.match(pipeline, /fuseRoomSheetEvidence\(\s*phase2\.project/);
   assert.match(pipeline, /phase2CadFusion: phase2\.summary/);
 });
