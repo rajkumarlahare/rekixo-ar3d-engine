@@ -1,4 +1,5 @@
 export type EditorPlanPoint = readonly [number, number];
+export type PlanResizeCorner = "nw" | "ne" | "se" | "sw";
 
 export interface DirectPlanDragOptions {
   gridSize?: number;
@@ -17,6 +18,18 @@ export interface EdgeSnapResult {
   point: [number, number];
   snappedX: boolean;
   snappedZ: boolean;
+}
+
+export interface PlanCornerResizeOptions {
+  minWidth?: number;
+  minDepth?: number;
+}
+
+export interface PlanCornerResizeResult {
+  centre: [number, number];
+  width: number;
+  depth: number;
+  cornerPoint: [number, number];
 }
 
 function assertPlanPoint(label: string, point: EditorPlanPoint) {
@@ -129,5 +142,65 @@ export function resolveEdgeSnap(
     ],
     snappedX: dx !== undefined,
     snappedZ: dz !== undefined,
+  };
+}
+
+function cornerSigns(corner: PlanResizeCorner): readonly [number, number] {
+  switch (corner) {
+    case "nw":
+      return [-1, -1];
+    case "ne":
+      return [1, -1];
+    case "se":
+      return [1, 1];
+    case "sw":
+      return [-1, 1];
+  }
+}
+
+/**
+ * Resizes a rectangular plan footprint from one corner while keeping the
+ * opposite corner fixed. Coordinates are local to the object's unrotated plan
+ * axes, so callers can safely use the same kernel for rotated site objects by
+ * transforming the pointer into local space first.
+ */
+export function resolvePlanCornerResize(
+  originalSize: EditorPlanPoint,
+  corner: PlanResizeCorner,
+  pointerLocal: EditorPlanPoint,
+  options: PlanCornerResizeOptions = {},
+): PlanCornerResizeResult {
+  assertPlanPoint("Plan resize size", originalSize);
+  assertPlanPoint("Plan resize pointer", pointerLocal);
+  if (originalSize[0] <= 0 || originalSize[1] <= 0)
+    throw new Error("Plan resize size must be positive.");
+
+  const minWidth = options.minWidth ?? 0.2;
+  const minDepth = options.minDepth ?? 0.2;
+  if (
+    !Number.isFinite(minWidth) ||
+    !Number.isFinite(minDepth) ||
+    minWidth <= 0 ||
+    minDepth <= 0
+  )
+    throw new Error("Plan resize minimum dimensions must be finite and positive.");
+
+  const [signX, signZ] = cornerSigns(corner);
+  const fixedX = (-signX * originalSize[0]) / 2;
+  const fixedZ = (-signZ * originalSize[1]) / 2;
+  const x =
+    signX > 0
+      ? Math.max(pointerLocal[0], fixedX + minWidth)
+      : Math.min(pointerLocal[0], fixedX - minWidth);
+  const z =
+    signZ > 0
+      ? Math.max(pointerLocal[1], fixedZ + minDepth)
+      : Math.min(pointerLocal[1], fixedZ - minDepth);
+
+  return {
+    centre: [normalized((fixedX + x) / 2), normalized((fixedZ + z) / 2)],
+    width: normalized(Math.abs(x - fixedX)),
+    depth: normalized(Math.abs(z - fixedZ)),
+    cornerPoint: [normalized(x), normalized(z)],
   };
 }
