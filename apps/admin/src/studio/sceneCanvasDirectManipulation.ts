@@ -3,16 +3,19 @@ import {
   beginPointerGesture,
   finishPointerGesture,
   resolveDirectPlanDrag,
+  resolveEdgeSnap,
   updatePointerGesture,
   type PointerGestureSession,
 } from "@rekixo/3d-engine-core";
-import type {
-  Furniture,
-  Opening,
-  Room,
-  Scene,
-  SiteElement,
-  Wall,
+import {
+  catalog,
+  roomBoundaryPoints,
+  type Furniture,
+  type Opening,
+  type Room,
+  type Scene,
+  type SiteElement,
+  type Wall,
 } from "./domain";
 import type { TransformCommit, TransformMode } from "./sceneCanvasTransform";
 import {
@@ -48,16 +51,23 @@ type DirectEntity =
   | { kind: "wall"; value: Wall; floorId: string }
   | { kind: "opening"; value: Opening; floorId: string };
 
+type WallEndpoint = "start" | "end";
+type MutableEdgeSnapTargets = { x: number[]; z: number[] };
+
 interface DragSession {
   gesture: PointerGestureSession;
   id: string;
   entity: DirectEntity;
   target: T.Object3D;
+  previewTarget: T.Object3D;
   startLocal: T.Vector3;
   originWorld: readonly [number, number];
   grabWorld: readonly [number, number];
   planeY: number;
   previousCursor: string;
+  wallEndpoint?: WallEndpoint;
+  endpointWorld?: [number, number];
+  snapApplied?: boolean;
 }
 
 interface DirectManipulationOptions {
@@ -140,6 +150,19 @@ function selectableId(node: T.Object3D | null) {
   return undefined;
 }
 
+function wallEndpointHandle(node: T.Object3D | null) {
+  let current = node;
+  let hit: { node: T.Object3D; endpoint: WallEndpoint } | undefined;
+  while (current) {
+    const endpoint = current.userData.wallEndpoint;
+    if (endpoint === "start" || endpoint === "end")
+      hit = { node: current, endpoint };
+    if (current.userData.architectureKind === "wall") break;
+    current = current.parent;
+  }
+  return hit;
+}
+
 function pointerRay(
   renderer: T.WebGLRenderer,
   camera: T.Camera,
@@ -190,35 +213,145 @@ function entityPointerPoint(
     : pointAtHeight(options, event.clientX, event.clientY, session.planeY);
 }
 
+function rotatedHalfExtents(width: number, depth: number, rotation: number) {
+  const angle = (rotation * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(angle));
+  const sin = Math.abs(Math.sin(angle));
+  return [
+    (width * cos + depth * sin) / 2,
+    (width * sin + depth * cos) / 2,
+  ] as const;
+}
+
+function entityHalfExtents(entity: DirectEntity) {
+  if (entity.kind === "room")
+    return [entity.value.width / 2, entity.value.depth / 2] as const;
+  if (entity.kind === "furniture") {
+    const item = catalog[entity.value.kind];
+    return rotatedHalfExtents(item.width, item.depth, entity.value.rotation);
+  }
+  if (entity.kind === "site")
+    return rotatedHalfExtents(
+      entity.value.width,
+      entity.value.depth,
+      entity.value.rotation,
+    );
+  return undefined;
+}
+
+function addRoomTargets(targets: MutableEdgeSnapTargets, room: Room) {
+  for (const [x, z] of roomBoundaryPoints(room)) {
+    targets.x.push(x);
+    targets.z.push(z);
+  }
+}
+
+function addBoxTargets(
+  targets: MutableEdgeSnapTargets,
+  x: number,
+  z: number,
+  halfExtents: readonly [number, number],
+) {
+  targets.x.push(x - halfExtents[0], x + halfExtents[0]);
+  targets.z.push(z - halfExtents[1], z + halfExtents[1]);
+}
+
+function edgeSnapTargets(
+  config: DirectManipulationConfig,
+  entity: DirectEntity,
+): MutableEdgeSnapTargets {
+  const targets: MutableEdgeSnapTargets = { x: [], z: [] };
+  const floorId = "floorId" in entity ? entity.floorId : entity.value.floorId;
+
+  if (entity.kind === "furniture") {
+    const owner = config.scene.rooms.find((room) => room.id === entity.value.roomId);
+    if (owner) addRoomTargets(targets, owner);
+    for (const item of config.scene.furniture) {
+      if (item.id === entity.value.id || item.roomId !== entity.value.roomId) continue;
+      const room = config.scene.rooms.find((candidate) => candidate.id === item.roomId);
+      if (!room) continue;
+      const size = catalog[item.kind];
+      addBoxTargets(
+        targets,
+        room.x + item.x,
+        room.z + item.z,
+        rotatedHalfExtents(size.width, size.depth, item.rotation),
+      );
+    }
+    return targets;
+  }
+
+  for (const room of config.scene.rooms) {
+    if (floorId && room.floorId !== floorId) continue;
+    if (entity.kind === "room" && room.id === entity.value.id) continue;
+    addRoomTargets(targets, room);
+  }
+  for (const wall of config.scene.walls ?? []) {
+    if (floorId && wall.floorId !== floorId) continue;
+    targets.x.push(wall.start[0], wall.end[0]);
+    targets.z.push(wall.start[1], wall.end[1]);
+  }
+
+  if (entity.kind === "site")
+    for (const item of config.scene.siteElements ?? []) {
+      if (item.id === entity.value.id) continue;
+      if (floorId && item.floorId && item.floorId !== floorId) continue;
+      addBoxTargets(
+        targets,
+        item.x,
+        item.z,
+        rotatedHalfExtents(item.width, item.depth, item.rotation),
+      );
+    }
+
+  return targets;
+}
+
 function setWorldPlanPosition(
   options: DirectManipulationOptions,
   session: DragSession,
   pointer: T.Vector3,
 ) {
   const config = options.getConfig();
-  const gridOnly = session.entity.kind === "furniture" || session.entity.kind === "site";
+  const gridObject = session.entity.kind === "furniture" || session.entity.kind === "site";
+  const raw = resolveDirectPlanDrag(
+    session.originWorld,
+    session.grabWorld,
+    [pointer.x, pointer.z],
+  );
   let [x, z] = resolveDirectPlanDrag(
     session.originWorld,
     session.grabWorld,
     [pointer.x, pointer.z],
-    { gridSize: config.snap && gridOnly ? 0.1 : 0 },
+    { gridSize: config.snap && gridObject ? 0.1 : 0 },
   );
+  let snapped = Math.abs(x - raw[0]) > 1e-6 || Math.abs(z - raw[1]) > 1e-6;
 
-  if (
-    config.snap &&
-    !gridOnly &&
-    "floorId" in session.entity
-  ) {
-    const snapped = options.snapPlanPoint(
-      new T.Vector3(x, session.planeY, z),
-      session.entity.floorId,
-      true,
-      session.entity.kind === "room" ? session.entity.value.id : undefined,
-    );
-    x = snapped.x;
-    z = snapped.z;
+  if (config.snap) {
+    const halfExtents = entityHalfExtents(session.entity);
+    if (halfExtents) {
+      const edge = resolveEdgeSnap(
+        [x, z],
+        halfExtents,
+        edgeSnapTargets(config, session.entity),
+        { tolerance: 0.18 },
+      );
+      x = edge.point[0];
+      z = edge.point[1];
+      snapped ||= edge.snappedX || edge.snappedZ;
+    } else if ("floorId" in session.entity) {
+      const plan = options.snapPlanPoint(
+        new T.Vector3(x, session.planeY, z),
+        session.entity.floorId,
+        true,
+      );
+      snapped ||= Math.abs(plan.x - x) > 1e-6 || Math.abs(plan.z - z) > 1e-6;
+      x = plan.x;
+      z = plan.z;
+    }
   }
 
+  session.snapApplied = snapped;
   const world = new T.Vector3(x, session.planeY, z);
   const local = session.target.parent
     ? session.target.parent.worldToLocal(world.clone())
@@ -226,6 +359,51 @@ function setWorldPlanPosition(
   session.target.position.x = local.x;
   session.target.position.z = local.z;
   session.target.updateWorldMatrix(true, true);
+}
+
+function setWallEndpointPosition(
+  options: DirectManipulationOptions,
+  session: DragSession,
+  pointer: T.Vector3,
+) {
+  if (session.entity.kind !== "wall" || !session.wallEndpoint) return false;
+  const config = options.getConfig();
+  let [x, z] = resolveDirectPlanDrag(
+    session.originWorld,
+    session.grabWorld,
+    [pointer.x, pointer.z],
+  );
+  let snapped = false;
+  if (config.snap) {
+    const plan = options.snapPlanPoint(
+      new T.Vector3(x, session.planeY, z),
+      session.entity.floorId,
+      true,
+    );
+    snapped = Math.abs(plan.x - x) > 1e-6 || Math.abs(plan.z - z) > 1e-6;
+    x = plan.x;
+    z = plan.z;
+  }
+
+  const fixed =
+    session.wallEndpoint === "start"
+      ? session.entity.value.end
+      : session.entity.value.start;
+  if (Math.hypot(x - fixed[0], z - fixed[1]) < 0.2) {
+    options.setStatus("Wall endpoints must stay at least 0.2 m apart.");
+    return false;
+  }
+
+  const world = new T.Vector3(x, session.planeY, z);
+  const local = session.previewTarget.parent
+    ? session.previewTarget.parent.worldToLocal(world.clone())
+    : world;
+  session.previewTarget.position.x = local.x;
+  session.previewTarget.position.z = local.z;
+  session.previewTarget.updateWorldMatrix(true, true);
+  session.endpointWorld = [Number(x.toFixed(4)), Number(z.toFixed(4))];
+  session.snapApplied = snapped;
+  return true;
 }
 
 function transformCommit(session: DragSession): TransformCommit | undefined {
@@ -250,8 +428,22 @@ function transformCommit(session: DragSession): TransformCommit | undefined {
       x: session.target.position.x,
       z: session.target.position.z,
     };
-  if (session.entity.kind === "wall")
+  if (session.entity.kind === "wall") {
+    if (session.wallEndpoint && session.endpointWorld) {
+      const original = session.entity.value[session.wallEndpoint];
+      if (
+        Math.hypot(
+          session.endpointWorld[0] - original[0],
+          session.endpointWorld[1] - original[1],
+        ) <= 1e-6
+      )
+        return undefined;
+      return session.wallEndpoint === "start"
+        ? { kind: "wall", id: session.entity.value.id, start: session.endpointWorld }
+        : { kind: "wall", id: session.entity.value.id, end: session.endpointWorld };
+    }
     return wallTransformChange(session.entity.value, session.target, "translate");
+  }
   return openingTransformChange(session.entity.value, session.target, "translate");
 }
 
@@ -304,8 +496,15 @@ export function createDirectManipulationController(options: DirectManipulationOp
       const entity = directEntity(config, id);
       if (!target || !entity) return false;
 
-      target.updateWorldMatrix(true, true);
-      const world = target.getWorldPosition(new T.Vector3());
+      const endpointHit =
+        entity.kind === "wall" ? wallEndpointHandle(hit?.object ?? null) : undefined;
+      const previewTarget = endpointHit?.node ?? target;
+      previewTarget.updateWorldMatrix(true, true);
+      const world = previewTarget.getWorldPosition(new T.Vector3());
+      const endpointWorld =
+        entity.kind === "wall" && endpointHit
+          ? ([...entity.value[endpointHit.endpoint]] as [number, number])
+          : undefined;
       const probe: Pick<DragSession, "entity" | "planeY"> = {
         entity,
         planeY: world.y,
@@ -318,16 +517,19 @@ export function createDirectManipulationController(options: DirectManipulationOp
         id,
         entity,
         target,
-        startLocal: target.position.clone(),
-        originWorld: [world.x, world.z],
+        previewTarget,
+        startLocal: previewTarget.position.clone(),
+        originWorld: endpointWorld ?? [world.x, world.z],
         grabWorld: [grab.x, grab.z],
         planeY: world.y,
         previousCursor: options.renderer.domElement.style.cursor,
+        wallEndpoint: endpointHit?.endpoint,
+        endpointWorld,
       };
       options.controls.enabled = false;
       options.transform.enabled = false;
       options.renderer.domElement.setPointerCapture(event.pointerId);
-      options.renderer.domElement.style.cursor = "grab";
+      options.renderer.domElement.style.cursor = endpointHit ? "crosshair" : "grab";
       return true;
     },
 
@@ -339,7 +541,8 @@ export function createDirectManipulationController(options: DirectManipulationOp
       if (!update.session.activated) return true;
       const pointer = entityPointerPoint(options, active, event);
       if (pointer) {
-        setWorldPlanPosition(options, active, pointer);
+        if (active.wallEndpoint) setWallEndpointPosition(options, active, pointer);
+        else setWorldPlanPosition(options, active, pointer);
         options.renderer.domElement.style.cursor = "grabbing";
       }
       return true;
@@ -355,8 +558,8 @@ export function createDirectManipulationController(options: DirectManipulationOp
       const session = active;
       active = undefined;
       if (completion.kind === "cancel") {
-        session.target.position.copy(session.startLocal);
-        session.target.updateWorldMatrix(true, true);
+        session.previewTarget.position.copy(session.startLocal);
+        session.previewTarget.updateWorldMatrix(true, true);
         release(session);
         options.setStatus("");
         return true;
@@ -369,16 +572,27 @@ export function createDirectManipulationController(options: DirectManipulationOp
       }
 
       const pointer = entityPointerPoint(options, session, event);
-      if (pointer) setWorldPlanPosition(options, session, pointer);
+      if (pointer) {
+        if (session.wallEndpoint) setWallEndpointPosition(options, session, pointer);
+        else setWorldPlanPosition(options, session, pointer);
+      }
       const change = transformCommit(session);
       release(session);
       const config = options.getConfig();
       config.onSelect(session.id);
       if (change) config.onTransformCommit?.(change);
+      if (!change) {
+        options.setStatus("");
+        return true;
+      }
       options.setStatus(
-        config.snap
-          ? "Moved directly · smart snap applied · one undo step."
-          : "Moved directly · one undo step.",
+        session.wallEndpoint
+          ? session.snapApplied
+            ? "Wall endpoint resized · smart snap applied · one undo step."
+            : "Wall endpoint resized · one undo step."
+          : session.snapApplied
+            ? "Moved directly · smart edge snap applied · one undo step."
+            : "Moved directly · one undo step.",
       );
       return true;
     },

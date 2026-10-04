@@ -4,15 +4,62 @@ export interface DirectPlanDragOptions {
   gridSize?: number;
 }
 
+export interface EdgeSnapTargets {
+  x?: readonly number[];
+  z?: readonly number[];
+}
+
+export interface EdgeSnapOptions {
+  tolerance?: number;
+}
+
+export interface EdgeSnapResult {
+  point: [number, number];
+  snappedX: boolean;
+  snappedZ: boolean;
+}
+
 function assertPlanPoint(label: string, point: EditorPlanPoint) {
   if (!Number.isFinite(point[0]) || !Number.isFinite(point[1]))
     throw new Error(`${label} must contain finite plan coordinates.`);
 }
 
+function normalized(value: number) {
+  const rounded = Number(value.toFixed(6));
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
 function snapCoordinate(value: number, gridSize: number) {
-  const snapped = Math.round(value / gridSize) * gridSize;
-  const normalized = Number(snapped.toFixed(6));
-  return Object.is(normalized, -0) ? 0 : normalized;
+  return normalized(Math.round(value / gridSize) * gridSize);
+}
+
+function nearestEdgeDelta(
+  centre: number,
+  halfExtent: number,
+  targets: readonly number[],
+  tolerance: number,
+) {
+  let best:
+    | { delta: number; distance: number; target: number; edge: number }
+    | undefined;
+  const edges = [centre - halfExtent, centre + halfExtent];
+  for (const target of targets) {
+    if (!Number.isFinite(target)) continue;
+    for (const edge of edges) {
+      const delta = target - edge;
+      const distance = Math.abs(delta);
+      if (distance > tolerance) continue;
+      if (
+        !best ||
+        distance < best.distance - 1e-9 ||
+        (Math.abs(distance - best.distance) <= 1e-9 &&
+          (target < best.target - 1e-9 ||
+            (Math.abs(target - best.target) <= 1e-9 && edge < best.edge)))
+      )
+        best = { delta, distance, target, edge };
+    }
+  }
+  return best?.delta;
 }
 
 /**
@@ -40,4 +87,47 @@ export function resolveDirectPlanDrag(
   const z = origin[1] + pointer[1] - grab[1];
   if (!gridSize) return [x, z];
   return [snapCoordinate(x, gridSize), snapCoordinate(z, gridSize)];
+}
+
+/**
+ * Snaps an axis-aligned footprint by its outside edges instead of snapping the
+ * object centre. This makes direct correction feel like CAD: a room/furniture
+ * edge can line up with nearby room or wall evidence without changing size.
+ */
+export function resolveEdgeSnap(
+  centre: EditorPlanPoint,
+  halfExtents: EditorPlanPoint,
+  targets: EdgeSnapTargets,
+  options: EdgeSnapOptions = {},
+): EdgeSnapResult {
+  assertPlanPoint("Edge snap centre", centre);
+  assertPlanPoint("Edge snap half extents", halfExtents);
+  if (halfExtents[0] < 0 || halfExtents[1] < 0)
+    throw new Error("Edge snap half extents must be non-negative.");
+
+  const tolerance = options.tolerance ?? 0.18;
+  if (!Number.isFinite(tolerance) || tolerance < 0)
+    throw new Error("Edge snap tolerance must be a finite non-negative number.");
+
+  const dx = nearestEdgeDelta(
+    centre[0],
+    halfExtents[0],
+    targets.x ?? [],
+    tolerance,
+  );
+  const dz = nearestEdgeDelta(
+    centre[1],
+    halfExtents[1],
+    targets.z ?? [],
+    tolerance,
+  );
+
+  return {
+    point: [
+      normalized(centre[0] + (dx ?? 0)),
+      normalized(centre[1] + (dz ?? 0)),
+    ],
+    snappedX: dx !== undefined,
+    snappedZ: dz !== undefined,
+  };
 }

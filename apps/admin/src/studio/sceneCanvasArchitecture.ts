@@ -104,6 +104,44 @@ function openingColor(opening: Opening, selected: boolean) {
   return opening.kind === "window" ? 0x67b9df : 0xd6a35d;
 }
 
+function addWallEndpointHandle(
+  root: T.Group,
+  wall: Wall,
+  endpoint: "start" | "end",
+  localX: number,
+) {
+  const handle = new T.Group();
+  handle.name = `Wall ${endpoint} endpoint handle`;
+  handle.userData.selectId = wall.id;
+  handle.userData.wallEndpoint = endpoint;
+  handle.position.set(localX, -wall.height / 2 + 0.16, 0);
+
+  const visible = new T.Mesh(
+    new T.SphereGeometry(0.13, 18, 12),
+    new T.MeshBasicMaterial({ color: 0xffd18a, depthTest: false }),
+  );
+  visible.userData.selectId = wall.id;
+  visible.userData.wallEndpoint = endpoint;
+  visible.renderOrder = 42;
+  handle.add(visible);
+
+  const hitTarget = new T.Mesh(
+    new T.SphereGeometry(0.32, 12, 8),
+    new T.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      depthTest: false,
+    }),
+  );
+  hitTarget.name = `Wall ${endpoint} touch target`;
+  hitTarget.userData.selectId = wall.id;
+  hitTarget.userData.wallEndpoint = endpoint;
+  hitTarget.renderOrder = 43;
+  handle.add(hitTarget);
+  root.add(handle);
+}
+
 export function renderArchitectureElements(
   group: T.Group,
   scene: Scene,
@@ -153,6 +191,8 @@ export function renderArchitectureElements(
     if (wall.id === selected) {
       root.updateWorldMatrix(true, true);
       group.add(new T.BoxHelper(root, 0xffb45e));
+      addWallEndpointHandle(root, wall, "start", -length / 2);
+      addWallEndpointHandle(root, wall, "end", length / 2);
     }
   }
 
