@@ -30,6 +30,7 @@ import {
   renderArchitectureCanvas,
   type ArchitectureCanvasProps,
 } from "./sceneCanvasArchitectureController";
+import { createDirectManipulationController } from "./sceneCanvasDirectManipulation";
 import {
   installCanvasFurnitureDrop,
   placeCanvasFurnitureAtPointer,
@@ -782,6 +783,18 @@ export default function SceneCanvas(props: Props) {
       return snapRoomPoint(target, floor.id, snap, excludeRoomId);
     };
 
+    const directManipulation = createDirectManipulationController({
+      getConfig: () => latest.current,
+      renderer,
+      camera,
+      controls,
+      transform,
+      selectables,
+      pointOnFloor,
+      snapPlanPoint: snapRoomPoint,
+      setStatus,
+    });
+
     const roomPlanePoint = (
       event: PointerEvent,
       excludeRoomId?: string,
@@ -939,6 +952,7 @@ export default function SceneCanvas(props: Props) {
           return;
         }
       }
+      if (directManipulation.pointerDown(e)) return;
       point = {
         x: e.clientX,
         y: e.clientY,
@@ -983,6 +997,7 @@ export default function SceneCanvas(props: Props) {
         if (end) updateRoomDraft(roomDrawStart, end);
         return;
       }
+      if (directManipulation.pointerMove(e)) return;
       if (!point || latest.current.view !== "walk") return;
       yaw -= (e.clientX - point.x) * 0.004;
       pitch = T.MathUtils.clamp(
@@ -995,6 +1010,10 @@ export default function SceneCanvas(props: Props) {
     };
     const click = (e: PointerEvent) => {
       if (architectureController.pointerUp(e)) return;
+      if (directManipulation.pointerUp(e)) {
+        point = undefined;
+        return;
+      }
       if (vertexDrag) {
         const current = vertexDrag;
         const target = roomPlanePoint(e, current.roomId);
