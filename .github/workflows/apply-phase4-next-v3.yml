@@ -1,0 +1,38 @@
+name: Apply Phase 4 editor patch v3
+
+on:
+  push:
+    branches:
+      - phase4-multiselect-nudge-polygon-ux
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase4-multiselect-nudge-polygon-ux
+          fetch-depth: 0
+      - name: Apply deterministic editor changes once
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .github/apply_phase4_next.py || exit 0
+          test -f .github/fix_phase4_editor_script.py && python .github/fix_phase4_editor_script.py
+          test -f .github/fix_phase4_editor_script_v2.py && python .github/fix_phase4_editor_script_v2.py
+          python .github/apply_phase4_next.py
+          rm -f \
+            .github/fix_phase4_editor_script.py \
+            .github/fix_phase4_editor_script_v2.py \
+            .github/apply_phase4_next.py \
+            .github/phase4-next.patch \
+            .github/workflows/apply-phase4-next.yml \
+            .github/workflows/apply-phase4-next-v3.yml
+          git config user.name "rekixo-ci"
+          git config user.email "ai@rekixo.com"
+          git add -A
+          git commit -m "feat: complete Phase 4 multi-select and polygon UX"
+          git push origin HEAD:phase4-multiselect-nudge-polygon-ux
