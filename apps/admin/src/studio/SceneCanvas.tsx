@@ -61,7 +61,8 @@ import {
   type ModelProfileRuntime,
 } from "@rekixo/3d-model-profiles";
 import { asset } from "./storage";
-import { analyzeReferencePixels, type ReferencePixelAnalysis } from "./referenceImagePalette";
+import type { ReferencePixelAnalysis } from "./referenceImagePalette";
+import { captureSceneVisualSample } from "./sceneCanvasVisualSample";
 import {
   canWalk,
   reviewedDoorConnections,
@@ -1661,38 +1662,23 @@ export default function SceneCanvas(props: Props) {
   useEffect(() => {
     if (!props.visualSampleRequest || props.view !== "building") return;
     const runtime = api.current;
-    if (!runtime || !runtime.model.children.length) {
+    if (!runtime) {
       props.onVisualSampleError?.("Load the building model before scoring the current view.");
       return;
     }
-    const helper = runtime.transform.getHelper();
-    const visibility = [
-      [runtime.grid, runtime.grid.visible], [runtime.references, runtime.references.visible],
-      [helper, helper.visible], [runtime.roomDraft, runtime.roomDraft.visible],
-      [runtime.wallDraft, runtime.wallDraft.visible], [runtime.polygonDraft, runtime.polygonDraft.visible],
-      [runtime.polygonEdit, runtime.polygonEdit.visible], [runtime.multiSelection, runtime.multiSelection.visible],
-      ...(runtime.modelSelection ? [[runtime.modelSelection, runtime.modelSelection.visible]] : []),
-    ] as Array<[T.Object3D, boolean]>;
     try {
-      for (const [object] of visibility) object.visible = false;
-      runtime.renderer.render(runtime.scene, runtime.camera);
-      const sourceCanvas = runtime.renderer.domElement;
-      const maxEdge = 640;
-      const scale = Math.min(1, maxEdge / Math.max(sourceCanvas.width, sourceCanvas.height));
-      const width = Math.max(2, Math.round(sourceCanvas.width * scale));
-      const height = Math.max(2, Math.round(sourceCanvas.height * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = width; canvas.height = height;
-      const context = canvas.getContext("2d", { willReadFrequently: true });
-      if (!context) throw Error("Rendered-view comparison canvas is unavailable.");
-      context.drawImage(sourceCanvas, 0, 0, width, height);
-      const pixels = context.getImageData(0, 0, width, height);
-      props.onVisualSample?.(analyzeReferencePixels(pixels.data, width, height));
+      props.onVisualSample?.(
+        captureSceneVisualSample({
+          ...runtime,
+          transformHelper: runtime.transform.getHelper(),
+        }),
+      );
     } catch (reason) {
-      props.onVisualSampleError?.(reason instanceof Error ? reason.message : "Current rendered view could not be analyzed.");
-    } finally {
-      for (const [object, visible] of visibility) object.visible = visible;
-      runtime.renderer.render(runtime.scene, runtime.camera);
+      props.onVisualSampleError?.(
+        reason instanceof Error
+          ? reason.message
+          : "Current rendered view could not be analyzed.",
+      );
     }
   }, [props.visualSampleRequest]);
 
