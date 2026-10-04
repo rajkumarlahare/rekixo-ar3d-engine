@@ -51,6 +51,10 @@ import {
   applyBuildingReconstructionPlan,
   type BuildingReconstructionExecution,
 } from "./applyBuildingReconstruction";
+import {
+  buildVisualFacadeMatchPlan,
+  type VisualFacadeMatchPlan,
+} from "./visualFacadeMatching";
 
 export interface AutoBuildPipelineOptions
   extends LegacyAutoBuildPipelineOptions {
@@ -75,6 +79,7 @@ export interface AutoBuildPipelineResult
   sourceIntelligence: DeepSourceIntelligenceReport;
   reconstructionPlan: BuildingReconstructionPlan;
   reconstructionExecution: BuildingReconstructionExecution;
+  visualFacadeMatch: VisualFacadeMatchPlan;
   certificationReport: AutoBuildExecutionReport;
   sceneFingerprint: NormalizedSceneFingerprint;
   geometryIntegrity: SceneGeometryIntegrityReport;
@@ -152,6 +157,10 @@ export async function runAutoBuildPipeline(
     ...structured.summary,
     parseIssues: parsedRoomSheets.issues.length,
   };
+  const visualFacadeMatch = buildVisualFacadeMatchPlan(
+    structured.project,
+    audits,
+  );
   const issues = unique([
     ...base.issues,
     ...sourcePlan.planningIssues,
@@ -195,6 +204,7 @@ export async function runAutoBuildPipeline(
     sourceIntelligence,
     reconstructionPlan,
     reconstructionExecution,
+    visualFacadeMatch,
     certificationReport,
     sceneFingerprint,
     geometryIntegrity,
@@ -233,12 +243,16 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
     : execution.skippedFloorIds.length
       ? ` · Phase 3 execution preserved ${execution.skippedFloorIds.length} floor${execution.skippedFloorIds.length === 1 ? "" : "s"} for review`
       : "";
+  const visual = result.visualFacadeMatch;
+  const visualText = visual.status === "unavailable"
+    ? ""
+    : ` · Phase 5 visual ${visual.status}${visual.appearance ? ` · appearance ${visual.appearance.status}` : ""}${visual.counts.suggestedMaterials ? ` · ${visual.counts.suggestedMaterials} source material suggestion${visual.counts.suggestedMaterials === 1 ? "" : "s"} for review` : ""}`;
   const certification = result.certificationReport;
   const certificationText = ` · certification ${certification.checkCoveragePercent}% (${certification.counts.blocked} blocked · ${certification.counts.needsReview} review)`;
   const integrityText = ` · geometry ${result.geometryIntegrity.counts.blocker} blocked · ${result.geometryIntegrity.counts.review} review`;
   const replayText = ` · scene ${result.sceneFingerprint.hash.slice(0, 12)}…`;
 
-  return `${base}${phase2Text}${structuralText}${structuredText}${intelligenceText}${reconstructionText}${executionText}${certificationText}${integrityText}${replayText}.`;
+  return `${base}${phase2Text}${structuralText}${structuredText}${intelligenceText}${reconstructionText}${executionText}${visualText}${certificationText}${integrityText}${replayText}.`;
 }
 
 /**
@@ -267,5 +281,6 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
  * buildDeepSourceIntelligence · sourceIntelligence · authorityMatrix
  * buildBuildingReconstructionPlan · reconstructionPlan · auto-ready
  * applyBuildingReconstructionPlan · reconstructionExecution · human-reviewed geometry
+ * buildVisualFacadeMatchPlan · visualFacadeMatch · visual-non-metric
  * scene.publishModelId · scene.modelId
  */

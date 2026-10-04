@@ -1,15 +1,18 @@
 # Perfection Roadmap — Next Execution Order
 
-Current active milestone: **Phase 3 — Complete Building Reconstruction**.
+Current active milestone: **Phase 5 — Automatic Visual / Facade Matching**.
 
-Implementation order after the Phase 3.1 reconstruction planner:
+Phase 4 visual correction is now landed: pointer-safe direct manipulation, snapping, wall/opening/furniture handles, room/site resize, multi-select, group move, precision nudge and polygon editing are available in the shared Studio editor.
 
-1. Apply only `auto-ready` CAD floor geometry into model-backed scenes.
-2. Rebuild automatic room polygons from the selected CAD wall graph without touching verified rooms.
-3. Re-run CAD/model opening association after wall replacement; reviewed openings stay immutable.
-4. Reconcile stairs/lifts/columns/slabs as source-backed envelopes and connect circulation across resolved floors.
-5. Add automatic floor-envelope and vertical-stack consistency checks.
-6. Add reconstruction replay tests proving the same normalized sources produce the same floor/source plan and semantic scene fingerprint.
-7. Promote Phase 3 from planning-ready to reconstruction-certified only after real six-file protected certification passes the same flow.
+Phase 5 execution order:
 
-No step may use image appearance, PDF page order, upload order or guessed dimensions as metric truth.
+1. Build a deterministic visual-match plan from analyzed raster reference evidence.
+2. Treat image evidence as **non-metric appearance evidence only**; it may never create or move walls, rooms, openings, floors or structural geometry.
+3. Suggest presentation lighting only when reference confidence is sufficient; low-confidence or unknown lighting stays review-only.
+4. Match palette colors only to material names already proven by audited FBX source data. Unknown material names are not guessed.
+5. Keep all source-material color changes review-required until a later facade-region correspondence layer can prove which visible reference region belongs to which model material.
+6. Add facade-region segmentation/correspondence, multiple-reference arbitration and visual-difference scoring without weakening metric-source authority.
+7. Surface the visual plan in Studio as actionable review/apply controls, then include accepted runtime appearance/material overrides in deterministic replay.
+8. Promote Phase 5 to visual-match certified only after the protected real six-file pack demonstrates the same behavior end to end.
+
+Source authority remains: **DWG metric > FBX/SKB > measured PDF > visual image**. Visual references must never become dimensional truth.
