@@ -5,7 +5,6 @@ import type {
   SceneAppearance,
 } from "./domain";
 import type { FbxSourceAudit } from "./sourceAudit";
-import { referenceColorDistance } from "./referenceImagePalette";
 
 export type VisualFacadeMatchStatus =
   | "unavailable"
@@ -105,6 +104,22 @@ interface Rgb {
 const VISUAL_CONFIDENCE_FLOOR = 0.55;
 const AUTO_APPEARANCE_CONFIDENCE = 0.72;
 const MATERIAL_CONFLICT_DISTANCE = 78;
+
+function referenceColorDistance(left: string, right: string) {
+  if (!/^#[0-9a-f]{6}$/i.test(left) || !/^#[0-9a-f]{6}$/i.test(right))
+    return Number.POSITIVE_INFINITY;
+  const a = [
+    Number.parseInt(left.slice(1, 3), 16),
+    Number.parseInt(left.slice(3, 5), 16),
+    Number.parseInt(left.slice(5, 7), 16),
+  ];
+  const b = [
+    Number.parseInt(right.slice(1, 3), 16),
+    Number.parseInt(right.slice(3, 5), 16),
+    Number.parseInt(right.slice(5, 7), 16),
+  ];
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+}
 
 function clamp(value: number, min = 0, max = 1) {
   return Math.max(min, Math.min(max, value));

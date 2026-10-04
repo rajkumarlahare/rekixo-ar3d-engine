@@ -48,6 +48,7 @@ import {
   inspectReferenceImage,
   looksLikeGeneratedPlanReference,
 } from "./referenceImageInspector";
+import { choosePrimaryVisualReference } from "./visualFacadeMatching";
 
 export interface AutoBuildPipelineOptions {
   processDwgArchitecture?: DwgArchitectureProcessor;
@@ -102,6 +103,8 @@ export interface AutoBuildPipelineResult {
     autoFurnitureRepaired: number;
     autoFurnitureSkippedRooms: number;
     referenceImageEvidenceReady: boolean;
+    referenceImagesAnalyzed: number;
+    referenceImageRegions: number;
     referencePaletteColors: number;
     referenceLightingMood: ReferenceLightingMood | "";
     referenceImageConfidence: number;
@@ -397,39 +400,31 @@ export async function runAutoBuildPipeline(
       .filter((source) => source.role === "visual")
       .map((source) => source.assetId),
   );
-  const visualReferences = workingFiles.filter(
-    (file) =>
-      visualSourceIds.has(file.id) &&
-      !looksLikeGeneratedPlanReference(file.name) &&
-      /\.(?:png|jpe?g|webp|bmp)$/i.test(file.name),
-  );
-  if (visualReferences.length === 1) {
+  const visualReferences = workingFiles
+    .filter(
+      (file) =>
+        visualSourceIds.has(file.id) &&
+        !looksLikeGeneratedPlanReference(file.name) &&
+        /\.(?:png|jpe?g|webp|bmp)$/i.test(file.name),
+    )
+    .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id));
+  const analyzedVisualEvidence = [];
+  for (const visualReference of visualReferences) {
     try {
-      const evidence = await inspectReferenceImage(visualReferences[0]);
-      if (evidence.confidence >= 0.55) {
-        next = {
-          ...next,
-          scene: {
-            ...next.scene,
-            referenceImageEvidence: evidence,
-          },
-        };
-      } else {
-        issues.push(
-          "Reference image was decoded, but visual evidence confidence is too low to store as automatic project evidence.",
-        );
-      }
+      const evidence = await inspectReferenceImage(visualReference);
+      if (evidence.confidence >= 0.45) analyzedVisualEvidence.push(evidence);
+      else issues.push(`Reference image ${visualReference.name} decoded, but confidence ${Math.round(evidence.confidence * 100)}% is too low to retain as automatic appearance evidence.`);
     } catch (error) {
-      issues.push(
-        error instanceof Error
-          ? `Reference image analysis: ${error.message}`
-          : "Reference image analysis could not complete.",
-      );
+      issues.push(error instanceof Error
+        ? `Reference image analysis (${visualReference.name}): ${error.message}`
+        : `Reference image analysis (${visualReference.name}) could not complete.`);
     }
-  } else if (visualReferences.length > 1) {
-    issues.push(
-      "Multiple visual reference images are attached. Rekixo kept image palette/lighting analysis review-only instead of guessing one authoritative facade image.",
-    );
+  }
+  const primaryVisualEvidence = choosePrimaryVisualReference(analyzedVisualEvidence);
+  if (primaryVisualEvidence) {
+    next = { ...next, scene: { ...next.scene, referenceImageEvidence: primaryVisualEvidence, referenceImageEvidenceSet: analyzedVisualEvidence } };
+    if (analyzedVisualEvidence.length > 1)
+      issues.push(`${analyzedVisualEvidence.length} visual reference images were analyzed. Rekixo selected a deterministic primary and preserved every reference for conflict-aware appearance review.`);
   }
 
   const draft = buildSmartSceneDraft(next, analysis);
@@ -899,6 +894,11 @@ export async function runAutoBuildPipeline(
       referenceImageEvidenceReady: Boolean(
         next.scene.referenceImageEvidence,
       ),
+      referenceImagesAnalyzed:
+        next.scene.referenceImageEvidenceSet?.length ?? (next.scene.referenceImageEvidence ? 1 : 0),
+      referenceImageRegions:
+        next.scene.referenceImageEvidenceSet?.reduce((sum, evidence) => sum + (evidence.regions?.length ?? 0), 0) ??
+        next.scene.referenceImageEvidence?.regions?.length ?? 0,
       referencePaletteColors:
         next.scene.referenceImageEvidence?.renderedPalette.length ?? 0,
       referenceLightingMood:
@@ -973,7 +973,7 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
     ? ` · interior draft: ${summary.autoFurniturePrepared} item${summary.autoFurniturePrepared === 1 ? "" : "s"} across ${summary.autoFurnishedRooms} room${summary.autoFurnishedRooms === 1 ? "" : "s"}`
     : "";
   const referenceImage = summary.referenceImageEvidenceReady
-    ? ` · reference image: ${summary.referenceLightingMood || "unknown"} · ${summary.referencePaletteColors} rendered palette color${summary.referencePaletteColors === 1 ? "" : "s"} · visual structure evidence ready`
+    ? ` · reference image: ${summary.referenceLightingMood || "unknown"} · ${summary.referenceImagesAnalyzed} visual reference${summary.referenceImagesAnalyzed === 1 ? "" : "s"} analyzed · ${summary.referenceImageRegions} color region${summary.referenceImageRegions === 1 ? "" : "s"} · ${summary.referencePaletteColors} rendered palette color${summary.referencePaletteColors === 1 ? "" : "s"}`
     : "";
   const site = summary.siteElementsPrepared
     ? ` · site/landscape: ${summary.siteElementsPrepared} source-backed element${summary.siteElementsPrepared === 1 ? "" : "s"} · ${summary.siteElementsReady} ready for review${summary.siteElementsReviewOnly ? ` · ${summary.siteElementsReviewOnly} evidence-only` : ""}`
