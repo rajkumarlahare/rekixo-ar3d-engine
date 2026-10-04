@@ -327,7 +327,7 @@ function addGuideLine(
   color = 0x2bc7ff,
 ) {
   const line = new T.Line(
-    new T.BufferGeometry().setFromPoints(points),
+    new T.BufferGeometry().setFromPoints([...points]),
     new T.LineBasicMaterial({
       color,
       transparent: true,
@@ -733,7 +733,9 @@ function setWallEndpointPosition(
   return true;
 }
 
-function openingResizePlanCorner(corner: OpeningResizeCorner): PlanResizeCorner {
+function openingResizePlanCorner(
+  corner: OpeningResizeCorner,
+): PlanResizeCorner {
   return corner === "top-left" ? "sw" : "se";
 }
 
@@ -765,7 +767,8 @@ function setOpeningResize(
   );
 
   const host = hostWallForOpening(config.scene, opening);
-  const sillHeight = opening.kind === "window" ? opening.sillHeight ?? 0.9 : 0;
+  const sillHeight =
+    opening.kind === "window" ? opening.sillHeight ?? 0.9 : 0;
   const maxWidth = host
     ? Math.max(0.25, Math.min(8, wallLength(host) - 0.1))
     : 8;
@@ -792,7 +795,8 @@ function setOpeningResize(
     height = snappedHeight;
   }
 
-  const signX = session.openingResizeCorner === "top-right" ? 1 : -1;
+  const signX =
+    session.openingResizeCorner === "top-right" ? 1 : -1;
   const fixedX = (-signX * opening.width) / 2;
   const fixedY = -opening.height / 2;
   localX = fixedX + signX * width;
@@ -806,19 +810,15 @@ function setOpeningResize(
 
   const centreWorld: [number, number] = [
     Number(
-      (
-        session.originWorld[0] +
-        cos * resize.centre[0]
-      ).toFixed(6),
+      (session.originWorld[0] + cos * resize.centre[0]).toFixed(6),
     ),
     Number(
-      (
-        session.originWorld[1] -
-        sin * resize.centre[0]
-      ).toFixed(6),
+      (session.originWorld[1] - sin * resize.centre[0]).toFixed(6),
     ),
   ];
-  const centreY = Number((session.planeY + resize.centre[1]).toFixed(6));
+  const centreY = Number(
+    (session.planeY + resize.centre[1]).toFixed(6),
+  );
   const world = new T.Vector3(centreWorld[0], centreY, centreWorld[1]);
   const local = session.target.parent
     ? session.target.parent.worldToLocal(world.clone())
@@ -848,12 +848,20 @@ function normalizeDegrees(value: number) {
   return Number(normalized.toFixed(3));
 }
 
+function angleDifference(a: number, b: number) {
+  const delta = Math.abs(normalizeDegrees(a - b));
+  return Math.min(delta, 360 - delta);
+}
+
 function setFurnitureRotation(
   options: DirectManipulationOptions,
   session: DragSession,
   pointer: T.Vector3,
 ) {
-  if (session.entity.kind !== "furniture" || !session.furnitureRotationHandle)
+  if (
+    session.entity.kind !== "furniture" ||
+    !session.furnitureRotationHandle
+  )
     return false;
   const dx = pointer.x - session.originWorld[0];
   const dz = pointer.z - session.originWorld[1];
@@ -863,8 +871,10 @@ function setFurnitureRotation(
   );
   let snapped = false;
   if (options.getConfig().snap) {
-    const snappedRotation = normalizeDegrees(Math.round(rotation / 15) * 15);
-    snapped = Math.abs(snappedRotation - rotation) > 1e-6;
+    const snappedRotation = normalizeDegrees(
+      Math.round(rotation / 15) * 15,
+    );
+    snapped = angleDifference(snappedRotation, rotation) > 1e-6;
     rotation = snappedRotation;
   }
   session.target.rotation.y = T.MathUtils.degToRad(rotation);
@@ -899,11 +909,15 @@ function transformCommit(session: DragSession): TransformCommit | undefined {
       height: preview.height,
     };
   }
-  if (session.furnitureRotationHandle && session.rotationPreview !== undefined) {
+  if (
+    session.furnitureRotationHandle &&
+    session.rotationPreview !== undefined
+  ) {
     if (session.entity.kind !== "furniture") return undefined;
     if (
-      Math.abs(
-        normalizeDegrees(session.rotationPreview - session.entity.value.rotation),
+      angleDifference(
+        session.rotationPreview,
+        session.entity.value.rotation,
       ) <= 1e-6
     )
       return undefined;
@@ -986,9 +1000,17 @@ function transformCommit(session: DragSession): TransformCommit | undefined {
             end: session.endpointWorld,
           };
     }
-    return wallTransformChange(session.entity.value, session.target, "translate");
+    return wallTransformChange(
+      session.entity.value,
+      session.target,
+      "translate",
+    );
   }
-  return openingTransformChange(session.entity.value, session.target, "translate");
+  return openingTransformChange(
+    session.entity.value,
+    session.target,
+    "translate",
+  );
 }
 
 export function createDirectManipulationController(
