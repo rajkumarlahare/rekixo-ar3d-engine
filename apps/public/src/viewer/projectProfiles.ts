@@ -5,6 +5,7 @@ import {
   type ModelProfileRuntime,
 } from "./modelProfiles";
 import type { ExperienceFeature, ExperienceMode } from "./experienceTypes";
+import { createSemanticStudioExperience } from "./semanticStudioExperience";
 
 export { applyModelProfileExterior, loadModelProfileMaterialEnhancer };
 export type { ExperienceFeature, ExperienceMode, ModelProfileRuntime };
@@ -32,20 +33,17 @@ export interface ModelProfileContext {
 }
 
 /**
- * Demo Launch Phase 1 rule: the imported FBX/GLB is the public visual source of
- * truth. Do not replace it with reconstructed Studio geometry while the demo is
- * being prepared. Reviewed semantic interiors remain stored in the immutable
- * Studio release and can be re-enabled deliberately in the later walkthrough
- * phase after the source model presentation is locked.
- *
- * This keeps the public customer experience model-first: source geometry first,
- * verified metadata second, generated/reconstructed geometry only when an
- * explicit later phase enables it.
+ * Demo Launch Phase 1 rule: the imported FBX/GLB stays the public visual source
+ * of truth. Reviewed Studio geometry remains available as an additive semantic
+ * experience for later walkthrough/floor work, but it must not claim authority
+ * to replace the source model during the launch track.
  */
 export async function loadProfileExperience(
   _profile: ModelProfileRuntime | undefined,
-  _bounds: THREE.Box3,
-  _context: ModelProfileContext,
+  bounds: THREE.Box3,
+  context: ModelProfileContext,
 ): Promise<ExperienceRuntime | undefined> {
-  return undefined;
+  const semantic = createSemanticStudioExperience(bounds, context.mobile);
+  if (semantic) semantic.replaceSourceModelInInterior = false;
+  return semantic;
 }
