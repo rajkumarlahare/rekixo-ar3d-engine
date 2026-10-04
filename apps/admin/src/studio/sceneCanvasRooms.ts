@@ -5,6 +5,7 @@ import {
   type Room,
   type RoomPoint,
 } from "./domain";
+import { addPlanResizeHandles } from "./sceneCanvasPlanResizeHandles";
 
 export function block(
   root: T.Object3D,
@@ -62,6 +63,17 @@ export function roomSurface(
   floor.receiveShadow = true;
   floor.renderOrder = mapper ? 20 : 0;
   root.add(floor);
+
+  if (
+    selected &&
+    !room.polygon?.length &&
+    !interiorPresentation &&
+    (mapper || height <= 0.7)
+  )
+    addPlanResizeHandles(root, room.width, room.depth, {
+      y: mapper ? 0.13 : height + 0.08,
+      color: 0x8d84ff,
+    });
 
   if (mapper) return floor;
   const roomOpenings = openings.filter(
