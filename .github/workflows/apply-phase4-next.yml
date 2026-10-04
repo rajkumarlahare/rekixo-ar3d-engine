@@ -1,0 +1,31 @@
+name: Apply Phase 4 editor patch
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'phase4-multiselect-nudge-polygon-ux'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Apply staged editor patch once
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .github/phase4-next.patch || exit 0
+          git apply --check .github/phase4-next.patch
+          git apply .github/phase4-next.patch
+          rm .github/phase4-next.patch .github/workflows/apply-phase4-next.yml
+          git config user.name "rekixo-ci"
+          git config user.email "ai@rekixo.com"
+          git add -A
+          git commit -m "feat: complete Phase 4 multi-select and polygon UX"
+          git push origin HEAD:${{ github.head_ref }}
