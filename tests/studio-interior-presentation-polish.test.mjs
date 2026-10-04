@@ -6,12 +6,20 @@ const read = (path) => fs.readFileSync(path, "utf8");
 
 test("focused Interior uses presentation lighting instead of exterior sky/grid", () => {
   const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+  const appearance = read("apps/admin/src/studio/sceneCanvasAppearance.ts");
 
   assert.match(canvas, /PCFSoftShadowMap/);
   assert.match(canvas, /const focusedInterior =[\s\S]*?props\.view === "rooms"/);
-  assert.match(canvas, /runtime\.grid\.visible = !focusedInterior/);
-  assert.match(canvas, /runtime\.scene\.background = new T\.Color\("#e7e1d8"\)/);
-  assert.match(canvas, /runtime\.fill\.intensity = focusedInterior \? 1\.0 : 0\.72/);
+  assert.match(canvas, /applySceneCanvasAppearance/);
+  assert.match(appearance, /runtime\.grid\.visible = !focusedInterior/);
+  assert.match(
+    appearance,
+    /runtime\.scene\.background = new T\.Color\("#e7e1d8"\)/,
+  );
+  assert.match(
+    appearance,
+    /runtime\.fill\.intensity = focusedInterior \? 1 : 0\.72/,
+  );
 });
 
 test("focused Interior raises cutaway walls and adds warm architectural finish", () => {
