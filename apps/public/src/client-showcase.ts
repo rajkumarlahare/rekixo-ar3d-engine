@@ -6,6 +6,19 @@ function textOf(element: Element | null | undefined) {
   return element?.textContent?.trim() ?? "";
 }
 
+function appendTextElement(
+  parent: HTMLElement,
+  tagName: "span" | "strong" | "small",
+  text: string,
+  className?: string,
+) {
+  const element = document.createElement(tagName);
+  if (className) element.className = className;
+  element.textContent = text;
+  parent.appendChild(element);
+  return element;
+}
+
 function mapSearchUrl(projectName: string, location: string) {
   const query = [projectName, location].filter(Boolean).join(" ");
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
@@ -20,16 +33,17 @@ function ensureHeroOverlay(root: HTMLElement) {
   const overlay = document.createElement("div");
   overlay.className = "client-hero-overlay";
   overlay.setAttribute("aria-hidden", "true");
-  overlay.innerHTML = `
-    <span class="client-hero-kicker">INTERACTIVE 3D EXPERIENCE</span>
-    <strong>${projectName || "3D Project"}</strong>
-    <small>${location || "Explore the live building model"}</small>
-    <div class="client-hero-hints">
-      <span>Drag to rotate</span>
-      <span>Scroll to zoom</span>
-      <span>Day / Night</span>
-    </div>
-  `;
+
+  appendTextElement(overlay, "span", "INTERACTIVE 3D EXPERIENCE", "client-hero-kicker");
+  appendTextElement(overlay, "strong", projectName || "3D Project");
+  appendTextElement(overlay, "small", location || "Explore the live building model");
+
+  const hints = document.createElement("div");
+  hints.className = "client-hero-hints";
+  for (const hint of ["Drag to rotate", "Scroll to zoom", "Day / Night"]) {
+    appendTextElement(hints, "span", hint);
+  }
+  overlay.appendChild(hints);
   viewerSection.appendChild(overlay);
 }
 
@@ -50,16 +64,23 @@ function ensureLocationCard(root: HTMLElement) {
 
   const card = document.createElement("div");
   card.className = "client-location-card";
-  card.innerHTML = `
-    <div>
-      <span>PROJECT LOCATION</span>
-      <strong>${location}</strong>
-      <small>Open the configured project name and locality in Google Maps.</small>
-    </div>
-    <a target="_blank" rel="noopener noreferrer">Open in Maps ↗</a>
-  `;
-  const link = card.querySelector<HTMLAnchorElement>("a");
-  if (link) link.href = mapSearchUrl(projectName, location);
+
+  const locationCopy = document.createElement("div");
+  appendTextElement(locationCopy, "span", "PROJECT LOCATION");
+  appendTextElement(locationCopy, "strong", location);
+  appendTextElement(
+    locationCopy,
+    "small",
+    "Open the configured project name and locality in Google Maps.",
+  );
+
+  const link = document.createElement("a");
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.href = mapSearchUrl(projectName, location);
+  link.textContent = "Open in Maps ↗";
+
+  card.append(locationCopy, link);
   copy.appendChild(card);
 }
 
