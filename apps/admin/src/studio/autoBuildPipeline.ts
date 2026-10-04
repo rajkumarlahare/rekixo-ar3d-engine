@@ -246,7 +246,7 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   const visual = result.visualFacadeMatch;
   const visualText = visual.status === "unavailable"
     ? ""
-    : ` · Phase 5 visual ${visual.status}${visual.appearance ? ` · appearance ${visual.appearance.status}` : ""}${visual.counts.suggestedMaterials ? ` · ${visual.counts.suggestedMaterials} source material suggestion${visual.counts.suggestedMaterials === 1 ? "" : "s"} for review` : ""}`;
+    : ` · Phase 5 visual ${visual.status} · ${visual.counts.references} reference${visual.counts.references === 1 ? "" : "s"} · ${visual.counts.regions} region${visual.counts.regions === 1 ? "" : "s"}${visual.appearance ? ` · appearance ${visual.appearance.status}` : ""}${visual.counts.regionMatches ? ` · ${visual.counts.regionMatches} region material match${visual.counts.regionMatches === 1 ? "" : "es"}` : ""}${visual.counts.conflicts ? ` · ${visual.counts.conflicts} visual conflict${visual.counts.conflicts === 1 ? "" : "s"}` : ""}${visual.counts.suggestedMaterials ? ` · ${visual.counts.suggestedMaterials} source material suggestion${visual.counts.suggestedMaterials === 1 ? "" : "s"} for review` : ""}`;
   const certification = result.certificationReport;
   const certificationText = ` · certification ${certification.checkCoveragePercent}% (${certification.counts.blocked} blocked · ${certification.counts.needsReview} review)`;
   const integrityText = ` · geometry ${result.geometryIntegrity.counts.blocker} blocked · ${result.geometryIntegrity.counts.review} review`;

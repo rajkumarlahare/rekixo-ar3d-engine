@@ -175,5 +175,9 @@ test.describe("private golden six-file source pack", () => {
     );
     await page.getByTestId("open-visual-editor").click();
     await expect(page.getByLabel("3D editor tools")).toBeVisible({ timeout: 60_000 });
+    const visualReview = page.getByTestId("visual-facade-review");
+    await expect(visualReview).toBeVisible({ timeout: 60_000 });
+    await visualReview.locator("summary").click();
+    await expect(page.getByTestId("visual-reference-summary")).toContainText(/[1-9]\d* color region/i, { timeout: 60_000 });
   });
 });

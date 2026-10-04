@@ -84,6 +84,7 @@ test("Studio exposes accessible one-click presets without hiding fine tuning", (
   const studio = read("apps/admin/src/studio/Studio.tsx");
   const css = read("apps/admin/src/studio/studio-editor-core.css");
   const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+  const appearance = read("apps/admin/src/studio/sceneCanvasAppearance.ts");
 
   assert.match(studio, /aria-label="Visual realism presets"/);
   assert.match(studio, /aria-pressed=\{active\}/);
@@ -101,13 +102,15 @@ test("Studio exposes accessible one-click presets without hiding fine tuning", (
   assert.match(css, /\.look-preset-grid \.look-preset\.active/);
   assert.match(css, /@media \(max-width: 620px\)/);
 
+  assert.match(canvas, /applySceneCanvasAppearance/);
+
   for (const property of [
     "toneMappingExposure",
     "hemisphereIntensity",
     "sunIntensity",
     "nightMode",
   ])
-    assert.match(canvas, new RegExp(property));
+    assert.match(appearance, new RegExp(property));
 });
 
 test("new projects receive a cloned default appearance rather than shared mutable state", () => {

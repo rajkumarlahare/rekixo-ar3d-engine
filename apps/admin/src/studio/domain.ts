@@ -183,6 +183,23 @@ export type ReferenceLightingMood =
   | "night"
   | "unknown";
 
+export interface ReferenceColorRegion {
+  id: string;
+  color: string;
+  coverage: number;
+  centroidX: number;
+  centroidY: number;
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  luminance: number;
+  saturation: number;
+  warmth: number;
+  edgeStrength: number;
+  confidence: number;
+}
+
 export interface ReferenceImageEvidence {
   assetId: string;
   sourceWidth: number;
@@ -190,6 +207,7 @@ export interface ReferenceImageEvidence {
   sampledWidth: number;
   sampledHeight: number;
   renderedPalette: string[];
+  regions?: ReferenceColorRegion[];
   averageLuminance: number;
   warmFraction: number;
   darkFraction: number;
@@ -269,6 +287,7 @@ export interface Scene {
   scale: number;
   appearance?: SceneAppearance;
   referenceImageEvidence?: ReferenceImageEvidence;
+  referenceImageEvidenceSet?: ReferenceImageEvidence[];
   materialOverrides?: MaterialOverride[];
   modelTransform?: ModelTransform;
   referenceLayers?: ReferenceLayer[];
@@ -657,6 +676,43 @@ const color = (v: unknown) =>
 const unique = (items: { id: string }[]) =>
   new Set(items.map((i) => i.id)).size === items.length &&
   items.every((i) => text(i.id, 100));
+
+function validReferenceColorRegion(region: ReferenceColorRegion) {
+  return (
+    !!region && text(region.id, 100) && color(region.color) &&
+    number(region.coverage, 0.0001, 1) &&
+    number(region.centroidX, 0, 1) && number(region.centroidY, 0, 1) &&
+    number(region.minX, 0, 1) && number(region.minY, 0, 1) &&
+    number(region.maxX, 0, 1) && number(region.maxY, 0, 1) &&
+    region.minX <= region.centroidX && region.centroidX <= region.maxX &&
+    region.minY <= region.centroidY && region.centroidY <= region.maxY &&
+    number(region.luminance, 0, 1) && number(region.saturation, 0, 1) &&
+    number(region.warmth, -1, 1) && number(region.edgeStrength, 0, 1) &&
+    number(region.confidence, 0, 1)
+  );
+}
+function validReferenceImageEvidence(evidence: ReferenceImageEvidence) {
+  return (
+    !!evidence && text(evidence.assetId, 100) &&
+    Number.isInteger(evidence.sourceWidth) && number(evidence.sourceWidth, 2, 50000) &&
+    Number.isInteger(evidence.sourceHeight) && number(evidence.sourceHeight, 2, 50000) &&
+    Number.isInteger(evidence.sampledWidth) && number(evidence.sampledWidth, 2, 2000) &&
+    Number.isInteger(evidence.sampledHeight) && number(evidence.sampledHeight, 2, 2000) &&
+    Array.isArray(evidence.renderedPalette) && evidence.renderedPalette.length >= 1 &&
+    evidence.renderedPalette.length <= 8 && evidence.renderedPalette.every((entry) => color(entry)) &&
+    new Set(evidence.renderedPalette.map((entry) => entry.toLowerCase())).size === evidence.renderedPalette.length &&
+    (evidence.regions === undefined || (Array.isArray(evidence.regions) && evidence.regions.length <= 24 &&
+      new Set(evidence.regions.map((entry) => entry.id)).size === evidence.regions.length &&
+      evidence.regions.every(validReferenceColorRegion))) &&
+    number(evidence.averageLuminance, 0, 1) && number(evidence.warmFraction, 0, 1) &&
+    number(evidence.darkFraction, 0, 1) && number(evidence.highlightFraction, 0, 1) &&
+    number(evidence.averageSaturation, 0, 1) && number(evidence.verticalEdgeStrength, 0, 1) &&
+    number(evidence.horizontalEdgeStrength, 0, 1) &&
+    ["day", "evening", "night", "unknown"].includes(evidence.lightingMood) &&
+    number(evidence.confidence, 0, 1) && Number.isInteger(evidence.sampleCount) &&
+    number(evidence.sampleCount, 1, 1000000)
+  );
+}
 export function validateScene(s: Scene): void {
   if (
     !s ||
@@ -698,40 +754,14 @@ export function validateScene(s: Scene): void {
       typeof s.appearance.nightMode !== "boolean")
   )
     throw Error("Invalid scene appearance settings.");
-  if (s.referenceImageEvidence !== undefined) {
-    const evidence = s.referenceImageEvidence;
-    if (
-      !evidence ||
-      !text(evidence.assetId, 100) ||
-      !Number.isInteger(evidence.sourceWidth) ||
-      !number(evidence.sourceWidth, 2, 50000) ||
-      !Number.isInteger(evidence.sourceHeight) ||
-      !number(evidence.sourceHeight, 2, 50000) ||
-      !Number.isInteger(evidence.sampledWidth) ||
-      !number(evidence.sampledWidth, 2, 2000) ||
-      !Number.isInteger(evidence.sampledHeight) ||
-      !number(evidence.sampledHeight, 2, 2000) ||
-      !Array.isArray(evidence.renderedPalette) ||
-      evidence.renderedPalette.length < 1 ||
-      evidence.renderedPalette.length > 8 ||
-      evidence.renderedPalette.some((entry) => !color(entry)) ||
-      new Set(evidence.renderedPalette.map((entry) => entry.toLowerCase()))
-        .size !== evidence.renderedPalette.length ||
-      !number(evidence.averageLuminance, 0, 1) ||
-      !number(evidence.warmFraction, 0, 1) ||
-      !number(evidence.darkFraction, 0, 1) ||
-      !number(evidence.highlightFraction, 0, 1) ||
-      !number(evidence.averageSaturation, 0, 1) ||
-      !number(evidence.verticalEdgeStrength, 0, 1) ||
-      !number(evidence.horizontalEdgeStrength, 0, 1) ||
-      !["day", "evening", "night", "unknown"].includes(
-        evidence.lightingMood,
-      ) ||
-      !number(evidence.confidence, 0, 1) ||
-      !Number.isInteger(evidence.sampleCount) ||
-      !number(evidence.sampleCount, 1, 1000000)
-    )
-      throw Error("Invalid reference image evidence.");
+  if (s.referenceImageEvidence !== undefined && !validReferenceImageEvidence(s.referenceImageEvidence))
+    throw Error("Invalid reference image evidence.");
+  if (s.referenceImageEvidenceSet !== undefined) {
+    if (!Array.isArray(s.referenceImageEvidenceSet) || s.referenceImageEvidenceSet.length < 1 ||
+      s.referenceImageEvidenceSet.length > 12 ||
+      new Set(s.referenceImageEvidenceSet.map((entry) => entry.assetId)).size !== s.referenceImageEvidenceSet.length ||
+      s.referenceImageEvidenceSet.some((entry) => !validReferenceImageEvidence(entry)))
+      throw Error("Invalid reference image evidence set.");
   }
   if (s.materialOverrides !== undefined) {
     if (
@@ -1162,6 +1192,9 @@ export function validateProject(p: Project): void {
       !p.assets.includes(s.referenceImageEvidence.assetId)
     )
       throw Error("Reference image evidence asset is missing.");
+    for (const evidence of s.referenceImageEvidenceSet ?? [])
+      if (!p.assets.includes(evidence.assetId))
+        throw Error("Reference image evidence-set asset is missing.");
     for (const site of s.siteElements ?? [])
       if (site.sourceAssetId && !p.assets.includes(site.sourceAssetId))
         throw Error("Site element source asset is missing.");

@@ -1,4 +1,9 @@
-import type { Project, ReferenceImageEvidence, SceneAppearance } from "./domain";
+import type {
+  Project,
+  ReferenceColorRegion,
+  ReferenceImageEvidence,
+  SceneAppearance,
+} from "./domain";
 import type { FbxSourceAudit } from "./sourceAudit";
 
 export type VisualFacadeMatchStatus =
@@ -13,6 +18,16 @@ export type VisualMaterialRole =
   | "wood"
   | "stone";
 
+export interface VisualReferenceDecision {
+  sourceAssetId: string;
+  selected: boolean;
+  confidence: number;
+  rankScore: number;
+  lightingMood: ReferenceImageEvidence["lightingMood"];
+  regionCount: number;
+  reason: string;
+}
+
 export interface VisualAppearanceSuggestion {
   status: "needs-review" | "auto-ready";
   confidence: number;
@@ -21,12 +36,28 @@ export interface VisualAppearanceSuggestion {
   reasons: string[];
 }
 
+export interface VisualMaterialCandidate {
+  sourceAssetId: string;
+  regionId?: string;
+  baseColor: string;
+  coverage?: number;
+  centroidX?: number;
+  centroidY?: number;
+  confidence: number;
+  correspondence: "region" | "palette";
+  reason: string;
+}
+
 export interface VisualMaterialSuggestion {
   materialName: string;
   role: VisualMaterialRole;
   baseColor: string;
   confidence: number;
   sourceAssetId: string;
+  regionId?: string;
+  correspondence: "region" | "palette";
+  conflict: boolean;
+  candidates: VisualMaterialCandidate[];
   /** Visual evidence may guide appearance, but never becomes metric truth. */
   reviewRequired: true;
   reason: string;
@@ -34,14 +65,22 @@ export interface VisualMaterialSuggestion {
 
 export interface VisualFacadeMatchPlan {
   status: VisualFacadeMatchStatus;
+  /** Backwards-compatible alias for the selected primary reference. */
   sourceAssetId?: string;
+  primarySourceAssetId?: string;
   evidenceConfidence: number;
+  references: VisualReferenceDecision[];
+  lightingConflict: boolean;
   appearance?: VisualAppearanceSuggestion;
   materials: VisualMaterialSuggestion[];
   counts: {
+    references: number;
+    regions: number;
     sourceMaterials: number;
     classifiedMaterials: number;
     suggestedMaterials: number;
+    regionMatches: number;
+    conflicts: number;
     reviewRequired: number;
   };
   issues: string[];
@@ -64,6 +103,23 @@ interface Rgb {
 
 const VISUAL_CONFIDENCE_FLOOR = 0.55;
 const AUTO_APPEARANCE_CONFIDENCE = 0.72;
+const MATERIAL_CONFLICT_DISTANCE = 78;
+
+function referenceColorDistance(left: string, right: string) {
+  if (!/^#[0-9a-f]{6}$/i.test(left) || !/^#[0-9a-f]{6}$/i.test(right))
+    return Number.POSITIVE_INFINITY;
+  const a = [
+    Number.parseInt(left.slice(1, 3), 16),
+    Number.parseInt(left.slice(3, 5), 16),
+    Number.parseInt(left.slice(5, 7), 16),
+  ];
+  const b = [
+    Number.parseInt(right.slice(1, 3), 16),
+    Number.parseInt(right.slice(3, 5), 16),
+    Number.parseInt(right.slice(5, 7), 16),
+  ];
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+}
 
 function clamp(value: number, min = 0, max = 1) {
   return Math.max(min, Math.min(max, value));
@@ -144,13 +200,81 @@ function choosePaletteColor(
   return ranked[0];
 }
 
+function roleSuitability(role: VisualMaterialRole, region: ReferenceColorRegion) {
+  const lum = region.luminance;
+  const sat = region.saturation;
+  const warmth = region.warmth;
+  if (role === "glass")
+    return clamp(0.42 + Math.max(0, -warmth) * 0.4 + lum * 0.25 - sat * 0.08);
+  if (role === "metal")
+    return clamp(0.75 - sat * 0.48 + (1 - Math.abs(lum - 0.38)) * 0.18);
+  if (role === "wood")
+    return clamp(0.35 + Math.max(0, warmth) * 0.5 + sat * 0.28);
+  if (role === "stone")
+    return clamp(0.72 - Math.abs(sat - 0.16) * 0.75 - Math.abs(lum - 0.58) * 0.28);
+  return clamp(0.76 - Math.abs(lum - 0.72) * 0.48 - sat * 0.22);
+}
+
+function evidenceRank(evidence: ReferenceImageEvidence) {
+  const regionFactor = Math.min(1, (evidence.regions?.length ?? 0) / 8);
+  const edgeFactor = Math.min(
+    1,
+    (evidence.verticalEdgeStrength + evidence.horizontalEdgeStrength) * 3,
+  );
+  return round(evidence.confidence * 0.72 + regionFactor * 0.12 + edgeFactor * 0.16);
+}
+
+export function visualReferenceEvidence(project: Project) {
+  const rows = [
+    ...(project.scene.referenceImageEvidenceSet ?? []),
+    ...(project.scene.referenceImageEvidence
+      ? [project.scene.referenceImageEvidence]
+      : []),
+  ];
+  const byAsset = new Map<string, ReferenceImageEvidence>();
+  for (const row of rows) {
+    if (!project.assets.includes(row.assetId)) continue;
+    const current = byAsset.get(row.assetId);
+    if (!current || evidenceRank(row) > evidenceRank(current)) byAsset.set(row.assetId, row);
+  }
+  return [...byAsset.values()].sort(
+    (left, right) =>
+      evidenceRank(right) - evidenceRank(left) ||
+      right.confidence - left.confidence ||
+      left.assetId.localeCompare(right.assetId),
+  );
+}
+
+export function choosePrimaryVisualReference(
+  evidence: readonly ReferenceImageEvidence[],
+) {
+  return [...evidence].sort(
+    (left, right) =>
+      evidenceRank(right) - evidenceRank(left) ||
+      right.confidence - left.confidence ||
+      left.assetId.localeCompare(right.assetId),
+  )[0];
+}
+
+function strongLightingConflict(evidence: readonly ReferenceImageEvidence[]) {
+  const moods = new Set(
+    evidence
+      .filter((row) => row.confidence >= 0.65 && row.lightingMood !== "unknown")
+      .map((row) => row.lightingMood),
+  );
+  return moods.size > 1;
+}
+
 function appearanceFromEvidence(
   evidence: ReferenceImageEvidence,
   palette: readonly Rgb[],
+  forceReview: boolean,
 ): VisualAppearanceSuggestion {
   const confidence = round(evidence.confidence);
   const status =
-    confidence >= AUTO_APPEARANCE_CONFIDENCE && evidence.lightingMood !== "unknown"
+    !forceReview &&
+    confidence >= AUTO_APPEARANCE_CONFIDENCE &&
+    evidence.lightingMood !== "unknown"
       ? "auto-ready"
       : "needs-review";
   const fallbackBackground = "#dbe3e7";
@@ -195,8 +319,11 @@ function appearanceFromEvidence(
     sourceAssetId: evidence.assetId,
     appearance,
     reasons: [
-      `Reference lighting mood: ${evidence.lightingMood}.`,
+      `Primary reference lighting mood: ${evidence.lightingMood}.`,
       `Visual evidence confidence: ${Math.round(confidence * 100)}%.`,
+      ...(forceReview
+        ? ["Strong reference images disagree on lighting, so automatic lighting selection is blocked until review."]
+        : []),
       "Appearance settings affect presentation only; geometry and dimensions remain source-controlled.",
     ],
   };
@@ -208,44 +335,158 @@ function sourceMaterialNames(audits: readonly FbxSourceAudit[]) {
   );
 }
 
+function regionCandidate(
+  role: VisualMaterialRole,
+  evidence: ReferenceImageEvidence,
+): VisualMaterialCandidate | undefined {
+  const regions = (evidence.regions ?? []).filter(
+    (region) => region.coverage >= 0.006 && region.confidence >= 0.4,
+  );
+  if (!regions.length) return undefined;
+  const ranked = regions
+    .map((region) => {
+      const suitability = roleSuitability(role, region);
+      const coverageFactor = Math.min(1, region.coverage / 0.12);
+      const score =
+        suitability * 0.55 +
+        region.confidence * 0.25 +
+        coverageFactor * 0.15 +
+        Math.min(1, region.edgeStrength * 3) * 0.05;
+      return { region, suitability, score };
+    })
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        right.region.coverage - left.region.coverage ||
+        left.region.id.localeCompare(right.region.id),
+    );
+  const best = ranked[0];
+  if (!best || best.suitability < 0.38) return undefined;
+  return {
+    sourceAssetId: evidence.assetId,
+    regionId: best.region.id,
+    baseColor: best.region.color.toLowerCase(),
+    coverage: best.region.coverage,
+    centroidX: best.region.centroidX,
+    centroidY: best.region.centroidY,
+    confidence: round(
+      evidence.confidence *
+        (0.58 + best.suitability * 0.22 + best.region.confidence * 0.2),
+    ),
+    correspondence: "region",
+    reason: `${role} role is source-name-backed; region ${best.region.id} covers ${Math.round(best.region.coverage * 100)}% of this reference and is the strongest appearance-only correspondence.`,
+  };
+}
+
+function paletteCandidate(
+  role: VisualMaterialRole,
+  evidence: ReferenceImageEvidence,
+): VisualMaterialCandidate | undefined {
+  const palette = evidence.renderedPalette
+    .map(color)
+    .filter((entry): entry is Rgb => Boolean(entry));
+  const target = choosePaletteColor(role, palette);
+  if (!target) return undefined;
+  const roleFactor = role === "paint" || role === "stone" ? 0.9 : 0.82;
+  return {
+    sourceAssetId: evidence.assetId,
+    baseColor: target.hex,
+    confidence: round(evidence.confidence * roleFactor),
+    correspondence: "palette",
+    reason: `${role} role is source-name-backed; ${target.hex} is selected from the whole-image palette because this evidence has no spatial region data.`,
+  };
+}
+
+function candidatesForRole(
+  role: VisualMaterialRole,
+  evidence: readonly ReferenceImageEvidence[],
+) {
+  return evidence
+    .filter((row) => row.confidence >= VISUAL_CONFIDENCE_FLOOR)
+    .map((row) => regionCandidate(role, row) ?? paletteCandidate(role, row))
+    .filter((row): row is VisualMaterialCandidate => Boolean(row))
+    .sort(
+      (left, right) =>
+        right.confidence - left.confidence ||
+        left.sourceAssetId.localeCompare(right.sourceAssetId) ||
+        (left.regionId ?? "").localeCompare(right.regionId ?? ""),
+    );
+}
+
+function materialConflict(candidates: readonly VisualMaterialCandidate[]) {
+  if (candidates.length < 2) return false;
+  const strongest = candidates[0];
+  return candidates.slice(1).some(
+    (candidate) =>
+      candidate.confidence >= 0.5 &&
+      referenceColorDistance(strongest.baseColor, candidate.baseColor) >=
+        MATERIAL_CONFLICT_DISTANCE,
+  );
+}
+
 /**
- * Builds a deterministic, non-destructive visual matching plan.
- *
- * Reference images are appearance evidence only. The planner never creates or
- * moves geometry, never infers dimensions/openings/floors, and only proposes
- * material changes for material names already present in audited source FBX.
+ * Builds a deterministic, non-destructive visual matching plan across every
+ * analyzed raster reference. Reference images are appearance evidence only.
+ * Spatial color regions can suggest correspondence to already-audited source
+ * materials, but they never create/move geometry or infer metric truth.
  */
 export function buildVisualFacadeMatchPlan(
   project: Project,
   audits: readonly FbxSourceAudit[],
 ): VisualFacadeMatchPlan {
-  const evidence = project.scene.referenceImageEvidence;
+  const evidence = visualReferenceEvidence(project);
+  const primary = choosePrimaryVisualReference(evidence);
   const materialNames = sourceMaterialNames(audits);
   const invariants = [
     "visual-non-metric",
     "source-material-names-only",
     "geometry-immutable",
   ] as const;
+  const emptyCounts = {
+    references: evidence.length,
+    regions: evidence.reduce((sum, row) => sum + (row.regions?.length ?? 0), 0),
+    sourceMaterials: materialNames.length,
+    classifiedMaterials: 0,
+    suggestedMaterials: 0,
+    regionMatches: 0,
+    conflicts: 0,
+    reviewRequired: 0,
+  };
 
-  if (!evidence) {
+  if (!primary) {
     return {
       status: "unavailable",
       evidenceConfidence: 0,
+      references: [],
+      lightingConflict: false,
       materials: [],
-      counts: {
-        sourceMaterials: materialNames.length,
-        classifiedMaterials: 0,
-        suggestedMaterials: 0,
-        reviewRequired: 0,
-      },
+      counts: emptyCounts,
       issues: ["No analyzed visual reference image is available for facade matching."],
       invariants,
     };
   }
 
-  const palette = evidence.renderedPalette
+  const lightingConflict = strongLightingConflict(evidence);
+  const references = evidence.map((row, index) => ({
+    sourceAssetId: row.assetId,
+    selected: row.assetId === primary.assetId,
+    confidence: round(row.confidence),
+    rankScore: evidenceRank(row),
+    lightingMood: row.lightingMood,
+    regionCount: row.regions?.length ?? 0,
+    reason:
+      index === 0
+        ? "Highest deterministic visual-evidence rank; selected as the primary appearance reference."
+        : "Retained as corroborating appearance evidence; conflicts remain reviewable instead of being averaged away.",
+  }));
+  const primaryPalette = primary.renderedPalette
     .map(color)
     .filter((entry): entry is Rgb => Boolean(entry));
+  const appearance = appearanceFromEvidence(
+    primary,
+    primaryPalette,
+    lightingConflict,
+  );
   const classified = materialNames
     .map((materialName) => ({ materialName, role: classifyMaterial(materialName) }))
     .filter(
@@ -254,52 +495,84 @@ export function buildVisualFacadeMatchPlan(
     );
   const materials: VisualMaterialSuggestion[] = [];
 
-  if (evidence.confidence >= VISUAL_CONFIDENCE_FLOOR && palette.length) {
-    for (const entry of classified) {
-      const target = choosePaletteColor(entry.role, palette);
-      if (!target) continue;
-      const roleFactor = entry.role === "paint" || entry.role === "stone" ? 0.9 : 0.82;
-      materials.push({
-        materialName: entry.materialName,
-        role: entry.role,
-        baseColor: target.hex,
-        confidence: round(evidence.confidence * roleFactor),
-        sourceAssetId: evidence.assetId,
-        reviewRequired: true,
-        reason: `${entry.role} role is source-name-backed; ${target.hex} is selected only from the analyzed reference palette.`,
-      });
-    }
+  for (const entry of classified) {
+    const candidates = candidatesForRole(entry.role, evidence);
+    const selected = candidates[0];
+    if (!selected) continue;
+    const conflict = materialConflict(candidates);
+    materials.push({
+      materialName: entry.materialName,
+      role: entry.role,
+      baseColor: selected.baseColor,
+      confidence: selected.confidence,
+      sourceAssetId: selected.sourceAssetId,
+      ...(selected.regionId ? { regionId: selected.regionId } : {}),
+      correspondence: selected.correspondence,
+      conflict,
+      candidates,
+      reviewRequired: true,
+      reason: conflict
+        ? `${entry.role} has materially different strong reference candidates. Choose the intended reference region explicitly before applying.`
+        : selected.reason,
+    });
   }
 
-  const appearance = appearanceFromEvidence(evidence, palette);
+  const materialConflicts = materials.filter((row) => row.conflict).length;
   const issues: string[] = [];
-  if (evidence.confidence < VISUAL_CONFIDENCE_FLOOR)
+  if (primary.confidence < VISUAL_CONFIDENCE_FLOOR)
     issues.push(
-      "Visual reference confidence is too low for material suggestions; keep manual review.",
+      "Primary visual reference confidence is too low for material suggestions; keep manual review.",
     );
-  if (!palette.length)
-    issues.push("Visual reference contains no valid rendered palette colors.");
+  if (!primaryPalette.length)
+    issues.push("Primary visual reference contains no valid rendered palette colors.");
   if (materialNames.length && !classified.length)
     issues.push(
       "Source materials are present, but none have a safely classifiable facade/material role.",
+    );
+  if (evidence.length > 1)
+    issues.push(
+      `${evidence.length} visual references were analyzed and deterministically arbitrated; disagreements are preserved for review.`,
+    );
+  if (lightingConflict)
+    issues.push(
+      "Strong visual references disagree on lighting mood; lighting remains review-required.",
+    );
+  if (materialConflicts)
+    issues.push(
+      `${materialConflicts} material suggestion${materialConflicts === 1 ? " has" : "s have"} conflicting strong reference regions and require an explicit source choice.`,
     );
   if (materials.length)
     issues.push(
       `${materials.length} source material suggestion${materials.length === 1 ? "" : "s"} require human review before application.`,
     );
 
+  const regionMatches = materials.filter(
+    (row) => row.correspondence === "region",
+  ).length;
   return {
     status:
-      appearance.status === "auto-ready" ? "auto-ready" : "needs-review",
-    sourceAssetId: evidence.assetId,
-    evidenceConfidence: round(evidence.confidence),
+      appearance.status === "auto-ready" && !lightingConflict
+        ? "auto-ready"
+        : "needs-review",
+    sourceAssetId: primary.assetId,
+    primarySourceAssetId: primary.assetId,
+    evidenceConfidence: round(primary.confidence),
+    references,
+    lightingConflict,
     appearance,
     materials,
     counts: {
+      references: evidence.length,
+      regions: evidence.reduce((sum, row) => sum + (row.regions?.length ?? 0), 0),
       sourceMaterials: materialNames.length,
       classifiedMaterials: classified.length,
       suggestedMaterials: materials.length,
-      reviewRequired: materials.length + (appearance.status === "needs-review" ? 1 : 0),
+      regionMatches,
+      conflicts: materialConflicts + Number(lightingConflict),
+      reviewRequired:
+        materials.length +
+        (appearance.status === "needs-review" ? 1 : 0) +
+        materialConflicts,
     },
     issues,
     invariants,

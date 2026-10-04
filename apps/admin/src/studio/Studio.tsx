@@ -137,6 +137,7 @@ import {
   withLocalSaveTimestamp,
 } from "./localDraftState";
 import { applyTransformCommit } from "./sceneTransformApply";
+import { compareVisualAppearance, type VisualDifferenceResult } from "./visualDifference";
 import "./studio.css";
 import "./studio-operations.css";
 import "./studio-superadmin-theme.css";
@@ -218,6 +219,9 @@ export default function Studio() {
     useState<Kind>();
   const [sourceAudits, setSourceAudits] = useState<FbxSourceAudit[]>([]);
   const [sourceAuditBusy, setSourceAuditBusy] = useState(false);
+  const [visualSampleRequest, setVisualSampleRequest] = useState(0);
+  const [visualScoreBusy, setVisualScoreBusy] = useState(false);
+  const [visualDifference, setVisualDifference] = useState<VisualDifferenceResult>();
   const [smartAnalysis, setSmartAnalysis] = useState<SmartProjectAnalysis>();
   const [sourceFusion, setSourceFusion] = useState<SourceFusionReport>();
   const [manifestText, setManifestText] = useState("");
@@ -296,6 +300,9 @@ export default function Studio() {
     setSectionCutFlip(false);
     setModelMaterials([]);
     setSelectedMaterial("");
+    setVisualSampleRequest(0);
+    setVisualScoreBusy(false);
+    setVisualDifference(undefined);
     setFurniturePlacementKind(undefined);
     setSourceAudits([]);
     setSmartAnalysis(undefined);
@@ -512,6 +519,8 @@ export default function Studio() {
   function edit(next: Project) {
     if (!project) return;
     setBackup(undefined);
+    setVisualDifference(undefined);
+    setVisualScoreBusy(false);
     historyRef.current.record(project);
     localEditSerial.current += 1;
     setProject(next);
@@ -1356,6 +1365,15 @@ export default function Studio() {
     if (next === p) return;
     edit(next);
     setMessage("Reviewed reference look applied. Use Undo to restore the previous look.");
+  }
+  function requestVisualDifferenceScore() {
+    if (!p.scene.referenceImageEvidence) {
+      setError("Analyze a visual reference before scoring the current view.");
+      return;
+    }
+    setVisualDifference(undefined);
+    setVisualScoreBusy(true);
+    setVisualSampleRequest((value) => value + 1);
   }
   function resetMaterial() {
     if (!selectedMaterial) return;
@@ -4450,6 +4468,14 @@ export default function Studio() {
             }}
             onModelNodes={setModelNodes}
             onModelMaterials={setModelMaterials}
+            visualSampleRequest={visualSampleRequest}
+            onVisualSample={(sample) => {
+              const reference = p.scene.referenceImageEvidence;
+              setVisualScoreBusy(false);
+              if (!reference) return;
+              setVisualDifference(compareVisualAppearance(reference, sample, { viewpointAligned: true }));
+            }}
+            onVisualSampleError={(reason) => { setVisualScoreBusy(false); setError(reason); }}
           />
           {showFloorReview && isolateFloorId && !showReferenceWorkspace && (
             <FloorRoomReview scene={scene} floorId={isolateFloorId} unit={roomMapUnit}
@@ -5034,9 +5060,12 @@ export default function Studio() {
               project={p}
               audits={sourceAudits}
               materials={modelMaterials}
-              referenceName={files.find((file) => file.id === p.scene.referenceImageEvidence?.assetId)?.name}
+              referenceNames={Object.fromEntries(files.map((file) => [file.id, file.name]))}
               disabled={Boolean(review) || busy || sourceAuditBusy}
               onApply={applyReferenceLook}
+              onScoreRequest={requestVisualDifferenceScore}
+              visualDifference={visualDifference}
+              scoreBusy={visualScoreBusy}
             />
           )}
           {view === "building" && (

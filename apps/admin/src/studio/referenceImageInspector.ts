@@ -39,7 +39,7 @@ export async function inspectReferenceImage(
       willReadFrequently: true,
     });
     if (!context)
-      throw Error("Reference image canvas analysis is unavailable.");
+      throw Error("Reference image canvas analysis is unavailable in this browser.");
 
     context.drawImage(bitmap, 0, 0, width, height);
     const pixels = context.getImageData(0, 0, width, height);
@@ -52,6 +52,7 @@ export async function inspectReferenceImage(
       sampledWidth: width,
       sampledHeight: height,
       renderedPalette: analysis.renderedPalette,
+      regions: analysis.regions,
       averageLuminance: analysis.averageLuminance,
       warmFraction: analysis.warmFraction,
       darkFraction: analysis.darkFraction,

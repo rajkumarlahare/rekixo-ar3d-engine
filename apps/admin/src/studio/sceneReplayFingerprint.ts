@@ -3,6 +3,7 @@ import type {
   Floor,
   Opening,
   Project,
+  ReferenceImageEvidence,
   Room,
   RoomPoint,
   SiteElement,
@@ -193,6 +194,24 @@ function siteSeed(
   };
 }
 
+function referenceEvidenceSeed(evidence: ReferenceImageEvidence, assetRef: (id?: string) => string | undefined) {
+  return {
+    source: assetRef(evidence.assetId),
+    palette: [...evidence.renderedPalette].map((row) => row.toLowerCase()).sort(),
+    regions: [...(evidence.regions ?? [])].sort((left, right) => left.id.localeCompare(right.id)).map((region) => ({
+      id: region.id, color: region.color.toLowerCase(), coverage: round(region.coverage),
+      centroidX: round(region.centroidX), centroidY: round(region.centroidY),
+      minX: round(region.minX), minY: round(region.minY), maxX: round(region.maxX), maxY: round(region.maxY),
+      confidence: round(region.confidence),
+    })),
+    averageLuminance: round(evidence.averageLuminance), warmFraction: round(evidence.warmFraction),
+    darkFraction: round(evidence.darkFraction), highlightFraction: round(evidence.highlightFraction),
+    averageSaturation: round(evidence.averageSaturation),
+    verticalEdgeStrength: round(evidence.verticalEdgeStrength), horizontalEdgeStrength: round(evidence.horizontalEdgeStrength),
+    lightingMood: evidence.lightingMood, confidence: round(evidence.confidence),
+  };
+}
+
 async function sha256(value: string) {
   const bytes = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
@@ -309,22 +328,12 @@ export async function buildNormalizedSceneFingerprint(
       rotation: round(row.rotation),
     })),
     referenceImageEvidence: project.scene.referenceImageEvidence
-      ? {
-          source: assetRef(project.scene.referenceImageEvidence.assetId),
-          palette: [...project.scene.referenceImageEvidence.renderedPalette]
-            .map((row) => row.toLowerCase())
-            .sort(),
-          averageLuminance: round(project.scene.referenceImageEvidence.averageLuminance),
-          warmFraction: round(project.scene.referenceImageEvidence.warmFraction),
-          darkFraction: round(project.scene.referenceImageEvidence.darkFraction),
-          highlightFraction: round(project.scene.referenceImageEvidence.highlightFraction),
-          averageSaturation: round(project.scene.referenceImageEvidence.averageSaturation),
-          verticalEdgeStrength: round(project.scene.referenceImageEvidence.verticalEdgeStrength),
-          horizontalEdgeStrength: round(project.scene.referenceImageEvidence.horizontalEdgeStrength),
-          lightingMood: project.scene.referenceImageEvidence.lightingMood,
-          confidence: round(project.scene.referenceImageEvidence.confidence),
-        }
+      ? referenceEvidenceSeed(project.scene.referenceImageEvidence, assetRef)
       : undefined,
+    referenceImageEvidenceSet: sortByCanonical(
+      project.scene.referenceImageEvidenceSet ?? [],
+      (evidence) => referenceEvidenceSeed(evidence, assetRef),
+    ).map((evidence) => referenceEvidenceSeed(evidence, assetRef)),
     floors: normalizedFloors,
     rooms: normalizedRooms,
     walls: normalizedWalls,

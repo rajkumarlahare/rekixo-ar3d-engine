@@ -61,6 +61,9 @@ import {
   type ModelProfileRuntime,
 } from "@rekixo/3d-model-profiles";
 import { asset } from "./storage";
+import type { ReferencePixelAnalysis } from "./referenceImagePalette";
+import { captureSceneVisualSample } from "./sceneCanvasVisualSample";
+import { applySceneCanvasAppearance } from "./sceneCanvasAppearance";
 import {
   canWalk,
   reviewedDoorConnections,
@@ -107,6 +110,9 @@ interface Props extends ArchitectureCanvasProps {
   onTransformCommit?: (change: TransformCommit) => void;
   onModelNodes?: (nodes: ModelNodeSummary[]) => void;
   onModelMaterials?: (materials: ModelMaterialSummary[]) => void;
+  visualSampleRequest?: number;
+  onVisualSample?: (sample: ReferencePixelAnalysis) => void;
+  onVisualSampleError?: (message: string) => void;
   cameraOrientation?: "perspective" | "top";
   showReferenceLayers?: boolean;
   soloRoomId?: string;
@@ -1604,44 +1610,12 @@ export default function SceneCanvas(props: Props) {
   useEffect(() => {
     const runtime = api.current;
     if (!runtime) return;
-    const appearance = props.scene.appearance;
-    const focusedInterior =
-      props.view === "rooms" && Boolean(props.soloRoomId);
-    runtime.renderer.toneMappingExposure = focusedInterior
-      ? Math.max(appearance?.exposure ?? 1, 1.08)
-      : appearance?.exposure ?? 1;
-    runtime.hemi.intensity = focusedInterior
-      ? Math.max(appearance?.hemisphereIntensity ?? 2.8, 3.15)
-      : appearance?.hemisphereIntensity ?? 2.8;
-    runtime.sun.intensity = focusedInterior
-      ? Math.max(appearance?.sunIntensity ?? 3.2, 3.45)
-      : appearance?.sunIntensity ?? 3.2;
-    runtime.fill.intensity = focusedInterior ? 1.0 : 0.72;
-    runtime.grid.visible = !focusedInterior;
-    if (focusedInterior) {
-      runtime.scene.background = new T.Color("#e7e1d8");
-    } else if (runtime.profileExterior) {
-      const night = appearance?.nightMode ?? false;
-      runtime.profileExterior.setNight(night);
-      runtime.scene.background = night
-        ? runtime.profileExterior.eveningSky
-        : runtime.profileExterior.daylightSky;
-    } else {
-      runtime.scene.background = new T.Color(
-        appearance?.background ?? "#dbe3e7",
-      );
-    }
-  }, [
-    props.scene.appearance?.exposure,
-    props.scene.appearance?.sunIntensity,
-    props.scene.appearance?.hemisphereIntensity,
-    props.scene.appearance?.background,
-    props.scene.appearance?.nightMode,
-    props.scene.appearance?.referenceVisual,
-    props.scene.modelId,
-    props.view,
-    props.soloRoomId,
-  ]);
+    applySceneCanvasAppearance(
+      runtime,
+      props.scene.appearance,
+      props.view === "rooms" && Boolean(props.soloRoomId),
+    );
+  }, [props.scene.appearance, props.scene.modelId, props.view, props.soloRoomId]);
 
   useEffect(() => {
     const runtime = api.current;
@@ -1653,6 +1627,29 @@ export default function SceneCanvas(props: Props) {
     props.scene.modelId,
     props.scene.appearance?.referenceVisual,
   ]);
+
+  useEffect(() => {
+    if (!props.visualSampleRequest || props.view !== "building") return;
+    const runtime = api.current;
+    if (!runtime) {
+      props.onVisualSampleError?.("Load the building model before scoring the current view.");
+      return;
+    }
+    try {
+      props.onVisualSample?.(
+        captureSceneVisualSample({
+          ...runtime,
+          transformHelper: runtime.transform.getHelper(),
+        }),
+      );
+    } catch (reason) {
+      props.onVisualSampleError?.(
+        reason instanceof Error
+          ? reason.message
+          : "Current rendered view could not be analyzed.",
+      );
+    }
+  }, [props.visualSampleRequest]);
 
   useEffect(() => {
     const r = api.current;

@@ -4,8 +4,26 @@ export type ReferenceLightingMood =
   | "night"
   | "unknown";
 
+export interface ReferenceColorRegionAnalysis {
+  id: string;
+  color: string;
+  coverage: number;
+  centroidX: number;
+  centroidY: number;
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  luminance: number;
+  saturation: number;
+  warmth: number;
+  edgeStrength: number;
+  confidence: number;
+}
+
 export interface ReferencePixelAnalysis {
   renderedPalette: string[];
+  regions: ReferenceColorRegionAnalysis[];
   averageLuminance: number;
   warmFraction: number;
   darkFraction: number;
@@ -23,6 +41,18 @@ interface Bin {
   r: number;
   g: number;
   b: number;
+}
+
+interface RegionBin extends Bin {
+  id: string;
+  centroidX: number;
+  centroidY: number;
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  edge: number;
+  edgeWeight: number;
 }
 
 function clamp(value: number, min = 0, max = 1) {
@@ -47,14 +77,24 @@ function hex(r: number, g: number, b: number) {
   return ("#" + channel(r) + channel(g) + channel(b)).toLowerCase();
 }
 
-function colorDistance(left: string, right: string) {
+export function referenceColorDistance(left: string, right: string) {
   const rgb = (value: string) => [
     Number.parseInt(value.slice(1, 3), 16),
     Number.parseInt(value.slice(3, 5), 16),
-    Number.parseInt(value.slice(5, 7), 16),
   ];
-  const a = rgb(left);
-  const b = rgb(right);
+  if (!/^#[0-9a-f]{6}$/i.test(left) || !/^#[0-9a-f]{6}$/i.test(right))
+    return Number.POSITIVE_INFINITY;
+  const a = [
+    Number.parseInt(left.slice(1, 3), 16),
+    Number.parseInt(left.slice(3, 5), 16),
+    Number.parseInt(left.slice(5, 7), 16),
+  ];
+  const b = [
+    Number.parseInt(right.slice(1, 3), 16),
+    Number.parseInt(right.slice(3, 5), 16),
+    Number.parseInt(right.slice(5, 7), 16),
+  ];
+  void rgb;
   return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 }
 
@@ -75,6 +115,55 @@ function moodFor(
   return "unknown";
 }
 
+function buildRegions(
+  bins: ReadonlyMap<string, RegionBin>,
+  totalWeight: number,
+): ReferenceColorRegionAnalysis[] {
+  return [...bins.values()]
+    .map((bin) => {
+      const r = bin.r / bin.weight;
+      const g = bin.g / bin.weight;
+      const b = bin.b / bin.weight;
+      const coverage = bin.weight / totalWeight;
+      const edgeStrength = bin.edgeWeight > 0 ? bin.edge / bin.edgeWeight : 0;
+      const confidence = clamp(
+        0.42 + Math.min(0.32, coverage * 5.5) + Math.min(0.16, edgeStrength * 0.8),
+        0.35,
+        0.94,
+      );
+      return {
+        id: bin.id,
+        color: hex(r, g, b),
+        coverage: Number(coverage.toFixed(4)),
+        centroidX: Number((bin.centroidX / bin.weight).toFixed(4)),
+        centroidY: Number((bin.centroidY / bin.weight).toFixed(4)),
+        minX: Number(clamp(bin.minX).toFixed(4)),
+        minY: Number(clamp(bin.minY).toFixed(4)),
+        maxX: Number(clamp(bin.maxX).toFixed(4)),
+        maxY: Number(clamp(bin.maxY).toFixed(4)),
+        luminance: Number(luminance(r, g, b).toFixed(4)),
+        saturation: Number(saturation(r, g, b).toFixed(4)),
+        warmth: Number(clamp((r - b) / 255, -1, 1).toFixed(4)),
+        edgeStrength: Number(clamp(edgeStrength).toFixed(4)),
+        confidence: Number(confidence.toFixed(3)),
+      };
+    })
+    .filter((region) => region.coverage >= 0.006)
+    .sort(
+      (left, right) =>
+        right.coverage - left.coverage ||
+        right.confidence - left.confidence ||
+        left.id.localeCompare(right.id),
+    )
+    .slice(0, 24);
+}
+
+/**
+ * Extract appearance evidence from a raster without assigning metric authority.
+ * The spatial regions are deterministic coarse color clusters (4x4 cells), not
+ * object segmentation. They exist only so a human can review which visible
+ * reference area best corresponds to an already-proven model material.
+ */
 export function analyzeReferencePixels(
   data: ArrayLike<number>,
   width: number,
@@ -95,6 +184,7 @@ export function analyzeReferencePixels(
     Math.floor(Math.sqrt((width * height) / targetSamples)),
   );
   const bins = new Map<number, Bin>();
+  const regionBins = new Map<string, RegionBin>();
 
   let sampleCount = 0;
   let totalWeight = 0;
@@ -150,22 +240,66 @@ export function analyzeReferencePixels(
       bin.b += b * weight;
       bins.set(key, bin);
 
+      let localEdge = 0;
+      let localEdgeSamples = 0;
       if (x + step < width) {
         const right = pixel(x + step, y);
         if (right[3] >= 180) {
-          verticalEdge +=
-            Math.abs(lum - luminance(right[0], right[1], right[2])) * weight;
+          const delta = Math.abs(lum - luminance(right[0], right[1], right[2]));
+          verticalEdge += delta * weight;
           verticalEdgeWeight += weight;
+          localEdge += delta;
+          localEdgeSamples += 1;
         }
       }
       if (y + step < height) {
         const down = pixel(x, y + step);
         if (down[3] >= 180) {
-          horizontalEdge +=
-            Math.abs(lum - luminance(down[0], down[1], down[2])) * weight;
+          const delta = Math.abs(lum - luminance(down[0], down[1], down[2]));
+          horizontalEdge += delta * weight;
           horizontalEdgeWeight += weight;
+          localEdge += delta;
+          localEdgeSamples += 1;
         }
       }
+
+      const cellX = Math.min(3, Math.floor((x / width) * 4));
+      const cellY = Math.min(3, Math.floor((y / height) * 4));
+      const regionKey = `r-${cellX}-${cellY}-${qr}${qg}${qb}`;
+      const normalX = x / Math.max(1, width - 1);
+      const normalY = y / Math.max(1, height - 1);
+      const halfX = step / Math.max(1, width - 1);
+      const halfY = step / Math.max(1, height - 1);
+      const region = regionBins.get(regionKey) ?? {
+        id: regionKey,
+        weight: 0,
+        r: 0,
+        g: 0,
+        b: 0,
+        centroidX: 0,
+        centroidY: 0,
+        minX: 1,
+        minY: 1,
+        maxX: 0,
+        maxY: 0,
+        edge: 0,
+        edgeWeight: 0,
+      };
+      region.weight += weight;
+      region.r += r * weight;
+      region.g += g * weight;
+      region.b += b * weight;
+      region.centroidX += normalX * weight;
+      region.centroidY += normalY * weight;
+      region.minX = Math.min(region.minX, normalX - halfX);
+      region.minY = Math.min(region.minY, normalY - halfY);
+      region.maxX = Math.max(region.maxX, normalX + halfX);
+      region.maxY = Math.max(region.maxY, normalY + halfY);
+      if (localEdgeSamples) {
+        region.edge += (localEdge / localEdgeSamples) * weight;
+        region.edgeWeight += weight;
+      }
+      regionBins.set(regionKey, region);
     }
   }
 
@@ -183,7 +317,7 @@ export function analyzeReferencePixels(
       bin.g / bin.weight,
       bin.b / bin.weight,
     );
-    if (palette.some((existing) => colorDistance(existing, candidate) < 34))
+    if (palette.some((existing) => referenceColorDistance(existing, candidate) < 34))
       continue;
     palette.push(candidate);
     if (palette.length >= 8) break;
@@ -215,6 +349,7 @@ export function analyzeReferencePixels(
 
   return {
     renderedPalette: palette,
+    regions: buildRegions(regionBins, totalWeight),
     averageLuminance: Number(averageLuminance.toFixed(4)),
     warmFraction: Number(warmFraction.toFixed(4)),
     darkFraction: Number(darkFraction.toFixed(4)),
