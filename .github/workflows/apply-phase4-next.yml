@@ -21,8 +21,8 @@ jobs:
         run: |
           set -euo pipefail
           test -f .github/phase4-next.patch || exit 0
-          git apply --check .github/phase4-next.patch
-          git apply .github/phase4-next.patch
+          git apply --check --recount .github/phase4-next.patch
+          git apply --recount .github/phase4-next.patch
           rm .github/phase4-next.patch .github/workflows/apply-phase4-next.yml
           git config user.name "rekixo-ci"
           git config user.email "ai@rekixo.com"
