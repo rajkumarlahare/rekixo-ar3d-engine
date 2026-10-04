@@ -16,14 +16,13 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-      - name: Apply staged editor patch once
+      - name: Apply deterministic editor changes once
         shell: bash
         run: |
           set -euo pipefail
-          test -f .github/phase4-next.patch || exit 0
-          git apply --check --recount .github/phase4-next.patch
-          git apply --recount .github/phase4-next.patch
-          rm .github/phase4-next.patch .github/workflows/apply-phase4-next.yml
+          test -f .github/apply_phase4_next.py || exit 0
+          python .github/apply_phase4_next.py
+          rm -f .github/apply_phase4_next.py .github/phase4-next.patch .github/workflows/apply-phase4-next.yml
           git config user.name "rekixo-ci"
           git config user.email "ai@rekixo.com"
           git add -A
