@@ -12,6 +12,8 @@ import ReferenceWorkspace from "./ReferenceWorkspace";
 import FloorRoomReview from "./FloorRoomReview";
 import FurnitureShelf from "./FurnitureShelf";
 import MaterialQuickEditor from "./MaterialQuickEditor";
+import VisualFacadeReview from "./VisualFacadeReview";
+import { applyVisualFacadeReview, type VisualReviewAction } from "./visualFacadeReview";
 import VisualRoomMapper, {
   type RoomMapAction,
 } from "./VisualRoomMapper";
@@ -1347,6 +1349,13 @@ export default function Studio() {
         ],
       },
     });
+  }
+  function applyReferenceLook(action: VisualReviewAction) {
+    if (review || busy || sourceAuditBusy) return;
+    const next = applyVisualFacadeReview(p, sourceAudits, modelMaterials.map((material) => material.name), action);
+    if (next === p) return;
+    edit(next);
+    setMessage("Reviewed reference look applied. Use Undo to restore the previous look.");
   }
   function resetMaterial() {
     if (!selectedMaterial) return;
@@ -5020,6 +5029,16 @@ export default function Studio() {
             </p>
             </details>
           </fieldset>
+          {view === "building" && (
+            <VisualFacadeReview
+              project={p}
+              audits={sourceAudits}
+              materials={modelMaterials}
+              referenceName={files.find((file) => file.id === p.scene.referenceImageEvidence?.assetId)?.name}
+              disabled={Boolean(review) || busy || sourceAuditBusy}
+              onApply={applyReferenceLook}
+            />
+          )}
           {view === "building" && (
             <MaterialQuickEditor
               materials={modelMaterials}

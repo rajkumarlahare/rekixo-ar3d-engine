@@ -273,3 +273,45 @@ test("clean Studio has no repository-baked project profile", async ({ page }) =>
   await expect(page.getByLabel("Smart 3D project builder")).toBeVisible();
   await expect(page.getByText(/Jyoti Paradise/i)).toHaveCount(0);
 });
+
+test("reference lighting review applies, undoes, redoes and survives reload", async ({ page }) => {
+  await page.locator(".smart-builder input[type=file]").first().setInputFiles([
+    { name: "review-building.glb", mimeType: "model/gltf-binary", buffer: Buffer.from(fourFloorGltf()) },
+    { name: "review-reference.png", mimeType: "image/png", buffer: onePixelPng() },
+  ]);
+  await expect(page.getByText("Autosaved", { exact: true })).toBeVisible();
+  // Seed analyzed evidence to isolate the review controls from image recognition.
+  await page.evaluate(async () => {
+    const moduleUrl = "/3Dprojects/src/studio/storage.ts";
+    const storage = await import(/* @vite-ignore */ moduleUrl);
+    const [project] = await storage.projects();
+    const files = await Promise.all(project.assets.map((id: string) => storage.asset(id)));
+    const reference = files.find((file: { name: string }) => file.name === "review-reference.png");
+    project.scene.referenceImageEvidence = {
+      assetId: reference.id, sourceWidth: 2, sourceHeight: 2, sampledWidth: 2, sampledHeight: 2,
+      renderedPalette: ["#101722"], averageLuminance: 0.1, warmFraction: 0,
+      darkFraction: 0.9, highlightFraction: 0, averageSaturation: 0.1,
+      verticalEdgeStrength: 0, horizontalEdgeStrength: 0,
+      lightingMood: "night", confidence: 0.84, sampleCount: 4,
+    };
+    await storage.save(project);
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "3D Edit" }).click();
+  await page.getByText("Reference look review", { exact: true }).click();
+  await expect(page.getByText(/Reference: review-reference.png/)).toBeVisible();
+  await expect(page.getByText(/No eligible material suggestions/)).toBeVisible();
+  await page.getByRole("button", { name: "Apply reviewed lighting" }).click();
+  await expect(page.getByRole("button", { name: "Lighting already matches" })).toBeDisabled();
+  const editorTools = page.getByLabel("3D editor tools");
+  await editorTools.locator("summary").filter({ hasText: /^Edit/ }).click();
+  await editorTools.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Apply reviewed lighting" })).toBeEnabled();
+  await editorTools.getByRole("button", { name: "Redo", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Lighting already matches" })).toBeDisabled();
+  await expect(page.getByText("Autosaved", { exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "3D Edit" }).click();
+  await page.getByText("Reference look review", { exact: true }).click();
+  await expect(page.getByRole("button", { name: "Lighting already matches" })).toBeDisabled();
+});
