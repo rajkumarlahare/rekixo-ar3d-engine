@@ -256,6 +256,14 @@ export async function runCadOnlyAutoBuildPipeline(
       referenceImageEvidenceReady: Boolean(
         next.scene.referenceImageEvidence,
       ),
+      referenceImagesAnalyzed:
+        next.scene.referenceImageEvidenceSet?.length ??
+        (next.scene.referenceImageEvidence ? 1 : 0),
+      referenceImageRegions:
+        next.scene.referenceImageEvidenceSet?.reduce(
+          (sum, evidence) => sum + (evidence.regions?.length ?? 0),
+          0,
+        ) ?? next.scene.referenceImageEvidence?.regions?.length ?? 0,
       referencePaletteColors:
         next.scene.referenceImageEvidence?.renderedPalette.length ?? 0,
       referenceLightingMood:
