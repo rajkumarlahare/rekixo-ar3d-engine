@@ -1,6 +1,58 @@
 import * as T from "three";
-import type { Furniture, Opening } from "./domain";
+import { catalog, type Furniture, type Opening } from "./domain";
 import { addFurnitureVisual } from "./furnitureVisual";
+
+function addFurnitureRotationHandle(root: T.Group, item: Furniture) {
+  const size = catalog[item.kind];
+  const reach = size.depth / 2 + 0.42;
+  const y = size.height + 0.16;
+  const stem = new T.Line(
+    new T.BufferGeometry().setFromPoints([
+      new T.Vector3(0, y, size.depth / 2),
+      new T.Vector3(0, y, reach),
+    ]),
+    new T.LineBasicMaterial({
+      color: 0xffb45e,
+      transparent: true,
+      opacity: 0.95,
+      depthTest: false,
+    }),
+  );
+  stem.name = "Furniture rotation guide stem";
+  stem.renderOrder = 46;
+  root.add(stem);
+
+  const handle = new T.Group();
+  handle.name = "Furniture rotation handle";
+  handle.userData.selectId = item.id;
+  handle.userData.furnitureRotationHandle = true;
+  handle.position.set(0, y, reach);
+
+  const visible = new T.Mesh(
+    new T.SphereGeometry(0.12, 18, 12),
+    new T.MeshBasicMaterial({ color: 0xffb45e, depthTest: false }),
+  );
+  visible.userData.selectId = item.id;
+  visible.userData.furnitureRotationHandle = true;
+  visible.renderOrder = 47;
+  handle.add(visible);
+
+  const hitTarget = new T.Mesh(
+    new T.SphereGeometry(0.32, 12, 8),
+    new T.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      depthTest: false,
+    }),
+  );
+  hitTarget.name = "Furniture rotation touch target";
+  hitTarget.userData.selectId = item.id;
+  hitTarget.userData.furnitureRotationHandle = true;
+  hitTarget.renderOrder = 48;
+  handle.add(hitTarget);
+  root.add(handle);
+}
 
 export function renderRoomFurniture(
   roomRoot: T.Group,
@@ -22,6 +74,7 @@ export function renderRoomFurniture(
     if (item.id === selected) {
       root.updateWorldMatrix(true, true);
       selectionRoot.add(new T.BoxHelper(root, 0xd67e34));
+      addFurnitureRotationHandle(root, item);
     }
   }
 }

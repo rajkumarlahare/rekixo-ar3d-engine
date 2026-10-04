@@ -142,6 +142,47 @@ function addWallEndpointHandle(
   root.add(handle);
 }
 
+function addOpeningResizeHandle(
+  root: T.Group,
+  opening: Opening,
+  corner: "top-left" | "top-right",
+  localX: number,
+) {
+  const handle = new T.Group();
+  handle.name = `Opening ${corner} resize handle`;
+  handle.userData.selectId = opening.id;
+  handle.userData.openingResizeCorner = corner;
+  handle.position.set(localX, opening.height / 2, 0);
+
+  const visible = new T.Mesh(
+    new T.SphereGeometry(0.11, 18, 12),
+    new T.MeshBasicMaterial({
+      color: opening.kind === "window" ? 0x9ee7ff : 0xffd795,
+      depthTest: false,
+    }),
+  );
+  visible.userData.selectId = opening.id;
+  visible.userData.openingResizeCorner = corner;
+  visible.renderOrder = 44;
+  handle.add(visible);
+
+  const hitTarget = new T.Mesh(
+    new T.SphereGeometry(0.3, 12, 8),
+    new T.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      depthTest: false,
+    }),
+  );
+  hitTarget.name = `Opening ${corner} resize touch target`;
+  hitTarget.userData.selectId = opening.id;
+  hitTarget.userData.openingResizeCorner = corner;
+  hitTarget.renderOrder = 45;
+  handle.add(hitTarget);
+  root.add(handle);
+}
+
 export function renderArchitectureElements(
   group: T.Group,
   scene: Scene,
@@ -227,6 +268,8 @@ export function renderArchitectureElements(
     if (opening.id === selected) {
       root.updateWorldMatrix(true, true);
       group.add(new T.BoxHelper(root, 0xffcc6f));
+      addOpeningResizeHandle(root, opening, "top-left", -opening.width / 2);
+      addOpeningResizeHandle(root, opening, "top-right", opening.width / 2);
     }
   }
 }
