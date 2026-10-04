@@ -1,0 +1,188 @@
+/* Demo Launch Phase 7 — performance and final meeting polish.
+   This layer is deliberately presentation-only: source-model authority,
+   floor semantics and walkthrough navigation remain unchanged. */
+
+html,
+body {
+  overscroll-behavior: none;
+}
+
+.twin-shell,
+.twin-stage,
+.viewer-shell {
+  contain: layout paint style;
+}
+
+.twin-info-panel,
+.viewer-walk-graph,
+.twin-title-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 320px 240px;
+}
+
+.viewer-loader {
+  position: absolute;
+  z-index: 60;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 38%, #17314f66, transparent 36%),
+    linear-gradient(180deg, #07111ddd, #050914ee);
+  backdrop-filter: blur(8px);
+}
+
+.viewer-loader > div:first-child {
+  width: min(420px, calc(100vw - 48px));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: #f2f7fb;
+}
+
+.viewer-loader > div:first-child span {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.viewer-loader > div:first-child strong {
+  color: #7bf0bd;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.viewer-loader-track {
+  width: min(420px, calc(100vw - 48px));
+  height: 6px;
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #ffffff18;
+  box-shadow: inset 0 0 0 1px #ffffff12;
+}
+
+.viewer-loader-track > span {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #38bd87, #82f5c5);
+  transition: width .22s ease-out;
+}
+
+.viewer-notice {
+  z-index: 58;
+  max-width: min(520px, calc(100vw - 32px));
+  border: 1px solid #f2bf6a66;
+  border-radius: 14px;
+  background: #17120def;
+  box-shadow: 0 18px 50px #0008;
+  backdrop-filter: blur(14px);
+}
+
+.viewer-notice strong {
+  color: #fff2d3;
+}
+
+.viewer-notice span {
+  color: #d9c6a7;
+}
+
+/* Keep the customer's primary controls readable above phone safe areas. */
+.twin-stage .twin-rail,
+.twin-stage .twin-floor-strip,
+.twin-stage .viewer-walk-controls {
+  max-width: calc(100vw - 20px);
+}
+
+.demo-touch-device button,
+.demo-touch-device select {
+  touch-action: manipulation;
+}
+
+/* Low-power UI mode removes expensive glass effects while preserving the 3D
+   scene itself. Viewer3D already lowers pixel ratio/shadow cost on mobile. */
+.demo-low-power .twin-stage .twin-rail,
+.demo-low-power .twin-stage .viewer-compact-tools,
+.demo-low-power .twin-info-panel,
+.demo-low-power .viewer-walk-graph,
+.demo-low-power .viewer-notice,
+.demo-low-power .viewer-loader,
+.demo-low-power .twin-tour-control {
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+.demo-low-power .viewer-loader-track > span,
+.demo-low-power .twin-rail-item,
+.demo-low-power .viewer-walk-controls button {
+  transition-duration: .08s !important;
+}
+
+.demo-low-power .twin-stage .twin-title-card {
+  text-shadow: none;
+}
+
+@media (max-width: 760px) {
+  .viewer-loader {
+    padding: 18px;
+  }
+
+  .viewer-loader > div:first-child,
+  .viewer-loader-track {
+    width: min(360px, calc(100vw - 36px));
+  }
+
+  .twin-stage .twin-rail {
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+  }
+
+  .twin-stage .twin-info-panel--right {
+    max-height: min(46vh, 390px);
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  .twin-stage .viewer-walk-controls button {
+    min-width: 52px;
+    min-height: 52px;
+  }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .twin-stage .viewer-compact-tools {
+    top: 8px;
+    right: 8px;
+  }
+
+  .twin-stage .twin-tour-control {
+    top: 8px;
+    left: 50%;
+  }
+
+  .twin-stage .twin-info-panel--right {
+    top: 58px;
+    bottom: 64px;
+    max-height: calc(100vh - 122px);
+  }
+
+  .viewer-loader {
+    padding: 12px 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer-loader-track > span,
+  .twin-rail-item,
+  .viewer-walk-controls button,
+  .twin-tour-control,
+  .twin-tour-button {
+    transition: none !important;
+    animation: none !important;
+  }
+}
