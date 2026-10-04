@@ -285,7 +285,7 @@ test("Phase 5 visual-difference score requires user-aligned camera and remains a
 test("Phase 5 completion is wired through AutoBuild, Studio, cloud validation, replay and protected golden proof", () => {
   const legacy = fs.readFileSync("apps/admin/src/studio/autoBuildPipelineLegacy.ts", "utf8");
   const studio = fs.readFileSync("apps/admin/src/studio/Studio.tsx", "utf8");
-  const canvas = fs.readFileSync("apps/admin/src/studio/SceneCanvas.tsx", "utf8");
+  const canvasVisualSample = fs.readFileSync("apps/admin/src/studio/sceneCanvasVisualSample.ts", "utf8");
   const domain = fs.readFileSync("apps/admin/src/studio/domain.ts", "utf8");
   const worker = fs.readFileSync("workers/studio-draft-validation.mjs", "utf8");
   const replay = fs.readFileSync("apps/admin/src/studio/sceneReplayFingerprint.ts", "utf8");
@@ -294,8 +294,8 @@ test("Phase 5 completion is wired through AutoBuild, Studio, cloud validation, r
   assert.match(legacy, /choosePrimaryVisualReference/);
   assert.match(studio, /compareVisualAppearance/);
   assert.match(studio, /visualSampleRequest/);
-  assert.match(canvas, /analyzeReferencePixels/);
-  assert.match(canvas, /Rendered-view comparison canvas/);
+  assert.match(canvasVisualSample, /analyzeReferencePixels/);
+  assert.match(canvasVisualSample, /Rendered-view comparison canvas/);
   assert.match(domain, /ReferenceColorRegion/);
   assert.match(worker, /referenceImageEvidenceSet/);
   assert.match(replay, /referenceEvidenceSeed/);
