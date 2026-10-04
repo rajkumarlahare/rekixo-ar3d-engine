@@ -408,3 +408,101 @@
     bottom: 6px;
   }
 }
+
+/* Demo Launch Phase 3 — cinematic intro + interruptible guided presentation. */
+.twin-tour-control {
+  position: absolute;
+  z-index: 28;
+  top: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 7px 6px 10px;
+  border: 1px solid #ffffff24;
+  border-radius: 999px;
+  background: #07121ee8;
+  box-shadow: 0 12px 36px #0008;
+  backdrop-filter: blur(16px);
+}
+
+.twin-tour-button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid #3f8d6c;
+  border-radius: 999px;
+  background: linear-gradient(145deg, #0f3528, #0a2119);
+  color: #8af4c5;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  cursor: pointer;
+}
+
+.twin-tour-button:hover,
+.twin-tour-button:focus-visible {
+  border-color: #69d8a8;
+  outline: none;
+  box-shadow: 0 0 0 3px #52dca222;
+}
+
+.twin-tour-status {
+  max-width: 220px;
+  overflow: hidden;
+  color: #afbecd;
+  font-size: 9px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.twin-shell[data-presentation-motion="active"] .twin-title-card,
+.twin-shell[data-presentation-motion="active"] .twin-info-panel,
+.twin-shell[data-presentation-motion="active"] .twin-feature-card,
+.twin-shell[data-presentation-motion="active"] .twin-floor-strip {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.twin-shell[data-presentation-tour="running"] .twin-tour-button {
+  border-color: #d8b15d;
+  background: #2b210d;
+  color: #ffe0a0;
+}
+
+@media (max-width: 760px) {
+  .twin-tour-control {
+    top: 72px;
+    left: 50%;
+    max-width: calc(100vw - 132px);
+    padding: 5px;
+    gap: 6px;
+  }
+  .twin-tour-button {
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 9px;
+  }
+  .twin-tour-status {
+    max-width: 104px;
+    font-size: 8px;
+  }
+}
+
+@media (max-height: 500px) {
+  .twin-tour-control {
+    top: 10px;
+    left: 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .twin-shell[data-presentation-motion="active"] .twin-title-card,
+  .twin-shell[data-presentation-motion="active"] .twin-info-panel,
+  .twin-shell[data-presentation-motion="active"] .twin-feature-card,
+  .twin-shell[data-presentation-motion="active"] .twin-floor-strip {
+    transition: none;
+  }
+}
