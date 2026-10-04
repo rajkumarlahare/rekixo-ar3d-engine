@@ -39,6 +39,10 @@ import {
   buildActionableReviewQueue,
   type ActionableReviewQueue,
 } from "./actionableReviewQueue";
+import {
+  buildDeepSourceIntelligence,
+  type DeepSourceIntelligenceReport,
+} from "./deepSourceIntelligence";
 
 export interface AutoBuildPipelineOptions
   extends LegacyAutoBuildPipelineOptions {
@@ -60,6 +64,7 @@ export interface AutoBuildPipelineResult
   sourcePlan: AutoBuildSourcePlan;
   phase2CadFusion: Phase2CadFusionSummary;
   structuredEvidence: AutoBuildStructuredEvidenceSummary;
+  sourceIntelligence: DeepSourceIntelligenceReport;
   certificationReport: AutoBuildExecutionReport;
   sceneFingerprint: NormalizedSceneFingerprint;
   geometryIntegrity: SceneGeometryIntegrityReport;
@@ -74,7 +79,9 @@ function unique(values: readonly string[]) {
  * One shared AutoBuild entry point for model-backed and CAD-only projects.
  * Routing is derived from one source plan. Phase 2 then fuses every safely
  * resolved CAD floor back into the model-backed scene before structured room
- * measurements are reconciled.
+ * measurements are reconciled. Perfection Phase 2 adds a non-destructive deep
+ * source-intelligence pass: every attached drawing/source is classified and
+ * authority conflicts stay reviewable instead of being guessed.
  */
 export async function runAutoBuildPipeline(
   project: Project,
@@ -118,12 +125,17 @@ export async function runAutoBuildPipeline(
     ...structured.summary,
     parseIssues: parsedRoomSheets.issues.length,
   };
+  const sourceIntelligence = await buildDeepSourceIntelligence(
+    files,
+    base.analysis,
+  );
   const issues = unique([
     ...base.issues,
     ...sourcePlan.planningIssues,
     ...phase2.issues,
     ...parsedRoomSheets.issues,
     ...structured.issues,
+    ...sourceIntelligence.issues,
   ]);
   const reportFiles = [...files, ...base.assets].filter(
     (asset, index, all) => all.findIndex((candidate) => candidate.id === asset.id) === index,
@@ -155,6 +167,7 @@ export async function runAutoBuildPipeline(
     sourcePlan,
     phase2CadFusion: phase2.summary,
     structuredEvidence,
+    sourceIntelligence,
     certificationReport,
     sceneFingerprint,
     geometryIntegrity,
@@ -183,12 +196,14 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   const structuredText = structured.rowCount
     ? ` · CSV/TSV ${structured.applied}/${structured.matched} matched room measurement${structured.matched === 1 ? "" : "s"} applied${structuredReview ? ` · ${structuredReview} structured evidence item${structuredReview === 1 ? "" : "s"} need review` : ""}`
     : "";
+  const intelligence = result.sourceIntelligence;
+  const intelligenceText = ` · source intelligence ${intelligence.counts.classifiedPdfPages} PDF page${intelligence.counts.classifiedPdfPages === 1 ? "" : "s"} classified · ${intelligence.counts.resolvedFloorAssignments} floor role${intelligence.counts.resolvedFloorAssignments === 1 ? "" : "s"} resolved · ${intelligence.counts.authorityReview} authority review · ${intelligence.counts.conflicts} conflict${intelligence.counts.conflicts === 1 ? "" : "s"}`;
   const certification = result.certificationReport;
   const certificationText = ` · certification ${certification.checkCoveragePercent}% (${certification.counts.blocked} blocked · ${certification.counts.needsReview} review)`;
   const integrityText = ` · geometry ${result.geometryIntegrity.counts.blocker} blocked · ${result.geometryIntegrity.counts.review} review`;
   const replayText = ` · scene ${result.sceneFingerprint.hash.slice(0, 12)}…`;
 
-  return `${base}${phase2Text}${structuralText}${structuredText}${certificationText}${integrityText}${replayText}.`;
+  return `${base}${phase2Text}${structuralText}${structuredText}${intelligenceText}${certificationText}${integrityText}${replayText}.`;
 }
 
 /**
@@ -214,5 +229,6 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
  * deriveSourceBackedSiteLandscape · siteElementsPrepared
  * applyPhase2CadFusion · phase2CadFusion · structural CAD evidence
  * applySourceBackedStructuralPrimitives · structuralPrepared
+ * buildDeepSourceIntelligence · sourceIntelligence · authorityMatrix
  * scene.publishModelId · scene.modelId
  */
