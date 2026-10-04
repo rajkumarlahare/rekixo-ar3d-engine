@@ -14,6 +14,36 @@ test("demo launch keeps the published source model as public visual authority", 
   assert.doesNotMatch(profiles, /jyoti-paradise|Jyoti Paradise/i);
 });
 
+test("missing approved model fails closed without invented customer geometry", () => {
+  const preview = read("apps/public/src/viewer/viewerPreview.ts");
+
+  assert.match(preview, /source model unavailable/i);
+  assert.match(preview, /sourceModelUnavailable\s*=\s*true/);
+  assert.doesNotMatch(preview, /new THREE\.(?:Mesh|BoxGeometry|SphereGeometry|CylinderGeometry|PlaneGeometry)/);
+  assert.doesNotMatch(preview, /MeshStandardMaterial|MeshPhysicalMaterial/);
+});
+
+test("published camera data is normalized before framing the source model", () => {
+  const camera = read("apps/public/src/viewer/viewerCamera.ts");
+
+  assert.match(camera, /normalizeCameraPreset/);
+  assert.match(camera, /Number\.isFinite/);
+  assert.match(camera, /distanceToSquared\(target\) < 0\.01/);
+  assert.match(camera, /MIN_PRESENTATION_FOV/);
+  assert.match(camera, /MAX_PRESENTATION_FOV/);
+  assert.match(camera, /THREE\.MathUtils\.clamp/);
+  assert.match(camera, /box\.isEmpty\(\)/);
+});
+
+test("generic material tuning preserves source texture/color authority", () => {
+  const realism = read("apps/public/src/viewer/realism.ts");
+
+  assert.match(realism, /tuneTexture\(material\.map/);
+  assert.doesNotMatch(realism, /material\.color\.(?:set|setHex|setStyle)/);
+  assert.doesNotMatch(realism, /material\.map\s*=/);
+  assert.doesNotMatch(realism, /root\.(?:scale|rotation|position)\./);
+});
+
 test("demo launch plan locks model-first scope and defers non-launch engine work", () => {
   const plan = read("docs/DEMO-LAUNCH-PLAN.md");
 
@@ -22,6 +52,7 @@ test("demo launch plan locks model-first scope and defers non-launch engine work
   assert.match(plan, /SKP \/ SKB.*material and texture recovery/);
   assert.match(plan, /DWG \/ PDF \/ brochure data.*verified floor, flat, room, dimension/);
   assert.match(plan, /rekixo-ar3d-platform.*is not modified/);
+  assert.match(plan, /Do not show invented customer geometry/);
   assert.match(plan, /Deferred until after the demo/);
   assert.match(plan, /CAD-only full building generation/);
   assert.match(plan, /SketchUp-like authoring features/);
