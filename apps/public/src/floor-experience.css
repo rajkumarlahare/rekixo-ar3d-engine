@@ -1,0 +1,171 @@
+/* Demo Launch Phase 4 — floor explorer polish.
+   The underlying viewer owns floor clipping/explode state. This layer makes
+   that state obvious and fast to navigate for a customer presentation. */
+.twin-floor-focus {
+  position: absolute;
+  z-index: 27;
+  left: 20px;
+  bottom: 92px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 250px;
+  padding: 10px 11px 10px 14px;
+  color: #f5fbf8;
+  background: #07121eee;
+  border: 1px solid #ffffff26;
+  border-radius: 14px;
+  box-shadow: 0 14px 40px #0009;
+  backdrop-filter: blur(16px);
+  pointer-events: auto;
+}
+
+.twin-floor-focus[hidden] { display: none; }
+
+.twin-floor-focus__copy {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 2px;
+}
+
+.twin-floor-focus__copy span {
+  color: #72f1b9;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .14em;
+}
+
+.twin-floor-focus__copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.twin-floor-focus__copy small {
+  color: #95a5b8;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.twin-floor-focus__controls {
+  display: flex;
+  gap: 5px;
+}
+
+.twin-floor-focus__controls button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #ffffff2f;
+  border-radius: 10px;
+  color: #f4f8f6;
+  background: #132333;
+  font: inherit;
+  font-size: 19px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.twin-floor-focus__controls button:hover,
+.twin-floor-focus__controls button:focus-visible {
+  border-color: #5fd7a3;
+  background: #17372d;
+  outline: none;
+}
+
+.twin-floor-focus__controls button:disabled {
+  opacity: .35;
+  cursor: default;
+}
+
+.twin-floor-focus__controls .twin-floor-focus__all {
+  width: auto;
+  min-width: 44px;
+  padding: 0 9px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.twin-stage[data-floor-explorer-active] .twin-floor-strip {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 590px);
+  padding: 6px;
+  border: 1px solid #ffffff24;
+  border-radius: 14px;
+  background: #07121ee8;
+  box-shadow: 0 12px 36px #0008;
+  backdrop-filter: blur(14px);
+}
+
+.twin-stage[data-floor-explorer-active] .twin-floor-strip button {
+  min-width: 46px;
+  min-height: 38px;
+  border-radius: 9px;
+  transition: transform .16s ease, border-color .16s ease, background .16s ease;
+}
+
+.twin-stage[data-floor-explorer-active] .twin-floor-strip button.active {
+  transform: translateY(-2px);
+  border-color: #72f1b9;
+  background: linear-gradient(145deg, #164434, #0c2b21);
+  box-shadow: 0 6px 18px #0007, inset 0 2px 0 #72f1b9;
+}
+
+.twin-stage[data-floor-focus="all"] .twin-floor-focus {
+  border-color: #5fae9138;
+}
+
+@media (max-width: 980px) {
+  .twin-stage[data-floor-explorer-active] .twin-floor-strip {
+    max-width: calc(100vw - 420px);
+  }
+}
+
+@media (max-width: 760px) {
+  .twin-floor-focus {
+    left: 10px;
+    right: 10px;
+    bottom: 132px;
+    min-width: 0;
+    padding: 8px 9px 8px 11px;
+  }
+
+  .twin-floor-focus__copy strong { font-size: 12px; }
+  .twin-floor-focus__copy small { font-size: 8px; }
+  .twin-floor-focus__controls button {
+    width: 34px;
+    height: 34px;
+  }
+
+  .twin-stage[data-floor-explorer-active] .twin-floor-strip {
+    left: 10px;
+    right: 10px;
+    bottom: 76px;
+    max-width: none;
+    transform: none;
+    overflow-x: auto;
+    justify-content: flex-start;
+  }
+
+  .twin-stage[data-floor-explorer-active] .twin-floor-strip button {
+    flex: 0 0 auto;
+    min-width: 44px;
+  }
+}
+
+@media (max-height: 500px) {
+  .twin-floor-focus {
+    top: 58px;
+    bottom: auto;
+    left: 10px;
+    max-width: 320px;
+  }
+
+  .twin-stage[data-floor-explorer-active] .twin-floor-strip {
+    bottom: 62px;
+  }
+}
