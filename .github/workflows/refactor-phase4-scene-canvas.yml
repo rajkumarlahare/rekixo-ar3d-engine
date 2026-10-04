@@ -1,0 +1,30 @@
+name: Refactor Phase 4 SceneCanvas
+
+on:
+  push:
+    branches:
+      - phase4-multiselect-nudge-polygon-ux
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase4-multiselect-nudge-polygon-ux
+          fetch-depth: 0
+      - name: Extract editor UX helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .github/refactor_scene_canvas_phase4.py || exit 0
+          python .github/refactor_scene_canvas_phase4.py
+          rm -f .github/refactor_scene_canvas_phase4.py .github/workflows/refactor-phase4-scene-canvas.yml
+          git config user.name "rekixo-ci"
+          git config user.email "ai@rekixo.com"
+          git add -A
+          git commit -m "refactor: keep SceneCanvas within maintainability budget"
+          git push origin HEAD:phase4-multiselect-nudge-polygon-ux
