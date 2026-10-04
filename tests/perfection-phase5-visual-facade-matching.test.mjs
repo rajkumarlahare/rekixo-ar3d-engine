@@ -134,3 +134,90 @@ test("Phase 5 AutoBuild result carries the visual facade plan without making it 
   assert.match(pipeline, /visualFacadeMatch = buildVisualFacadeMatchPlan/);
   assert.match(pipeline, /Phase 5 visual/);
 });
+
+const review = await import(asUrl(
+  compile("apps/admin/src/studio/visualFacadeReview.ts").replace(
+    '"./visualFacadeMatching"',
+    JSON.stringify(asUrl(compile("apps/admin/src/studio/visualFacadeMatching.ts"))),
+  ),
+));
+function reviewProject() {
+  const project = projectWithEvidence();
+  project.assets.push("model-a", "other-model");
+  project.scene.modelId = "model-a";
+  project.scene.rooms = [{ id: "room-a", width: 5, depth: 4 }];
+  project.scene.walls = [{ id: "wall-a", start: { x: 0, z: 0 }, end: { x: 5, z: 0 } }];
+  project.scene.materialOverrides = [
+    { materialName: "Facade Paint", roughness: 0.7, opacity: 0.8, baseColor: "#ffffff" },
+    { materialName: "Other", metalness: 0.9 },
+  ];
+  return project;
+}
+function materialAction(project, materialName = "Facade Paint") {
+  return { key: review.buildVisualFacadeReview(project, audits).key, kind: "material", materialName };
+}
+
+test("review applies only the reviewed color, preserves finishes and geometry, and is idempotent", () => {
+  const project = reviewProject();
+  const before = structuredClone(project);
+  const next = review.applyVisualFacadeReview(project, audits, ["Facade Paint"], materialAction(project));
+  assert.notEqual(next, project);
+  assert.deepEqual(project, before);
+  assert.equal(next.scene.materialOverrides[0].baseColor, "#b7d2dc");
+  assert.equal(next.scene.materialOverrides[0].roughness, 0.7);
+  assert.equal(next.scene.materialOverrides[0].opacity, 0.8);
+  assert.equal(next.scene.materialOverrides[1], project.scene.materialOverrides[1]);
+  for (const field of Object.keys(project.scene).filter((key) => key !== "materialOverrides"))
+    assert.equal(next.scene[field], project.scene[field]);
+  assert.equal(review.applyVisualFacadeReview(next, audits, ["Facade Paint"], materialAction(next)), next);
+});
+
+test("review rejects stale reference, changed model, missing assets and unloaded or unknown materials", () => {
+  const original = reviewProject();
+  const action = materialAction(original);
+  const variants = [
+    (p) => { p.scene.referenceImageEvidence.renderedPalette = ["#010203"]; },
+    (p) => { p.scene.modelId = "other-model"; },
+    (p) => { p.assets = p.assets.filter((id) => id !== "visual-a"); },
+    (p) => { p.assets = p.assets.filter((id) => id !== "model-a"); },
+  ];
+  for (const mutate of variants) {
+    const changed = structuredClone(original);
+    mutate(changed);
+    assert.equal(review.applyVisualFacadeReview(changed, audits, ["Facade Paint"], action), changed);
+  }
+  assert.equal(review.applyVisualFacadeReview(original, audits, [], action), original);
+  assert.equal(review.applyVisualFacadeReview(original, audits, ["Mystery_17"], materialAction(original, "Mystery_17")), original);
+});
+
+test("review never takes material authority from another attached model", () => {
+  const project = reviewProject();
+  const unrelated = [{ ...audits[0], assetId: "other-model" }];
+  assert.deepEqual(review.buildVisualFacadeReview(project, unrelated).plan.materials, []);
+});
+
+test("review respects override capacity without blocking edits to existing overrides", () => {
+  const project = reviewProject();
+  project.scene.materialOverrides = Array.from({ length: 250 }, (_, i) => ({ materialName: `material-${i}` }));
+  assert.equal(review.applyVisualFacadeReview(project, audits, ["Facade Paint"], materialAction(project)), project);
+  project.scene.materialOverrides[0].materialName = "Facade Paint";
+  const next = review.applyVisualFacadeReview(project, audits, ["Facade Paint"], materialAction(project));
+  assert.notEqual(next, project);
+  assert.equal(next.scene.materialOverrides.length, 250);
+});
+
+test("lighting review changes presentation only and each result supports one-step undo and redo", async () => {
+  const { SnapshotHistory } = await import(asUrl(compile("packages/engine-core/src/editor/history.ts")));
+  const project = reviewProject();
+  const action = { key: review.buildVisualFacadeReview(project, audits).key, kind: "appearance" };
+  const next = review.applyVisualFacadeReview(project, audits, [], action);
+  assert.equal(next.scene.appearance.sunIntensity, 2.5);
+  for (const field of Object.keys(project.scene)) assert.equal(next.scene[field], project.scene[field]);
+  assert.equal(review.applyVisualFacadeReview(next, audits, [], action), next);
+  const history = new SnapshotHistory(40);
+  history.record(project);
+  assert.equal(history.undoDepth, 1);
+  const restored = history.undo(next);
+  assert.deepEqual(restored, project);
+  assert.deepEqual(history.redo(restored), next);
+});
