@@ -508,9 +508,9 @@ function setWallEndpointPosition(
 function transformCommit(session: DragSession): TransformCommit | undefined {
   if (session.resizeCorner && session.resizePreview) {
     const { centreWorld, width, depth } = session.resizePreview;
-    const value = session.entity.value;
     if (session.entity.kind !== "room" && session.entity.kind !== "site")
       return undefined;
+    const value = session.entity.value;
     if (
       Math.abs(centreWorld[0] - value.x) <= 1e-6 &&
       Math.abs(centreWorld[1] - value.z) <= 1e-6 &&
