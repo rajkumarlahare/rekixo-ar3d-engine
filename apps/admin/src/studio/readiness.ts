@@ -8,6 +8,14 @@ import type {
   CloudReleaseSummary,
   CloudSession,
 } from "./cloud";
+import {
+  validateWholeSceneGeometry,
+  type SceneGeometryIntegrityReport,
+} from "./sceneGeometryIntegrity";
+import {
+  buildActionableReviewQueue,
+  type ActionableReviewQueue,
+} from "./actionableReviewQueue";
 
 export type ReadinessSeverity = "ready" | "warning" | "blocker";
 
@@ -31,6 +39,8 @@ export interface StudioReadiness {
   modelAsset?: Asset;
   sourceModelAsset?: Asset;
   activeRelease?: CloudReleaseSummary;
+  geometryIntegrity: SceneGeometryIntegrityReport;
+  reviewQueue: ActionableReviewQueue;
 }
 
 function byId(files: Asset[]) {
@@ -78,6 +88,62 @@ export function buildStudioReadiness(
         error instanceof Error
           ? error.message
           : "The project package is not valid.",
+    });
+  }
+
+  const geometryIntegrity = validateWholeSceneGeometry(project);
+  const reviewQueue = buildActionableReviewQueue(
+    project,
+    undefined,
+    geometryIntegrity,
+  );
+  if (geometryIntegrity.counts.blocker > 0) {
+    items.push({
+      id: "scene-integrity",
+      severity: "blocker",
+      title: `${geometryIntegrity.counts.blocker} geometry blocker${geometryIntegrity.counts.blocker === 1 ? "" : "s"}`,
+      detail:
+        "Whole-scene integrity found contradictory geometry. Publication stays fail-closed until these items are corrected.",
+    });
+  } else if (geometryIntegrity.counts.review > 0) {
+    items.push({
+      id: "scene-integrity",
+      severity: "warning",
+      title: `${geometryIntegrity.counts.review} geometry review item${geometryIntegrity.counts.review === 1 ? "" : "s"}`,
+      detail:
+        "The scene is structurally valid enough to continue, but these cross-entity geometry relationships still need operator review.",
+    });
+  } else {
+    items.push({
+      id: "scene-integrity",
+      severity: "ready",
+      title: "Whole-scene geometry integrity passed",
+      detail: `Checked ${geometryIntegrity.checked.floors} floor(s), ${geometryIntegrity.checked.rooms} room(s), ${geometryIntegrity.checked.walls} wall(s) and ${geometryIntegrity.checked.openings} opening(s).`,
+    });
+  }
+
+  if (reviewQueue.blockers.length > 0) {
+    items.push({
+      id: "actionable-review-queue",
+      severity: "blocker",
+      title: `${reviewQueue.blockers.length} unresolved publish blocker${reviewQueue.blockers.length === 1 ? "" : "s"}`,
+      detail:
+        "Open the actionable review queue below and resolve every blocker before creating an immutable release.",
+    });
+  } else if (reviewQueue.review.length > 0) {
+    items.push({
+      id: "actionable-review-queue",
+      severity: "warning",
+      title: `${reviewQueue.review.length} explicit review item${reviewQueue.review.length === 1 ? "" : "s"}`,
+      detail:
+        "Draft evidence remains visible for correction; it is not silently promoted to human-reviewed truth.",
+    });
+  } else {
+    items.push({
+      id: "actionable-review-queue",
+      severity: "ready",
+      title: "Actionable review queue clear",
+      detail: "No unresolved scene review item is currently reported.",
     });
   }
 
@@ -207,7 +273,7 @@ export function buildStudioReadiness(
         : "No source-backed walkthrough openings",
       detail: openings.length
         ? `${openings.length - reviewedOpenings.length} opening draft${openings.length - reviewedOpenings.length === 1 ? "" : "s"} remain unresolved; room-to-room walkthrough only uses reviewed shared doors.`
-        : "The current Jyoti/source model did not yield a trustworthy reviewed shared door. Walkthrough connectivity stays disabled rather than inventing architectural openings. Studio can still jump between reviewed rooms in the same unit for demo navigation; this does not claim a physical doorway.",
+        : "The current source model did not yield a trustworthy reviewed shared door. Walkthrough connectivity stays disabled rather than inventing architectural openings. Studio can still jump between reviewed rooms in the same unit for demo navigation; this does not claim a physical doorway.",
     });
   } else if (reviewedConnections.length > 0) {
     items.push({
@@ -296,6 +362,8 @@ export function buildStudioReadiness(
     modelAsset,
     sourceModelAsset,
     activeRelease,
+    geometryIntegrity,
+    reviewQueue,
   };
 }
 
