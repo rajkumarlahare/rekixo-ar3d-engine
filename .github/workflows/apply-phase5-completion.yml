@@ -4,7 +4,7 @@ on:
   push:
     branches: [phase5-complete-visual-facade]
     paths:
-      - scripts/apply-phase5-completion.mjs
+      - scripts/apply-phase5-completion-v2.mjs
       - .github/workflows/apply-phase5-completion.yml
 
 permissions:
@@ -26,7 +26,7 @@ jobs:
           node-version: 22
 
       - name: Apply Phase 5 completion patch
-        run: node scripts/apply-phase5-completion.mjs
+        run: node scripts/apply-phase5-completion-v2.mjs
 
       - name: Commit generated wiring
         shell: bash
