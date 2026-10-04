@@ -4,7 +4,7 @@ on:
   push:
     branches: [phase5-complete-visual-facade]
     paths:
-      - scripts/apply-phase5-completion-v2.mjs
+      - scripts/phase5-ci-fixes.mjs
       - .github/workflows/apply-phase5-completion.yml
 
 permissions:
@@ -25,10 +25,10 @@ jobs:
         with:
           node-version: 22
 
-      - name: Apply Phase 5 completion patch
-        run: node scripts/apply-phase5-completion-v2.mjs
+      - name: Apply Phase 5 CI fixes
+        run: node scripts/phase5-ci-fixes.mjs
 
-      - name: Commit generated wiring
+      - name: Commit generated fixes
         shell: bash
         run: |
           set -euo pipefail
@@ -38,15 +38,6 @@ jobs:
           fi
           git config user.name "rekixo-ci"
           git config user.email "ai@rekixo.com"
-          git add apps/admin/src/studio/domain.ts \
-            workers/studio-draft-validation.mjs \
-            apps/admin/src/studio/autoBuildPipelineLegacy.ts \
-            apps/admin/src/studio/autoBuildPipeline.ts \
-            apps/admin/src/studio/SceneCanvas.tsx \
-            apps/admin/src/studio/Studio.tsx \
-            apps/admin/src/studio/sceneReplayFingerprint.ts \
-            apps/admin/src/studio/visualFacadeMatching.ts \
-            e2e/golden-source-pack.spec.ts \
-            docs/PERFECTION-ROADMAP-NEXT.md
-          git commit -m "feat: complete Phase 5 visual facade workflow"
+          git add apps/admin/src/studio/cadOnlyAutoBuildPipeline.ts
+          git commit -m "fix: keep CAD-only visual summary compatible"
           git push origin HEAD:phase5-complete-visual-facade
