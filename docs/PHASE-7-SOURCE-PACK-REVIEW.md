@@ -33,6 +33,8 @@ A new review draft also requires every verified original to have a suggestion pr
 
 Capabilities are copied into the draft from the trusted automatic classification result. `save-review` permits operator role and note decisions, but it rejects any client payload that changes those stored capabilities. This prevents a client from inventing `geometry` capability for a dimensional/reference source and bypassing the geometry-authority boundary.
 
+The Admin review UI treats authority, supporting-role and note edits as unsaved until `save-review` succeeds. While local edits are dirty, sealing and automatic-analysis refresh are blocked so the operator cannot accidentally seal the previous server-side review while the screen is showing newer unsaved decisions.
+
 ## API
 
 `GET /3Dprojects/api/cloud/projects/:slug/source-pack-review`

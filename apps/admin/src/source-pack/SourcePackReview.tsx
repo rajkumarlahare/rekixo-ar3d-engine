@@ -101,6 +101,7 @@ export default function SourcePackReview() {
   const slug = selectedProjectSlug();
   const [data, setData] = useState<ReviewPayload>();
   const [files, setFiles] = useState<ReviewFile[]>([]);
+  const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -116,6 +117,7 @@ export default function SourcePackReview() {
     );
     setData(payload);
     setFiles(payload.latestPack?.files ?? []);
+    setDirty(false);
   }
 
   useEffect(() => {
@@ -139,6 +141,7 @@ export default function SourcePackReview() {
       );
       setData(payload);
       setFiles(payload.latestPack?.files ?? []);
+      setDirty(false);
       return payload;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Source Pack operation failed.");
@@ -184,6 +187,7 @@ export default function SourcePackReview() {
             : file.roles.filter((role) => role !== "geometry-authority"),
       })),
     );
+    setDirty(true);
   }
 
   function toggleRole(sourceFileId: string, role: string) {
@@ -196,12 +200,14 @@ export default function SourcePackReview() {
         return { ...file, roles };
       }),
     );
+    setDirty(true);
   }
 
   function updateNotes(sourceFileId: string, notes: string) {
     setFiles((current) =>
       current.map((file) => (file.sourceFileId === sourceFileId ? { ...file, notes } : file)),
     );
+    setDirty(true);
   }
 
   async function saveReview() {
@@ -226,6 +232,10 @@ export default function SourcePackReview() {
   async function sealPack() {
     const pack = data?.latestPack;
     if (!pack || pack.status !== "draft") return;
+    if (dirty) {
+      setError("Unsaved review changes hain. Source Pack seal karne se pehle Save Review karein.");
+      return;
+    }
     if (!window.confirm("Source Pack seal hone ke baad immutable ho jayega. Continue?")) return;
     const result = await post(
       { action: "seal", packId: pack.id, confirm: "SEAL SOURCE PACK" },
@@ -256,7 +266,12 @@ export default function SourcePackReview() {
           <small>REKIXO AR3D ENGINE</small>
           <strong>Source Pack Review</strong>
         </div>
-        <button type="button" onClick={() => void refreshClassification()} disabled={Boolean(busy) || !slug}>
+        <button
+          type="button"
+          onClick={() => void refreshClassification()}
+          disabled={Boolean(busy) || !slug || dirty}
+          title={dirty ? "Save review changes before refreshing automatic analysis" : undefined}
+        >
           {busy === "classify" ? "Analyzing…" : "Refresh automatic analysis"}
         </button>
       </header>
@@ -294,7 +309,7 @@ export default function SourcePackReview() {
         <article>
           <span>VERIFIED FILES</span>
           <strong>{pack?.readiness.verifiedSourceCount ?? data?.suggestions.length ?? 0}</strong>
-          <small>{pack?.readiness.ready ? "Review complete" : "Review / authority selection pending"}</small>
+          <small>{dirty ? "Unsaved review changes" : pack?.readiness.ready ? "Review complete" : "Review / authority selection pending"}</small>
         </article>
       </section>
 
@@ -394,20 +409,34 @@ export default function SourcePackReview() {
 
           <section className="source-review__actions">
             <div>
-              <strong>{authorityId ? "Geometry authority selected" : "Select one geometry authority"}</strong>
+              <strong>
+                {dirty
+                  ? "Unsaved review changes"
+                  : authorityId
+                    ? "Geometry authority selected"
+                    : "Select one geometry authority"}
+              </strong>
               <span>
-                Save keeps draft editable. Seal writes a SHA-256 manifest, approves the operator decision and makes this Source Pack immutable.
+                {dirty
+                  ? "Save Review required hai. Unsaved authority, role ya note changes ko seal nahi kiya jayega."
+                  : "Save keeps draft editable. Seal writes a SHA-256 manifest, approves the operator decision and makes this Source Pack immutable."}
               </span>
             </div>
-            <button type="button" onClick={() => void saveReview()} disabled={Boolean(busy) || !authorityId}>
+            <button type="button" onClick={() => void saveReview()} disabled={Boolean(busy) || !authorityId || !dirty}>
               {busy === "save" ? "Saving…" : "Save Review"}
             </button>
             <button
               className="source-review__seal"
               type="button"
               onClick={() => void sealPack()}
-              disabled={Boolean(busy) || !pack.readiness.ready}
-              title={pack.readiness.ready ? "Seal immutable Source Pack" : "Save a complete review before sealing"}
+              disabled={Boolean(busy) || dirty || !pack.readiness.ready}
+              title={
+                dirty
+                  ? "Save review changes before sealing"
+                  : pack.readiness.ready
+                    ? "Seal immutable Source Pack"
+                    : "Save a complete review before sealing"
+              }
             >
               {busy === "seal" ? "Sealing…" : "Seal Source Pack"}
             </button>
