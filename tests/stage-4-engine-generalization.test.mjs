@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { validProjectSlug } from "../shared/project-slug-policy.js";
 
 const read = (file) => fs.readFileSync(file, "utf8");
+const PRODUCTION_PROTECTION_WORKER = "workers/project-deletion.mjs";
 
 function walk(dir) {
   const out = [];
@@ -32,6 +33,9 @@ test("generic runtime has no first-project or Jyoti identity fallback", () => {
       return false;
     if (/\/dist\/assets\/studio-source-profiles-[^/]+\.js$/.test(normalized))
       return false;
+    // The destructive deletion worker owns a narrow production protection lock.
+    // Dedicated regression tests prove that it is a guard, not a tenant fallback.
+    if (normalized === PRODUCTION_PROTECTION_WORKER) return false;
     return true;
   });
 
