@@ -1,6 +1,8 @@
 import { projectAssetPrefix } from "./storage-boundary.mjs";
 import { validProjectSlug } from "../shared/project-slug-policy.js";
 
+const LOCKED_PRODUCTION_PROJECT_SLUGS = new Set(["jyoti-paradise"]);
+
 const SECURITY_HEADERS = {
   "Referrer-Policy": "same-origin",
   "X-Content-Type-Options": "nosniff",
@@ -28,6 +30,30 @@ function sameOrigin(request) {
 
 function validProjectId(value) {
   return typeof value === "string" && /^[A-Za-z0-9_-]{8,120}$/.test(value);
+}
+
+function lockedProductionProjects(projects) {
+  return projects.filter((project) =>
+    LOCKED_PRODUCTION_PROJECT_SLUGS.has(String(project?.slug || "")),
+  );
+}
+
+function lockedDeletionResponse(projects) {
+  const slugs = lockedProductionProjects(projects).map((project) => project.slug);
+  return json(
+    {
+      error:
+        "Permanent bulk deletion is blocked because the request contains a locked production project.",
+      lockedProjects: slugs,
+      retryable: false,
+    },
+    { status: 423 },
+  );
+}
+
+function assertProjectDeletionAllowed(slug) {
+  if (LOCKED_PRODUCTION_PROJECT_SLUGS.has(String(slug || "")))
+    throw Error(`Locked production project cannot be deleted: ${slug}`);
 }
 
 async function deletionJobsSchemaReady(env) {
@@ -105,6 +131,7 @@ export async function deletionStatus(request, env) {
 }
 
 async function deleteProjectOwnedObjects(env, slug, onDeleted) {
+  assertProjectDeletionAllowed(slug);
   const prefix = projectAssetPrefix(slug);
   let cursor;
   let deleted = 0;
@@ -128,6 +155,7 @@ async function deleteProjectOwnedObjects(env, slug, onDeleted) {
 }
 
 async function deleteProjectRecords(env, project) {
+  assertProjectDeletionAllowed(project.slug);
   await env.DB.batch([
     env.DB.prepare(
       "DELETE FROM engine_admin_audit WHERE project_id=?",
@@ -223,6 +251,9 @@ async function setDeletionJobState(
 
 async function runDeletionJob(env, actor, row) {
   const projects = deletionJobProjects(row);
+  if (lockedProductionProjects(projects).length)
+    return lockedDeletionResponse(projects);
+
   let deletedR2Objects = Number(row.deleted_r2_objects || 0);
   let deletedProjects = Number(row.deleted_projects || 0);
   let status = String(row.status || "running");
@@ -479,6 +510,10 @@ export async function hardDeleteAllProjects(request, env, actor) {
       ORDER BY created_at ASC,slug ASC`,
   ).all();
   const projectRows = rows.results || [];
+
+  if (lockedProductionProjects(projectRows).length)
+    return lockedDeletionResponse(projectRows);
+
   const expectedProjectCount = Number(body.expectedProjectCount);
   if (
     !Number.isInteger(expectedProjectCount) ||
