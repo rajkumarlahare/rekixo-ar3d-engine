@@ -85,6 +85,22 @@ BEGIN
 END;
 
 -- A selected anchor must belong to the same Geo draft and immutable Building source.
+CREATE TRIGGER IF NOT EXISTS trg_geo_experience_drafts_3d_anchor_owner_insert
+BEFORE INSERT ON geo_experience_drafts_3d
+WHEN NEW.model_anchor_id IS NOT NULL
+ AND NOT EXISTS (
+   SELECT 1
+     FROM geo_model_anchors_3d a
+    WHERE a.id=NEW.model_anchor_id
+      AND a.experience_id=NEW.experience_id
+      AND a.project_id=NEW.project_id
+      AND a.source_building_release_id=NEW.source_building_release_id
+      AND a.source_building_release_version=NEW.source_building_release_version
+ )
+BEGIN
+  SELECT RAISE(ABORT, 'Geo draft model anchor ownership mismatch');
+END;
+
 CREATE TRIGGER IF NOT EXISTS trg_geo_experience_drafts_3d_anchor_owner_update
 BEFORE UPDATE OF model_anchor_id,experience_id,project_id,source_building_release_id,source_building_release_version
 ON geo_experience_drafts_3d
@@ -276,6 +292,12 @@ OR (
 )
 BEGIN
   SELECT RAISE(ABORT, 'Geo calibration report ownership/revision mismatch');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_geo_calibration_reports_3d_immutable
+BEFORE UPDATE ON geo_calibration_reports_3d
+BEGIN
+  SELECT RAISE(ABORT, 'Geo calibration report is immutable');
 END;
 
 -- Site/parcel boundary authoring stays WGS84 and revision-scoped. JSON is used for
