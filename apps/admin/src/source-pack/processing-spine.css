@@ -1,0 +1,163 @@
+.processing-spine {
+  width: min(1180px, calc(100% - 40px));
+  margin: 18px auto 0;
+  padding: 20px;
+  box-sizing: border-box;
+  border: 1px solid rgba(71, 119, 255, 0.24);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(20, 38, 78, 0.42), rgba(9, 13, 20, 0.96));
+}
+
+.processing-spine__head,
+.processing-spine__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.processing-spine__head > div:first-child,
+.processing-spine__actions > div {
+  display: grid;
+  gap: 6px;
+}
+
+.processing-spine p {
+  margin: 0;
+  color: #7f91b2;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.processing-spine h2 {
+  margin: 0;
+}
+
+.processing-spine__head span,
+.processing-spine__actions span,
+.processing-spine article small {
+  color: #96a5bc;
+  line-height: 1.45;
+}
+
+.processing-spine__status {
+  min-width: 150px;
+  display: grid;
+  gap: 4px;
+  text-align: right;
+}
+
+.processing-spine__status small {
+  color: #79a0ff;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+}
+
+.processing-spine--succeeded .processing-spine__status small {
+  color: #64d69a;
+}
+
+.processing-spine--failed .processing-spine__status small,
+.processing-spine--cancelled .processing-spine__status small {
+  color: #ff8d8d;
+}
+
+.processing-spine__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.processing-spine article {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(7, 10, 16, 0.66);
+}
+
+.processing-spine article > span {
+  color: #7f8da4;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+}
+
+.processing-spine article strong,
+.processing-spine article small {
+  overflow-wrap: anywhere;
+}
+
+.processing-spine__actions {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.processing-spine button {
+  border: 1px solid #1c5cff;
+  border-radius: 10px;
+  background: #1c5cff;
+  color: #fff;
+  padding: 11px 16px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.processing-spine button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.processing-spine__alert {
+  margin-top: 14px;
+  padding: 11px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.processing-spine__alert--error {
+  background: rgba(139, 37, 37, 0.18);
+  border-color: rgba(255, 96, 96, 0.28);
+}
+
+.processing-spine__alert--ok {
+  background: rgba(26, 119, 75, 0.16);
+  border-color: rgba(68, 214, 139, 0.25);
+}
+
+.processing-spine--pending {
+  display: grid;
+  gap: 8px;
+  border-color: rgba(255, 184, 77, 0.24);
+}
+
+@media (max-width: 880px) {
+  .processing-spine {
+    width: min(100% - 24px, 1180px);
+  }
+
+  .processing-spine__head,
+  .processing-spine__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .processing-spine__status {
+    text-align: left;
+  }
+
+  .processing-spine__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .processing-spine button {
+    width: 100%;
+  }
+}
