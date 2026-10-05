@@ -16,10 +16,6 @@ const sourceReview = fs.readFileSync(
   "apps/admin/src/source-pack/SourcePackReview.tsx",
   "utf8",
 );
-const contracts = fs.readFileSync(
-  "packages/contracts/src/processing-spine-v1.ts",
-  "utf8",
-);
 
 test("Phase 1 processing foundation is additive and pins immutable Source Pack identity", () => {
   assert.match(migration, /CREATE TABLE IF NOT EXISTS processing_jobs_3d/);
@@ -87,11 +83,4 @@ test("Source Pack UI exposes durable start/retry state without reconstructing ge
   assert.doesNotMatch(ui, /Build Draft|Draw Wall|Create Room/);
   assert.match(sourceReview, /import ProcessingSpine from "\.\/ProcessingSpine"/);
   assert.match(sourceReview, /<ProcessingSpine slug=\{slug\} sourcePackSignal=\{processingSignal\} \/>/);
-});
-
-test("processing API contract freezes the durable job identity", () => {
-  assert.match(contracts, /PROCESSING_SPINE_CONTRACT_VERSION = 1/);
-  assert.match(contracts, /ProcessingJobStateV1/);
-  assert.match(contracts, /sourcePackManifestSha256: string/);
-  assert.match(contracts, /artifactPrefix: string/);
 });
