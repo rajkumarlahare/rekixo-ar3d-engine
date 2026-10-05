@@ -90,6 +90,8 @@ const requiredObjects = new Set([
   "source_pack_files_3d",
   "source_upload_sessions_3d",
   "source_upload_parts_3d",
+  "processing_jobs_3d",
+  "processing_artifacts_3d",
   "engine_deletion_jobs_3d",
   "trg_projects_3d_block_insert_during_delete",
 ]);
@@ -114,6 +116,8 @@ const objectRows = executeJson(
         'source_pack_files_3d',
         'source_upload_sessions_3d',
         'source_upload_parts_3d',
+        'processing_jobs_3d',
+        'processing_artifacts_3d',
         'engine_deletion_jobs_3d',
         'trg_projects_3d_block_insert_during_delete'
       )
@@ -128,15 +132,21 @@ const projectCountRows = executeJson("SELECT COUNT(*) AS total FROM projects_3d"
 if (Number(projectCountRows[0]?.total ?? -1) !== 0)
   throw new Error("Fresh migration chain must start with an empty project registry.");
 
-console.log("Verifying sealed Source Pack V2 rows can be removed only by the resumable hard-delete lifecycle...");
+console.log("Verifying sealed Source Pack V2 and successful processing rows can be removed only by the resumable hard-delete lifecycle...");
 const fixtureProjectId = "project_ci_source_delete";
 const fixtureProjectSlug = "ci-source-delete";
 const fixtureSourceId = "source_ci_geometry";
 const fixturePackId = "source_pack_ci_v1";
 const fixtureSessionId = "source_upload_ci_v1";
+const fixtureProcessingJobId = "processing_job_ci_v1";
+const fixtureProcessingArtifactId = "processing_artifact_ci_v1";
 const fixtureJobId = "deletion_job_ci_source_v2";
 const fixtureSha256 = "a".repeat(64);
 const fixtureManifestSha256 = "f".repeat(64);
+const fixtureArtifactSha256 = "b".repeat(64);
+const fixtureOutputManifestSha256 = "c".repeat(64);
+const fixtureArtifactPrefix =
+  `projects/${fixtureProjectSlug}/processing/${fixturePackId}/canonical-building-v1/attempt-1/`;
 const fixtureSnapshot = JSON.stringify([
   {
     id: fixtureProjectId,
@@ -191,6 +201,39 @@ executeJson(
    VALUES ('${fixtureSessionId}',1,'ci-etag',1024)`,
 );
 executeJson(
+  `INSERT INTO processing_jobs_3d
+    (id,project_id,source_pack_id,source_pack_version,source_pack_manifest_sha256,
+     processor_version,attempt,state,artifact_prefix,requested_by,requested_at)
+   VALUES
+    ('${fixtureProcessingJobId}','${fixtureProjectId}','${fixturePackId}',1,
+     '${fixtureManifestSha256}','canonical-building-v1',1,'queued',
+     '${fixtureArtifactPrefix}','ci@rekixo.com',datetime('now'))`,
+);
+executeJson(
+  `UPDATE processing_jobs_3d
+      SET state='running',started_at=datetime('now'),heartbeat_at=datetime('now'),updated_at=datetime('now')
+    WHERE id='${fixtureProcessingJobId}'`,
+);
+executeJson(
+  `INSERT INTO processing_artifacts_3d
+    (id,processing_job_id,project_id,kind,logical_id,state,r2_key,mime_type)
+   VALUES
+    ('${fixtureProcessingArtifactId}','${fixtureProcessingJobId}','${fixtureProjectId}',
+     'canonical-model','building','staged','${fixtureArtifactPrefix}building.glb','model/gltf-binary')`,
+);
+executeJson(
+  `UPDATE processing_artifacts_3d
+      SET state='ready',byte_size=512,sha256='${fixtureArtifactSha256}',updated_at=datetime('now')
+    WHERE id='${fixtureProcessingArtifactId}'`,
+);
+executeJson(
+  `UPDATE processing_jobs_3d
+      SET state='succeeded',finished_at=datetime('now'),
+          output_manifest_json='{}',output_manifest_sha256='${fixtureOutputManifestSha256}',
+          updated_at=datetime('now')
+    WHERE id='${fixtureProcessingJobId}'`,
+);
+executeJson(
   `UPDATE projects_3d
       SET status='archived',updated_at=datetime('now')
     WHERE id='${fixtureProjectId}'`,
@@ -213,10 +256,12 @@ const cascadeRows = executeJson(
      (SELECT COUNT(*) FROM source_packs_3d WHERE project_id='${fixtureProjectId}') +
      (SELECT COUNT(*) FROM source_pack_files_3d WHERE project_id='${fixtureProjectId}') +
      (SELECT COUNT(*) FROM source_upload_sessions_3d WHERE project_id='${fixtureProjectId}') +
-     (SELECT COUNT(*) FROM source_upload_parts_3d WHERE session_id='${fixtureSessionId}') AS total`,
+     (SELECT COUNT(*) FROM source_upload_parts_3d WHERE session_id='${fixtureSessionId}') +
+     (SELECT COUNT(*) FROM processing_jobs_3d WHERE project_id='${fixtureProjectId}') +
+     (SELECT COUNT(*) FROM processing_artifacts_3d WHERE project_id='${fixtureProjectId}') AS total`,
 );
 if (Number(cascadeRows[0]?.total ?? -1) !== 0)
-  throw new Error("Sealed Source Pack V2 project cascade left project-owned rows behind.");
+  throw new Error("Sealed Source Pack V2 / processing project cascade left project-owned rows behind.");
 executeJson(`DELETE FROM engine_deletion_jobs_3d WHERE id='${fixtureJobId}'`);
 
 const projectOwnedCounts = executeJson(
@@ -247,6 +292,8 @@ const projectOwnedCounts = executeJson(
      (SELECT COUNT(*) FROM source_pack_files_3d) +
      (SELECT COUNT(*) FROM source_upload_sessions_3d) +
      (SELECT COUNT(*) FROM source_upload_parts_3d) +
+     (SELECT COUNT(*) FROM processing_jobs_3d) +
+     (SELECT COUNT(*) FROM processing_artifacts_3d) +
      (SELECT COUNT(*) FROM engine_deletion_jobs_3d) AS total`,
 );
 if (Number(projectOwnedCounts[0]?.total ?? -1) !== 0)
@@ -265,5 +312,5 @@ if (applied !== migrationFiles.length)
   );
 
 console.log(
-  `Fresh D1 migration chain verified: ${applied} migrations, required tables/triggers present, sealed source-pack hard delete verified, project state empty.`,
+  `Fresh D1 migration chain verified: ${applied} migrations, required tables/triggers present, sealed source-pack + processing hard delete verified, project state empty.`,
 );
