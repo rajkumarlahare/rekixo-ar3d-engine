@@ -1,12 +1,18 @@
 import { engineAdminReadAccess } from "./admin-cloud.mjs";
 import { activeDeletionJob } from "./project-deletion.mjs";
 import { validProjectSlug } from "../shared/project-slug-policy.js";
+import {
+  SOURCE_UPLOAD_PART_SIZE,
+  SOURCE_UPLOAD_MAX_BYTES,
+  validSourceIdentity as validIdentity,
+  validSourceSha256 as validSha256,
+  sourceFileKey,
+  sourcePartPlan,
+  expectedSourcePartSize,
+} from "./source-upload-policy.mjs";
 
 const BASE_PATH = "/3Dprojects";
 const SOURCE_ROUTE_PREFIX = `${BASE_PATH}/api/cloud/projects/`;
-export const SOURCE_UPLOAD_PART_SIZE = 16 * 1024 * 1024;
-export const SOURCE_UPLOAD_MAX_PARTS = 10_000;
-export const SOURCE_UPLOAD_MAX_BYTES = SOURCE_UPLOAD_PART_SIZE * SOURCE_UPLOAD_MAX_PARTS;
 const SOURCE_UPLOAD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_JSON_BYTES = 32 * 1024;
 const LOCKED_SOURCE_MUTATION_SLUGS = new Set(["jyoti-paradise"]);
@@ -37,41 +43,21 @@ function sameOrigin(request) {
   }
 }
 
-function validIdentity(value) {
-  return typeof value === "string" && /^[A-Za-z0-9_-]{8,120}$/.test(value);
-}
-
-function validSha256(value) {
-  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
-}
-
 function safeText(value, max) {
   return typeof value === "string" && value.trim().length > 0 && value.length <= max;
 }
 
-export function sourceFileKey(slug, sourceFileId, sha256) {
-  if (!validProjectSlug(slug) || !validIdentity(sourceFileId) || !validSha256(sha256))
-    throw Error("Invalid Source Pack V2 storage identity.");
-  return `projects/${slug}/source-files/${sourceFileId}/${sha256}`;
-}
-
-export function sourcePartPlan(byteSize, partSize = SOURCE_UPLOAD_PART_SIZE) {
-  if (!Number.isSafeInteger(byteSize) || byteSize <= 0)
-    throw Error("Source file byte size must be a positive safe integer.");
-  if (!Number.isSafeInteger(partSize) || partSize < 5 * 1024 * 1024 || partSize > 5 * 1024 * 1024 * 1024)
-    throw Error("Invalid multipart part size.");
-  const partCount = Math.ceil(byteSize / partSize);
-  if (partCount > SOURCE_UPLOAD_MAX_PARTS)
-    throw Error("Source file requires more than 10,000 multipart parts.");
-  return { partSize, partCount };
-}
-
-export function expectedSourcePartSize(byteSize, partSize, partNumber) {
-  const { partCount } = sourcePartPlan(byteSize, partSize);
-  if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > partCount)
-    throw Error("Invalid multipart part number.");
-  if (partNumber < partCount) return partSize;
-  return byteSize - partSize * (partCount - 1);
+function registrationMatches(row, project, id, filename, mediaType, byteSize, sha256, key) {
+  return Boolean(
+    row &&
+      row.id === id &&
+      row.project_id === project.id &&
+      row.filename === filename &&
+      row.media_type === mediaType &&
+      Number(row.byte_size) === byteSize &&
+      row.sha256 === sha256 &&
+      row.r2_key === key,
+  );
 }
 
 async function sourceSchemaReady(env) {
@@ -196,6 +182,15 @@ async function listSources(env, project) {
   return json({ sources: (rows.results || []).map(sourceResponse) });
 }
 
+async function findRegistration(env, id, key) {
+  const existing = await env.DB.prepare(
+    `SELECT * FROM source_files_3d
+      WHERE id=? OR r2_key=?
+      LIMIT 2`,
+  ).bind(id, key).all();
+  return existing.results || [];
+}
+
 async function registerSource(request, env, actor, project, slug) {
   let body;
   try {
@@ -231,22 +226,10 @@ async function registerSource(request, env, actor, project, slug) {
   }
 
   const key = sourceFileKey(slug, id, sha256);
-  const existing = await env.DB.prepare(
-    `SELECT * FROM source_files_3d
-      WHERE id=? OR r2_key=?
-      LIMIT 2`,
-  ).bind(id, key).all();
-  const rows = existing.results || [];
+  let rows = await findRegistration(env, id, key);
   if (rows.length) {
-    const exact = rows.find(
-      (row) =>
-        row.id === id &&
-        row.project_id === project.id &&
-        row.filename === filename &&
-        row.media_type === mediaType &&
-        Number(row.byte_size) === byteSize &&
-        row.sha256 === sha256 &&
-        row.r2_key === key,
+    const exact = rows.find((row) =>
+      registrationMatches(row, project, id, filename, mediaType, byteSize, sha256, key),
     );
     if (exact) return json({ source: sourceResponse(exact), created: false });
     return json({ error: "Source file identity or storage key already exists." }, { status: 409 });
@@ -275,6 +258,11 @@ async function registerSource(request, env, actor, project, slug) {
       ),
     ]);
   } catch {
+    rows = await findRegistration(env, id, key);
+    const exact = rows.find((row) =>
+      registrationMatches(row, project, id, filename, mediaType, byteSize, sha256, key),
+    );
+    if (exact) return json({ source: sourceResponse(exact), created: false });
     return json({ error: "Source file identity or storage key already exists." }, { status: 409 });
   }
 
@@ -395,9 +383,23 @@ async function initiateUpload(env, actor, project, slug, sourceFileId) {
         now,
       ),
     ]);
-  } catch (error) {
+  } catch {
     await multipart.abort().catch(() => {});
-    throw error;
+    const winner = await activeSession(env, project.id, source.id);
+    if (winner && winner.id !== sessionId) {
+      const parts = await partsForSession(env, winner.id);
+      const refreshed = await sourceById(env, project.id, source.id);
+      return json({
+        source: sourceResponse(refreshed || source),
+        session: sessionResponse(winner, parts),
+        resumed: true,
+        partCount: sourcePartPlan(Number(source.byte_size), Number(winner.part_size)).partCount,
+      });
+    }
+    return json(
+      { error: "Upload session changed concurrently; retry initiation." },
+      { status: 409 },
+    );
   }
 
   const session = await sessionById(env, project.id, source.id, sessionId);
