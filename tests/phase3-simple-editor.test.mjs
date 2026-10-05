@@ -38,7 +38,7 @@ const presets = await import(
   asUrl(compile("apps/admin/src/studio/materialPresets.ts"))
 );
 
-test("Phase 3 furniture drop solver moves a near-wall request to the nearest safe room position", () => {
+test("furniture placement solver moves a near-wall request to the nearest safe room position", () => {
   const room = {
     id: "r",
     name: "Living",
@@ -57,18 +57,12 @@ test("Phase 3 furniture drop solver moves a near-wall request to the nearest saf
   assert.ok(result);
   assert.ok(result.x < 1.85);
   assert.equal(
-    placement.furnitureFitsAt(
-      room,
-      "sofa",
-      result.x,
-      result.z,
-      result.rotation,
-    ),
+    placement.furnitureFitsAt(room, "sofa", result.x, result.z, result.rotation),
     true,
   );
 });
 
-test("Phase 3 furniture solver refuses an item that cannot fit the room", () => {
+test("furniture solver refuses an item that cannot fit the room", () => {
   const room = {
     id: "r",
     name: "Tiny",
@@ -83,69 +77,12 @@ test("Phase 3 furniture solver refuses an item that cannot fit the room", () => 
     source: "test",
     verified: true,
   };
-  assert.equal(
-    placement.findFurniturePlacement(room, "bed", 0, 0),
-    undefined,
-  );
+  assert.equal(placement.findFurniturePlacement(room, "bed", 0, 0), undefined);
 });
 
-test("Phase 3 material presets provide one-tap architectural finishes", () => {
+test("material presets retain reusable architectural finishes", () => {
   assert.ok(presets.MATERIAL_PRESETS.length >= 6);
-  assert.equal(
-    presets.suggestedMaterialPreset("Translucent_Glass_Blue")?.id,
-    "glass",
-  );
-  assert.equal(
-    presets.suggestedMaterialPreset("Metal_Panel")?.id,
-    "dark-metal",
-  );
-  assert.equal(
-    presets.suggestedMaterialPreset("Marble_Carrara_Floor_Tile")?.id,
-    "stone",
-  );
-});
-
-test("Phase 3 canvas supports desktop drag/drop and mobile tap placement", () => {
-  const canvas = fs.readFileSync(
-    "apps/admin/src/studio/SceneCanvas.tsx",
-    "utf8",
-  );
-  const canvasPlacement = fs.readFileSync(
-    "apps/admin/src/studio/canvasFurniturePlacement.ts",
-    "utf8",
-  );
-  const shelf = fs.readFileSync(
-    "apps/admin/src/studio/FurnitureShelf.tsx",
-    "utf8",
-  );
-  const studio = fs.readFileSync(
-    "apps/admin/src/studio/Studio.tsx",
-    "utf8",
-  );
-
-  assert.match(canvasPlacement, /application\/x-rekixo-furniture/);
-  assert.match(canvasPlacement, /addEventListener\("dragover"/);
-  assert.match(canvasPlacement, /addEventListener\("drop"/);
-  assert.match(canvas, /furniturePlacement\?\.enabled/);
-  assert.match(canvas, /onFurniturePlace/);
-  assert.match(shelf, /draggable=/);
-  assert.match(shelf, /Drag \/ tap/);
-  assert.match(studio, /findFurniturePlacement/);
-  assert.match(studio, /furnitureFromPlacement/);
-  assert.match(studio, /<FurnitureShelf/);
-});
-
-test("Phase 3 material numeric controls are extracted behind fine tune", () => {
-  const material = fs.readFileSync(
-    "apps/admin/src/studio/MaterialQuickEditor.tsx",
-    "utf8",
-  );
-  const studio = fs.readFileSync(
-    "apps/admin/src/studio/Studio.tsx",
-    "utf8",
-  );
-  assert.match(material, /Quick material finishes/);
-  assert.match(material, /Fine tune material/);
-  assert.match(material, /MATERIAL_PRESETS/);
-  assert.match(studio, /<MaterialQuickEditor/);
+  assert.equal(presets.suggestedMaterialPreset("Translucent_Glass_Blue")?.id, "glass");
+  assert.equal(presets.suggestedMaterialPreset("Metal_Panel")?.id, "dark-metal");
+  assert.equal(presets.suggestedMaterialPreset("Marble_Carrara_Floor_Tile")?.id, "stone");
 });

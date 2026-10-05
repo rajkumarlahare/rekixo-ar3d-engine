@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
 const retiredStudioShell = [
@@ -25,14 +26,14 @@ const retainedFoundations = [
 ];
 
 test("retired legacy Studio shell stays deleted", () => {
-  for (const path of retiredStudioShell) {
-    assert.equal(fs.existsSync(path), false, `${path} must stay retired`);
+  for (const retiredPath of retiredStudioShell) {
+    assert.equal(fs.existsSync(retiredPath), false, `${retiredPath} must stay retired`);
   }
 });
 
 test("shared presentation, source-processing, and Geo foundations stay present", () => {
-  for (const path of retainedFoundations) {
-    assert.equal(fs.existsSync(path), true, `${path} is a retained Engine foundation`);
+  for (const retainedPath of retainedFoundations) {
+    assert.equal(fs.existsSync(retainedPath), true, `${retainedPath} is a retained Engine foundation`);
   }
 });
 
@@ -42,4 +43,20 @@ test("production Admin entry remains Automatic Engine only", () => {
   assert.doesNotMatch(main, /import\("\.\/studio\/Studio"\)/);
   assert.match(main, /\/3Dprojects\/source-pack/);
   assert.match(main, /function LegacyStudioRedirect\(\)/);
+});
+
+test("test contracts do not resurrect retired Studio shell paths", () => {
+  const self = path.basename(import.meta.filename ?? "legacy-studio-shell-retirement.test.mjs");
+  const testFiles = fs.readdirSync("tests").filter((name) => name.endsWith(".test.mjs") && name !== self);
+
+  for (const testFile of testFiles) {
+    const source = fs.readFileSync(path.join("tests", testFile), "utf8");
+    for (const retiredPath of retiredStudioShell) {
+      assert.equal(
+        source.includes(retiredPath),
+        false,
+        `${testFile} must not depend on retired ${retiredPath}`,
+      );
+    }
+  }
 });
