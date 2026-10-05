@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ADMIN_BASE_PATH } from "@rekixo/3d-contracts";
+import ProcessingSpine from "./ProcessingSpine";
 import "./source-pack-review.css";
 
 type AuthoritySuggestion =
@@ -257,6 +258,7 @@ export default function SourcePackReview() {
     data?.authoritySuggestion.status === "suggested"
       ? data.authoritySuggestion.sourceFileId
       : null;
+  const processingSignal = `${pack?.id ?? ""}:${pack?.status ?? ""}:${pack?.manifestSha256 ?? ""}`;
 
   return (
     <main className="source-review">
@@ -312,6 +314,8 @@ export default function SourcePackReview() {
           <small>{dirty ? "Unsaved review changes" : pack?.readiness.ready ? "Review complete" : "Review / authority selection pending"}</small>
         </article>
       </section>
+
+      <ProcessingSpine slug={slug} sourcePackSignal={processingSignal} />
 
       {!pack || pack.status !== "draft" ? (
         <section className="source-review__start">
