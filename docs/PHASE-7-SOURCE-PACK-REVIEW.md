@@ -28,11 +28,13 @@ The Source Pack Review is a decision surface, not a CAD/model editor.
 
 The review draft intentionally strips the classifier's `geometry-authority` role when it is first created. The recommendation is shown in the UI, but the operator must explicitly choose the authority.
 
+A new review draft also requires every verified original to have a suggestion produced by the **current** `SOURCE_CLASSIFIER_VERSION`. If the classifier policy is upgraded later, previously persisted suggestions cannot silently seed a new review version; the operator must refresh automatic analysis first. Existing operator-reviewed or sealed packs remain unchanged.
+
 ## API
 
 `GET /3Dprojects/api/cloud/projects/:slug/source-pack-review`
 
-Returns automatic suggestions plus the latest Source Pack state/readiness.
+Returns automatic suggestions plus the latest Source Pack state/readiness. Each suggestion includes its classifier version so the decision provenance remains inspectable.
 
 `POST /3Dprojects/api/cloud/projects/:slug/source-pack-review`
 

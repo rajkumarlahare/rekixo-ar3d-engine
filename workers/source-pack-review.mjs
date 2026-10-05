@@ -1,6 +1,9 @@
 import { engineAdminReadAccess } from "./admin-cloud.mjs";
 import { activeDeletionJob } from "./project-deletion.mjs";
-import { chooseGeometryAuthoritySuggestion } from "./source-classification-policy.mjs";
+import {
+  SOURCE_CLASSIFIER_VERSION,
+  chooseGeometryAuthoritySuggestion,
+} from "./source-classification-policy.mjs";
 import {
   canonicalSourcePackManifest,
   normalizeSourcePackReviewFiles,
@@ -86,7 +89,7 @@ async function verifiedSources(env, projectId) {
 
 async function classificationSuggestions(env, projectId) {
   const rows = await env.DB.prepare(
-    `SELECT s.source_file_id,s.suggested_roles_json,s.suggested_capabilities_json,
+    `SELECT s.source_file_id,s.classifier_version,s.suggested_roles_json,s.suggested_capabilities_json,
             s.confidence,s.geometry_authority_score,s.rationale_code,
             f.filename,f.media_type,f.byte_size,f.sha256
        FROM source_classification_suggestions_3d s
@@ -105,6 +108,7 @@ function suggestionResponse(row) {
     mediaType: row.media_type,
     byteSize: Number(row.byte_size),
     sha256: row.sha256,
+    classifierVersion: row.classifier_version,
     suggestedRoles: JSON.parse(row.suggested_roles_json),
     suggestedCapabilities: JSON.parse(row.suggested_capabilities_json),
     confidence: Number(row.confidence),
@@ -222,7 +226,10 @@ async function startDraft(env, actor, project) {
   const suggestions = await classificationSuggestions(env, project.id);
   const suggestionById = new Map(suggestions.map((item) => [item.source_file_id, item]));
   const missing = sources.filter((source) => !suggestionById.has(source.id));
-  if (missing.length)
+  const stale = sources.filter(
+    (source) => suggestionById.get(source.id)?.classifier_version !== SOURCE_CLASSIFIER_VERSION,
+  );
+  if (missing.length || stale.length)
     throw new Error("Refresh automatic source classification before starting review.");
 
   const version = Number(current?.version || 0) + 1;
