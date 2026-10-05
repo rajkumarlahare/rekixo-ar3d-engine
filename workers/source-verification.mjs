@@ -53,9 +53,9 @@ async function schemaReady(env) {
       `SELECT COUNT(*) AS total
          FROM sqlite_master
         WHERE type='table'
-          AND name IN ('source_files_3d','project_operation_locks_3d')`,
+          AND name IN ('source_files_3d','source_packs_3d','project_operation_locks_3d')`,
     ).first();
-    return Number(row?.total || 0) === 2;
+    return Number(row?.total || 0) === 3;
   } catch {
     return false;
   }
@@ -76,6 +76,27 @@ async function sourceById(env, projectId, sourceFileId) {
       WHERE id=? AND project_id=?
       LIMIT 1`,
   ).bind(sourceFileId, projectId).first();
+}
+
+async function activeSourcePackDraft(env, projectId) {
+  return env.DB.prepare(
+    `SELECT id,version
+       FROM source_packs_3d
+      WHERE project_id=? AND status='draft'
+      ORDER BY version DESC
+      LIMIT 1`,
+  ).bind(projectId).first();
+}
+
+function draftSourceSetConflict(draft) {
+  return json(
+    {
+      error: "Finish the current Source Pack review before verifying another source original.",
+      sourcePackId: draft.id,
+      sourcePackVersion: Number(draft.version),
+    },
+    { status: 409 },
+  );
 }
 
 async function projectOperationLockReason(env, projectId, operation) {
@@ -182,6 +203,9 @@ async function verifySource(env, actor, project, sourceFileId) {
       { status: 409 },
     );
 
+  const draft = await activeSourcePackDraft(env, project.id);
+  if (draft) return draftSourceSetConflict(draft);
+
   let object;
   try {
     object = await env.MODEL_ASSETS.get(source.r2_key);
@@ -219,16 +243,23 @@ async function verifySource(env, actor, project, sourceFileId) {
   const result = await env.DB.prepare(
     `UPDATE source_files_3d
         SET upload_state='verified',failure_reason=NULL,updated_at=?
-      WHERE id=? AND project_id=? AND upload_state='uploaded'`,
-  ).bind(now, source.id, project.id).run();
+      WHERE id=? AND project_id=? AND upload_state='uploaded'
+        AND NOT EXISTS (
+          SELECT 1 FROM source_packs_3d
+           WHERE project_id=? AND status='draft'
+        )`,
+  ).bind(now, source.id, project.id, project.id).run();
   const changed = Number(result?.meta?.changes || 0) > 0;
   const current = await sourceById(env, project.id, source.id);
 
-  if (!current || current.upload_state !== "verified")
+  if (!current || current.upload_state !== "verified") {
+    const concurrentDraft = await activeSourcePackDraft(env, project.id);
+    if (concurrentDraft) return draftSourceSetConflict(concurrentDraft);
     return json(
       { error: "Source verification state changed concurrently; reload and retry." },
       { status: 409 },
     );
+  }
 
   if (changed)
     await audit(env, actor, "source.verified", project.id, source.id, {

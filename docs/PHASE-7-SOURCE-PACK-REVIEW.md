@@ -12,6 +12,7 @@ The Source Pack Review is a decision surface, not a CAD/model editor.
 - DWG/PDF/reference files may remain evidence/content/presentation inputs and are not silently promoted into geometry.
 - Supporting roles can be adjusted by the operator.
 - Source capabilities are engine-derived from the trusted draft and cannot be expanded or rewritten by the review client.
+- While a Source Pack draft is active, another uploaded original cannot transition to `verified`; this freezes the verified source set for that review. Already-verified verification replays remain idempotent.
 - Sealing creates a deterministic manifest and SHA-256 digest.
 - A sealed pack is immutable. Changes require a new Source Pack version.
 - Sealing does not publish a Building release, mutate an active release pointer, or write/delete R2 presentation assets.
@@ -25,11 +26,14 @@ The Source Pack Review is a decision surface, not a CAD/model editor.
 5. Select exactly one geometry authority.
 6. Save operator review.
 7. Seal Source Pack.
-8. Downstream model-processing phases may consume only a sealed pack.
+8. Verify any additional uploaded originals, refresh classification, and start the next Source Pack version when they must join the reviewed source set.
+9. Downstream model-processing phases may consume only a sealed pack.
 
 The review draft intentionally strips the classifier's `geometry-authority` role when it is first created. The recommendation is shown in the UI, but the operator must explicitly choose the authority.
 
 A new review draft also requires every verified original to have a suggestion produced by the **current** `SOURCE_CLASSIFIER_VERSION`. If the classifier policy is upgraded later, previously persisted suggestions cannot silently seed a new review version; the operator must refresh automatic analysis first. Existing operator-reviewed or sealed packs remain unchanged.
+
+Draft creation snapshots the current verified-source count inside the same D1 batch that creates the draft mappings. If verification wins a concurrent race first, draft creation fails closed and asks the operator to refresh classification/retry. Once the draft exists, source verification checks the draft before doing checksum work and also conditions the final `uploaded` → `verified` update on no draft existing. This closes both normal and concurrent source-set changes without mutating source bytes.
 
 Capabilities are copied into the draft from the trusted automatic classification result. `save-review` permits operator role and note decisions, but it rejects any client payload that changes those stored capabilities. This prevents a client from inventing `geometry` capability for a dimensional/reference source and bypassing the geometry-authority boundary.
 
@@ -50,6 +54,10 @@ Supported actions:
 - `seal` (requires exact `SEAL SOURCE PACK` confirmation)
 
 Every POST is authenticated, same-origin, blocked for archived projects, blocked by the generic `source-write` operation lock, and blocked while permanent deletion is active.
+
+`POST /3Dprojects/api/cloud/projects/:slug/source-files/:sourceFileId/verify`
+
+Verification remains idempotent for an already-verified source. A new `uploaded` → `verified` transition returns `409` while a Source Pack draft is active, so the review cannot become stale because a new verified original appeared after it started.
 
 ## Manifest
 
