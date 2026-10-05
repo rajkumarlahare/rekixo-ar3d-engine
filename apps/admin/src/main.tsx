@@ -18,6 +18,25 @@ function RouteLoading({ label }: { label: string }) {
   );
 }
 
+function DashboardRoute() {
+  const project = new URLSearchParams(window.location.search).get("project")?.trim().toLowerCase() || "";
+  return (
+    <>
+      <EngineDashboard />
+      {project ? (
+        <a
+          className="source-pack-dashboard-link"
+          href={`/3Dprojects/source-pack?project=${encodeURIComponent(project)}`}
+        >
+          <small>AUTOMATIC ENGINE</small>
+          <strong>Review Source Pack</strong>
+          <span>Classify → choose geometry authority → seal</span>
+        </a>
+      ) : null}
+    </>
+  );
+}
+
 function AdminRouter() {
   const path = window.location.pathname.replace(/\/$/, "");
 
@@ -63,7 +82,7 @@ function AdminRouter() {
 
   return (
     <Suspense fallback={<RouteLoading label="Opening Engine projects…" />}>
-      <EngineDashboard />
+      <DashboardRoute />
     </Suspense>
   );
 }
