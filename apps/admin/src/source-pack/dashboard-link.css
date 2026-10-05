@@ -1,0 +1,47 @@
+.source-pack-dashboard-link {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 80;
+  width: min(310px, calc(100vw - 40px));
+  display: grid;
+  gap: 4px;
+  padding: 15px 17px;
+  border: 1px solid rgba(90, 135, 255, 0.48);
+  border-radius: 15px;
+  background: rgba(12, 19, 33, 0.96);
+  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.38);
+  color: #f5f8ff;
+  text-decoration: none;
+  backdrop-filter: blur(18px);
+}
+
+.source-pack-dashboard-link:hover {
+  border-color: rgba(117, 155, 255, 0.9);
+  transform: translateY(-1px);
+}
+
+.source-pack-dashboard-link small {
+  color: #7f9cff;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.source-pack-dashboard-link strong {
+  font-size: 15px;
+}
+
+.source-pack-dashboard-link span {
+  color: #97a6bd;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+@media (max-width: 680px) {
+  .source-pack-dashboard-link {
+    right: 12px;
+    bottom: 12px;
+    width: calc(100vw - 24px);
+  }
+}
