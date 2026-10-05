@@ -4,12 +4,24 @@ const bucket = process.env.R2_BUCKET || "rekixo-3d-assets";
 const prefix = process.env.R2_PREFIX || "projects/";
 const confirm = process.env.CONFIRM_ENGINE_PROJECT_PURGE;
 
+const LOCKED_PRODUCTION_PREFIXES = ["projects/jyoti-paradise/"];
+
+function overlapsLockedProductionPrefix(candidate) {
+  return LOCKED_PRODUCTION_PREFIXES.some(
+    (locked) => locked.startsWith(candidate) || candidate.startsWith(locked),
+  );
+}
+
 if (!token || !accountId)
   throw new Error("Cloudflare account/token environment is required.");
 if (confirm !== "DELETE_ENGINE_PROJECT_DATA")
   throw new Error("Refusing R2 purge without explicit confirmation.");
 if (!prefix || prefix === "/")
   throw new Error("Refusing unsafe R2 prefix.");
+if (overlapsLockedProductionPrefix(prefix))
+  throw new Error(
+    `Refusing R2 purge because prefix overlaps locked production data: ${prefix}`,
+  );
 
 const base =
   `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets/${bucket}/objects`;
