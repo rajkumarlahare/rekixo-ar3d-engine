@@ -48,17 +48,25 @@ test("production Admin entry remains Automatic Engine only", () => {
   assert.match(main, /function LegacyStudioRedirect\(\)/);
 });
 
-test("test contracts do not resurrect retired Studio shell paths", () => {
+test("test contracts do not read retired Studio shell files", () => {
   const self = path.basename(import.meta.filename ?? "legacy-studio-shell-retirement.test.mjs");
   const testFiles = fs.readdirSync("tests").filter((name) => name.endsWith(".test.mjs") && name !== self);
 
   for (const testFile of testFiles) {
     const source = fs.readFileSync(path.join("tests", testFile), "utf8");
+    // Absence assertions are valid retirement guards, not dependencies. Strip those
+    // single-line checks before looking for stale test fixtures that still read a
+    // retired implementation as executable/source input.
+    const dependencySource = source
+      .split("\n")
+      .filter((line) => !line.includes("existsSync("))
+      .join("\n");
+
     for (const retiredPath of retiredStudioShell) {
       assert.equal(
-        source.includes(retiredPath),
+        dependencySource.includes(retiredPath),
         false,
-        `${testFile} must not depend on retired ${retiredPath}`,
+        `${testFile} must not read retired ${retiredPath}`,
       );
     }
   }
