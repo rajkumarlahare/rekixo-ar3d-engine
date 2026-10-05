@@ -40,8 +40,14 @@ test("manual R2 purge refuses any prefix overlapping Jyoti Paradise", () => {
 
   assert.match(purge, /LOCKED_PRODUCTION_PREFIXES/);
   assert.match(purge, /projects\/jyoti-paradise\//);
-  assert.match(purge, /locked\.startsWith\(candidate\) \|\| candidate\.startsWith\(locked\)/);
-  assert.match(purge, /Refusing R2 purge because prefix overlaps locked production data/);
+  assert.match(
+    purge,
+    /locked\.startsWith\(candidate\) \|\| candidate\.startsWith\(locked\)/,
+  );
+  assert.match(
+    purge,
+    /Refusing R2 purge because prefix overlaps locked production data/,
+  );
 });
 
 test("database rejects direct Jyoti Paradise project deletion", () => {
@@ -55,5 +61,8 @@ test("database rejects direct Jyoti Paradise project deletion", () => {
   );
   assert.match(migration, /BEFORE DELETE ON projects_3d/);
   assert.match(migration, /WHEN OLD\.slug = 'jyoti-paradise'/);
-  assert.match(migration, /Jyoti Paradise is a locked production project and cannot be deleted/);
+  assert.match(
+    migration,
+    /Jyoti Paradise is a locked production project and cannot be deleted/,
+  );
 });
