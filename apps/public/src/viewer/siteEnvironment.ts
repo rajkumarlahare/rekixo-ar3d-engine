@@ -1,5 +1,6 @@
 import type { PublicSiteElement } from "@rekixo/3d-contracts";
 import * as THREE from "three";
+import { addPresentationFallback } from "./presentationEnvironment";
 import { getPublicRuntimeSiteElements } from "./publicRuntimeContext";
 
 const AREA_KINDS = new Set<PublicSiteElement["kind"]>([
@@ -360,9 +361,11 @@ function disposeRoot(root: THREE.Object3D) {
 }
 
 export function createArchitecturalSiteEnvironment(
-  _bounds: THREE.Box3,
+  bounds: THREE.Box3,
   _renderer: THREE.WebGLRenderer,
   mobile: boolean,
+  presentation = false,
+  groundElevation?: number,
 ) {
   const root = new THREE.Group();
   root.name = "source-backed-site-environment";
@@ -376,6 +379,13 @@ export function createArchitecturalSiteEnvironment(
   const lights = elements.filter((item) => item.kind === "outdoor-light");
   const structural = elements.filter((item) => STRUCTURAL_KINDS.has(item.kind));
 
+  const presentationBulbs: THREE.MeshStandardMaterial[] = [];
+  // Basement bounds are not a ground survey. Omit optional dressing if grade is unknown.
+  const knownGrade = typeof groundElevation === "number" && Number.isFinite(groundElevation);
+  if (!elements.length && presentation && !bounds.isEmpty() && (knownGrade || bounds.min.y >= -0.25)) {
+    addPresentationFallback(root, bounds, mobile, presentationBulbs, knownGrade ? groundElevation : bounds.min.y);
+  }
+
   addAreaBatches(root, areas);
   addTreeBatches(root, trees, mobile);
   addPlantBatches(root, plants, mobile);
@@ -387,6 +397,7 @@ export function createArchitecturalSiteEnvironment(
     root,
     setNight(night: boolean) {
       if (bulbMaterial) bulbMaterial.emissiveIntensity = night ? 4.2 : 0.38;
+      for (const bulb of presentationBulbs) bulb.emissiveIntensity = night ? 4.2 : 0.38;
     },
     dispose() {
       disposeRoot(root);

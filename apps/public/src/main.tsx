@@ -1,15 +1,16 @@
 import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
-  PUBLIC_BASE_PATH,
   type Public3DExperience,
   type Scene3D,
   type Scene3DType,
 } from "@rekixo/3d-contracts";
 import { projectSlugFromPathname } from "@rekixo/3d-engine-core";
-import { loadPublicExperience } from "./api";
+import { loadPublicExperience, type ClientExperience } from "./api";
 import { Viewer3D } from "./viewer/Viewer3D";
 import "./styles.css";
+import { BuildingDetails } from "./BuildingDetails";
+import { availableClientModules, buildingPresentation, clientViewerCapabilities } from "./clientPresentation";
 import "./viewer/walkthrough-ui.css";
 
 const GeoPublicDemo = lazy(() => import("./geo/GeoPublicDemo"));
@@ -117,14 +118,7 @@ function mediaUrl(experience: Public3DExperience, key?: string) {
 
 function MediaImage({ src, alt, className }: { src?: string; alt: string; className?: string }) {
   const [failed, setFailed] = useState(false);
-  if (!src || failed) {
-    return (
-      <div className={`media-placeholder ${className ?? ""}`}>
-        <strong>Media unavailable</strong>
-        <span>This project module does not currently have a published media asset.</span>
-      </div>
-    );
-  }
+  if (!src || failed) return null;
   return <img className={className} src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} />;
 }
 
@@ -149,11 +143,14 @@ function NotFound({ message }: { message?: string }) {
   );
 }
 
-function ProjectNavigation({ experience, walkFloor }: { experience: Public3DExperience; walkFloor?: number }) {
+function ProjectNavigation({ experience, walkFloor }: { experience: ClientExperience; walkFloor?: number }) {
   const { model, camera, project } = experience;
   const settings = settingsOf<ProjectSettings>(sceneOf(experience, "project-navigation"));
   const floorSettings = settingsOf<FloorSettings>(sceneOf(experience, "typical-floor"));
-  const availableFloors = floorIdsOf(floorSettings);
+  const capabilities = clientViewerCapabilities(experience);
+  const floorReady = capabilities.floors;
+  const availableFloors = floorReady ? floorIdsOf(floorSettings) : [];
+  const presentation = buildingPresentation(experience);
   const render = mediaUrl(experience, settings.exteriorRenderKey);
 
   return (
@@ -168,32 +165,32 @@ function ProjectNavigation({ experience, walkFloor }: { experience: Public3DExpe
           availableFloors={availableFloors}
           floorGeometry={floorSettings.floorLevels ?? []}
           walkthrough={experience.walkthrough}
+          clientPresentation
+          sourcePresentation={experience.sourcePresentation}
+          allowInteriorControls={floorReady}
+          allowWalkControls={capabilities.walk}
         />
+        <div className="client-hero-overlay" aria-hidden="true">
+          <span className="client-hero-kicker">EXPLORE THE BUILDING</span>
+          <strong>{project.name}</strong>
+          {project.location && <small>{project.location}</small>}
+        </div>
       </section>
 
-      <section className="project-overview">
+      <section className="project-overview client-showcase-overview">
         <div className="overview-copy">
           <p className="eyebrow">PROJECT OVERVIEW</p>
           <h2>{settings.headline ?? project.name}</h2>
-          <p>
-            This experience is generated from the verified models, scenes and media
-            configured for this project. Modules are published only when their
-            project-scoped source data is available.
-          </p>
+          <p>{presentation.description || "Explore the exterior from every angle. Choose a view, rotate the building and discover its architecture in daylight or after dark."}</p>
           <div className="fact-row">
             {settings.brochurePrice && <div><span>Project offer</span><strong>{settings.brochurePrice}</strong></div>}
-            <div><span>Location</span><strong>{project.location ?? "Location not provided"}</strong></div>
-            <div><span>Model</span><strong>{model?.available ? "Live 3D" : "3D asset pending"}</strong></div>
+            {project.location && <div><span>Location</span><strong>{project.location}</strong></div>}
           </div>
         </div>
         <MediaImage src={render} alt={`${project.name} exterior reference`} className="exterior-reference" />
       </section>
 
-      <section className="source-note">
-        <span>MODEL STATUS</span>
-        <strong>{model?.available ? `${model.name} · v${model.version}` : "No active web model is currently available"}</strong>
-        <p>{settings.modelNote ?? "Project model metadata and web assets are managed independently for this 3D project."}</p>
-      </section>
+      <BuildingDetails experience={experience} />
     </>
   );
 }
@@ -382,20 +379,6 @@ function Amenities({ experience }: { experience: Public3DExperience }) {
           </div>
         </div>
       </div>
-    </section>
-  );
-}
-
-function PendingModule({ type, experience }: { type: Scene3DType; experience: Public3DExperience }) {
-  const allScenes = experience.scenes ?? [];
-  const scene = allScenes.find((item) => item.type === type);
-  const settings = settingsOf<PendingSettings>(scene);
-  const label = moduleOrder.find(([item]) => item === type)?.[1] ?? "Module";
-  return (
-    <section className="content-module pending-module">
-      <p className="eyebrow">PROJECT MODULE</p>
-      <h2>{label}</h2>
-      <p>{settings.reason ?? "This module is not currently enabled for the selected 3D project."}</p>
     </section>
   );
 }
@@ -748,7 +731,7 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
 
 function App() {
   const slug = useMemo(() => projectSlugFromPathname(window.location.pathname), []);
-  const [experience, setExperience] = useState<Public3DExperience>();
+  const [experience, setExperience] = useState<ClientExperience>();
   const [error, setError] = useState<string>();
   const [attempt, setAttempt] = useState(0);
   const [activeType, setActiveType] = useState<Scene3DType>("project-navigation");
@@ -785,11 +768,13 @@ function App() {
   }
 
   const sceneMap = new Map((experience.scenes ?? []).map((scene) => [scene.type, scene]));
-  const activeScene = sceneMap.get(activeType);
+  const visibleModules = moduleOrder.filter(([type]) => availableClientModules(experience, [type]).length > 0);
+  const selectedType = visibleModules.some(([type]) => type === activeType) ? activeType : visibleModules[0]?.[0];
+  const activeScene = selectedType ? sceneMap.get(selectedType) : undefined;
   const activeReady = Boolean(activeScene?.enabled);
 
   return (
-    <main className="experience">
+    <main className="experience client-showcase">
       <header className="project-header">
         <a className="brand" href="https://ar3dstudio.in" aria-label="AR3D Studio home">
           <span>AR</span>
@@ -800,13 +785,11 @@ function App() {
           <h1>{experience.project.name}</h1>
           <p className="location">{experience.project.location}</p>
         </div>
-        <span className="production-badge"><i aria-hidden="true" />Production</span>
+
       </header>
 
-      <nav className="module-nav" aria-label="3D project modules">
-        {moduleOrder.map(([type, label], index) => {
-          const scene = sceneMap.get(type);
-          const ready = Boolean(scene?.enabled);
+      {visibleModules.length > 1 && <nav className="module-nav" aria-label="3D project modules">
+        {visibleModules.map(([type, label], index) => {
           return (
             <button
               type="button"
@@ -819,16 +802,16 @@ function App() {
             >
               <span>{String(index + 1).padStart(2, "0")}</span>
               <strong>{label}</strong>
-              <small>{ready ? "Available" : "Source pending"}</small>
+
             </button>
           );
         })}
-      </nav>
+      </nav>}
 
-      <div className="module-stage" key={activeType}>
-        {activeType === "project-navigation" && <ProjectNavigation experience={experience} walkFloor={walkRequestFloor} />}
-        {activeType === "wing-distance" && <LocationMap experience={experience} />}
-        {activeType === "typical-floor" && (
+      <div className="module-stage" key={selectedType}>
+        {selectedType === "project-navigation" && <ProjectNavigation experience={experience} walkFloor={walkRequestFloor} />}
+        {selectedType === "wing-distance" && <LocationMap experience={experience} />}
+        {selectedType === "typical-floor" && (
           <TypicalFloor
             experience={experience}
             onEnterFloor={(floor) => {
@@ -837,19 +820,17 @@ function App() {
             }}
           />
         )}
-        {activeType === "amenity" && <Amenities experience={experience} />}
-        {activeType === "section" && activeReady && (
+        {selectedType === "amenity" && <Amenities experience={experience} />}
+        {selectedType === "section" && activeReady && (
           <ModelModule experience={experience} type="section" title="Interactive Section Cut" interactionMode="section" />
         )}
-        {activeType === "balcony" && activeReady && (
+        {selectedType === "balcony" && activeReady && (
           <ModelModule experience={experience} type="balcony" title="Facade & Balcony Detail" interactionMode="detail" />
         )}
-        {!activeReady && <PendingModule type={activeType} experience={experience} />}
       </div>
 
       <footer>
-        <span>AR3D Studio · Rekixo AR3D Engine</span>
-        <span>{PUBLIC_BASE_PATH}/{experience.project.slug}</span>
+        <span>AR3D Studio · Interactive Real Estate</span>
       </footer>
     </main>
   );

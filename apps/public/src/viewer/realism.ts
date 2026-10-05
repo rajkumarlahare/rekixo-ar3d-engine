@@ -26,8 +26,8 @@ function tuneTexture(texture: THREE.Texture | null | undefined, anisotropy: numb
  * Project-neutral architectural material tuning.
  *
  * Never place customer/source-specific material names, colors, texture data or
- * source fingerprints in this module. Those belong behind a verified profile
- * gate in modelProfiles.ts.
+ * source fingerprints in this module. Missing texture bytes are not fabricated;
+ * source colors remain unchanged while physical surface response is improved.
  */
 export function enhanceArchitecturalModel(
   root: THREE.Object3D,
@@ -53,18 +53,18 @@ export function enhanceArchitecturalModel(
       tuneTexture(material.metalnessMap, anisotropy);
       tuneTexture(material.aoMap, anisotropy);
       tuneTexture(material.emissiveMap, anisotropy);
-      material.envMapIntensity = referenceVisual ? 0.5 : 0.72;
+      material.envMapIntensity = referenceVisual ? 0.56 : 0.78;
 
       if (/glass|window|translucent/.test(name) && !/tile/.test(name)) {
         material.roughness = Math.min(
           material.roughness,
-          referenceVisual ? 0.09 : 0.14,
+          referenceVisual ? 0.08 : 0.12,
         );
         material.metalness = Math.min(material.metalness, 0.05);
         material.transparent = true;
         material.opacity = Math.min(
           material.opacity,
-          referenceVisual ? 0.42 : 0.62,
+          referenceVisual ? 0.46 : 0.66,
         );
         material.depthWrite = false;
       } else if (/metal|steel|aluminium|aluminum|railing|panel/.test(name)) {
@@ -79,9 +79,9 @@ export function enhanceArchitecturalModel(
           Math.max(material.roughness, 0.32),
           0.58,
         );
-      } else if (/concrete|paver|plaster|wall/.test(name)) {
+      } else if (/concrete|paver|plaster|wall|paint|facade|façade/.test(name)) {
         material.metalness = Math.min(material.metalness, 0.03);
-        material.roughness = Math.max(material.roughness, 0.62);
+        material.roughness = Math.max(material.roughness, 0.58);
       }
 
       material.needsUpdate = true;
