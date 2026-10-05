@@ -142,6 +142,13 @@ test("review draft refuses missing or stale classifier suggestions", () => {
   assert.match(worker, /Refresh automatic source classification before starting review/);
 });
 
+test("operator review cannot invent engine-derived source capabilities", () => {
+  assert.match(worker, /function sameCapabilities/);
+  assert.match(worker, /const storedFiles = \(await packFiles\(env, project\.id, pack\.id\)\)\.map\(packFileResponse\)/);
+  assert.match(worker, /!sameCapabilities\(item\.capabilities, stored\.capabilities\)/);
+  assert.match(worker, /Source capabilities are engine-derived and cannot be changed during operator review/);
+});
+
 test("review API is guarded and cannot mutate presentation/public assets", () => {
   assert.match(worker, /engineAdminReadAccess/);
   assert.match(worker, /sameOrigin/);
