@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
 const read = (path) => fs.readFileSync(path, "utf8");
+const studioPath = (name) => path.join("apps/admin/src/studio", name);
 
 test("published viewer uses the read-only presentation canvas", () => {
   const viewer = read("apps/admin/src/studio/PublishedViewer.tsx");
@@ -56,22 +58,19 @@ test("presentation canvas cannot regain authoring dependencies", () => {
 });
 
 test("legacy SceneCanvas authoring shell and detached panels remain retired", () => {
-  for (const path of [
-    "apps/admin/src/studio/SceneCanvas.tsx",
-    "apps/admin/src/studio/SceneCanvasOverlays.tsx",
-    "apps/admin/src/studio/sceneCanvasArchitectureController.ts",
-    "apps/admin/src/studio/sceneCanvasDirectManipulation.ts",
-    "apps/admin/src/studio/sceneCanvasEditorUx.ts",
-    "apps/admin/src/studio/canvasFurniturePlacement.ts",
-    "apps/admin/src/studio/MaterialQuickEditor.tsx",
-    "apps/admin/src/studio/ModelNodeInspector.tsx",
-    "apps/admin/src/studio/ReferenceWorkspace.tsx",
-  ]) assert.equal(fs.existsSync(path), false, `retired authoring module returned: ${path}`);
+  for (const name of [
+    "SceneCanvas.tsx",
+    "SceneCanvasOverlays.tsx",
+    "sceneCanvasArchitectureController.ts",
+    "sceneCanvasDirectManipulation.ts",
+    "sceneCanvasEditorUx.ts",
+    "canvasFurniturePlacement.ts",
+    "MaterialQuickEditor.tsx",
+    "ModelNodeInspector.tsx",
+    "ReferenceWorkspace.tsx",
+  ]) assert.equal(fs.existsSync(studioPath(name)), false, `retired authoring module returned: ${name}`);
 });
 
 test("shared room and site rendering helper dependency remains until separately proven removable", () => {
-  assert.equal(
-    fs.existsSync("apps/admin/src/studio/sceneCanvasPlanResizeHandles.ts"),
-    true,
-  );
+  assert.equal(fs.existsSync(studioPath("sceneCanvasPlanResizeHandles.ts")), true);
 });
