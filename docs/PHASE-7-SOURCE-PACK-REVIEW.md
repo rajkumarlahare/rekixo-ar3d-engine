@@ -11,6 +11,7 @@ The Source Pack Review is a decision surface, not a CAD/model editor.
 - Exactly one verified original must be chosen as `geometry-authority` before a draft can be saved.
 - DWG/PDF/reference files may remain evidence/content/presentation inputs and are not silently promoted into geometry.
 - Supporting roles can be adjusted by the operator.
+- Source capabilities are engine-derived from the trusted draft and cannot be expanded or rewritten by the review client.
 - Sealing creates a deterministic manifest and SHA-256 digest.
 - A sealed pack is immutable. Changes require a new Source Pack version.
 - Sealing does not publish a Building release, mutate an active release pointer, or write/delete R2 presentation assets.
@@ -29,6 +30,8 @@ The Source Pack Review is a decision surface, not a CAD/model editor.
 The review draft intentionally strips the classifier's `geometry-authority` role when it is first created. The recommendation is shown in the UI, but the operator must explicitly choose the authority.
 
 A new review draft also requires every verified original to have a suggestion produced by the **current** `SOURCE_CLASSIFIER_VERSION`. If the classifier policy is upgraded later, previously persisted suggestions cannot silently seed a new review version; the operator must refresh automatic analysis first. Existing operator-reviewed or sealed packs remain unchanged.
+
+Capabilities are copied into the draft from the trusted automatic classification result. `save-review` permits operator role and note decisions, but it rejects any client payload that changes those stored capabilities. This prevents a client from inventing `geometry` capability for a dimensional/reference source and bypassing the geometry-authority boundary.
 
 ## API
 
