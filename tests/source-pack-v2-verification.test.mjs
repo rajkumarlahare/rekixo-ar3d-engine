@@ -18,7 +18,8 @@ test("source verification is a dedicated route ahead of the upload router", () =
 test("source verification streams SHA-256 without buffering the original", () => {
   const worker = read("workers/source-verification.mjs");
   assert.match(worker, /crypto\.DigestStream\("SHA-256"\)/);
-  assert.match(worker, /object\.body\.pipeTo\(digestStream\)/);
+  assert.match(worker, /body\.pipeTo\(digestStream\)/);
+  assert.match(worker, /sha256Hex\(object\.body\)/);
   assert.match(worker, /await digestStream\.digest/);
   assert.doesNotMatch(worker, /arrayBuffer\(\)/);
   assert.doesNotMatch(worker, /MODEL_ASSETS\.put/);
