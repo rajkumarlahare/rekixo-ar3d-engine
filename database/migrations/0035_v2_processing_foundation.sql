@@ -60,20 +60,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_processing_jobs_3d_single_live
 -- A job can only pin an operator-approved immutable Source Pack snapshot. Ready
 -- may later become superseded when a newer pack is sealed; both states remain
 -- immutable sealed inputs and therefore preserve the exact processing identity.
+-- The artifact prefix is derived here as a database invariant instead of trusting
+-- an API caller to choose a project/storage namespace correctly.
 CREATE TRIGGER IF NOT EXISTS trg_processing_jobs_3d_input_insert
 BEFORE INSERT ON processing_jobs_3d
 WHEN NOT EXISTS (
   SELECT 1
     FROM source_packs_3d p
+    JOIN projects_3d project ON project.id=p.project_id
    WHERE p.id=NEW.source_pack_id
      AND p.project_id=NEW.project_id
      AND p.version=NEW.source_pack_version
      AND p.status IN ('ready','superseded')
      AND p.operator_approved=1
      AND p.manifest_sha256=NEW.source_pack_manifest_sha256
+     AND NEW.artifact_prefix =
+       'projects/' || project.slug || '/processing/' || NEW.source_pack_id || '/' ||
+       NEW.processor_version || '/attempt-' || NEW.attempt || '/'
 )
 BEGIN
-  SELECT RAISE(ABORT, 'Processing job requires the exact sealed Source Pack snapshot');
+  SELECT RAISE(ABORT, 'Processing job requires the exact sealed Source Pack snapshot and storage boundary');
 END;
 
 -- Processing input identity is content-addressed and never changes in-place.
@@ -138,7 +144,8 @@ CREATE INDEX IF NOT EXISTS idx_processing_artifacts_3d_project
   ON processing_artifacts_3d(project_id, created_at);
 
 -- Artifacts may only be staged/finalized by the exact running job and inside its
--- attempt-specific storage prefix. No derived artifact can escape project/job scope.
+-- attempt-specific storage prefix. Prefix matching uses byte-for-byte substring
+-- comparison, not SQL LIKE, so underscores in Source Pack IDs cannot become wildcards.
 CREATE TRIGGER IF NOT EXISTS trg_processing_artifacts_3d_owner_insert
 BEFORE INSERT ON processing_artifacts_3d
 WHEN NOT EXISTS (
@@ -147,7 +154,8 @@ WHEN NOT EXISTS (
    WHERE j.id=NEW.processing_job_id
      AND j.project_id=NEW.project_id
      AND j.state='running'
-     AND NEW.r2_key LIKE j.artifact_prefix || '%'
+     AND length(NEW.r2_key) > length(j.artifact_prefix)
+     AND substr(NEW.r2_key,1,length(j.artifact_prefix))=j.artifact_prefix
 )
 BEGIN
   SELECT RAISE(ABORT, 'Processing artifact must belong to the running job storage boundary');
@@ -161,7 +169,8 @@ WHEN NOT EXISTS (
    WHERE j.id=NEW.processing_job_id
      AND j.project_id=NEW.project_id
      AND j.state='running'
-     AND NEW.r2_key LIKE j.artifact_prefix || '%'
+     AND length(NEW.r2_key) > length(j.artifact_prefix)
+     AND substr(NEW.r2_key,1,length(j.artifact_prefix))=j.artifact_prefix
 )
 BEGIN
   SELECT RAISE(ABORT, 'Processing artifact must remain inside the running job storage boundary');
