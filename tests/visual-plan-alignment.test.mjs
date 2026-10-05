@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
 const read = (path) => fs.readFileSync(path, "utf8");
+const studioPath = (name) => path.join("apps/admin/src/studio", name);
 
 test("PDF floor-plan preparation is lazy, cropped and keeps the source unchanged", () => {
   const helper = read("apps/admin/src/studio/pdfReferenceRaster.ts");
@@ -17,7 +19,7 @@ test("PDF floor-plan preparation is lazy, cropped and keeps the source unchanged
 });
 
 test("legacy visual alignment workspace and SceneCanvas implementation remain retired", () => {
-  assert.equal(fs.existsSync("apps/admin/src/studio/ReferenceWorkspace.tsx"), false);
-  assert.equal(fs.existsSync("apps/admin/src/studio/SceneCanvas.tsx"), false);
-  assert.equal(fs.existsSync("apps/admin/src/studio/SceneCanvasOverlays.tsx"), false);
+  assert.equal(fs.existsSync(studioPath("ReferenceWorkspace.tsx")), false);
+  assert.equal(fs.existsSync(studioPath("SceneCanvas.tsx")), false);
+  assert.equal(fs.existsSync(studioPath("SceneCanvasOverlays.tsx")), false);
 });
