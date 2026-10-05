@@ -212,24 +212,19 @@ test("source-pack readiness stays generic and does not encode customer names or 
   assert.match(source, /SketchUp/);
 });
 
-test("critical browser smoke controls use stable data-testid selectors", () => {
-  const builder = fs.readFileSync(
-    "apps/admin/src/studio/SmartProjectBuilder.tsx",
+test("Automatic Engine browser smoke enforces the source-decision product boundary", () => {
+  const review = fs.readFileSync(
+    "apps/admin/src/source-pack/SourcePackReview.tsx",
     "utf8",
   );
-  const e2e = fs.readFileSync("e2e/studio-authoring.spec.ts", "utf8");
+  const e2e = fs.readFileSync("e2e/automatic-engine-entry.spec.ts", "utf8");
 
-  for (const id of [
-    "analyze-project",
-    "detected-floor-levels",
-    "build-automatically",
-    "build-analyzed-draft",
-    "open-visual-editor",
-  ])
-    assert.match(builder, new RegExp(`data-testid=["']${id}["']`));
-
-  assert.match(e2e, /getByTestId\("analyze-project"\)/);
-  assert.match(e2e, /getByTestId\("detected-floor-levels"\)/);
-  assert.match(e2e, /getByTestId\("build-analyzed-draft"\)/);
-  assert.match(e2e, /getByTestId\("open-visual-editor"\)/);
+  assert.match(review, /AUTOMATIC PRESENTATION ENGINE · SOURCE DECISION/);
+  assert.match(review, /One geometry authority/);
+  assert.match(review, /architecture rebuild नहीं करेंगे/);
+  assert.match(e2e, /Source Pack Review/);
+  assert.match(e2e, /AUTOMATIC PRESENTATION ENGINE · SOURCE DECISION/);
+  assert.match(e2e, /One geometry authority/);
+  assert.match(e2e, /Smart 3D project builder/);
+  assert.match(e2e, /3D editor tools/);
 });
