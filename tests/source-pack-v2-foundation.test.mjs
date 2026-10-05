@@ -164,11 +164,11 @@ test("sealed Source Pack V2 can cascade only inside the exact resumable hard-del
 
   assert.match(
     migration,
-    /geometry_authority_file_id\) REFERENCES source_files_3d\(id\) ON DELETE NO ACTION/,
+    /FOREIGN KEY \(geometry_authority_file_id\) REFERENCES source_files_3d\(id\) ON DELETE NO ACTION/,
   );
   assert.match(
     migration,
-    /source_file_id\) REFERENCES source_files_3d\(id\) ON DELETE NO ACTION/,
+    /FOREIGN KEY \(source_file_id\) REFERENCES source_files_3d\(id\) ON DELETE NO ACTION/,
   );
   assert.match(migration, /trg_source_pack_files_3d_ready_delete_block/);
   assert.match(migration, /project\.status='archived'/);
