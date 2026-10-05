@@ -4,16 +4,14 @@ import test from "node:test";
 
 const read = (path) => fs.readFileSync(path, "utf8");
 
-test("room drawing happens on the selected floor and derives geometry from a drag", () => {
-  const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+test("read-only presentation renders room geometry without manual room-drawing callbacks", () => {
+  const presentation = read("apps/admin/src/studio/PresentationCanvas.tsx");
 
-  assert.match(canvas, /roomPlanePoint/);
-  assert.match(canvas, /new T\.Plane\(new T\.Vector3\(0, 1, 0\), -floor\.elevation\)/);
-  assert.match(canvas, /Math\.abs\(end\.x - start\.x\)/);
-  assert.match(canvas, /Math\.abs\(end\.z - start\.z\)/);
-  assert.match(canvas, /onRoomDraw/);
-  assert.match(canvas, /resolvePlanSnap/);
-  assert.match(canvas, /edgeTolerance: 0\.18/);
+  assert.match(presentation, /roomBoundaryPoints/);
+  assert.match(presentation, /presentationRoomSurface/);
+  assert.doesNotMatch(presentation, /onRoomDraw/);
+  assert.doesNotMatch(presentation, /onRoomPolygonDraw/);
+  assert.doesNotMatch(presentation, /resolvePlanSnap/);
 });
 
 test("automatic room draft foundations preserve evidence discipline", () => {
@@ -25,14 +23,12 @@ test("automatic room draft foundations preserve evidence discipline", () => {
   assert.match(autoRooms, /verified: false/);
 });
 
-test("polygon room geometry keeps snap and callback foundations", () => {
-  const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+test("shared plan snap kernel remains standalone from the presentation runtime", () => {
+  const snap = read("packages/engine-core/src/editor/snap.ts");
+  const presentation = read("apps/admin/src/studio/PresentationCanvas.tsx");
 
-  assert.match(canvas, /roomBoundaryPoints/);
-  assert.match(canvas, /resolvePlanSnap/);
-  assert.match(canvas, /midpointTolerance: 0\.18/);
-  assert.match(canvas, /onRoomPolygonDraw/);
-  assert.match(canvas, /onRoomPolygonChange/);
-  assert.match(canvas, /roomVertexIndex/);
-  assert.match(canvas, /click first corner or press Enter/);
+  assert.match(snap, /resolvePlanSnap/);
+  assert.match(snap, /midpointTolerance/);
+  assert.match(snap, /edgeTolerance/);
+  assert.doesNotMatch(presentation, /resolvePlanSnap/);
 });
