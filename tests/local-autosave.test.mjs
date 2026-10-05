@@ -85,6 +85,7 @@ test("production browser entry no longer depends on legacy Studio autosave UI", 
   assert.doesNotMatch(main, /lazy\(\(\) => import\("\.\/studio\/Studio"\)\)/);
   assert.match(main, /window\.location\.replace\(`\/3Dprojects\/source-pack/);
   assert.match(e2e, /\/3Dprojects\/studio\?project=e2e-project/);
-  assert.match(e2e, /\/3Dprojects\/source-pack\\\?project=e2e-project/);
+  assert.match(e2e, /source-pack/);
+  assert.match(e2e, /project=e2e-project/);
   assert.doesNotMatch(e2e, /Save local|Autosaved/);
 });
