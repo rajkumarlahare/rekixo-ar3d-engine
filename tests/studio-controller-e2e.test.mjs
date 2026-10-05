@@ -4,17 +4,6 @@ import test from "node:test";
 
 const read = (path) => fs.readFileSync(path, "utf8");
 
-test("Studio cloud discovery and release state live in a focused hook", () => {
-  const studio = read("apps/admin/src/studio/Studio.tsx");
-  const hook = read("apps/admin/src/studio/useStudioCloudState.ts");
-  assert.match(studio, /useStudioCloudState/);
-  assert.doesNotMatch(studio, /const \[cloudSession, setCloudSession\]/);
-  assert.match(hook, /\.session\(\)/);
-  assert.match(hook, /refreshCloudProjects/);
-  assert.match(hook, /refreshCloudReleases/);
-  assert.match(hook, /markCloudSignedOut/);
-});
-
 test("browser E2E smoke covers Automatic Engine entry and source decision boundary", () => {
   const config = read("playwright.config.ts");
   const main = read("apps/admin/src/main.tsx");

@@ -18,17 +18,17 @@ test("Engine home exposes a Building-first project workflow and optional Experie
   assert.doesNotMatch(dashboard, /Create → Edit → Map → Live/);
 });
 
-test("Engine project context is carried from dashboard into Studio and 3D Jio Mapper", () => {
+test("Engine project context crosses the compatibility Studio URL into Automatic Engine and Geo Mapper", () => {
   const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
-  const studio = read("apps/admin/src/studio/Studio.tsx");
+  const main = read("apps/admin/src/main.tsx");
   const geo = read("apps/admin/src/geo/GeoMapper3D.tsx");
 
   assert.match(dashboard, /projectUrl\("studio", selectedSlug\)/);
   assert.match(dashboard, /projectUrl\("geo-mapper", selectedSlug\)/);
   assert.match(dashboard, /\?project=\$\{encodeURIComponent\(slug\)\}/);
-  assert.match(studio, /new URLSearchParams\(window\.location\.search\)/);
-  assert.match(studio, /requestedCloudProjectRef/);
-  assert.match(studio, /openCloudProject\(requested\)/);
+  assert.match(main, /function LegacyStudioRedirect\(\)/);
+  assert.match(main, /window\.location\.replace\(`\/3Dprojects\/source-pack\$\{window\.location\.search\}`\)/);
+  assert.match(main, /\/3Dprojects\/source-pack/);
   assert.match(geo, /\/3Dprojects\/studio\?project=/);
 });
 
@@ -41,26 +41,24 @@ test("Engine home creates isolated projects through existing cloud contract", ()
   assert.doesNotMatch(dashboard, /DELETE FROM|DROP TABLE|geo_placements_3d/);
 });
 
-test("Admin router keeps existing Studio, Jio Mapper, login and showcase routes", () => {
+test("Admin router keeps Automatic Engine, compatibility Studio, Geo Mapper, login and showcase routes", () => {
   const main = read("apps/admin/src/main.tsx");
+  assert.match(main, /\/3Dprojects\/source-pack/);
   assert.match(main, /\/3Dprojects\/studio/);
   assert.match(main, /\/3Dprojects\/geo-mapper/);
   assert.match(main, /\/3Dprojects\/login/);
   assert.match(main, /\/3Dprojects\/showcase\//);
   assert.match(main, /<EngineDashboard \/>/);
+  assert.match(main, /<SourcePackReview \/>/);
 });
 
-
-test("Engine Admin uses the golden favicon identity for primary UI actions", () => {
+test("Engine Admin keeps the golden identity on surviving primary surfaces", () => {
   const dashboardCss = read("apps/admin/src/dashboard/engine-dashboard.css");
-  const studioTheme = read("apps/admin/src/studio/studio-superadmin-theme.css");
   const geoCss = read("apps/admin/src/geo/geo-mapper.css");
   const shared = read("apps/admin/src/styles.css");
 
   assert.match(dashboardCss, /--engine-gold: #f4b942/);
   assert.match(dashboardCss, /Golden Engine identity/);
-  assert.match(studioTheme, /--rkx-violet: #f4b942/);
-  assert.match(studioTheme, /Golden Engine identity bridge/);
   assert.match(geoCss, /--geo-gold: #f4b942/);
   assert.match(geoCss, /Golden 3D Jio Mapper identity/);
   assert.match(shared, /\.eyebrow \{\s*color: #f4b942/);

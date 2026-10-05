@@ -4,17 +4,9 @@ import test from "node:test";
 
 const read = (path) => fs.readFileSync(path, "utf8");
 
-test("Smart Project Builder exposes the guided source-to-draft workflow", () => {
-  const studio = read("apps/admin/src/studio/Studio.tsx");
+test("Smart Project Builder keeps the source-to-draft analysis workflow reusable", () => {
   const builder = read("apps/admin/src/studio/SmartProjectBuilder.tsx");
   const analyzer = read("apps/admin/src/studio/projectAnalyzer.ts");
-
-  assert.match(studio, /"builder" \| "overview" \| "editor"/);
-  assert.match(studio, /\["builder", "Setup"\]/);
-  assert.match(studio, /aria-label="Project workflow"/);
-  assert.match(studio, /uploadSourcePack/);
-  assert.match(studio, /analyzeSmartProject/);
-  assert.match(studio, /buildSmartDraft/);
   assert.match(builder, /UNIVERSAL SOURCE DROP/);
   assert.match(builder, /Analyze project/);
   assert.match(builder, /Build automatically/);
@@ -29,14 +21,11 @@ test("Smart Project Builder exposes the guided source-to-draft workflow", () => 
 
 test("Smart analyzer keeps ambiguous geometry in review instead of inventing semantics", () => {
   const analyzer = read("apps/admin/src/studio/projectAnalyzer.ts");
+  const smartDraft = read("apps/admin/src/studio/smartDraftBuilder.ts");
   assert.match(analyzer, /reason: "multi-floor"/);
   assert.match(analyzer, /reason: "outside"/);
   assert.match(analyzer, /confidence >= 0\.78/);
-
-  const studio = read("apps/admin/src/studio/Studio.tsx");
-  const smartDraft = read("apps/admin/src/studio/smartDraftBuilder.ts");
   assert.match(smartDraft, /assignment\.confidence < 0\.62/);
-  assert.match(studio, /Ambiguous geometry remains review-only/);
 });
 
 test("builder metadata stays authoring-only in public Studio snapshots", () => {
@@ -48,20 +37,13 @@ test("builder metadata stays authoring-only in public Studio snapshots", () => {
   assert.doesNotMatch(sanitizer, /brief:/);
 });
 
-
-test("architectural automation stays suggestion-first and preserves manual labels", () => {
+test("architectural automation stays suggestion-first", () => {
   const analyzer = read("apps/admin/src/studio/projectAnalyzer.ts");
-  const studio = read("apps/admin/src/studio/Studio.tsx");
-
   assert.match(analyzer, /kind: SmartArchitecturalKind/);
   assert.match(analyzer, /confidence:/);
   assert.match(analyzer, /source name\/material says door/);
   assert.match(analyzer, /source name\/material says window/);
   assert.match(analyzer, /thin vertical storey-scale geometry/);
-  assert.match(studio, /semanticAssignment === "manual"/);
-  assert.match(studio, /semanticAssignment: "auto"/);
-  assert.match(studio, /const threshold = 0\.82/);
-  assert.match(studio, /Review them visually before treating them as architecture/);
 });
 
 test("CAD intake keeps raw DWG fail-closed until its source-bound normalized derivative exists", () => {
@@ -77,11 +59,9 @@ test("CAD intake keeps raw DWG fail-closed until its source-bound normalized der
   assert.match(dxf, /metresPerUnit/);
 });
 
-
 test("generic builder keeps web model and plan alignment independent from project profiles", () => {
   const builder = read("apps/admin/src/studio/SmartProjectBuilder.tsx");
   const pipeline = read("apps/admin/src/studio/autoBuildPipeline.ts");
-
   assert.match(builder, /WEB MODEL READY/);
   assert.match(builder, /Align floor plan →/);
   assert.match(builder, /Build automatically/);
@@ -92,11 +72,9 @@ test("generic builder keeps web model and plan alignment independent from projec
 
 test("FBX texture warning follows the selected authoring model only", () => {
   const builder = read("apps/admin/src/studio/SmartProjectBuilder.tsx");
-
   assert.match(builder, /audit\.assetId === project\.scene\.modelId/);
   assert.match(builder, /Selected FBX external textures incomplete/);
 });
-
 
 test("completed smart draft is explicit and rebuild stays advanced", () => {
   const builder = read("apps/admin/src/studio/SmartProjectBuilder.tsx");

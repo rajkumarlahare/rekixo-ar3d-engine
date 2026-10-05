@@ -53,26 +53,12 @@ test("local timestamp helper preserves reload state and detects cloud divergence
     synced,
     new Date("2026-09-29T10:00:01.000Z"),
   );
-  assert.equal(
-    changed.updated,
-    "2026-09-29T10:00:01.000Z",
-  );
+  assert.equal(changed.updated, "2026-09-29T10:00:01.000Z");
   assert.equal(helper.projectAheadOfCloud(changed), true);
 });
 
-test("Studio debounces local edits into IndexedDB without marking cloud synchronized", () => {
-  const studio = read("apps/admin/src/studio/Studio.tsx");
+test("readiness keeps local/cloud divergence fail-closed", () => {
   const readiness = read("apps/admin/src/studio/readiness.ts");
-
-  assert.match(studio, /window\.setTimeout\(\(\) => \{/);
-  assert.match(studio, /\}, 650\)/);
-  assert.match(studio, /storage[\s\S]*\.save\(next\)/);
-  assert.match(studio, /setDirty\(false\)/);
-  assert.match(studio, /if \(next\.cloud\) setCloudDirty\(true\)/);
-  assert.match(studio, /projectAheadOfCloud\(p\)/);
-  assert.match(studio, /Autosaved/);
-  assert.match(studio, /Save to cloud before switching a release/);
-
   assert.match(readiness, /cloudDirty: boolean/);
   assert.match(readiness, /Local draft is newer than cloud/);
   assert.match(readiness, /work is autosaved in this browser/);

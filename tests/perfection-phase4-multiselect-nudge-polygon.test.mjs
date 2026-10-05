@@ -8,14 +8,12 @@ const apply = read("apps/admin/src/studio/sceneTransformApply.ts");
 const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
 const direct = read("apps/admin/src/studio/sceneCanvasDirectManipulation.ts");
 const ux = read("apps/admin/src/studio/sceneCanvasEditorUx.ts");
-const studio = read("apps/admin/src/studio/Studio.tsx");
 
 test("Phase 4 batches group moves into one transform transaction", () => {
   assert.match(transform, /kind: "batch"; changes: AtomicTransformCommit\[\]/);
   assert.match(apply, /change\.kind === "batch"/);
   assert.match(direct, /groupMove\?\.length/);
   assert.match(direct, /kind: "batch"/);
-  assert.match(studio, /applyTransformCommit\(p\.scene, change\)/);
 });
 
 test("Phase 4 keeps multi-select explicit and prevents Shift from starting a drag", () => {
@@ -24,7 +22,6 @@ test("Phase 4 keeps multi-select explicit and prevents Shift from starting a dra
   assert.match(canvas, /!e\.shiftKey \|\| !latest\.current\.onSelectionChange/);
   assert.match(ux, /toggleCanvasSelection/);
   assert.match(direct, /event\.shiftKey/);
-  assert.match(studio, /selectedIds, setSelectedIds/);
 });
 
 test("Phase 4 keyboard nudging has fine, normal and coarse precision", () => {

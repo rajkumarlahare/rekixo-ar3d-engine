@@ -218,7 +218,6 @@ test("reviewed openings cut real procedural wall pieces and wall graph is cloud-
     "apps/admin/src/studio/domain.ts",
     "utf8",
   );
-
   assert.match(roomRenderer, /opening\.reviewed/);
   assert.match(roomRenderer, /floorGap/);
   assert.match(roomRenderer, /new T\.BoxGeometry\(pieceLength, pieceHeight, 0\.12\)/);
@@ -228,7 +227,6 @@ test("reviewed openings cut real procedural wall pieces and wall graph is cloud-
   assert.match(domain, /origin: WallOrigin/);
   assert.match(domain, /repeatOfFloorId/);
 });
-
 
 test("Phase 2 auto room draft creates only closed-wall-loop rooms", () => {
   const floor = { id: "f0", name: "Ground", elevation: 0 };
@@ -256,18 +254,15 @@ test("Phase 2 auto room draft creates only closed-wall-loop rooms", () => {
   assert.equal(result.rooms[0].width, 4);
   assert.equal(result.rooms[0].depth, 3);
   assert.equal(result.rooms[0].sourceAssetId, "model");
-
   const open = closed.slice(0, 3);
   const openResult = autoRooms.deriveAutoRoomDrafts(open, [floor], "model");
   assert.equal(openResult.rooms.length, 0);
 });
 
-
 function storedZip(name, dataBytes) {
   const encoder = new TextEncoder();
   const nameBytes = encoder.encode(name);
   const data = new Uint8Array(dataBytes);
-
   const local = new Uint8Array(30 + nameBytes.length + data.length);
   const localView = new DataView(local.buffer);
   localView.setUint32(0, 0x04034b50, true);
@@ -277,7 +272,6 @@ function storedZip(name, dataBytes) {
   localView.setUint16(26, nameBytes.length, true);
   local.set(nameBytes, 30);
   local.set(data, 30 + nameBytes.length);
-
   const central = new Uint8Array(46 + nameBytes.length);
   const centralView = new DataView(central.buffer);
   centralView.setUint32(0, 0x02014b50, true);
@@ -287,7 +281,6 @@ function storedZip(name, dataBytes) {
   centralView.setUint16(28, nameBytes.length, true);
   centralView.setUint32(42, 0, true);
   central.set(nameBytes, 46);
-
   const end = new Uint8Array(22);
   const endView = new DataView(end.buffer);
   endView.setUint32(0, 0x06054b50, true);
@@ -295,7 +288,6 @@ function storedZip(name, dataBytes) {
   endView.setUint16(10, 1, true);
   endView.setUint32(12, central.length, true);
   endView.setUint32(16, local.length, true);
-
   return new Blob([local, central, end]);
 }
 
@@ -306,121 +298,34 @@ test("Phase 2 matches SketchUp material folders to FBX material names and prefer
     ),
     "Metal Panel",
   );
-
   const files = [
-    {
-      id: "normal",
-      projectId: "p",
-      name: "Metal_Panel_normal.png",
-      type: "image/png",
-      size: 1,
-      hash: "a".repeat(64),
-      blob: new Blob(["n"]),
-    },
-    {
-      id: "base",
-      projectId: "p",
-      name: "Metal_Panel_basecolor.jpg",
-      type: "image/jpeg",
-      size: 1,
-      hash: "b".repeat(64),
-      blob: new Blob(["b"]),
-    },
+    { id: "normal", projectId: "p", name: "Metal_Panel_normal.png", type: "image/png", size: 1, hash: "a".repeat(64), blob: new Blob(["n"]) },
+    { id: "base", projectId: "p", name: "Metal_Panel_basecolor.jpg", type: "image/jpeg", size: 1, hash: "b".repeat(64), blob: new Blob(["b"]) },
   ];
   const bindings = [
-    {
-      sourceArchiveId: "skb",
-      archivePath: "materials/[Metal Panel]/Metal_Panel_normal.png",
-      materialName: "Metal Panel",
-      textureAssetId: "normal",
-      textureName: "Metal_Panel_normal.png",
-      confidence: 0.98,
-    },
-    {
-      sourceArchiveId: "skb",
-      archivePath: "materials/[Metal Panel]/Metal_Panel_basecolor.jpg",
-      materialName: "Metal Panel",
-      textureAssetId: "base",
-      textureName: "Metal_Panel_basecolor.jpg",
-      confidence: 0.98,
-    },
+    { sourceArchiveId: "skb", archivePath: "materials/[Metal Panel]/Metal_Panel_normal.png", materialName: "Metal Panel", textureAssetId: "normal", textureName: "Metal_Panel_normal.png", confidence: 0.98 },
+    { sourceArchiveId: "skb", archivePath: "materials/[Metal Panel]/Metal_Panel_basecolor.jpg", materialName: "Metal Panel", textureAssetId: "base", textureName: "Metal_Panel_basecolor.jpg", confidence: 0.98 },
   ];
-  const resolved = materialResolver.resolveSketchUpMaterialTexture(
-    "Material::Metal_Panel",
-    bindings,
-    files,
-  );
+  const resolved = materialResolver.resolveSketchUpMaterialTexture("Material::Metal_Panel", bindings, files);
   assert.equal(resolved?.asset.id, "base");
   assert.ok((resolved?.score ?? 0) > 100);
 });
 
 test("Phase 2 reads SketchUp material XML style metadata safely", async () => {
-  const xml = [
-    "<material>",
-    "<red>143</red>",
-    "<green>157</green>",
-    "<blue>158</blue>",
-    "<opacity>0.8</opacity>",
-    "<texture>Metal_Panel.jpg</texture>",
-    "<xScale>24</xScale>",
-    "<yScale>24</yScale>",
-    "</material>",
-  ].join("");
-  const blob = storedZip(
-    "materials/[Metal Panel]/material.xml",
-    new TextEncoder().encode(xml),
-  );
-  const extracted = await sketch.extractSketchUpMaterialDefinitions({
-    id: "skb-material",
-    projectId: "p",
-    name: "building.skb",
-    type: "application/octet-stream",
-    size: blob.size,
-    hash: "e".repeat(64),
-    blob,
-  });
+  const xml = ["<material>", "<red>143</red>", "<green>157</green>", "<blue>158</blue>", "<opacity>0.8</opacity>", "<texture>Metal_Panel.jpg</texture>", "<xScale>24</xScale>", "<yScale>24</yScale>", "</material>"].join("");
+  const blob = storedZip("materials/[Metal Panel]/material.xml", new TextEncoder().encode(xml));
+  const extracted = await sketch.extractSketchUpMaterialDefinitions({ id: "skb-material", projectId: "p", name: "building.skb", type: "application/octet-stream", size: blob.size, hash: "e".repeat(64), blob });
   assert.equal(extracted.issues.length, 0);
   assert.equal(extracted.definitions.length, 1);
-  assert.deepEqual(extracted.definitions[0], {
-    archivePath: "materials/[Metal Panel]/material.xml",
-    name: "Metal Panel",
-    textureName: "Metal_Panel.jpg",
-    baseColor: "#8f9d9e",
-    opacity: 0.8,
-    xScale: 24,
-    yScale: 24,
-  });
-
-  const style = materialResolver.resolveSketchUpMaterialStyle(
-    "Material::Metal_Panel",
-    [
-      {
-        sourceArchiveId: "skb-material",
-        archivePath: "materials/[Metal Panel]/material.xml",
-        materialName: "Metal Panel",
-        baseColor: "#8f9d9e",
-        opacity: 0.8,
-        xScale: 24,
-        yScale: 24,
-        confidence: 0.99,
-      },
-    ],
-  );
+  assert.deepEqual(extracted.definitions[0], { archivePath: "materials/[Metal Panel]/material.xml", name: "Metal Panel", textureName: "Metal_Panel.jpg", baseColor: "#8f9d9e", opacity: 0.8, xScale: 24, yScale: 24 });
+  const style = materialResolver.resolveSketchUpMaterialStyle("Material::Metal_Panel", [{ sourceArchiveId: "skb-material", archivePath: "materials/[Metal Panel]/material.xml", materialName: "Metal Panel", baseColor: "#8f9d9e", opacity: 0.8, xScale: 24, yScale: 24, confidence: 0.99 }]);
   assert.equal(style?.binding.baseColor, "#8f9d9e");
   assert.equal(style?.binding.opacity, 0.8);
 });
 
 test("Phase 2 recovers safe material textures from a ZIP-style SKB", async () => {
   const blob = storedZip("materials/Brick/brick.jpg", [1, 2, 3, 4]);
-  const recovered = await sketch.extractSketchUpTextures({
-    id: "skb-texture",
-    projectId: "p",
-    name: "building.skb",
-    type: "application/octet-stream",
-    size: blob.size,
-    hash: "c".repeat(64),
-    blob,
-  });
+  const recovered = await sketch.extractSketchUpTextures({ id: "skb-texture", projectId: "p", name: "building.skb", type: "application/octet-stream", size: blob.size, hash: "c".repeat(64), blob });
   assert.equal(recovered.issues.length, 0);
   assert.equal(recovered.textures.length, 1);
   assert.equal(recovered.textures[0].name, "brick.jpg");
@@ -428,44 +333,19 @@ test("Phase 2 recovers safe material textures from a ZIP-style SKB", async () =>
   assert.equal(recovered.textures[0].blob.size, 4);
 });
 
-test("Phase 2 builder exposes automatic SketchUp texture recovery", () => {
-  const builder = fs.readFileSync(
-    "apps/admin/src/studio/SmartProjectBuilder.tsx",
-    "utf8",
-  );
-  const studio = fs.readFileSync(
-    "apps/admin/src/studio/Studio.tsx",
-    "utf8",
-  );
-  const recovery = fs.readFileSync(
-    "apps/admin/src/studio/sketchUpRecovery.ts",
-    "utf8",
-  );
+test("Phase 2 builder and recovery modules expose automatic SketchUp texture recovery", () => {
+  const builder = fs.readFileSync("apps/admin/src/studio/SmartProjectBuilder.tsx", "utf8");
+  const recovery = fs.readFileSync("apps/admin/src/studio/sketchUpRecovery.ts", "utf8");
   assert.match(builder, /Recover SKB textures/);
-  assert.match(studio, /prepareSketchUpTextureRecovery/);
   assert.match(recovery, /extractSketchUpTextures/);
-  assert.match(studio, /SketchUp material texture/);
+  assert.match(recovery, /canonicalRecoveredTextureName/);
 });
 
-
 test("Phase 2 PDF plan evidence and auto-orientation are wired into alignment", () => {
-  const pdfInspector = fs.readFileSync(
-    "apps/admin/src/studio/pdfPlanInspector.ts",
-    "utf8",
-  );
-  const fusion = fs.readFileSync(
-    "apps/admin/src/studio/sourceFusion.ts",
-    "utf8",
-  );
-  const reference = fs.readFileSync(
-    "apps/admin/src/studio/ReferenceWorkspace.tsx",
-    "utf8",
-  );
-  const canvas = fs.readFileSync(
-    "apps/admin/src/studio/SceneCanvas.tsx",
-    "utf8",
-  );
-
+  const pdfInspector = fs.readFileSync("apps/admin/src/studio/pdfPlanInspector.ts", "utf8");
+  const fusion = fs.readFileSync("apps/admin/src/studio/sourceFusion.ts", "utf8");
+  const reference = fs.readFileSync("apps/admin/src/studio/ReferenceWorkspace.tsx", "utf8");
+  const canvas = fs.readFileSync("apps/admin/src/studio/SceneCanvas.tsx", "utf8");
   assert.match(pdfInspector, /getTextContent/);
   assert.match(pdfInspector, /dimensionStrings/);
   assert.match(pdfInspector, /bestPage/);
@@ -475,232 +355,83 @@ test("Phase 2 PDF plan evidence and auto-orientation are wired into alignment", 
   assert.match(canvas, /90° plan orientation selected automatically/);
 });
 
-
 test("Phase 2 one-click review approves only conservative high-confidence suggestions", () => {
   const scene = {
     floors: [
       { id: "f0", name: "Ground", elevation: 0 },
-      {
-        id: "f1",
-        name: "Floor 1",
-        elevation: 3,
-        repeatOfFloorId: "f0",
-        repeatConfidence: 0.95,
-        repeatReviewed: false,
-      },
-      {
-        id: "f2",
-        name: "Floor 2",
-        elevation: 6,
-        repeatOfFloorId: "f0",
-        repeatConfidence: 0.88,
-        repeatReviewed: false,
-      },
+      { id: "f1", name: "Floor 1", elevation: 3, repeatOfFloorId: "f0", repeatConfidence: 0.95, repeatReviewed: false },
+      { id: "f2", name: "Floor 2", elevation: 6, repeatOfFloorId: "f0", repeatConfidence: 0.88, repeatReviewed: false },
     ],
     rooms: [],
     furniture: [],
     walls: [
-      {
-        id: "ready",
-        floorId: "f0",
-        roomIds: [],
-        start: [0, 0],
-        end: [4, 0],
-        thickness: 0.12,
-        height: 2.8,
-        reviewed: false,
-        origin: "model-auto",
-        confidence: 0.94,
-      },
-      {
-        id: "review",
-        floorId: "f0",
-        roomIds: [],
-        start: [0, 1],
-        end: [4, 1],
-        thickness: 0.12,
-        height: 2.8,
-        reviewed: false,
-        origin: "model-auto",
-        confidence: 0.84,
-      },
-      {
-        id: "manual",
-        floorId: "f0",
-        roomIds: [],
-        start: [0, 2],
-        end: [4, 2],
-        thickness: 0.12,
-        height: 2.8,
-        reviewed: false,
-        origin: "manual",
-        confidence: 1,
-      },
+      { id: "ready", floorId: "f0", roomIds: [], start: [0, 0], end: [4, 0], thickness: 0.12, height: 2.8, reviewed: false, origin: "model-auto", confidence: 0.94 },
+      { id: "review", floorId: "f0", roomIds: [], start: [0, 1], end: [4, 1], thickness: 0.12, height: 2.8, reviewed: false, origin: "model-auto", confidence: 0.84 },
+      { id: "manual", floorId: "f0", roomIds: [], start: [0, 2], end: [4, 2], thickness: 0.12, height: 2.8, reviewed: false, origin: "manual", confidence: 1 },
     ],
     openings: [],
     scale: 1,
   };
-
   const counts = autoReview.autoBuildingReviewCounts(scene);
   assert.equal(counts.readyWalls, 1);
   assert.equal(counts.wallReview, 2);
   assert.equal(counts.readyRepeats, 1);
   assert.equal(counts.repeatReview, 1);
-
   const autoWalls = autoReview.markAutoReadyModelWalls(scene);
   assert.equal(autoWalls.prepared, 1);
-  assert.equal(
-    autoWalls.scene.walls.find((wall) => wall.id === "ready").reviewed,
-    false,
-  );
-  assert.equal(
-    autoWalls.scene.walls.find((wall) => wall.id === "ready").reviewState,
-    "auto_ready",
-  );
-
+  assert.equal(autoWalls.scene.walls.find((wall) => wall.id === "ready").reviewed, false);
+  assert.equal(autoWalls.scene.walls.find((wall) => wall.id === "ready").reviewState, "auto_ready");
   const autoRepeats = autoReview.markAutoReadyRepeatedFloors(autoWalls.scene);
   assert.equal(autoRepeats.prepared, 1);
   assert.equal(autoRepeats.scene.floors[1].repeatReviewed, false);
   assert.equal(autoRepeats.scene.floors[1].repeatReviewState, "auto_ready");
-
   const walls = autoReview.approveReadyModelWalls(autoRepeats.scene);
   assert.equal(walls.approved, 1);
   assert.equal(walls.scene.walls.find((wall) => wall.id === "ready").reviewed, true);
-  assert.equal(
-    walls.scene.walls.find((wall) => wall.id === "ready").reviewState,
-    "human_reviewed",
-  );
+  assert.equal(walls.scene.walls.find((wall) => wall.id === "ready").reviewState, "human_reviewed");
   assert.equal(walls.scene.walls.find((wall) => wall.id === "review").reviewed, false);
   assert.equal(walls.scene.walls.find((wall) => wall.id === "manual").reviewed, false);
-
   const repeats = autoReview.acceptReadyRepeatedFloors(walls.scene);
   assert.equal(repeats.accepted, 1);
   assert.equal(repeats.scene.floors[1].repeatReviewed, true);
-  assert.equal(
-    repeats.scene.floors[1].repeatReviewState,
-    "human_reviewed",
-  );
+  assert.equal(repeats.scene.floors[1].repeatReviewState, "human_reviewed");
   assert.equal(repeats.scene.floors[2].repeatReviewed, false);
 });
 
 test("Phase 1 auto-build prepares openings without pretending they were human-reviewed", () => {
   const scene = {
     floors: [{ id: "f0", name: "Ground", elevation: 0 }],
-    rooms: [
-      {
-        id: "r0",
-        name: "Living",
-        floorId: "f0",
-        unit: "101",
-        x: 2,
-        z: 2,
-        width: 4,
-        depth: 4,
-        height: 2.8,
-        color: "#ffffff",
-        source: "fixture",
-        verified: false,
-      },
-    ],
-    furniture: [],
-    walls: [],
-    openings: [],
-    modelNodeTags: [],
-    scale: 1,
+    rooms: [{ id: "r0", name: "Living", floorId: "f0", unit: "101", x: 2, z: 2, width: 4, depth: 4, height: 2.8, color: "#ffffff", source: "fixture", verified: false }],
+    furniture: [], walls: [], openings: [], modelNodeTags: [], scale: 1,
   };
-  const candidate = {
-    nodeName: "Door 101",
-    occurrence: 1,
-    kind: "door",
-    confidence: 0.94,
-    floorIndex: 0,
-    position: [2, 1, 0],
-    size: [0.9, 2, 0.12],
-    reasons: ["source name says door"],
-  };
-  const suggestion = {
-    key: "Door 101\u00001",
-    sourceNodeName: "Door 101",
-    sourceOccurrence: 1,
-    kind: "door",
-    floorId: "f0",
-    roomIds: ["r0"],
-    position: [2, 1, 0],
-    width: 0.9,
-    height: 2,
-    rotationY: 0,
-    wallDistance: 0.05,
-    confidence: 0.94,
-    ready: true,
-    reasons: ["fixture"],
-  };
-
-  const automatic = openingWorkflow.applyReadyOpeningWorkflow(
-    scene,
-    [candidate],
-    [suggestion],
-    () => "opening-1",
-    "auto",
-  );
+  const candidate = { nodeName: "Door 101", occurrence: 1, kind: "door", confidence: 0.94, floorIndex: 0, position: [2, 1, 0], size: [0.9, 2, 0.12], reasons: ["source name says door"] };
+  const suggestion = { key: "Door 101\u00001", sourceNodeName: "Door 101", sourceOccurrence: 1, kind: "door", floorId: "f0", roomIds: ["r0"], position: [2, 1, 0], width: 0.9, height: 2, rotationY: 0, wallDistance: 0.05, confidence: 0.94, ready: true, reasons: ["fixture"] };
+  const automatic = openingWorkflow.applyReadyOpeningWorkflow(scene, [candidate], [suggestion], () => "opening-1", "auto");
   assert.equal(automatic.prepared, 1);
   assert.equal(automatic.approved, 0);
   assert.equal(automatic.scene.openings.length, 1);
   assert.equal(automatic.scene.openings[0].reviewed, false);
   assert.equal(automatic.scene.openings[0].reviewState, "auto_ready");
-
-  const human = openingWorkflow.applyReadyOpeningWorkflow(
-    automatic.scene,
-    [candidate],
-    [suggestion],
-    () => "opening-2",
-    "human",
-  );
+  const human = openingWorkflow.applyReadyOpeningWorkflow(automatic.scene, [candidate], [suggestion], () => "opening-2", "human");
   assert.equal(human.approved, 1);
   assert.equal(human.scene.openings.length, 1);
   assert.equal(human.scene.openings[0].reviewed, true);
   assert.equal(human.scene.openings[0].reviewState, "human_reviewed");
-
-  const automaticRerun = openingWorkflow.applyReadyOpeningWorkflow(
-    human.scene,
-    [candidate],
-    [suggestion],
-    () => "opening-3",
-    "auto",
-  );
+  const automaticRerun = openingWorkflow.applyReadyOpeningWorkflow(human.scene, [candidate], [suggestion], () => "opening-3", "auto");
   assert.equal(automaticRerun.scene.openings.length, 1);
   assert.equal(automaticRerun.scene.openings[0].reviewed, true);
-  assert.equal(
-    automaticRerun.scene.openings[0].reviewState,
-    "human_reviewed",
-  );
-  assert.equal(
-    automaticRerun.scene.modelNodeTags[0].semanticAssignment,
-    "manual",
-  );
+  assert.equal(automaticRerun.scene.openings[0].reviewState, "human_reviewed");
+  assert.equal(automaticRerun.scene.modelNodeTags[0].semanticAssignment, "manual");
 });
 
-test("Phase 2 fast review UI and public sanitization are fail-closed", () => {
-  const builder = fs.readFileSync(
-    "apps/admin/src/studio/SmartProjectBuilder.tsx",
-    "utf8",
-  );
-  const studio = fs.readFileSync(
-    "apps/admin/src/studio/Studio.tsx",
-    "utf8",
-  );
-  const worker = fs.readFileSync(
-    "workers/studio-draft-validation.mjs",
-    "utf8",
-  );
-
+test("Phase 2 fast review controls and public sanitization remain fail-closed", () => {
+  const builder = fs.readFileSync("apps/admin/src/studio/SmartProjectBuilder.tsx", "utf8");
+  const worker = fs.readFileSync("workers/studio-draft-validation.mjs", "utf8");
   assert.match(builder, /Approve \{autoReview\.readyWalls\} ready walls/);
   assert.match(builder, /Accept \{autoReview\.readyRepeats\} repeated floors/);
-  assert.match(studio, /approveReadyModelWalls/);
-  assert.match(studio, /acceptReadyRepeatedFloors/);
   assert.match(worker, /wall\?\.reviewed === true/);
   assert.match(worker, /floor\.repeatReviewed === true/);
 });
-
 
 test("Phase 2 cross-source queue keeps ambiguity and missing metadata resources reviewable", () => {
   const blob = new Blob(["x"]);
@@ -715,74 +446,27 @@ test("Phase 2 cross-source queue keeps ambiguity and missing metadata resources 
     { assetId: "m", name: "scene.drs", extension: "drs", kind: "metadata", support: "partial", capabilities: ["metadata"], findings: [], warnings: [] },
   ];
   const facts = [
-    {
-      id: "m:refs",
-      sourceAssetId: "m",
-      key: "metadata.resource-refs",
-      value: ["source/missing-model.fbx"],
-      confidence: 0.9,
-      basis: "metadata",
-      status: "observed",
-    },
-    {
-      id: "a:floor",
-      sourceAssetId: "a",
-      key: "canonical.floor-count",
-      value: 5,
-      confidence: 0.9,
-      basis: "model",
-      status: "suggested",
-    },
-    {
-      id: "b:floor",
-      sourceAssetId: "b",
-      key: "canonical.floor-count",
-      value: 6,
-      confidence: 0.9,
-      basis: "provider",
-      status: "suggested",
-    },
+    { id: "m:refs", sourceAssetId: "m", key: "metadata.resource-refs", value: ["source/missing-model.fbx"], confidence: 0.9, basis: "metadata", status: "observed" },
+    { id: "a:floor", sourceAssetId: "a", key: "canonical.floor-count", value: 5, confidence: 0.9, basis: "model", status: "suggested" },
+    { id: "b:floor", sourceAssetId: "b", key: "canonical.floor-count", value: 6, confidence: 0.9, basis: "provider", status: "suggested" },
   ];
-  const conflicts = sourceConflicts.detectSourceFusionConflicts(
-    files,
-    items,
-    facts,
-    [],
-  );
+  const conflicts = sourceConflicts.detectSourceFusionConflicts(files, items, facts, []);
   assert.ok(conflicts.some((entry) => entry.id === "ambiguous-authoring-model"));
   assert.ok(conflicts.some((entry) => entry.id === "conflict:canonical.floor-count"));
   assert.ok(conflicts.some((entry) => entry.id === "missing-model-ref:m"));
 });
 
-test("Phase 2 normal builder exposes one-click generic Auto Build and no hash-profile setup panel", () => {
-  const builder = fs.readFileSync(
-    "apps/admin/src/studio/SmartProjectBuilder.tsx",
-    "utf8",
-  );
-  const studio = fs.readFileSync(
-    "apps/admin/src/studio/Studio.tsx",
-    "utf8",
-  );
-  const pipeline = fs.readFileSync(
-    "apps/admin/src/studio/autoBuildPipeline.ts",
-    "utf8",
-  );
-
+test("Phase 2 generic Auto Build remains profile-free and suggestion-first", () => {
+  const builder = fs.readFileSync("apps/admin/src/studio/SmartProjectBuilder.tsx", "utf8");
+  const pipeline = fs.readFileSync("apps/admin/src/studio/autoBuildPipeline.ts", "utf8");
   assert.match(builder, /Build automatically/);
   assert.doesNotMatch(builder, /SOURCE LOCK DETECTED/);
   assert.doesNotMatch(builder, /Exact SHA-256 source matches/);
-  assert.match(studio, /runAutoBuildPipeline/);
   assert.match(pipeline, /prepareFbxWebModel/);
   assert.match(pipeline, /prepareSketchUpTextureRecovery/);
   assert.match(pipeline, /materialBindings/);
-  assert.ok(
-    pipeline.indexOf("const recovery = await prepareSketchUpTextureRecovery") <
-      pipeline.indexOf("const prepared = await prepareFbxWebModel"),
-  );
-  const webModel = fs.readFileSync(
-    "apps/admin/src/studio/fbxWebModel.ts",
-    "utf8",
-  );
+  assert.ok(pipeline.indexOf("const recovery = await prepareSketchUpTextureRecovery") < pipeline.indexOf("const prepared = await prepareFbxWebModel"));
+  const webModel = fs.readFileSync("apps/admin/src/studio/fbxWebModel.ts", "utf8");
   assert.match(webModel, /resolveSketchUpMaterialTexture/);
   assert.match(webModel, /browser-fbx-to-glb-v2-material-fusion/);
   assert.match(webModel, /materialTexturesApplied/);
@@ -802,30 +486,20 @@ test("Phase 2 normal builder exposes one-click generic Auto Build and no hash-pr
 });
 
 test("Phase 2 six-source contract remains generic", () => {
-  const fusion = fs.readFileSync(
-    "apps/admin/src/studio/sourceFusion.ts",
-    "utf8",
-  );
+  const fusion = fs.readFileSync("apps/admin/src/studio/sourceFusion.ts", "utf8");
   for (const extension of ["fbx", "dwg", "skb", "pdf", "jpg", "drs"])
     assert.match(fusion, new RegExp(extension, "i"));
   assert.doesNotMatch(fusion, /jyoti|project_jyoti|source lock/i);
 });
 
-
 test("Phase 2 parses normalized metre geometry from unit-aware ASCII DXF", () => {
   const source = [
-    "0","SECTION","2","HEADER",
-    "9","$INSUNITS","70","4",
-    "0","ENDSEC",
-    "0","SECTION","2","ENTITIES",
+    "0","SECTION","2","HEADER","9","$INSUNITS","70","4","0","ENDSEC","0","SECTION","2","ENTITIES",
     "0","LINE","8","A-WALL","10","0","20","0","11","4000","21","0",
-    "0","LWPOLYLINE","8","A-WALL","70","1",
-    "10","0","20","0","10","4000","20","0","10","4000","20","3000","10","0","20","3000",
+    "0","LWPOLYLINE","8","A-WALL","70","1","10","0","20","0","10","4000","20","0","10","4000","20","3000","10","0","20","3000",
     "0","LINE","8","A-DOOR","10","900","20","0","11","1800","21","0",
-    "0","TEXT","8","A-ROOM","10","2000","20","1500","1","LIVING",
-    "0","ENDSEC","0","EOF",
+    "0","TEXT","8","A-ROOM","10","2000","20","1500","1","LIVING","0","ENDSEC","0","EOF",
   ].join("\n");
-
   const parsed = dxf.parseAsciiDxfArchitecture(source);
   assert.equal(parsed.ascii, true);
   assert.equal(parsed.unitName, "millimetre");
@@ -841,45 +515,19 @@ test("Phase 2 parses normalized metre geometry from unit-aware ASCII DXF", () =>
 test("Phase 2 CAD wall fallback is fail-closed on ambiguous floors and usable on a single resolved floor", () => {
   const analysis = analysisFixture();
   analysis.architecturalCandidates = [];
-  analysis.cadAudits = [{
-    assetId: "cad",
-    name: "ground-floor.dxf",
-    kind: "dxf",
-    semanticReady: true,
-    layerHints: [{ layer: "A-WALL", kind: "wall" }],
-    unitName: "metre",
-    metresPerUnit: 1,
-    geometryReady: true,
-    semanticSegments: [
-      { kind: "wall", layer: "A-WALL", start: [0,0], end: [4,0], sourceEntity: "LINE" },
-      { kind: "wall", layer: "A-WALL", start: [4,0], end: [4,3], sourceEntity: "LINE" },
-      { kind: "wall", layer: "A-WALL", start: [4,3], end: [0,3], sourceEntity: "LINE" },
-      { kind: "wall", layer: "A-WALL", start: [0,3], end: [0,0], sourceEntity: "LINE" },
-    ],
-    textLabels: [],
-    note: "normalized",
-  }];
+  analysis.cadAudits = [{ assetId: "cad", name: "ground-floor.dxf", kind: "dxf", semanticReady: true, layerHints: [{ layer: "A-WALL", kind: "wall" }], unitName: "metre", metresPerUnit: 1, geometryReady: true, semanticSegments: [
+    { kind: "wall", layer: "A-WALL", start: [0,0], end: [4,0], sourceEntity: "LINE" },
+    { kind: "wall", layer: "A-WALL", start: [4,0], end: [4,3], sourceEntity: "LINE" },
+    { kind: "wall", layer: "A-WALL", start: [4,3], end: [0,3], sourceEntity: "LINE" },
+    { kind: "wall", layer: "A-WALL", start: [0,3], end: [0,0], sourceEntity: "LINE" },
+  ], textLabels: [], note: "normalized" }];
   analysis.bounds = { min: [0,0,0], max: [4,3,3] };
-
-  const one = graph.deriveCadWallGraph(
-    analysis,
-    [{ id: "g", name: "Ground", elevation: 0 }],
-    1,
-    { x: 0, y: 0, z: 0, rotationY: 0 },
-  );
+  const one = graph.deriveCadWallGraph(analysis, [{ id: "g", name: "Ground", elevation: 0 }], 1, { x: 0, y: 0, z: 0, rotationY: 0 });
   assert.equal(one.compatible, true);
   assert.equal(one.walls.length, 4);
   assert.ok(one.walls.every((wall) => wall.origin === "cad-auto"));
   assert.ok(one.walls.every((wall) => wall.reviewed === false));
-
-  const ambiguous = graph.deriveCadWallGraph(
-    { ...analysis, cadAudits: [{ ...analysis.cadAudits[0], name: "typical.dxf" }] },
-    [
-      { id: "g", name: "Ground", elevation: 0 },
-      { id: "f1", name: "Floor 1", elevation: 3 },
-    ],
-    1,
-  );
+  const ambiguous = graph.deriveCadWallGraph({ ...analysis, cadAudits: [{ ...analysis.cadAudits[0], name: "typical.dxf" }] }, [{ id: "g", name: "Ground", elevation: 0 }, { id: "f1", name: "Floor 1", elevation: 3 }], 1);
   assert.equal(ambiguous.compatible, false);
   assert.equal(ambiguous.walls.length, 0);
 });
@@ -892,47 +540,19 @@ test("SketchUp archive inspection supports prefixed SKB ZIP payloads", async () 
   ]).arrayBuffer());
   const prefix = new TextEncoder().encode("SketchUp Model prefixed container header...........................");
   const blob = new Blob([prefix, base]);
-  const result = await sketch.inspectSketchUpArchive({
-    id: "skb-prefix",
-    projectId: "p",
-    name: "model.skb",
-    type: "application/octet-stream",
-    size: blob.size,
-    hash: "d".repeat(64),
-    blob,
-  });
+  const result = await sketch.inspectSketchUpArchive({ id: "skb-prefix", projectId: "p", name: "model.skb", type: "application/octet-stream", size: blob.size, hash: "d".repeat(64), blob });
   assert.equal(result.zipLike, true);
   assert.equal(result.entryCount, 3);
   assert.ok(result.textureFiles.includes("materials/[Basic Tile]/Basic Tile.jpg"));
 });
 
-test("Phase 2 active Studio path no longer depends on project hash profiles", () => {
-  const studio = fs.readFileSync(
-    "apps/admin/src/studio/Studio.tsx",
-    "utf8",
-  );
-  const mapper = fs.readFileSync(
-    "apps/admin/src/studio/VisualRoomMapper.tsx",
-    "utf8",
-  );
-  const reference = fs.readFileSync(
-    "apps/admin/src/studio/ReferenceWorkspace.tsx",
-    "utf8",
-  );
-  const repeatSource = fs.readFileSync(
-    "apps/admin/src/studio/unitRepeat.ts",
-    "utf8",
-  );
-  const recovery = fs.readFileSync(
-    "apps/admin/src/studio/sketchUpRecovery.ts",
-    "utf8",
-  );
-
-  assert.doesNotMatch(studio, /quickSourceSetup|detectQuickSourceSetup|source lock|profileRoomSheetRows/i);
-  assert.doesNotMatch(mapper, /onPrepareSuggestedLayout|PROJECT/);
+test("Phase 2 retained automatic foundations no longer depend on project hash profiles", () => {
+  const builder = fs.readFileSync("apps/admin/src/studio/SmartProjectBuilder.tsx", "utf8");
+  const reference = fs.readFileSync("apps/admin/src/studio/ReferenceWorkspace.tsx", "utf8");
+  const repeatSource = fs.readFileSync("apps/admin/src/studio/unitRepeat.ts", "utf8");
+  const recovery = fs.readFileSync("apps/admin/src/studio/sketchUpRecovery.ts", "utf8");
+  assert.doesNotMatch(builder, /quickSourceSetup|detectQuickSourceSetup|source lock|profileRoomSheetRows/i);
   assert.doesNotMatch(reference, /QuickSourceSetup|quickSetup/);
-  assert.match(studio, /buildDetectedRepeatPreview/);
-  assert.match(studio, /applyDetectedRepeatPlan/);
   assert.match(repeatSource, /buildDetectedRepeatPreview/);
   assert.match(recovery, /canonicalRecoveredTextureName/);
   assert.match(recovery, /auditFbxSources/);

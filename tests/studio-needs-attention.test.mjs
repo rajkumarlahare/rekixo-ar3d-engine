@@ -44,72 +44,34 @@ const scene = (overrides = {}) => ({
 
 test("unsourced legacy room drafts are removable only when dependency-free", () => {
   const target = room();
+  assert.equal(draftModule.isRemovableUnsourcedDraft(scene({ rooms: [target] }), target), true);
   assert.equal(
-    draftModule.isRemovableUnsourcedDraft(
-      scene({ rooms: [target] }),
-      target,
-    ),
-    true,
-  );
-
-  assert.equal(
-    draftModule.isRemovableUnsourcedDraft(
-      scene({ rooms: [{ ...target, verified: true }] }),
-      { ...target, verified: true },
-    ),
+    draftModule.isRemovableUnsourcedDraft(scene({ rooms: [{ ...target, verified: true }] }), { ...target, verified: true }),
     false,
   );
-
   assert.equal(
-    draftModule.isRemovableUnsourcedDraft(
-      scene({ rooms: [{ ...target, sourcePackSourceId: "source" }] }),
-      { ...target, sourcePackSourceId: "source" },
-    ),
+    draftModule.isRemovableUnsourcedDraft(scene({ rooms: [{ ...target, sourcePackSourceId: "source" }] }), { ...target, sourcePackSourceId: "source" }),
     false,
   );
-
   assert.equal(
-    draftModule.isRemovableUnsourcedDraft(
-      scene({
-        rooms: [target],
-        furniture: [{ id: "chair", roomId: target.id }],
-      }),
-      target,
-    ),
+    draftModule.isRemovableUnsourcedDraft(scene({ rooms: [target], furniture: [{ id: "chair", roomId: target.id }] }), target),
     false,
   );
-
   assert.equal(
-    draftModule.isRemovableUnsourcedDraft(
-      scene({
-        rooms: [target],
-        openings: [{ id: "door", roomIds: [target.id] }],
-      }),
-      target,
-    ),
+    draftModule.isRemovableUnsourcedDraft(scene({ rooms: [target], openings: [{ id: "door", roomIds: [target.id] }] }), target),
     false,
   );
 });
 
 test("generated repeat drafts cannot be mistaken for removable legacy drafts", () => {
   const generated = room({
-    source:
-      "Batch repeated draft from Floor 1 · 101 → 201. Geometry is copied for authoring convenience and requires visual review.",
+    source: "Batch repeated draft from Floor 1 · 101 → 201. Geometry is copied for authoring convenience and requires visual review.",
   });
-  assert.equal(
-    draftModule.isRemovableUnsourcedDraft(
-      scene({ rooms: [generated] }),
-      generated,
-    ),
-    false,
-  );
+  assert.equal(draftModule.isRemovableUnsourcedDraft(scene({ rooms: [generated] }), generated), false);
 });
 
 test("Review UI prioritizes unresolved work and keeps reviewed rooms collapsed", () => {
-  const evidence = fs.readFileSync(
-    "apps/admin/src/studio/StudioEvidence.tsx",
-    "utf8",
-  );
+  const evidence = fs.readFileSync("apps/admin/src/studio/StudioEvidence.tsx", "utf8");
   assert.match(evidence, /Needs attention/);
   assert.match(evidence, /Unresolved rooms/);
   assert.match(evidence, /Reviewed rooms ·/);
@@ -118,20 +80,15 @@ test("Review UI prioritizes unresolved work and keeps reviewed rooms collapsed",
 });
 
 test("readiness exposes walkthrough evidence instead of inventing openings", () => {
-  const readiness = fs.readFileSync(
-    "apps/admin/src/studio/readiness.ts",
-    "utf8",
-  );
+  const readiness = fs.readFileSync("apps/admin/src/studio/readiness.ts", "utf8");
   assert.match(readiness, /No source-backed walkthrough openings/);
   assert.match(readiness, /Walkthrough connectivity stays disabled rather than inventing architectural openings/);
   assert.match(readiness, /reviewed shared doors/);
 });
 
-
 test("brochure-backed Ground layout draft is removable only when a reviewed replacement exists", () => {
   const ground = room({
-    source:
-      "Brochure page 2 living dimensions. Studio placement is a draft and needs alignment with the source material.",
+    source: "Brochure page 2 living dimensions. Studio placement is a draft and needs alignment with the source material.",
   });
   const replacement = room({
     id: "living-101",
@@ -148,35 +105,13 @@ test("brochure-backed Ground layout draft is removable only when a reviewed repl
     { id: "floor-1", name: "Floor 1", elevation: 3.048 },
   ];
 
+  assert.equal(draftModule.isRemovableUnsourcedDraft(scene({ floors, rooms: [ground, replacement] }), ground), true);
+  assert.equal(draftModule.isRemovableUnsourcedDraft(scene({ floors, rooms: [ground] }), ground), false);
   assert.equal(
-    draftModule.isRemovableUnsourcedDraft(
-      scene({ floors, rooms: [ground, replacement] }),
-      ground,
-    ),
-    true,
-  );
-
-  assert.equal(
-    draftModule.isRemovableUnsourcedDraft(
-      scene({ floors, rooms: [ground] }),
-      ground,
-    ),
-    false,
-  );
-
-  assert.equal(
-    draftModule.isRemovableUnsourcedDraft(
-      scene({
-        floors,
-        rooms: [ground, replacement],
-        furniture: [{ id: "chair", roomId: ground.id }],
-      }),
-      ground,
-    ),
+    draftModule.isRemovableUnsourcedDraft(scene({ floors, rooms: [ground, replacement], furniture: [{ id: "chair", roomId: ground.id }] }), ground),
     true,
   );
 });
-
 
 test("mesh-bound superseded brochure draft may be removed while generic mesh drafts stay protected", () => {
   const floors = [
@@ -185,8 +120,7 @@ test("mesh-bound superseded brochure draft may be removed while generic mesh dra
   ];
   const ground = room({
     mesh: "LegacyMesh",
-    source:
-      "Brochure page 2 living dimensions. Studio placement is a draft and needs alignment with the source material.",
+    source: "Brochure page 2 living dimensions. Studio placement is a draft and needs alignment with the source material.",
   });
   const replacement = room({
     id: "living-101",
@@ -198,30 +132,12 @@ test("mesh-bound superseded brochure draft may be removed while generic mesh dra
     sourcePackSourceId: "jyoti-source-brochure",
   });
 
+  assert.equal(draftModule.isRemovableUnsourcedDraft(scene({ floors, rooms: [ground, replacement] }), ground), true);
   assert.equal(
-    draftModule.isRemovableUnsourcedDraft(
-      scene({ floors, rooms: [ground, replacement] }),
-      ground,
-    ),
-    true,
-  );
-
-  assert.equal(
-    draftModule.isRemovableUnsourcedDraft(
-      scene({ rooms: [room({ mesh: "SomeMesh" })] }),
-      room({ mesh: "SomeMesh" }),
-    ),
+    draftModule.isRemovableUnsourcedDraft(scene({ rooms: [room({ mesh: "SomeMesh" })] }), room({ mesh: "SomeMesh" })),
     false,
   );
 });
-
-test("legacy room cleanup preserves model tags while clearing the removed room binding", () => {
-  const studio = fs.readFileSync("apps/admin/src/studio/Studio.tsx", "utf8");
-  assert.match(studio, /modelNodeTags: \(p\.scene\.modelNodeTags \?\? \[\]\)\.map/);
-  assert.match(studio, /if \(tag\.roomId !== key\) return tag/);
-  assert.match(studio, /delete preserved\.roomId/);
-});
-
 
 test("superseded brochure draft can migrate furniture to its reviewed replacement", () => {
   const floors = [
@@ -229,8 +145,7 @@ test("superseded brochure draft can migrate furniture to its reviewed replacemen
     { id: "floor-1", name: "Floor 1", elevation: 3.048 },
   ];
   const ground = room({
-    source:
-      "Brochure page 2 living dimensions. Studio placement is a draft and needs alignment with the source model.",
+    source: "Brochure page 2 living dimensions. Studio placement is a draft and needs alignment with the source model.",
   });
   const replacement = room({
     id: "living-101",
@@ -246,20 +161,6 @@ test("superseded brochure draft can migrate furniture to its reviewed replacemen
     furniture: [{ id: "sofa", roomId: ground.id }],
   });
 
-  assert.equal(
-    draftModule.isRemovableUnsourcedDraft(current, ground),
-    true,
-  );
-  assert.equal(
-    draftModule.findSupersedingReviewedRoom(current, ground)?.id,
-    replacement.id,
-  );
-});
-
-test("Studio cleanup migrates furniture and blocks new furnishing on superseded draft", () => {
-  const studio = fs.readFileSync("apps/admin/src/studio/Studio.tsx", "utf8");
-  assert.match(studio, /item\.roomId === key && replacement/);
-  assert.match(studio, /roomId: replacement\.id/);
-  assert.match(studio, /legacyDraftFurnitureBlocked/);
-  assert.match(studio, /Remove\/review this superseded draft before furnishing/);
+  assert.equal(draftModule.isRemovableUnsourcedDraft(current, ground), true);
+  assert.equal(draftModule.findSupersedingReviewedRoom(current, ground)?.id, replacement.id);
 });
