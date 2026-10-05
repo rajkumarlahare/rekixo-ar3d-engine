@@ -78,16 +78,13 @@ test("Studio debounces local edits into IndexedDB without marking cloud synchron
   assert.match(readiness, /work is autosaved in this browser/);
 });
 
-test("hard reload browser coverage no longer presses Save local before reload", () => {
-  const e2e = read("e2e/studio-authoring.spec.ts");
-  assert.match(
-    e2e,
-    /local autosave survives hard reload without pressing Save local/,
-  );
-  assert.match(e2e, /Autosaved/);
-  assert.match(e2e, /await page\.reload\(\)/);
-  assert.doesNotMatch(
-    e2e,
-    /Autosaved E2E Change[\s\S]{0,900}getByRole\("button", \{ name: "Save local" \}\)/,
-  );
+test("production browser entry no longer depends on legacy Studio autosave UI", () => {
+  const main = read("apps/admin/src/main.tsx");
+  const e2e = read("e2e/automatic-engine-entry.spec.ts");
+
+  assert.doesNotMatch(main, /lazy\(\(\) => import\("\.\/studio\/Studio"\)\)/);
+  assert.match(main, /window\.location\.replace\(`\/3Dprojects\/source-pack/);
+  assert.match(e2e, /\/3Dprojects\/studio\?project=e2e-project/);
+  assert.match(e2e, /\/3Dprojects\/source-pack\\\?project=e2e-project/);
+  assert.doesNotMatch(e2e, /Save local|Autosaved/);
 });
