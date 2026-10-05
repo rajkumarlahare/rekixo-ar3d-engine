@@ -133,12 +133,11 @@ test("tool state machine covers direct building and interior authoring tools", a
     assert.match(source, new RegExp(`"${tool}"`));
 });
 
-test("production Studio routes current snap, pointer and history behavior through the shared kernel", () => {
+test("shared kernel remains wired into the retained presentation canvas", () => {
   const canvas = fs.readFileSync(
     "apps/admin/src/studio/SceneCanvas.tsx",
     "utf8",
   );
-  const studio = fs.readFileSync("apps/admin/src/studio/Studio.tsx", "utf8");
   const core = fs.readFileSync("packages/engine-core/src/index.ts", "utf8");
 
   assert.match(core, /export \* from "\.\/editor"/);
@@ -146,7 +145,4 @@ test("production Studio routes current snap, pointer and history behavior throug
   assert.match(canvas, /isPointerTap/);
   assert.match(canvas, /type PlanSegment/);
   assert.doesNotMatch(canvas, /edgeDistance <= 0\.18/);
-  assert.match(studio, /new SnapshotHistory<Project>\(40\)/);
-  assert.match(studio, /historyRef\.current\.record\(project\)/);
-  assert.doesNotMatch(studio, /undo\.current|redo\.current/);
 });
