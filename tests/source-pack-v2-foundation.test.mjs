@@ -151,3 +151,37 @@ test("Source Pack V2 schema is additive, sealed after ready, and prepared for re
   assert.doesNotMatch(migration, /DELETE\s+FROM\s+studio_assets_3d/i);
   assert.doesNotMatch(migration, /UPDATE\s+studio_assets_3d/i);
 });
+
+test("sealed Source Pack V2 can cascade only inside the exact resumable hard-delete context", () => {
+  const migration = fs.readFileSync(
+    "database/migrations/0031_source_pack_v2_foundation.sql",
+    "utf8",
+  );
+  const verifier = fs.readFileSync(
+    "scripts/verify-fresh-migrations.mjs",
+    "utf8",
+  );
+
+  assert.match(
+    migration,
+    /geometry_authority_file_id\) REFERENCES source_files_3d\(id\) ON DELETE NO ACTION/,
+  );
+  assert.match(
+    migration,
+    /source_file_id\) REFERENCES source_files_3d\(id\) ON DELETE NO ACTION/,
+  );
+  assert.match(migration, /trg_source_pack_files_3d_ready_delete_block/);
+  assert.match(migration, /project\.status='archived'/);
+  assert.match(migration, /engine_deletion_jobs_3d job/);
+  assert.match(migration, /job\.status<>'completed'/);
+  assert.match(migration, /json_each\(job\.projects_json\)/);
+  assert.match(
+    migration,
+    /json_extract\(snapshot_project\.value, '\$\.id'\)=OLD\.project_id/,
+  );
+
+  assert.match(verifier, /Verifying sealed Source Pack V2 rows can be removed only/);
+  assert.match(verifier, /db_cleanup_pending/);
+  assert.match(verifier, /DELETE FROM projects_3d WHERE id=/);
+  assert.match(verifier, /Sealed Source Pack V2 project cascade left project-owned rows behind/);
+});
