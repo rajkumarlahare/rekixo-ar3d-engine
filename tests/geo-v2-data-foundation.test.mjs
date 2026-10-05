@@ -48,6 +48,7 @@ test("Geo model anchors are metre-local and pinned to exact Building release own
     migration,
     /r\.version=NEW\.source_building_release_version/,
   );
+  assert.match(migration, /trg_geo_experience_drafts_3d_anchor_owner_insert/);
   assert.match(migration, /trg_geo_experience_drafts_3d_anchor_owner_update/);
   assert.match(migration, /trg_geo_model_anchors_3d_delete_in_use/);
 });
@@ -74,6 +75,7 @@ test("masterplan controls and calibration stay separate from rigid Building plac
   assert.match(migration, /worst_control_point_id TEXT/);
   assert.match(migration, /status IN \('unverified','verified','failed'\)/);
   assert.match(migration, /UNIQUE \(overlay_id, draft_revision\)/);
+  assert.match(migration, /trg_geo_calibration_reports_3d_immutable/);
 });
 
 test("site boundary and migration verifier include the V2 Geo foundation", () => {
