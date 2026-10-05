@@ -139,3 +139,15 @@ test("multipart completion has a D1 recovery path after an R2 success", () => {
   assert.match(worker, /source\.upload_state === "uploaded"/);
   assert.match(worker, /replayed: true/);
 });
+
+test("D1 permits only one active multipart session for each source original", () => {
+  const migration = fs.readFileSync(
+    "database/migrations/0032_source_upload_one_active_session.sql",
+    "utf8",
+  );
+  assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS idx_source_upload_sessions_3d_one_active/);
+  assert.match(migration, /ON source_upload_sessions_3d\(source_file_id\)/);
+  assert.match(migration, /WHERE state IN \('initiated','uploading'\)/);
+  assert.doesNotMatch(migration, /DROP\s+TABLE/i);
+  assert.doesNotMatch(migration, /DELETE\s+FROM/i);
+});
