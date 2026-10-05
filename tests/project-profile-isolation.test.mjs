@@ -17,14 +17,14 @@ function walk(dir) {
   return out;
 }
 
-test("generic viewer and Studio keep shared profile registries project-neutral", () => {
+test("generic viewer and presentation runtime keep shared profile registries project-neutral", () => {
   const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
-  const studio = read("apps/admin/src/studio/SceneCanvas.tsx");
+  const presentation = read("apps/admin/src/studio/PresentationCanvas.tsx");
   const modelRegistry = read("packages/model-profiles/src/index.ts");
   const projectRegistry = read("apps/public/src/viewer/projectProfiles.ts");
   const sourceRegistry = read("project-profiles/studio-source-profiles.ts");
 
-  assert.match(studio, /@rekixo\/3d-model-profiles/);
+  assert.match(presentation, /@rekixo\/3d-model-profiles/);
   assert.match(viewer, /\.\/projectProfiles/);
   assert.match(modelRegistry, /return undefined/);
   assert.match(projectRegistry, /createSemanticStudioExperience/);
@@ -76,17 +76,12 @@ test("bundle gate rejects project-specific chunks from returning", () => {
   );
 });
 
-test("Studio propagates local FBX source hash only as source evidence", () => {
-  const studio = read("apps/admin/src/studio/SceneCanvas.tsx");
-  const fbxBlock = studio.match(
-    /if \(f\.name\.toLowerCase\(\)\.endsWith\("\.fbx"\)\) \{[\s\S]*?\} else \{/,
-  )?.[0];
+test("FBX conversion propagates local source hash only as source provenance", () => {
+  const webModel = read("apps/admin/src/studio/fbxWebModel.ts");
 
-  assert.ok(fbxBlock, "FBX parse block should stay explicit");
-  assert.match(fbxBlock, /object\.userData\.sourceGeometry/);
-  assert.match(fbxBlock, /sha256: f\.hash\.toLowerCase\(\)/);
-  assert.doesNotMatch(
-    studio.slice(studio.indexOf("} else {"), studio.indexOf("if (cancelled)")),
-    /sha256:\s*f\.hash/,
-  );
+  assert.match(webModel, /root\.userData\.rekixoSource\s*=\s*\{/);
+  assert.match(webModel, /assetId:\s*source\.id/);
+  assert.match(webModel, /sha256:\s*source\.hash/);
+  assert.match(webModel, /conversion:\s*"browser-fbx-to-glb-v2-material-fusion"/);
+  assert.doesNotMatch(webModel, /jyoti-paradise|Jyoti Paradise/i);
 });
