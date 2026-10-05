@@ -2,18 +2,20 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-const sourceUpload = await import(
-  new URL("../workers/source-upload.mjs", import.meta.url)
+const sourceUploadPolicy = await import(
+  new URL("../workers/source-upload-policy.mjs", import.meta.url)
 );
 
 const {
   SOURCE_UPLOAD_PART_SIZE,
   SOURCE_UPLOAD_MAX_PARTS,
   SOURCE_UPLOAD_MAX_BYTES,
+  validSourceIdentity,
+  validSourceSha256,
   sourceFileKey,
   sourcePartPlan,
   expectedSourcePartSize,
-} = sourceUpload;
+} = sourceUploadPolicy;
 
 test("Source Pack V2 uses bounded 16 MiB multipart chunks", () => {
   assert.equal(SOURCE_UPLOAD_PART_SIZE, 16 * 1024 * 1024);
@@ -35,6 +37,10 @@ test("Source Pack V2 uses bounded 16 MiB multipart chunks", () => {
     partSize: SOURCE_UPLOAD_PART_SIZE,
     partCount: 2,
   });
+  assert.deepEqual(sourcePartPlan(SOURCE_UPLOAD_MAX_BYTES), {
+    partSize: SOURCE_UPLOAD_PART_SIZE,
+    partCount: SOURCE_UPLOAD_MAX_PARTS,
+  });
   assert.equal(
     expectedSourcePartSize(
       SOURCE_UPLOAD_PART_SIZE + 7,
@@ -53,17 +59,51 @@ test("Source Pack V2 uses bounded 16 MiB multipart chunks", () => {
   );
 });
 
-test("multipart planning rejects invalid sizes and more than 10,000 parts", () => {
+test("multipart planning rejects invalid sizes, part sizes, counts and part numbers", () => {
   assert.throws(() => sourcePartPlan(0), /positive safe integer/);
-  assert.throws(() => sourcePartPlan(Number.MAX_SAFE_INTEGER + 1), /positive safe integer/);
+  assert.throws(
+    () => sourcePartPlan(Number.MAX_SAFE_INTEGER + 1),
+    /positive safe integer/,
+  );
+  assert.throws(
+    () => sourcePartPlan(100, 5 * 1024 * 1024 - 1),
+    /Invalid multipart part size/,
+  );
+  assert.throws(
+    () => sourcePartPlan(100, 5 * 1024 * 1024 * 1024 + 1),
+    /Invalid multipart part size/,
+  );
+  assert.throws(
+    () => sourcePartPlan(100, 5.5 * 1024 * 1024),
+    /Invalid multipart part size/,
+  );
   assert.throws(
     () => sourcePartPlan(SOURCE_UPLOAD_MAX_BYTES + 1),
     /more than 10,000 multipart parts/,
   );
   assert.throws(
+    () => expectedSourcePartSize(100, SOURCE_UPLOAD_PART_SIZE, 0),
+    /Invalid multipart part number/,
+  );
+  assert.throws(
+    () => expectedSourcePartSize(100, SOURCE_UPLOAD_PART_SIZE, 1.5),
+    /Invalid multipart part number/,
+  );
+  assert.throws(
     () => expectedSourcePartSize(100, SOURCE_UPLOAD_PART_SIZE, 2),
     /Invalid multipart part number/,
   );
+});
+
+test("source identity and SHA-256 validators stay strict", () => {
+  assert.equal(validSourceIdentity("source_12345678"), true);
+  assert.equal(validSourceIdentity("short"), false);
+  assert.equal(validSourceIdentity("../source_12345678"), false);
+  assert.equal(validSourceIdentity(null), false);
+  assert.equal(validSourceSha256("a".repeat(64)), true);
+  assert.equal(validSourceSha256("A".repeat(64)), false);
+  assert.equal(validSourceSha256("a".repeat(63)), false);
+  assert.equal(validSourceSha256(null), false);
 });
 
 test("source originals use project-scoped content-addressed keys", () => {
@@ -75,6 +115,18 @@ test("source originals use project-scoped content-addressed keys", () => {
   assert.throws(() => sourceFileKey("../escape", "source_12345678", sha256));
   assert.throws(() => sourceFileKey("garden-heights", "../source", sha256));
   assert.throws(() => sourceFileKey("garden-heights", "source_12345678", "bad"));
+});
+
+test("runtime worker consumes the isolated upload policy instead of redefining it", () => {
+  const worker = fs.readFileSync("workers/source-upload.mjs", "utf8");
+  assert.match(worker, /from "\.\/source-upload-policy\.mjs"/);
+  assert.match(worker, /SOURCE_UPLOAD_PART_SIZE/);
+  assert.match(worker, /SOURCE_UPLOAD_MAX_BYTES/);
+  assert.match(worker, /sourceFileKey/);
+  assert.match(worker, /sourcePartPlan/);
+  assert.match(worker, /expectedSourcePartSize/);
+  assert.doesNotMatch(worker, /export function sourcePartPlan/);
+  assert.doesNotMatch(worker, /export function sourceFileKey/);
 });
 
 test("new source route is intercepted before the legacy Cloud Studio router", () => {
@@ -113,9 +165,15 @@ test("mutations are same-origin, deletion-job aware and Jyoti benchmark locked",
     /new URL\(origin\)\.origin === new URL\(request\.url\)\.origin/,
   );
   assert.match(worker, /activeDeletionJob\(env\)/);
-  assert.match(worker, /LOCKED_SOURCE_MUTATION_SLUGS = new Set\(\["jyoti-paradise"\]\)/);
+  assert.match(
+    worker,
+    /LOCKED_SOURCE_MUTATION_SLUGS = new Set\(\["jyoti-paradise"\]\)/,
+  );
   assert.match(worker, /status: 423/);
-  assert.match(worker, /Source originals cannot be mutated or deleted through this route/);
+  assert.match(
+    worker,
+    /Source originals cannot be mutated or deleted through this route/,
+  );
   assert.doesNotMatch(worker, /request\.method === "DELETE"/);
 });
 
@@ -135,9 +193,20 @@ test("multipart completion has a D1 recovery path after an R2 success", () => {
   const completeIndex = worker.indexOf(".complete(completionParts)");
   assert.ok(headIndex >= 0);
   assert.ok(completeIndex > headIndex);
-  assert.match(worker, /Completed R2 source object does not match the registered source metadata/);
+  assert.match(
+    worker,
+    /Completed R2 source object does not match the registered source metadata/,
+  );
   assert.match(worker, /source\.upload_state === "uploaded"/);
   assert.match(worker, /replayed: true/);
+});
+
+test("concurrent initiations abort the losing R2 upload and resume the winning D1 session", () => {
+  const worker = fs.readFileSync("workers/source-upload.mjs", "utf8");
+  assert.match(worker, /await multipart\.abort\(\)\.catch\(\(\) => \{\}\)/);
+  assert.match(worker, /const winner = await activeSession/);
+  assert.match(worker, /winner\.id !== sessionId/);
+  assert.match(worker, /resumed: true/);
 });
 
 test("D1 permits only one active multipart session for each source original", () => {
@@ -145,7 +214,10 @@ test("D1 permits only one active multipart session for each source original", ()
     "database/migrations/0032_source_upload_one_active_session.sql",
     "utf8",
   );
-  assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS idx_source_upload_sessions_3d_one_active/);
+  assert.match(
+    migration,
+    /CREATE UNIQUE INDEX IF NOT EXISTS idx_source_upload_sessions_3d_one_active/,
+  );
   assert.match(migration, /ON source_upload_sessions_3d\(source_file_id\)/);
   assert.match(migration, /WHERE state IN \('initiated','uploading'\)/);
   assert.doesNotMatch(migration, /DROP\s+TABLE/i);
