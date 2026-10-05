@@ -85,6 +85,11 @@ const requiredObjects = new Set([
   "geo_control_points_3d",
   "geo_calibration_reports_3d",
   "geo_site_boundaries_3d",
+  "source_files_3d",
+  "source_packs_3d",
+  "source_pack_files_3d",
+  "source_upload_sessions_3d",
+  "source_upload_parts_3d",
   "engine_deletion_jobs_3d",
   "trg_projects_3d_block_insert_during_delete",
 ]);
@@ -104,6 +109,11 @@ const objectRows = executeJson(
         'geo_control_points_3d',
         'geo_calibration_reports_3d',
         'geo_site_boundaries_3d',
+        'source_files_3d',
+        'source_packs_3d',
+        'source_pack_files_3d',
+        'source_upload_sessions_3d',
+        'source_upload_parts_3d',
         'engine_deletion_jobs_3d',
         'trg_projects_3d_block_insert_during_delete'
       )
@@ -141,6 +151,11 @@ const projectOwnedCounts = executeJson(
      (SELECT COUNT(*) FROM geo_releases_3d) +
      (SELECT COUNT(*) FROM geo_experience_active_releases_3d) +
      (SELECT COUNT(*) FROM geo_release_activations_3d) +
+     (SELECT COUNT(*) FROM source_files_3d) +
+     (SELECT COUNT(*) FROM source_packs_3d) +
+     (SELECT COUNT(*) FROM source_pack_files_3d) +
+     (SELECT COUNT(*) FROM source_upload_sessions_3d) +
+     (SELECT COUNT(*) FROM source_upload_parts_3d) +
      (SELECT COUNT(*) FROM engine_deletion_jobs_3d) AS total`,
 );
 if (Number(projectOwnedCounts[0]?.total ?? -1) !== 0)
