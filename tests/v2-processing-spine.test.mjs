@@ -27,6 +27,7 @@ test("Phase 1 processing foundation is additive and pins immutable Source Pack i
   assert.match(migration, /trg_processing_jobs_3d_input_insert/);
   assert.match(migration, /status IN \('ready','superseded'\)/);
   assert.match(migration, /operator_approved=1/);
+  assert.match(migration, /NEW\.artifact_prefix =[\s\S]*'projects\/' \|\| project\.slug/);
   assert.match(migration, /Processing job input identity is immutable/);
   assert.doesNotMatch(migration, /DROP\s+TABLE/i);
   assert.doesNotMatch(migration, /UPDATE\s+releases_3d/i);
@@ -45,7 +46,11 @@ test("processing retries append attempts and duplicate active work is blocked", 
 });
 
 test("processing artifacts are attempt-scoped and successful output is immutable", () => {
-  assert.match(migration, /NEW\.r2_key LIKE j\.artifact_prefix \|\| '%'/);
+  assert.match(
+    migration,
+    /substr\(NEW\.r2_key,1,length\(j\.artifact_prefix\)\)=j\.artifact_prefix/,
+  );
+  assert.doesNotMatch(migration, /NEW\.r2_key LIKE j\.artifact_prefix/);
   assert.match(migration, /Successful processing job requires a ready artifact/);
   assert.match(migration, /Ready processing artifact is immutable/);
   assert.match(migration, /Successful processing job is immutable outside project hard delete/);
