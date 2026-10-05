@@ -111,7 +111,7 @@ test("authoring document establishes wall-hosted openings without replacing curr
   assert.match(source, /placement: "floor" \| "wall" \| "ceiling" \| "site"/);
 });
 
-test("tool state machine covers direct building and interior authoring tools", async () => {
+test("tool state machine covers reusable building and interior authoring primitives", async () => {
   const {
     createEditorToolState,
     beginEditorToolGesture,
@@ -133,16 +133,15 @@ test("tool state machine covers direct building and interior authoring tools", a
     assert.match(source, new RegExp(`"${tool}"`));
 });
 
-test("shared kernel remains wired into the retained presentation canvas", () => {
+test("shared pointer kernel remains wired into read-only presentation while authoring kernels stay standalone", () => {
   const canvas = fs.readFileSync(
-    "apps/admin/src/studio/SceneCanvas.tsx",
+    "apps/admin/src/studio/PresentationCanvas.tsx",
     "utf8",
   );
   const core = fs.readFileSync("packages/engine-core/src/index.ts", "utf8");
 
   assert.match(core, /export \* from "\.\/editor"/);
-  assert.match(canvas, /resolvePlanSnap/);
   assert.match(canvas, /isPointerTap/);
-  assert.match(canvas, /type PlanSegment/);
-  assert.doesNotMatch(canvas, /edgeDistance <= 0\.18/);
+  assert.doesNotMatch(canvas, /resolvePlanSnap/);
+  assert.doesNotMatch(canvas, /type PlanSegment/);
 });

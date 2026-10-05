@@ -55,8 +55,14 @@ test("presentation canvas cannot regain authoring dependencies", () => {
     );
 });
 
-test("authoring SceneCanvas remains isolated for later dependency-proven retirement", () => {
-  assert.equal(fs.existsSync("apps/admin/src/studio/SceneCanvas.tsx"), true);
-  const viewer = read("apps/admin/src/studio/PublishedViewer.tsx");
-  assert.equal(viewer.includes("./SceneCanvas"), false);
+test("legacy authoring canvas and direct controllers remain retired", () => {
+  for (const path of [
+    "apps/admin/src/studio/SceneCanvas.tsx",
+    "apps/admin/src/studio/SceneCanvasOverlays.tsx",
+    "apps/admin/src/studio/sceneCanvasArchitectureController.ts",
+    "apps/admin/src/studio/sceneCanvasDirectManipulation.ts",
+    "apps/admin/src/studio/sceneCanvasEditorUx.ts",
+    "apps/admin/src/studio/sceneCanvasPlanResizeHandles.ts",
+    "apps/admin/src/studio/canvasFurniturePlacement.ts",
+  ]) assert.equal(fs.existsSync(path), false, `retired authoring module returned: ${path}`);
 });

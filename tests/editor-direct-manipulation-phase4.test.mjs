@@ -90,90 +90,10 @@ test("corner resize keeps the opposite corner fixed and enforces minimum dimensi
   );
 });
 
-test("direct manipulation controller is pointer-owned, cancel-safe and commits only at gesture end", () => {
-  const source = fs.readFileSync(
-    "apps/admin/src/studio/sceneCanvasDirectManipulation.ts",
-    "utf8",
+test("legacy SceneCanvas direct-manipulation controller stays retired", () => {
+  assert.equal(
+    fs.existsSync("apps/admin/src/studio/sceneCanvasDirectManipulation.ts"),
+    false,
   );
-
-  assert.match(source, /beginPointerGesture/);
-  assert.match(source, /updatePointerGesture/);
-  assert.match(source, /finishPointerGesture/);
-  assert.match(source, /event\.type === "pointercancel"/);
-  assert.match(source, /session\.previewTarget\.position\.copy\(session\.startLocal\)/);
-  assert.match(source, /session\.previewTarget\.scale\.copy\(session\.startScale\)/);
-  assert.match(source, /completion\.kind === "tap"/);
-  assert.match(source, /completion\.kind === "cancel"/);
-
-  const moveStart = source.indexOf("pointerMove(event: PointerEvent)");
-  const upStart = source.indexOf("pointerUp(event: PointerEvent)", moveStart);
-  assert.ok(moveStart >= 0 && upStart > moveStart);
-  assert.doesNotMatch(source.slice(moveStart, upStart), /onTransformCommit/);
-  assert.match(source.slice(upStart), /config\.onTransformCommit\?\.\(change\)/);
-});
-
-test("direct manipulation covers smart edge snapping, wall endpoints and plan corner resizing", () => {
-  const source = fs.readFileSync(
-    "apps/admin/src/studio/sceneCanvasDirectManipulation.ts",
-    "utf8",
-  );
-  const architecture = fs.readFileSync(
-    "apps/admin/src/studio/sceneCanvasArchitecture.ts",
-    "utf8",
-  );
-  const handles = fs.readFileSync(
-    "apps/admin/src/studio/sceneCanvasPlanResizeHandles.ts",
-    "utf8",
-  );
-  const rooms = fs.readFileSync(
-    "apps/admin/src/studio/sceneCanvasRooms.ts",
-    "utf8",
-  );
-  const site = fs.readFileSync(
-    "apps/admin/src/studio/sceneCanvasSite.ts",
-    "utf8",
-  );
-
-  for (const kind of ["room", "furniture", "site", "wall", "opening"])
-    assert.match(source, new RegExp(`kind: "${kind}"`));
-
-  assert.match(source, /config\.view === "walk"/);
-  assert.match(source, /config\.transformMode \?\? "translate"/);
-  assert.match(source, /authoringActive\(config\)/);
-  assert.match(source, /options\.transform\.dragging/);
-  assert.match(source, /options\.transform\.axis/);
-  assert.match(source, /resolveEdgeSnap/);
-  assert.match(source, /edgeSnapTargets/);
-  assert.match(source, /gridSize: config\.snap && gridObject \? 0\.1 : 0/);
-  assert.match(source, /wallEndpointHandle/);
-  assert.match(source, /setWallEndpointPosition/);
-  assert.match(source, /Wall endpoint resized/);
-  assert.match(source, /Math\.hypot\(x - fixed\[0\], z - fixed\[1\]\) < 0\.2/);
-  assert.match(source, /planResizeHandle/);
-  assert.match(source, /resolvePlanCornerResize/);
-  assert.match(source, /setPlanCornerResize/);
-  assert.match(source, /resizeCorner/);
-  assert.match(source, /Resize · W/);
-  assert.match(architecture, /addWallEndpointHandle/);
-  assert.match(architecture, /new T\.SphereGeometry\(0\.32/);
-  assert.match(architecture, /userData\.wallEndpoint = endpoint/);
-  assert.match(handles, /new T\.SphereGeometry\(0\.3/);
-  assert.match(handles, /userData\.planResizeCorner = corner/);
-  assert.match(rooms, /!room\.polygon\?\.length/);
-  assert.match(rooms, /addPlanResizeHandles/);
-  assert.match(site, /addPlanResizeHandles/);
-});
-
-test("production SceneCanvas routes pointer down, move and up through direct manipulation", () => {
-  const source = fs.readFileSync(
-    "apps/admin/src/studio/SceneCanvas.tsx",
-    "utf8",
-  );
-
-  assert.match(source, /createDirectManipulationController/);
-  assert.match(source, /snapPlanPoint: snapRoomPoint/);
-  assert.match(source, /directManipulation\.pointerDown\(e\)/);
-  assert.match(source, /directManipulation\.pointerMove\(e\)/);
-  assert.match(source, /directManipulation\.pointerUp\(e\)/);
-  assert.match(source, /addEventListener\("pointercancel", click\)/);
+  assert.equal(fs.existsSync("apps/admin/src/studio/SceneCanvas.tsx"), false);
 });
