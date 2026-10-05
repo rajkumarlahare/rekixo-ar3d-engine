@@ -23,10 +23,6 @@ const readinessSource = fs.readFileSync(
   "apps/admin/src/studio/readiness.ts",
   "utf8",
 );
-const publishSource = fs.readFileSync(
-  "apps/admin/src/studio/StudioPublish.tsx",
-  "utf8",
-);
 
 function transpile(source, fileName, jsx = false) {
   const result = ts.transpileModule(source, {
@@ -190,7 +186,6 @@ test("P1.6 whole-scene validator is cross-entity and fail-closed", () => {
 test("P1.7 review queue is actionable and publish readiness consumes integrity blockers", () => {
   transpile(queueSource, "actionableReviewQueue.ts");
   transpile(readinessSource, "readiness.ts");
-  transpile(publishSource, "StudioPublish.tsx", true);
 
   assert.match(queueSource, /buildActionableReviewQueue/);
   assert.match(queueSource, /action:/);
@@ -206,9 +201,11 @@ test("P1.7 review queue is actionable and publish readiness consumes integrity b
   assert.match(readinessSource, /severity: "blocker"/);
   assert.match(readinessSource, /publishable: valid && blockers\.length === 0/);
 
-  assert.match(publishSource, /data-testid="actionable-review-queue"/);
-  assert.match(publishSource, /disabled=\{busy \|\| !readiness\.publishable\}/);
-  assert.match(publishSource, /<strong>Next:<\/strong> \{item\.action\}/);
+  assert.equal(
+    fs.existsSync("apps/admin/src/studio/StudioPublish.tsx"),
+    false,
+    "publish readiness must no longer depend on the retired StudioPublish UI wrapper",
+  );
 });
 
 test("shared AutoBuild emits fingerprint, integrity report and actionable queue every run", () => {
