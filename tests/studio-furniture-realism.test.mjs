@@ -4,14 +4,14 @@ import test from "node:test";
 
 const read = (file) => fs.readFileSync(file, "utf8");
 
-test("Studio furniture renderer uses detailed object construction instead of one primitive block", () => {
-  const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+test("published and reusable room renderers use detailed furniture visuals", () => {
+  const presentation = read("apps/admin/src/studio/PresentationCanvas.tsx");
   const furniture = read("apps/admin/src/studio/furnitureVisual.ts");
   const roomObjects = read("apps/admin/src/studio/sceneCanvasRoomObjects.ts");
 
-  assert.match(canvas, /renderRoomFurniture/);
+  assert.match(presentation, /function presentationFurniture/);
+  assert.match(presentation, /addFurnitureVisual\(root, item\)/);
   assert.match(roomObjects, /addFurnitureVisual\(root, item\)/);
-  assert.doesNotMatch(canvas, /block\(\s*g,\s*f\.kind/);
 
   assert.match(furniture, /Sofa seat cushion/);
   assert.match(furniture, /Sofa back cushion/);

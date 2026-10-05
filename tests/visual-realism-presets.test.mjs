@@ -45,8 +45,8 @@ test("evening presets use architectural lights with distinct light balances", ()
   assert.ok(warm.exposure >= night.exposure);
 });
 
-test("retained presentation canvas applies scene appearance controls", () => {
-  const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+test("read-only presentation canvas applies scene appearance controls", () => {
+  const canvas = read("apps/admin/src/studio/PresentationCanvas.tsx");
   const appearance = read("apps/admin/src/studio/sceneCanvasAppearance.ts");
   assert.match(canvas, /applySceneCanvasAppearance/);
   for (const property of ["toneMappingExposure", "hemisphereIntensity", "sunIntensity", "nightMode"])

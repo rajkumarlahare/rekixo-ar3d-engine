@@ -56,14 +56,14 @@ test("Phase 10 AutoBuild derives site drafts only from source-backed CAD semanti
 });
 
 test("Phase 10 site elements remain renderable and publish only after review", () => {
-  const canvas = fs.readFileSync("apps/admin/src/studio/SceneCanvas.tsx", "utf8");
+  const presentation = fs.readFileSync("apps/admin/src/studio/PresentationCanvas.tsx", "utf8");
   const siteCanvas = fs.readFileSync("apps/admin/src/studio/sceneCanvasSite.ts", "utf8");
   const worker = fs.readFileSync("workers/studio-draft-validation.mjs", "utf8");
   const manifest = fs.readFileSync("apps/admin/src/studio/manifestV2.ts", "utf8");
   const contract = fs.readFileSync("packages/contracts/src/scene-manifest-v2.ts", "utf8");
-  assert.match(canvas, /renderSiteElements/);
-  assert.match(canvas, /siteElementTransformChange/);
-  assert.match(canvas, /props\.scene\.siteElements/);
+  assert.match(presentation, /function presentationSiteElements/);
+  assert.match(presentation, /addSiteElementVisual\(root, element\)/);
+  assert.match(presentation, /props\.scene\.siteElements \?\? \[\]/);
   assert.match(siteCanvas, /addSiteElementVisual/);
   assert.match(siteCanvas, /kind: "siteElement"/);
   assert.match(worker, /siteElements: \(scene\.siteElements \?\? \[\]\)/);

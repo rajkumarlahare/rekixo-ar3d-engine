@@ -4,20 +4,31 @@ import test from "node:test";
 
 const read = (path) => fs.readFileSync(path, "utf8");
 
-test("Scene canvas excludes neighboring rooms and unrelated openings in room-focus mode", () => {
-  const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+test("reusable opening renderer can still isolate reviewed openings to a room", () => {
   const roomObjects = read("apps/admin/src/studio/sceneCanvasRoomObjects.ts");
 
-  assert.match(canvas, /soloRoomId\?: string/);
-  assert.match(canvas, /props\.view === "rooms"[\s\S]*?props\.soloRoomId[\s\S]*?room\.id !== props\.soloRoomId/);
-  assert.match(canvas, /renderReviewedOpeningMarkers/);
-  assert.match(canvas, /soloRoomId: props\.soloRoomId/);
-  assert.match(roomObjects, /options\.view === "rooms"[\s\S]*?options\.soloRoomId[\s\S]*?!opening\.roomIds\.includes\(options\.soloRoomId\)/);
+  assert.match(
+    roomObjects,
+    /options\.view === "rooms"[\s\S]*?options\.soloRoomId[\s\S]*?!opening\.roomIds\.includes\(options\.soloRoomId\)/,
+  );
+  assert.match(
+    roomObjects,
+    /options\.view === "walk"[\s\S]*?!opening\.roomIds\.includes\(options\.roomId\)/,
+  );
 });
 
-test("room-focus mode frames the active room instead of the whole floor", () => {
-  const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+test("published room view frames the active room while walk mode renders only that room", () => {
+  const presentation = read("apps/admin/src/studio/PresentationCanvas.tsx");
 
-  assert.match(canvas, /props\.view === "rooms" && props\.soloRoomId[\s\S]*?api\.current\?\.focusSelected\(\)/);
-  assert.match(canvas, /props\.soloRoomId,[\s\S]*?\]\);/);
+  assert.match(presentation, /const activeRoomId =/);
+  assert.match(presentation, /current\.roomId/);
+  assert.match(
+    presentation,
+    /current\.scene\.rooms\.find\([\s\S]*?candidate\.id === activeRoomId/,
+  );
+  assert.match(presentation, /roomBoundaryPoints\(room\)/);
+  assert.match(
+    presentation,
+    /props\.view === "walk" && room\.id !== props\.roomId/,
+  );
 });

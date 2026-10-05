@@ -70,12 +70,3 @@ test("profile suggested rooms seed once and preserve evidence provenance", () =>
   const repeated = roomSheet.createSuggestedRoomDrafts([row], rooms, "floor-1", { x: 2, y: 0, z: 3, rotationY: 0 }, 1, () => "should-not-be-used");
   assert.equal(repeated.length, 0);
 });
-
-test("retained canvas preserves exact room-sheet stamping behavior", () => {
-  const canvas = fs.readFileSync("apps/admin/src/studio/SceneCanvas.tsx", "utf8");
-  const canvasHints = fs.readFileSync("apps/admin/src/studio/CanvasAuthoringHints.tsx", "utf8");
-  assert.match(canvas, /roomStamp\?:/);
-  assert.match(canvas, /latest\.current\.roomStamp\?\.enabled/);
-  assert.match(canvas, /width: Number\(stamp\.width\.toFixed\(3\)\)/);
-  assert.match(canvasHints, /Click or tap once to place the exact room-sheet size/);
-});

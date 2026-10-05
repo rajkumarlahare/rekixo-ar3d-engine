@@ -110,28 +110,14 @@ test("Phase 4 pointer cancellation is a non-committing terminal state", async ()
   assert.equal(completion.kind, "cancel");
 });
 
-test("Phase 4 architecture authoring uses the shared gesture kernel and fails closed on pointercancel", () => {
-  const controller = fs.readFileSync(
-    "apps/admin/src/studio/sceneCanvasArchitectureController.ts",
-    "utf8",
-  );
-  const canvas = fs.readFileSync(
-    "apps/admin/src/studio/SceneCanvas.tsx",
-    "utf8",
-  );
+test("shared gesture kernel stays exported after legacy canvas controller retirement", () => {
   const editorIndex = fs.readFileSync(
     "packages/engine-core/src/editor/index.ts",
     "utf8",
   );
-
   assert.match(editorIndex, /export \* from "\.\/gesture"/);
-  assert.match(controller, /beginPointerGesture\(event\)/);
-  assert.match(controller, /updatePointerGesture\(wallGesture, event\)/);
-  assert.match(controller, /finishPointerGesture\(wallGesture, event, \{ cancelled \}\)/);
-  assert.match(controller, /event\.type === "pointercancel"/);
-  assert.match(controller, /if \(!completion\.accepted\) return true/);
-  assert.match(controller, /if \(cancelled\) \{/);
-  assert.match(controller, /if \(completion\.kind !== "tap"\) return true/);
-  assert.doesNotMatch(controller, /isPointerTap/);
-  assert.match(canvas, /addEventListener\("pointercancel", click\)/);
+  assert.equal(
+    fs.existsSync("apps/admin/src/studio/sceneCanvasArchitectureController.ts"),
+    false,
+  );
 });
