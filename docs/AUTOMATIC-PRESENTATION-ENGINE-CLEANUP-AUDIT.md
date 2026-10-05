@@ -18,6 +18,10 @@ rather than:
 
 `draw/edit walls -> author rooms/openings/furniture -> reconstruct building -> publish`.
 
+The final product also keeps an optional Engine-owned 3D Geo Experience. Geo references an exact immutable Building release, places that rigid Building at an actual WGS84 location, supports masterplan/site calibration, and publishes through its own immutable Geo release lifecycle. Geo is therefore a first-class retained capability, not a cleanup candidate.
+
+See `docs/FINAL-AUTOMATIC-PRESENTATION-AND-GEO-ARCHITECTURE.md` for the locked target architecture.
+
 ## Production protection — LOCKED
 
 `jyoti-paradise` is the golden production reference. During this cleanup:
@@ -48,6 +52,14 @@ Keep the stable public routing/viewer foundation, immutable release tables/contr
 ### Presentation runtime
 
 Keep/refine `Viewer3D`, camera utilities, sky, realism/material utilities, `presentationEnvironment`, `siteEnvironment`, source-presentation mapping, runtime context, resource cleanup, and mobile/performance behavior.
+
+### 3D Geo Experience
+
+Keep and evolve the existing Building/Geo experience split, Geo draft/revision lifecycle, exact Building-release pinning, immutable Geo releases, activation/rollback history, geo-optimized model derivative path, and Geo security/audit boundaries.
+
+Refactor the current Geo authoring/runtime implementation from a 2D satellite-map anchor plus separate model preview into a true integrated geospatial 3D placement system. Canonical Geo truth must be WGS84 + local ENU metres, with explicit model anchors, heading/height controls, optional masterplan/site calibration, verification, and immutable Geo publish.
+
+The Building must remain rigid in Geo. 2D masterplan homography may calibrate an overlay, but it must never warp or reconstruct Building geometry.
 
 ### Tests worth retaining
 
@@ -82,6 +94,10 @@ Render public controls conditionally. Floor Explorer, Walk, Section, Explode, se
 ### Environment
 
 Convert current primitive/site landscape behavior into a reusable presentation-environment system with project configuration and reusable optimized assets. Generated surroundings are presentation dressing, not claimed real-world GIS truth.
+
+### Geo authoring/runtime
+
+`GeoMapper3D.tsx` and `GeoPublicDemo.tsx` are refactor targets, not deletion targets. Preserve the existing immutable Geo lifecycle while replacing the current separate map/model presentation with the final integrated 3D Geo Mapper and public geospatial scene.
 
 ## DELETE CANDIDATES — AFTER DEPENDENCY REMOVAL AND GREEN TESTS
 
@@ -125,10 +141,11 @@ Before destructive Phase 1/2 work, verify from production rather than repository
 - exact active Jyoti project ID and active release ID;
 - complete release-asset rows and exact R2 object keys reachable from that release;
 - whether checked-in presentation hashes are live dependencies or build-time references;
-- which geo-experience tables/routes are still part of the intended Rekixo product versus a separate retained capability;
 - whether any external/legacy client URL depends on old customer-info/showcase DOM structure;
 - all direct administrative deletion paths outside the audited bulk worker and purge script;
 - production D1 columns/tables still read by public/admin workers before schema retirement.
+
+The intended product status of Geo is no longer unknown: 3D Geo Mapper is explicitly retained as a first-class optional Experience.
 
 ## Current sample source-pack findings
 
@@ -152,21 +169,25 @@ Recommended source roles:
 3. Keep all cleanup on the dedicated branch.
 4. Add regression tests.
 
-### Phase 1 — Dependency inventory
+### Phase 1 — Final V2 contracts and dependency inventory
 
-Build an import/reference/schema/route inventory and classify each candidate as KEEP, REFACTOR, DELETE, LOCKED, or UNKNOWN.
+Lock the automatic-presentation product boundary, Building/Geo Experience boundary, source-authority rules, Geo WGS84/ENU/metre rules, model-anchor contract, immutable Building-to-Geo release pinning, and dependency inventory before schema/runtime migration.
 
-### Phase 2 — UI/runtime detachment
+### Phase 2 — Additive V2 data foundation
+
+Add new schema through forward migrations only. Keep compatibility readers until replacement runtime is proven.
+
+### Phase 3 — UI/runtime detachment
 
 Replace editor-first Studio surfaces with source-pack/presentation workflow while leaving old implementation isolated but still available to the branch until replacement tests pass.
 
-### Phase 3 — safe deletion batches
+### Phase 4 — safe deletion batches
 
 Remove now-unreferenced authoring modules, editor package code, obsolete tests/styles/docs, and only then consider forward schema cleanup.
 
 ### Later phases
 
-Source-pack processing, web-model optimization, texture recovery, reusable premium environment, sky/lighting/material intelligence, automatic camera presets, premium public template, minimal Super Admin workflow, performance/mobile QA, and controlled production deployment.
+Source-pack processing, web-model optimization, texture recovery, reusable premium environment, sky/lighting/material intelligence, automatic camera presets, premium public template, integrated 3D Geo Mapper/public runtime, mobile/performance QA, and controlled production deployment.
 
 ## Merge gate
 
