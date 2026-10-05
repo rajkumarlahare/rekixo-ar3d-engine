@@ -176,6 +176,15 @@ function packFileResponse(row) {
   };
 }
 
+function sameCapabilities(left, right) {
+  const normalizedLeft = [...new Set(left || [])].sort();
+  const normalizedRight = [...new Set(right || [])].sort();
+  return (
+    normalizedLeft.length === normalizedRight.length &&
+    normalizedLeft.every((value, index) => value === normalizedRight[index])
+  );
+}
+
 async function packResponse(env, projectId, pack) {
   if (!pack) return null;
   const files = (await packFiles(env, projectId, pack.id)).map(packFileResponse);
@@ -290,6 +299,16 @@ async function saveReview(env, actor, project, body) {
   const stale = [...reviewedIds].filter((id) => !verifiedIds.has(id));
   if (missing.length || stale.length)
     throw new Error("Review must include every currently verified source file exactly once.");
+
+  const storedFiles = (await packFiles(env, project.id, pack.id)).map(packFileResponse);
+  const storedById = new Map(storedFiles.map((item) => [item.sourceFileId, item]));
+  for (const item of files) {
+    const stored = storedById.get(item.sourceFileId);
+    if (!stored || !sameCapabilities(item.capabilities, stored.capabilities))
+      throw new Error(
+        "Source capabilities are engine-derived and cannot be changed during operator review.",
+      );
+  }
 
   const geometryAuthorityFileId = files.find((item) =>
     item.roles.includes("geometry-authority"),
