@@ -9,6 +9,7 @@ import {
 
 const worker = fs.readFileSync("workers/source-pack-review.mjs", "utf8");
 const entry = fs.readFileSync("workers/admin-entry.mjs", "utf8");
+const reviewUi = fs.readFileSync("apps/admin/src/source-pack/SourcePackReview.tsx", "utf8");
 
 test("operator review requires exactly one geometry-capable authority", () => {
   assert.throws(
@@ -147,6 +148,15 @@ test("operator review cannot invent engine-derived source capabilities", () => {
   assert.match(worker, /const storedFiles = \(await packFiles\(env, project\.id, pack\.id\)\)\.map\(packFileResponse\)/);
   assert.match(worker, /!sameCapabilities\(item\.capabilities, stored\.capabilities\)/);
   assert.match(worker, /Source capabilities are engine-derived and cannot be changed during operator review/);
+});
+
+test("Source Pack UI cannot seal stale server review while local changes are unsaved", () => {
+  assert.match(reviewUi, /const \[dirty, setDirty\] = useState\(false\)/);
+  assert.match(reviewUi, /setDirty\(true\)/);
+  assert.match(reviewUi, /setDirty\(false\)/);
+  assert.match(reviewUi, /if \(dirty\) \{[\s\S]*Unsaved review changes/);
+  assert.match(reviewUi, /disabled=\{Boolean\(busy\) \|\| dirty \|\| !pack\.readiness\.ready\}/);
+  assert.match(reviewUi, /disabled=\{Boolean\(busy\) \|\| !slug \|\| dirty\}/);
 });
 
 test("review API is guarded and cannot mutate presentation/public assets", () => {
