@@ -18,6 +18,15 @@ for (const [path, maxLines] of budgets) {
     );
 }
 
+for (const retiredPath of [
+  "apps/admin/src/studio/StudioOverview.tsx",
+  "apps/admin/src/studio/StudioPublish.tsx",
+  "apps/admin/src/studio/StudioSources.tsx",
+  "apps/admin/src/studio/useStudioCloudState.ts",
+])
+  if (fs.existsSync(retiredPath))
+    throw new Error(`Detached legacy Studio wrapper returned: ${retiredPath}`);
+
 const presentation = read("apps/admin/src/studio/PresentationCanvas.tsx");
 if (/public\/src\/viewer/.test(presentation))
   throw new Error(
