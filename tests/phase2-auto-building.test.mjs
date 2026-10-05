@@ -201,13 +201,13 @@ test("Phase 2 DWG evidence scan reports version and architectural strings withou
   assert.ok(result.drawingTextHints.some((item) => /FLOOR PLAN/.test(item)));
 });
 
-test("reviewed openings cut real procedural wall pieces and wall graph is cloud-validated", () => {
+test("reviewed openings remain visible in presentation and wall graph is cloud-validated", () => {
   const roomRenderer = fs.readFileSync(
     "apps/admin/src/studio/sceneCanvasRooms.ts",
     "utf8",
   );
-  const sceneCanvas = fs.readFileSync(
-    "apps/admin/src/studio/SceneCanvas.tsx",
+  const presentation = fs.readFileSync(
+    "apps/admin/src/studio/PresentationCanvas.tsx",
     "utf8",
   );
   const worker = fs.readFileSync(
@@ -221,7 +221,8 @@ test("reviewed openings cut real procedural wall pieces and wall graph is cloud-
   assert.match(roomRenderer, /opening\.reviewed/);
   assert.match(roomRenderer, /floorGap/);
   assert.match(roomRenderer, /new T\.BoxGeometry\(pieceLength, pieceHeight, 0\.12\)/);
-  assert.match(sceneCanvas, /props\.scene\.openings \?\? \[\]/);
+  assert.match(presentation, /presentationOpeningMarkers/);
+  assert.match(presentation, /opening\.reviewed/);
   assert.match(worker, /scene\.walls/);
   assert.match(worker, /Invalid Studio parametric wall/);
   assert.match(domain, /origin: WallOrigin/);
@@ -341,18 +342,14 @@ test("Phase 2 builder and recovery modules expose automatic SketchUp texture rec
   assert.match(recovery, /canonicalRecoveredTextureName/);
 });
 
-test("Phase 2 PDF plan evidence and auto-orientation are wired into alignment", () => {
+test("Phase 2 PDF plan evidence remains in automatic source fusion after visual alignment retirement", () => {
   const pdfInspector = fs.readFileSync("apps/admin/src/studio/pdfPlanInspector.ts", "utf8");
   const fusion = fs.readFileSync("apps/admin/src/studio/sourceFusion.ts", "utf8");
-  const reference = fs.readFileSync("apps/admin/src/studio/ReferenceWorkspace.tsx", "utf8");
-  const canvas = fs.readFileSync("apps/admin/src/studio/SceneCanvas.tsx", "utf8");
   assert.match(pdfInspector, /getTextContent/);
   assert.match(pdfInspector, /dimensionStrings/);
   assert.match(pdfInspector, /bestPage/);
   assert.match(fusion, /pdf\.plan-page/);
-  assert.match(reference, /recommendedPdfPage/);
-  assert.match(canvas, /score90 \+ 0\.08 < score0 \? 90 : 0/);
-  assert.match(canvas, /90° plan orientation selected automatically/);
+  assert.doesNotMatch(fusion, /jyoti|project_jyoti|source lock/i);
 });
 
 test("Phase 2 one-click review approves only conservative high-confidence suggestions", () => {
@@ -548,11 +545,9 @@ test("SketchUp archive inspection supports prefixed SKB ZIP payloads", async () 
 
 test("Phase 2 retained automatic foundations no longer depend on project hash profiles", () => {
   const builder = fs.readFileSync("apps/admin/src/studio/SmartProjectBuilder.tsx", "utf8");
-  const reference = fs.readFileSync("apps/admin/src/studio/ReferenceWorkspace.tsx", "utf8");
   const repeatSource = fs.readFileSync("apps/admin/src/studio/unitRepeat.ts", "utf8");
   const recovery = fs.readFileSync("apps/admin/src/studio/sketchUpRecovery.ts", "utf8");
   assert.doesNotMatch(builder, /quickSourceSetup|detectQuickSourceSetup|source lock|profileRoomSheetRows/i);
-  assert.doesNotMatch(reference, /QuickSourceSetup|quickSetup/);
   assert.match(repeatSource, /buildDetectedRepeatPreview/);
   assert.match(recovery, /canonicalRecoveredTextureName/);
   assert.match(recovery, /auditFbxSources/);
