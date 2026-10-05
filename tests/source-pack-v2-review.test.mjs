@@ -143,6 +143,20 @@ test("review draft refuses missing or stale classifier suggestions", () => {
   assert.match(worker, /Refresh automatic source classification before starting review/);
 });
 
+test("review draft atomically snapshots the verified source set", () => {
+  assert.match(
+    worker,
+    /SELECT COUNT\(\*\) FROM source_files_3d[\s\S]*project_id=\? AND upload_state='verified'[\s\S]*\)=\?/,
+  );
+  assert.match(
+    worker,
+    /AND NOT EXISTS \([\s\S]*SELECT 1 FROM source_packs_3d[\s\S]*status='draft'[\s\S]*\)/,
+  );
+  assert.match(worker, /const results = await env\.DB\.batch\(statements\)/);
+  assert.match(worker, /const created = Number\(results\?\.\[0\]\?\.meta\?\.changes \|\| 0\) > 0/);
+  assert.match(worker, /Verified source set changed while starting review/);
+});
+
 test("operator review cannot invent engine-derived source capabilities", () => {
   assert.match(worker, /function sameCapabilities/);
   assert.match(worker, /const storedFiles = \(await packFiles\(env, project\.id, pack\.id\)\)\.map\(packFileResponse\)/);
