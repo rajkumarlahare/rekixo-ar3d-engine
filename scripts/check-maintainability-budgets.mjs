@@ -4,7 +4,7 @@ const read = (path) => fs.readFileSync(path, "utf8");
 const lineCount = (path) => read(path).split(/\r?\n/).length;
 
 const budgets = [
-  ["apps/admin/src/studio/Studio.tsx", 5400],
+  ["apps/admin/src/source-pack/SourcePackReview.tsx", 500],
   ["apps/admin/src/studio/SceneCanvas.tsx", 2050],
   ["workers/admin-cloud.mjs", 2450],
 ];
@@ -19,9 +19,9 @@ for (const [path, maxLines] of budgets) {
 
 const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
 if (/public\/src\/viewer/.test(canvas))
-  throw new Error("Admin Studio must not import implementation code from apps/public.");
+  throw new Error("Admin presentation canvas must not import implementation code from apps/public.");
 if (!/@rekixo\/3d-model-profiles/.test(canvas))
-  throw new Error("Admin Studio must use the shared model-profile package.");
+  throw new Error("Admin presentation canvas must use the shared model-profile package.");
 
 const cloud = read("workers/admin-cloud.mjs");
 if (!/from "\.\/project-deletion\.mjs"/.test(cloud))
