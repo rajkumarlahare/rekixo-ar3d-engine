@@ -30,7 +30,16 @@ test("Automatic Source Pack route remains the primary supported engine entry", (
 test("production deploy verifier enforces the Automatic Engine entry contract", () => {
   const verifier = read("scripts/verify-design-admin.mjs");
 
-  assert.match(verifier, /get\('\/3Dprojects\/source-pack', 'text\/html'\)/);
+  assert.match(verifier, /async function getFreshAdminEntry\(\)/);
+  assert.match(
+    verifier,
+    /get\('\/3Dprojects\/source-pack', 'text\/html', 1\)/,
+  );
+  assert.match(verifier, /get\(entry\[1\], 'javascript', 1\)/);
+  assert.match(
+    verifier,
+    /const \{ html, entry, code \} = await getFreshAdminEntry\(\)/,
+  );
   assert.match(verifier, /SourcePackReview-\[\\w-\]\+\\\.js/);
   assert.match(verifier, /Refresh automatic analysis/);
   assert.match(verifier, /SEAL SOURCE PACK/);

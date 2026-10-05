@@ -1,9 +1,9 @@
 const origin = 'https://admin.rekixo.com';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function get(path, kind) {
+async function get(path, kind, attempts = 5) {
   let diagnostic = "";
-  for (let attempt = 1; attempt <= 5; attempt += 1) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const url = new URL(path, origin);
     url.searchParams.set("_rekixo_verify", `${Date.now()}-${attempt}`);
     try {
@@ -18,22 +18,52 @@ async function get(path, kind) {
     } catch (error) {
       diagnostic = error instanceof Error ? error.message : String(error);
     }
-    if (attempt < 5) await sleep(3000);
+    if (attempt < attempts) await sleep(3000);
   }
   throw Error(
     `Automatic Engine Admin verification failed after propagation retries: ${path} (${diagnostic})`,
   );
 }
 
-const html = await get('/3Dprojects/source-pack', 'text/html');
+async function getFreshAdminEntry() {
+  let diagnostic = "";
+
+  // The HTML shell and hashed entry asset can propagate through Cloudflare
+  // at slightly different times. Refresh both together instead of pinning
+  // one stale hashed asset for every retry.
+  for (let attempt = 1; attempt <= 10; attempt += 1) {
+    try {
+      const html = await get('/3Dprojects/source-pack', 'text/html', 1);
+      const entry = html.match(/src="(\/3Dprojects\/assets\/[^" ]+\.js)"/);
+
+      if (!entry) {
+        diagnostic = 'Missing Automatic Engine Admin entry script.';
+      } else {
+        try {
+          const code = await get(entry[1], 'javascript', 1);
+          return { html, entry, code };
+        } catch (error) {
+          diagnostic = error instanceof Error ? error.message : String(error);
+        }
+      }
+    } catch (error) {
+      diagnostic = error instanceof Error ? error.message : String(error);
+    }
+
+    if (attempt < 10) await sleep(3000);
+  }
+
+  throw Error(
+    `Automatic Engine Admin entry did not converge after propagation retries: ${diagnostic}`,
+  );
+}
+
+const { html, entry, code } = await getFreshAdminEntry();
+
 if (!html.includes('href="/3Dprojects/favicon.svg"')) throw Error('Missing 3D Engine Admin favicon link.');
 const favicon = await get('/3Dprojects/favicon.svg', 'image/svg+xml');
 for (const gold of ['#FFD166', '#B77900', '#E4A11B'])
   if (!favicon.includes(gold)) throw Error(`Deployed golden favicon is missing ${gold}.`);
-
-const entry = html.match(/src="(\/3Dprojects\/assets\/[^" ]+\.js)"/);
-if (!entry) throw Error('Missing Automatic Engine Admin entry script.');
-const code = await get(entry[1], 'javascript');
 
 if (!code.includes('/3Dprojects/source-pack')) {
   throw Error('Deployed admin entry is missing the Automatic Engine Source Pack route.');
