@@ -133,6 +133,15 @@ test("sealed manifest is deterministic and keeps geometry/evidence boundaries ex
   assert.deepEqual(manifest.files[1].roles, ["content-reference", "evidence"]);
 });
 
+test("review draft refuses missing or stale classifier suggestions", () => {
+  assert.match(worker, /SOURCE_CLASSIFIER_VERSION/);
+  assert.match(worker, /s\.classifier_version/);
+  assert.match(worker, /classifierVersion: row\.classifier_version/);
+  assert.match(worker, /classifier_version !== SOURCE_CLASSIFIER_VERSION/);
+  assert.match(worker, /missing\.length \|\| stale\.length/);
+  assert.match(worker, /Refresh automatic source classification before starting review/);
+});
+
 test("review API is guarded and cannot mutate presentation/public assets", () => {
   assert.match(worker, /engineAdminReadAccess/);
   assert.match(worker, /sameOrigin/);
