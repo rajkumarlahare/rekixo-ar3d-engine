@@ -116,7 +116,7 @@ test("Source Pack V2 keeps classification confidence reviewable and bounded", ()
   );
 });
 
-test("Source Pack V2 schema is additive, immutable after ready, and prepared for resumable upload", () => {
+test("Source Pack V2 schema is additive, sealed after ready, and prepared for resumable upload", () => {
   const migration = fs.readFileSync(
     "database/migrations/0031_source_pack_v2_foundation.sql",
     "utf8",
@@ -138,8 +138,13 @@ test("Source Pack V2 schema is additive, immutable after ready, and prepared for
   }
 
   assert.match(migration, /Verified source file identity is immutable/);
+  assert.match(migration, /Source pack can contain only one geometry authority/);
   assert.match(migration, /Ready source pack file mapping is immutable/);
   assert.match(migration, /Ready source pack is immutable; create a new version/);
+  assert.match(migration, /Create source pack as draft before sealing it ready/);
+  assert.match(migration, /status IN \('ready','superseded'\)/);
+  assert.match(migration, /json_type\(roles_json\)='array'/);
+  assert.match(migration, /trg_source_upload_sessions_3d_owner_update/);
   assert.match(migration, /r2-multipart/);
   assert.match(migration, /geometry-authority/);
   assert.doesNotMatch(migration, /DROP\s+TABLE/i);
