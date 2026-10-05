@@ -55,8 +55,8 @@ test("presentation canvas cannot regain authoring dependencies", () => {
     );
 });
 
-test("authoring SceneCanvas remains isolated for later dependency-proven retirement", () => {
-  assert.equal(fs.existsSync("apps/admin/src/studio/SceneCanvas.tsx"), true);
+test("detached authoring SceneCanvas stays retired", () => {
+  assert.equal(fs.existsSync("apps/admin/src/studio/SceneCanvas.tsx"), false);
   const viewer = read("apps/admin/src/studio/PublishedViewer.tsx");
   assert.equal(viewer.includes("./SceneCanvas"), false);
 });
