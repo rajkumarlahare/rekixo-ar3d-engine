@@ -15,23 +15,22 @@ test("Studio cloud discovery and release state live in a focused hook", () => {
   assert.match(hook, /markCloudSignedOut/);
 });
 
-test("browser E2E smoke covers authoring, analysis and reload-safe autosave", () => {
+test("browser E2E smoke covers Automatic Engine entry and source decision boundary", () => {
   const config = read("playwright.config.ts");
-  const e2e = read("e2e/studio-authoring.spec.ts");
+  const main = read("apps/admin/src/main.tsx");
+  const e2e = read("e2e/automatic-engine-entry.spec.ts");
   const workflow = read(".github/workflows/deploy-cloudflare.yml");
+
   assert.match(config, /Desktop Chrome/);
-  assert.match(e2e, /getByTestId\("analyze-project"\)/);
-  assert.match(e2e, /getByTestId\("detected-floor-levels"\)/);
-  assert.match(e2e, /getByTestId\("build-analyzed-draft"\)/);
-  assert.match(e2e, /getByTestId\("open-visual-editor"\)/);
-  assert.match(e2e, /Autosaved/);
-  assert.match(e2e, /More project actions/);
-  assert.match(e2e, /name: "Setup"/);
-  assert.match(e2e, /name: "3D Edit"/);
-  assert.match(e2e, /hard reload without pressing Save local/);
-  assert.match(e2e, /page\.reload\(\)/);
-  assert.match(e2e, /toBeDisabled/);
-  assert.match(e2e, /Selected local project/);
+  assert.match(main, /LegacyStudioRedirect/);
+  assert.match(main, /\/3Dprojects\/source-pack/);
+  assert.doesNotMatch(main, /lazy\(\(\) => import\("\.\/studio\/Studio"\)\)/);
+  assert.match(e2e, /legacy Studio URL enters the Automatic Engine/);
+  assert.match(e2e, /Source Pack Review/);
+  assert.match(e2e, /AUTOMATIC PRESENTATION ENGINE · SOURCE DECISION/);
+  assert.match(e2e, /One geometry authority/);
+  assert.match(e2e, /Smart 3D project builder/);
+  assert.match(e2e, /3D editor tools/);
   assert.match(workflow, /Run browser E2E smoke/);
   assert.match(workflow, /playwright install --with-deps chromium/);
 });
