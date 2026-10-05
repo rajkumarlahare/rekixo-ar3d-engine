@@ -15,7 +15,6 @@ const BASE_PATH = "/3Dprojects";
 const SOURCE_ROUTE_PREFIX = `${BASE_PATH}/api/cloud/projects/`;
 const SOURCE_UPLOAD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_JSON_BYTES = 32 * 1024;
-const LOCKED_SOURCE_MUTATION_SLUGS = new Set(["jyoti-paradise"]);
 
 const SECURITY_HEADERS = {
   "Content-Security-Policy-Report-Only": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com; media-src 'self' blob:; font-src 'self' data: https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://maps.googleapis.com https://maps.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.gstatic.com; worker-src 'self' blob:",
@@ -66,9 +65,14 @@ async function sourceSchemaReady(env) {
       `SELECT COUNT(*) AS total
          FROM sqlite_master
         WHERE type='table'
-          AND name IN ('source_files_3d','source_upload_sessions_3d','source_upload_parts_3d')`,
+          AND name IN (
+            'source_files_3d',
+            'source_upload_sessions_3d',
+            'source_upload_parts_3d',
+            'project_operation_locks_3d'
+          )`,
     ).first();
-    return Number(row?.total || 0) === 3;
+    return Number(row?.total || 0) === 4;
   } catch {
     return false;
   }
@@ -81,6 +85,16 @@ async function projectBySlug(env, slug) {
       WHERE slug=?
       LIMIT 1`,
   ).bind(slug).first();
+}
+
+async function projectOperationLockReason(env, projectId, operation) {
+  const row = await env.DB.prepare(
+    `SELECT reason
+       FROM project_operation_locks_3d
+      WHERE project_id=? AND operation=?
+      LIMIT 1`,
+  ).bind(projectId, operation).first();
+  return row ? String(row.reason || "Project operation is locked.") : null;
 }
 
 async function audit(env, actor, action, projectId, targetId, details = {}) {
@@ -669,9 +683,13 @@ export async function handleSourceUploadRequest(request, env, url = new URL(requ
     if (!sameOrigin(request)) return json({ error: "Invalid request origin." }, { status: 403 });
     if (project.status === "archived")
       return json({ error: "Restore the project before uploading source files." }, { status: 409 });
-    if (LOCKED_SOURCE_MUTATION_SLUGS.has(route.slug))
+    const lockReason = await projectOperationLockReason(env, project.id, "source-write");
+    if (lockReason)
       return json(
-        { error: "Jyoti Paradise is locked as the production benchmark; source mutation is disabled." },
+        {
+          error: "Project source mutation is locked by an operational policy.",
+          reason: lockReason,
+        },
         { status: 423 },
       );
     if (await activeDeletionJob(env))
