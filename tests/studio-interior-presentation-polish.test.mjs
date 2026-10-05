@@ -4,13 +4,12 @@ import test from "node:test";
 
 const read = (path) => fs.readFileSync(path, "utf8");
 
-test("focused Interior uses presentation lighting instead of exterior sky/grid", () => {
-  const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+test("read-only presentation keeps production shadows and appearance runtime", () => {
+  const presentation = read("apps/admin/src/studio/PresentationCanvas.tsx");
   const appearance = read("apps/admin/src/studio/sceneCanvasAppearance.ts");
 
-  assert.match(canvas, /PCFSoftShadowMap/);
-  assert.match(canvas, /const focusedInterior =[\s\S]*?props\.view === "rooms"/);
-  assert.match(canvas, /applySceneCanvasAppearance/);
+  assert.match(presentation, /PCFSoftShadowMap/);
+  assert.match(presentation, /applySceneCanvasAppearance/);
   assert.match(appearance, /runtime\.grid\.visible = !focusedInterior/);
   assert.match(
     appearance,
@@ -22,39 +21,32 @@ test("focused Interior uses presentation lighting instead of exterior sky/grid",
   );
 });
 
-test("focused Interior raises cutaway walls and adds warm architectural finish", () => {
-  const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+test("reusable room renderer retains warm architectural interior finish", () => {
   const rooms = read("apps/admin/src/studio/sceneCanvasRooms.ts");
 
-  assert.match(canvas, /focusedInterior[\s\S]*?Math\.min\(room\.height, 1\.05\)/);
-  assert.match(canvas, /roomSurface\([\s\S]*?focusedInterior/);
   assert.match(rooms, /interiorPresentation = false/);
   assert.match(rooms, /#f4f0e9/);
   assert.match(rooms, /skirting/);
   assert.match(rooms, /#c9b9a4/);
 });
 
-test("focused Interior keeps the initial room view clean until furniture is selected", () => {
-  const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+test("presentation room view uses a shallow cutaway and frames the active room", () => {
+  const presentation = read("apps/admin/src/studio/PresentationCanvas.tsx");
 
   assert.match(
-    canvas,
-    /room\.id === props\.selected[\s\S]*?!\(props\.view === "rooms" && props\.soloRoomId\)/,
+    presentation,
+    /props\.view === "walk" \? room\.height : 0\.65/,
   );
-  assert.match(
-    canvas,
-    /isRoom && props\.view === "rooms" && props\.soloRoomId/,
-  );
-  assert.match(
-    canvas,
-    /focusedInterior \? 1\.04 : 0\.9/,
-  );
+  assert.match(presentation, /const activeRoomId =/);
+  assert.match(presentation, /current\.roomId/);
+  assert.match(presentation, /roomBoundaryPoints\(room\)/);
+  assert.match(presentation, /new T\.Box3/);
 });
 
 test("presentation polish is render-only and does not mutate project scene data", () => {
-  const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+  const presentation = read("apps/admin/src/studio/PresentationCanvas.tsx");
   const rooms = read("apps/admin/src/studio/sceneCanvasRooms.ts");
 
   assert.doesNotMatch(rooms, /room\.[a-zA-Z]+\s*=/);
-  assert.doesNotMatch(canvas, /props\.scene\.[a-zA-Z]+\s*=/);
+  assert.doesNotMatch(presentation, /props\.scene\.[a-zA-Z]+\s*=/);
 });
