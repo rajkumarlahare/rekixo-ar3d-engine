@@ -5,6 +5,7 @@ const lineCount = (path) => read(path).split(/\r?\n/).length;
 
 const budgets = [
   ["apps/admin/src/source-pack/SourcePackReview.tsx", 500],
+  ["apps/admin/src/studio/PresentationCanvas.tsx", 900],
   ["apps/admin/src/studio/SceneCanvas.tsx", 2050],
   ["workers/admin-cloud.mjs", 2450],
 ];
@@ -17,11 +18,41 @@ for (const [path, maxLines] of budgets) {
     );
 }
 
-const canvas = read("apps/admin/src/studio/SceneCanvas.tsx");
-if (/public\/src\/viewer/.test(canvas))
-  throw new Error("Admin presentation canvas must not import implementation code from apps/public.");
-if (!/@rekixo\/3d-model-profiles/.test(canvas))
-  throw new Error("Admin presentation canvas must use the shared model-profile package.");
+const presentation = read("apps/admin/src/studio/PresentationCanvas.tsx");
+if (/public\/src\/viewer/.test(presentation))
+  throw new Error(
+    "Admin presentation canvas must not import implementation code from apps/public.",
+  );
+if (!/@rekixo\/3d-model-profiles/.test(presentation))
+  throw new Error(
+    "Admin presentation canvas must use the shared model-profile package.",
+  );
+for (const forbidden of [
+  "TransformControls",
+  "sceneCanvasArchitectureController",
+  "sceneCanvasEditorUx",
+  "sceneCanvasDirectManipulation",
+  "canvasFurniturePlacement",
+  "sceneCanvasPlanResizeHandles",
+  "SceneCanvasOverlays",
+  "CanvasAuthoringHints",
+])
+  if (presentation.includes(forbidden))
+    throw new Error(
+      `Read-only PresentationCanvas regained authoring dependency: ${forbidden}`,
+    );
+
+const publishedViewer = read("apps/admin/src/studio/PublishedViewer.tsx");
+if (!/from "\.\/PresentationCanvas"/.test(publishedViewer))
+  throw new Error("PublishedViewer must use the read-only PresentationCanvas boundary.");
+if (/from "\.\/SceneCanvas"/.test(publishedViewer))
+  throw new Error("PublishedViewer must not depend on the authoring SceneCanvas shell.");
+
+const authoringCanvas = read("apps/admin/src/studio/SceneCanvas.tsx");
+if (/public\/src\/viewer/.test(authoringCanvas))
+  throw new Error("Admin authoring canvas must not import implementation code from apps/public.");
+if (!/@rekixo\/3d-model-profiles/.test(authoringCanvas))
+  throw new Error("Admin authoring canvas must use the shared model-profile package.");
 
 const cloud = read("workers/admin-cloud.mjs");
 if (!/from "\.\/project-deletion\.mjs"/.test(cloud))
@@ -44,7 +75,9 @@ const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
 const broadPhase = viewer.indexOf("walkRaycastCandidates(");
 const triangleRaycast = viewer.indexOf("collisionRay.intersectObjects(candidates");
 if (broadPhase < 0 || triangleRaycast <= broadPhase)
-  throw new Error("Viewer walk collision must broad-phase candidates before triangle raycasts.");
+  throw new Error(
+    "Viewer walk collision must broad-phase candidates before triangle raycasts.",
+  );
 
 console.log(
   budgets
