@@ -62,6 +62,8 @@ export function normalizeSourcePackReviewFiles(files) {
   const authorities = normalized.filter((item) => item.roles.includes("geometry-authority"));
   if (authorities.length !== 1)
     throw new Error("Exactly one geometry authority must be selected before saving review.");
+  if (!authorities[0].capabilities.includes("geometry"))
+    throw new Error("Geometry authority must be a geometry-capable source file.");
 
   return normalized.sort((a, b) => a.sourceFileId.localeCompare(b.sourceFileId));
 }
@@ -72,16 +74,21 @@ export function sourcePackReviewReadiness({ verifiedSourceIds, files }) {
   const authorities = (files || []).filter((item) =>
     Array.isArray(item.roles) && item.roles.includes("geometry-authority"),
   );
+  const authorityHasGeometry =
+    authorities.length === 1 &&
+    Array.isArray(authorities[0].capabilities) &&
+    authorities[0].capabilities.includes("geometry");
   const missingSourceIds = [...verified].filter((id) => !reviewed.has(id)).sort();
   const staleSourceIds = [...reviewed].filter((id) => !verified.has(id)).sort();
-  const geometryAuthorityFileId = authorities.length === 1 ? authorities[0].sourceFileId : null;
+  const geometryAuthorityFileId = authorityHasGeometry ? authorities[0].sourceFileId : null;
 
   return {
     ready:
       verified.size > 0 &&
       missingSourceIds.length === 0 &&
       staleSourceIds.length === 0 &&
-      authorities.length === 1,
+      authorities.length === 1 &&
+      authorityHasGeometry,
     verifiedSourceCount: verified.size,
     reviewedSourceCount: reviewed.size,
     geometryAuthorityFileId,
