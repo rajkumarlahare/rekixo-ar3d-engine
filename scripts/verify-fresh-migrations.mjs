@@ -80,6 +80,11 @@ const requiredObjects = new Set([
   "releases_3d",
   "experiences_3d",
   "geo_releases_3d",
+  "geo_model_anchors_3d",
+  "geo_overlays_3d",
+  "geo_control_points_3d",
+  "geo_calibration_reports_3d",
+  "geo_site_boundaries_3d",
   "engine_deletion_jobs_3d",
   "trg_projects_3d_block_insert_during_delete",
 ]);
@@ -94,6 +99,11 @@ const objectRows = executeJson(
         'releases_3d',
         'experiences_3d',
         'geo_releases_3d',
+        'geo_model_anchors_3d',
+        'geo_overlays_3d',
+        'geo_control_points_3d',
+        'geo_calibration_reports_3d',
+        'geo_site_boundaries_3d',
         'engine_deletion_jobs_3d',
         'trg_projects_3d_block_insert_during_delete'
       )
@@ -122,6 +132,11 @@ const projectOwnedCounts = executeJson(
      (SELECT COUNT(*) FROM experiences_3d) +
      (SELECT COUNT(*) FROM geo_placements_3d) +
      (SELECT COUNT(*) FROM geo_experience_drafts_3d) +
+     (SELECT COUNT(*) FROM geo_model_anchors_3d) +
+     (SELECT COUNT(*) FROM geo_overlays_3d) +
+     (SELECT COUNT(*) FROM geo_control_points_3d) +
+     (SELECT COUNT(*) FROM geo_calibration_reports_3d) +
+     (SELECT COUNT(*) FROM geo_site_boundaries_3d) +
      (SELECT COUNT(*) FROM geo_draft_verifications_3d) +
      (SELECT COUNT(*) FROM geo_releases_3d) +
      (SELECT COUNT(*) FROM geo_experience_active_releases_3d) +
