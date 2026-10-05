@@ -55,14 +55,23 @@ test("presentation canvas cannot regain authoring dependencies", () => {
     );
 });
 
-test("legacy authoring canvas and direct controllers remain retired", () => {
+test("legacy SceneCanvas authoring shell and detached panels remain retired", () => {
   for (const path of [
     "apps/admin/src/studio/SceneCanvas.tsx",
     "apps/admin/src/studio/SceneCanvasOverlays.tsx",
     "apps/admin/src/studio/sceneCanvasArchitectureController.ts",
     "apps/admin/src/studio/sceneCanvasDirectManipulation.ts",
     "apps/admin/src/studio/sceneCanvasEditorUx.ts",
-    "apps/admin/src/studio/sceneCanvasPlanResizeHandles.ts",
     "apps/admin/src/studio/canvasFurniturePlacement.ts",
+    "apps/admin/src/studio/MaterialQuickEditor.tsx",
+    "apps/admin/src/studio/ModelNodeInspector.tsx",
+    "apps/admin/src/studio/ReferenceWorkspace.tsx",
   ]) assert.equal(fs.existsSync(path), false, `retired authoring module returned: ${path}`);
+});
+
+test("shared room and site rendering helper dependency remains until separately proven removable", () => {
+  assert.equal(
+    fs.existsSync("apps/admin/src/studio/sceneCanvasPlanResizeHandles.ts"),
+    true,
+  );
 });

@@ -27,8 +27,10 @@ for (const retiredPath of [
   "apps/admin/src/studio/sceneCanvasArchitectureController.ts",
   "apps/admin/src/studio/sceneCanvasDirectManipulation.ts",
   "apps/admin/src/studio/sceneCanvasEditorUx.ts",
-  "apps/admin/src/studio/sceneCanvasPlanResizeHandles.ts",
   "apps/admin/src/studio/canvasFurniturePlacement.ts",
+  "apps/admin/src/studio/MaterialQuickEditor.tsx",
+  "apps/admin/src/studio/ModelNodeInspector.tsx",
+  "apps/admin/src/studio/ReferenceWorkspace.tsx",
 ])
   if (fs.existsSync(retiredPath))
     throw new Error(`Detached legacy Studio authoring module returned: ${retiredPath}`);
