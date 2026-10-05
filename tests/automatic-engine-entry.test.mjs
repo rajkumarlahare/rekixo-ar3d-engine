@@ -26,3 +26,16 @@ test("Automatic Source Pack route remains the primary supported engine entry", (
   assert.match(main, /<SourcePackReview \/>/);
   assert.match(main, /<small>AUTOMATIC ENGINE<\/small>/);
 });
+
+test("production deploy verifier enforces the Automatic Engine entry contract", () => {
+  const verifier = read("scripts/verify-design-admin.mjs");
+
+  assert.match(verifier, /get\('\/3Dprojects\/source-pack', 'text\/html'\)/);
+  assert.match(verifier, /SourcePackReview-\[\\w-\]\+\\\.js/);
+  assert.match(verifier, /Refresh automatic analysis/);
+  assert.match(verifier, /SEAL SOURCE PACK/);
+  assert.match(verifier, /Legacy Studio bundle is still referenced by the production Admin entry/);
+  assert.doesNotMatch(verifier, /The deployed admin has no Studio bundle/);
+  assert.doesNotMatch(verifier, /Duplicate furnished floor/);
+  assert.doesNotMatch(verifier, /3D DESIGN ADMIN/);
+});
