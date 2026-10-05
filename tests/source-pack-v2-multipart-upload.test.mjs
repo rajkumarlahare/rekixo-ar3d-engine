@@ -74,7 +74,7 @@ test("multipart planning rejects invalid sizes, part sizes, counts and part numb
     /Invalid multipart part size/,
   );
   assert.throws(
-    () => sourcePartPlan(100, 5.5 * 1024 * 1024),
+    () => sourcePartPlan(100, 5 * 1024 * 1024 + 0.5),
     /Invalid multipart part size/,
   );
   assert.throws(
@@ -158,23 +158,35 @@ test("completion stops at uploaded and cannot silently promote a source to verif
   assert.match(worker, /Verified source originals are immutable/);
 });
 
-test("mutations are same-origin, deletion-job aware and Jyoti benchmark locked", () => {
+test("source mutations are same-origin, deletion-job aware and protected by generic operation locks", () => {
   const worker = fs.readFileSync("workers/source-upload.mjs", "utf8");
+  const migration = fs.readFileSync(
+    "database/migrations/0033_project_operation_locks.sql",
+    "utf8",
+  );
+
   assert.match(
     worker,
     /new URL\(origin\)\.origin === new URL\(request\.url\)\.origin/,
   );
   assert.match(worker, /activeDeletionJob\(env\)/);
-  assert.match(
-    worker,
-    /LOCKED_SOURCE_MUTATION_SLUGS = new Set\(\["jyoti-paradise"\]\)/,
-  );
+  assert.match(worker, /projectOperationLockReason/);
+  assert.match(worker, /project_operation_locks_3d/);
+  assert.match(worker, /"source-write"/);
   assert.match(worker, /status: 423/);
+  assert.doesNotMatch(worker, /jyoti-paradise|Jyoti Paradise/i);
   assert.match(
     worker,
     /Source originals cannot be mutated or deleted through this route/,
   );
   assert.doesNotMatch(worker, /request\.method === "DELETE"/);
+
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS project_operation_locks_3d/);
+  assert.match(migration, /PRIMARY KEY \(project_id, operation\)/);
+  assert.match(migration, /'source-write'/);
+  assert.match(migration, /WHERE slug='jyoti-paradise'/);
+  assert.doesNotMatch(migration, /DELETE\s+FROM/i);
+  assert.doesNotMatch(migration, /DROP\s+TABLE/i);
 });
 
 test("multipart part uploads require exact Content-Length and completion validates every part", () => {
