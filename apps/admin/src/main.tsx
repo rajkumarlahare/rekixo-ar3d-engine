@@ -1,11 +1,10 @@
-import React, { Suspense, lazy } from "react";
+import React, { Suspense, lazy, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import "./source-pack/dashboard-link.css";
 
 const EngineDashboard = lazy(() => import("./dashboard/EngineDashboard"));
 const SourcePackReview = lazy(() => import("./source-pack/SourcePackReview"));
-const Studio = lazy(() => import("./studio/Studio"));
 const GeoMapper3D = lazy(() => import("./geo/GeoMapper3D"));
 const PublishedViewer = lazy(() => import("./studio/PublishedViewer"));
 const CloudLogin = lazy(() => import("./CloudLogin"));
@@ -38,6 +37,14 @@ function DashboardRoute() {
   );
 }
 
+function LegacyStudioRedirect() {
+  useEffect(() => {
+    window.location.replace(`/3Dprojects/source-pack${window.location.search}`);
+  }, []);
+
+  return <RouteLoading label="Opening Automatic Engine…" />;
+}
+
 function AdminRouter() {
   const path = window.location.pathname.replace(/\/$/, "");
 
@@ -66,11 +73,7 @@ function AdminRouter() {
   }
 
   if (path === "/3Dprojects/studio") {
-    return (
-      <Suspense fallback={<RouteLoading label="Opening Design Studio…" />}>
-        <Studio />
-      </Suspense>
-    );
+    return <LegacyStudioRedirect />;
   }
 
   if (path === "/3Dprojects/login") {
