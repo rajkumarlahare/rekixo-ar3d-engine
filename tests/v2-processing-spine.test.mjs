@@ -8,6 +8,7 @@ const migration = fs.readFileSync(
 );
 const worker = fs.readFileSync("workers/processing-jobs.mjs", "utf8");
 const entry = fs.readFileSync("workers/admin-entry.mjs", "utf8");
+const verifier = fs.readFileSync("scripts/verify-fresh-migrations.mjs", "utf8");
 const ui = fs.readFileSync(
   "apps/admin/src/source-pack/ProcessingSpine.tsx",
   "utf8",
@@ -51,6 +52,16 @@ test("processing artifacts are attempt-scoped and successful output is immutable
   assert.match(migration, /job\.status='db_cleanup_pending'/);
   assert.match(migration, /json_extract\(snapshot_project\.value, '\$\.id'\)=OLD\.project_id/);
   assert.match(migration, /json_extract\(snapshot_project\.value, '\$\.status'\)='archived'/);
+});
+
+test("fresh migration verifier installs and hard-deletes processing state", () => {
+  assert.match(verifier, /"processing_jobs_3d"/);
+  assert.match(verifier, /"processing_artifacts_3d"/);
+  assert.match(verifier, /INSERT INTO processing_jobs_3d/);
+  assert.match(verifier, /INSERT INTO processing_artifacts_3d/);
+  assert.match(verifier, /SET state='succeeded'/);
+  assert.match(verifier, /COUNT\(\*\) FROM processing_jobs_3d/);
+  assert.match(verifier, /COUNT\(\*\) FROM processing_artifacts_3d/);
 });
 
 test("processing API is guarded, audited and cannot mutate source/release bytes", () => {
