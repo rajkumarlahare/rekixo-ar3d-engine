@@ -1,5 +1,6 @@
 import adminWorker from "./admin.mjs";
 import { handleSourceClassificationRequest } from "./source-classification.mjs";
+import { handleSourcePackReviewRequest } from "./source-pack-review.mjs";
 import { handleSourceVerificationRequest } from "./source-verification.mjs";
 import { handleSourceUploadRequest } from "./source-upload.mjs";
 
@@ -8,6 +9,9 @@ export { DwgProcessor } from "./dwg-processor-container.mjs";
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const reviewResponse = await handleSourcePackReviewRequest(request, env, url);
+    if (reviewResponse) return reviewResponse;
+
     const classificationResponse = await handleSourceClassificationRequest(
       request,
       env,
