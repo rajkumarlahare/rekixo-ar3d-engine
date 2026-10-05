@@ -248,8 +248,26 @@ async function startDraft(env, actor, project) {
     env.DB.prepare(
       `INSERT INTO source_packs_3d
         (id,project_id,version,status,operator_approved,created_by,created_at,updated_at)
-       VALUES (?,?,?,'draft',0,?,?,?)`,
-    ).bind(packId, project.id, version, actor.email, now, now),
+       SELECT ?,?,?,'draft',0,?,?,?
+        WHERE (
+          SELECT COUNT(*) FROM source_files_3d
+           WHERE project_id=? AND upload_state='verified'
+        )=?
+          AND NOT EXISTS (
+            SELECT 1 FROM source_packs_3d
+             WHERE project_id=? AND status='draft'
+          )`,
+    ).bind(
+      packId,
+      project.id,
+      version,
+      actor.email,
+      now,
+      now,
+      project.id,
+      sources.length,
+      project.id,
+    ),
   ];
 
   sources.forEach((source, index) => {
@@ -262,7 +280,11 @@ async function startDraft(env, actor, project) {
         `INSERT INTO source_pack_files_3d
           (source_pack_id,project_id,source_file_id,roles_json,capabilities_json,
            classification_origin,classification_confidence,notes,sort_order,created_at,updated_at)
-         VALUES (?,?,?,?,?,'automatic',?,NULL,?,?,?)`,
+         SELECT ?,?,?,?,?,'automatic',?,NULL,?,?,?
+          WHERE EXISTS (
+            SELECT 1 FROM source_packs_3d
+             WHERE id=? AND project_id=? AND status='draft'
+          )`,
       ).bind(
         packId,
         project.id,
@@ -273,11 +295,22 @@ async function startDraft(env, actor, project) {
         index,
         now,
         now,
+        packId,
+        project.id,
       ),
     );
   });
 
-  await env.DB.batch(statements);
+  const results = await env.DB.batch(statements);
+  const created = Number(results?.[0]?.meta?.changes || 0) > 0;
+  if (!created) {
+    const concurrent = await latestPack(env, project.id);
+    if (concurrent?.status === "draft") return packResponse(env, project.id, concurrent);
+    throw new Error(
+      "Verified source set changed while starting review. Refresh automatic source classification and retry.",
+    );
+  }
+
   await audit(env, actor, "source.pack_review_started", project.id, packId, {
     version,
     verifiedSourceCount: sources.length,
