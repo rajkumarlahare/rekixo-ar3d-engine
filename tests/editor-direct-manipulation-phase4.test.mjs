@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 import ts from "typescript";
+
+const studioPath = (name) => path.join("apps/admin/src/studio", name);
 
 async function loadTs(path) {
   const source = fs.readFileSync(path, "utf8");
@@ -91,9 +94,6 @@ test("corner resize keeps the opposite corner fixed and enforces minimum dimensi
 });
 
 test("legacy SceneCanvas direct-manipulation controller stays retired", () => {
-  assert.equal(
-    fs.existsSync("apps/admin/src/studio/sceneCanvasDirectManipulation.ts"),
-    false,
-  );
-  assert.equal(fs.existsSync("apps/admin/src/studio/SceneCanvas.tsx"), false);
+  assert.equal(fs.existsSync(studioPath("sceneCanvasDirectManipulation.ts")), false);
+  assert.equal(fs.existsSync(studioPath("SceneCanvas.tsx")), false);
 });
