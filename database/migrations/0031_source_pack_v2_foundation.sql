@@ -50,7 +50,9 @@ CREATE TABLE IF NOT EXISTS source_packs_3d (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (project_id) REFERENCES projects_3d(id) ON DELETE CASCADE,
-  FOREIGN KEY (geometry_authority_file_id) REFERENCES source_files_3d(id) ON DELETE RESTRICT,
+  -- NO ACTION is intentional: deleting a source file alone is blocked, while a
+  -- whole-project delete may remove the pack and its authority in one statement.
+  FOREIGN KEY (geometry_authority_file_id) REFERENCES source_files_3d(id) ON DELETE NO ACTION,
   UNIQUE (project_id, version),
   UNIQUE (project_id, id),
   CHECK (
@@ -87,7 +89,9 @@ CREATE TABLE IF NOT EXISTS source_pack_files_3d (
   PRIMARY KEY (source_pack_id, source_file_id),
   FOREIGN KEY (source_pack_id) REFERENCES source_packs_3d(id) ON DELETE CASCADE,
   FOREIGN KEY (project_id) REFERENCES projects_3d(id) ON DELETE CASCADE,
-  FOREIGN KEY (source_file_id) REFERENCES source_files_3d(id) ON DELETE RESTRICT
+  -- Like the authority FK above, NO ACTION protects ordinary source deletion but
+  -- permits a single whole-project cascade once every referencing row disappears.
+  FOREIGN KEY (source_file_id) REFERENCES source_files_3d(id) ON DELETE NO ACTION
 );
 
 CREATE INDEX IF NOT EXISTS idx_source_pack_files_3d_project
@@ -175,12 +179,30 @@ BEGIN
   SELECT RAISE(ABORT, 'Ready source pack file mapping is immutable');
 END;
 
+-- Sealed mappings may disappear only as part of the existing resumable hard-delete
+-- lifecycle: the project must already be archived and its exact id must be present
+-- in the active deletion-job snapshot. Normal edits/deletes remain fail-closed.
 CREATE TRIGGER IF NOT EXISTS trg_source_pack_files_3d_ready_delete_block
 BEFORE DELETE ON source_pack_files_3d
 WHEN EXISTS (
   SELECT 1 FROM source_packs_3d p
    WHERE p.id=OLD.source_pack_id AND p.status IN ('ready','superseded')
 )
+ AND NOT (
+   EXISTS (
+     SELECT 1 FROM projects_3d project
+      WHERE project.id=OLD.project_id
+        AND project.status='archived'
+   )
+   AND EXISTS (
+     SELECT 1
+       FROM engine_deletion_jobs_3d job,
+            json_each(job.projects_json) snapshot_project
+      WHERE job.kind='all-projects'
+        AND job.status<>'completed'
+        AND json_extract(snapshot_project.value, '$.id')=OLD.project_id
+   )
+ )
 BEGIN
   SELECT RAISE(ABORT, 'Ready source pack file mapping is immutable');
 END;
