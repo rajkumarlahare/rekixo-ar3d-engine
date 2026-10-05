@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 
 const EngineDashboard = lazy(() => import("./dashboard/EngineDashboard"));
+const SourcePackReview = lazy(() => import("./source-pack/SourcePackReview"));
 const Studio = lazy(() => import("./studio/Studio"));
 const GeoMapper3D = lazy(() => import("./geo/GeoMapper3D"));
 const PublishedViewer = lazy(() => import("./studio/PublishedViewer"));
@@ -24,6 +25,14 @@ function AdminRouter() {
     return (
       <Suspense fallback={<RouteLoading label="Loading published design…" />}>
         <PublishedViewer />
+      </Suspense>
+    );
+  }
+
+  if (path === "/3Dprojects/source-pack") {
+    return (
+      <Suspense fallback={<RouteLoading label="Opening Source Pack Review…" />}>
+        <SourcePackReview />
       </Suspense>
     );
   }
