@@ -10,7 +10,7 @@ import {
 const worker = fs.readFileSync("workers/source-pack-review.mjs", "utf8");
 const entry = fs.readFileSync("workers/admin-entry.mjs", "utf8");
 
-test("operator review requires exactly one geometry authority", () => {
+test("operator review requires exactly one geometry-capable authority", () => {
   assert.throws(
     () =>
       normalizeSourcePackReviewFiles([
@@ -26,6 +26,18 @@ test("operator review requires exactly one geometry authority", () => {
         { sourceFileId: "glb", roles: ["geometry-authority"], capabilities: ["geometry"] },
       ]),
     /Exactly one geometry authority/,
+  );
+
+  assert.throws(
+    () =>
+      normalizeSourcePackReviewFiles([
+        {
+          sourceFileId: "dwg",
+          roles: ["geometry-authority", "evidence"],
+          capabilities: ["dimensions", "floor-plan"],
+        },
+      ]),
+    /geometry-capable source file/,
   );
 
   const files = normalizeSourcePackReviewFiles([
@@ -46,19 +58,32 @@ test("operator review requires exactly one geometry authority", () => {
   assert.deepEqual(files[1].capabilities, ["geometry", "textures"]);
 });
 
-test("review readiness rejects missing or stale verified-source mappings", () => {
+test("review readiness rejects missing, stale or non-geometry authority mappings", () => {
   const incomplete = sourcePackReviewReadiness({
     verifiedSourceIds: ["fbx", "dwg"],
-    files: [{ sourceFileId: "fbx", roles: ["geometry-authority"] }],
+    files: [{ sourceFileId: "fbx", roles: ["geometry-authority"], capabilities: ["geometry"] }],
   });
   assert.equal(incomplete.ready, false);
   assert.deepEqual(incomplete.missingSourceIds, ["dwg"]);
 
+  const badAuthority = sourcePackReviewReadiness({
+    verifiedSourceIds: ["dwg"],
+    files: [
+      {
+        sourceFileId: "dwg",
+        roles: ["geometry-authority", "evidence"],
+        capabilities: ["dimensions", "floor-plan"],
+      },
+    ],
+  });
+  assert.equal(badAuthority.ready, false);
+  assert.equal(badAuthority.geometryAuthorityFileId, null);
+
   const complete = sourcePackReviewReadiness({
     verifiedSourceIds: ["fbx", "dwg"],
     files: [
-      { sourceFileId: "fbx", roles: ["geometry-authority"] },
-      { sourceFileId: "dwg", roles: ["evidence"] },
+      { sourceFileId: "fbx", roles: ["geometry-authority"], capabilities: ["geometry"] },
+      { sourceFileId: "dwg", roles: ["evidence"], capabilities: ["dimensions", "floor-plan"] },
     ],
   });
   assert.equal(complete.ready, true);
