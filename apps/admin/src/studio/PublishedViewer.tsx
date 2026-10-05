@@ -1,33 +1,37 @@
 import { useEffect, useMemo, useState } from "react";
-import SceneCanvas, { type View } from "./SceneCanvas";
+import PresentationCanvas, { type View } from "./PresentationCanvas";
 import { loadPublished, type PublishedDesign } from "./published";
 import "./studio.css";
+
 export default function PublishedViewer() {
   const slug = location.pathname.replace(/\/$/, "").split("/").pop() ?? "";
   const [design, setDesign] = useState<PublishedDesign>();
   const [error, setError] = useState("");
   const [view, setView] = useState<View>("building");
   const [roomId, setRoomId] = useState("");
+
   useEffect(() => {
     let active = true;
     loadPublished(slug)
-      .then((d) => {
+      .then((published) => {
         if (active) {
-          setDesign(d);
-          setRoomId(d.project.scene.rooms[0]?.id ?? "");
+          setDesign(published);
+          setRoomId(published.project.scene.rooms[0]?.id ?? "");
         }
       })
-      .catch((e) => {
-        if (active) setError(e.message);
+      .catch((reason) => {
+        if (active) setError(reason.message);
       });
     return () => {
       active = false;
     };
   }, [slug]);
+
   const resolveAsset = useMemo(
-    () => async (key: string) => design?.files.find((f) => f.id === key),
+    () => async (key: string) => design?.files.find((file) => file.id === key),
     [design],
   );
+
   if (!design)
     return (
       <main className="studio">
@@ -36,7 +40,8 @@ export default function PublishedViewer() {
         <a href="/3Dprojects/studio">Design Admin</a>
       </main>
     );
-  const room = design.project.scene.rooms.find((r) => r.id === roomId);
+
+  const room = design.project.scene.rooms.find((entry) => entry.id === roomId);
   return (
     <main className="studio published-design">
       <header className="studio-head">
@@ -47,43 +52,44 @@ export default function PublishedViewer() {
         <a href="/3Dprojects/studio">Open Design Admin</a>
       </header>
       <nav className="canvas-toolbar" aria-label="Project views">
-        {(["building", "rooms", "walk"] as View[]).map((v) => (
+        {(["building", "rooms", "walk"] as View[]).map((nextView) => (
           <button
-            key={v}
-            disabled={v !== "building" && !room}
-            aria-pressed={view === v}
-            onClick={() => setView(v)}
+            key={nextView}
+            disabled={nextView !== "building" && !room}
+            aria-pressed={view === nextView}
+            onClick={() => setView(nextView)}
           >
-            {v === "building"
+            {nextView === "building"
               ? "Building"
-              : v === "rooms"
+              : nextView === "rooms"
                 ? "Interior draft"
                 : "Walk room"}
           </button>
         ))}
         <label>
           Room{" "}
-          <select value={roomId} onChange={(e) => setRoomId(e.target.value)}>
-            {design.project.scene.rooms.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.unit} · {r.name}
+          <select value={roomId} onChange={(event) => setRoomId(event.target.value)}>
+            {design.project.scene.rooms.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.unit} · {entry.name}
               </option>
             ))}
           </select>
         </label>
       </nav>
       <section className="published-canvas">
-        <SceneCanvas
+        <PresentationCanvas
           scene={design.project.scene}
           resolveAsset={resolveAsset}
           roomId={roomId}
           selected={roomId}
           view={view}
           onSelect={(key) => {
-            if (design.project.scene.rooms.some((r) => r.id === key))
+            if (design.project.scene.rooms.some((entry) => entry.id === key))
               setRoomId(key);
           }}
           onMesh={() => {}}
+          onWalkRoomChange={(nextRoomId) => setRoomId(nextRoomId)}
         />
       </section>
       <footer className="storage-banner">
