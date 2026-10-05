@@ -40,6 +40,23 @@ test("verification checks R2 identity before promoting uploaded to verified", ()
   assert.match(worker, /source\.verified/);
 });
 
+test("verification freezes the verified source set while a Source Pack draft is active", () => {
+  const worker = read("workers/source-verification.mjs");
+  assert.match(worker, /name IN \('source_files_3d','source_packs_3d','project_operation_locks_3d'\)/);
+  assert.match(worker, /async function activeSourcePackDraft/);
+  assert.match(worker, /WHERE project_id=\? AND status='draft'/);
+  assert.match(worker, /Finish the current Source Pack review before verifying another source original/);
+  assert.match(
+    worker,
+    /if \(source\.upload_state === "verified"\)[\s\S]*const draft = await activeSourcePackDraft\(env, project\.id\)/,
+  );
+  assert.match(
+    worker,
+    /AND NOT EXISTS \([\s\S]*SELECT 1 FROM source_packs_3d[\s\S]*WHERE project_id=\? AND status='draft'[\s\S]*\)/,
+  );
+  assert.match(worker, /const concurrentDraft = await activeSourcePackDraft\(env, project\.id\)/);
+});
+
 test("verification keeps project protections tenant-neutral", () => {
   const worker = read("workers/source-verification.mjs");
   assert.match(worker, /projectOperationLockReason\(env, project\.id, "source-write"\)/);
