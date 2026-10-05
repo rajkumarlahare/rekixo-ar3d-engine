@@ -39,6 +39,9 @@ import {
   type ModelProfileRuntime,
 } from "./projectProfiles";
 import { applyPreset, fitCamera, type HomeView } from "./viewerCamera";
+import { applySourcePresentation, type SourcePresentation } from "./sourcePresentation";
+import { createExteriorSky } from "./exteriorSky";
+import { exteriorCameraView, type ExteriorView } from "./exteriorCamera";
 import { createPreviewBuilding } from "./viewerPreview";
 import { disposeViewerObject } from "./viewerResources";
 
@@ -46,6 +49,9 @@ type ViewerMode = "booting" | "loading" | "model" | "demo" | "error";
 type PresentationView = "default" | "aerial" | "building" | "top" | "balcony" | "context";
 
 interface Viewer3DProps {
+  sourcePresentation?: SourcePresentation;
+  clientPresentation?: boolean;
+  allowInteriorControls?: boolean;
   modelUrl?: string;
   cameraPreset?: CameraPreset3D;
   modelLabel?: string;
@@ -72,6 +78,9 @@ function isMobileDevice() {
 }
 
 export function Viewer3D({
+  sourcePresentation,
+  clientPresentation = false,
+  allowInteriorControls = true,
   modelUrl,
   cameraPreset,
   modelLabel,
@@ -99,6 +108,9 @@ export function Viewer3D({
       .join("|"),
   ].join("::");
   const hostRef = useRef<HTMLDivElement>(null);
+  const exteriorViewRef = useRef<((view: ExteriorView, instant?: boolean) => void) | null>(null);
+  const selectedExteriorRef = useRef<ExteriorView>("hero");
+  const [exteriorView, setExteriorView] = useState<ExteriorView>("hero");
   const resetRef = useRef<(() => void) | null>(null);
   const floorRef = useRef<((floor: number | null) => void) | null>(null);
   const sectionRef = useRef<((enabled: boolean) => void) | null>(null);
@@ -134,6 +146,7 @@ export function Viewer3D({
     const hostElement: HTMLDivElement = candidate;
 
     let disposed = false;
+    let abortModelLoad: (() => void) | undefined;
     let animationFrame = 0;
     let activeObject: THREE.Object3D | undefined;
     let homeView: HomeView | undefined;
@@ -169,7 +182,10 @@ export function Viewer3D({
 
     const mobile = isMobileDevice();
     const referenceVisual = visualPreset === "reference-render";
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const scene = new THREE.Scene();
+    const sky = clientPresentation ? createExteriorSky(reducedMotion) : undefined;
+    if (sky) scene.add(sky.root);
     scene.background = new THREE.Color(0x8faec8);
     scene.fog = new THREE.FogExp2(0xa9bfd0, 0.0015);
     if (referenceVisual) {
@@ -193,7 +209,7 @@ export function Viewer3D({
     renderer.toneMappingExposure = 0.9;
     if (referenceVisual) renderer.toneMappingExposure = 0.84;
     renderer.shadowMap.enabled = referenceVisual || !mobile;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? (referenceVisual ? 1.55 : 1.35) : 2));
     renderer.domElement.className = "viewer-canvas";
     renderer.domElement.style.touchAction = "none";
@@ -209,7 +225,7 @@ export function Viewer3D({
     controls.panSpeed = 0.65;
     controls.screenSpacePanning = true;
     controls.minPolarAngle = THREE.MathUtils.degToRad(18);
-    controls.maxPolarAngle = THREE.MathUtils.degToRad(87);
+    controls.maxPolarAngle = THREE.MathUtils.degToRad(clientPresentation ? 110 : 87);
 
     const applyWalkRotation = () => {
       const euler = new THREE.Euler(walkPitch, walkYaw, 0, "YXZ");
@@ -258,6 +274,7 @@ export function Viewer3D({
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
+      if (clientPresentation) exteriorViewRef.current?.(selectedExteriorRef.current, true);
     };
 
     const observer = new ResizeObserver(updateSize);
@@ -265,6 +282,13 @@ export function Viewer3D({
     updateSize();
 
     const resetCamera = () => {
+      cameraTween = undefined;
+      if (clientPresentation && exteriorViewRef.current) {
+        selectedExteriorRef.current = "hero";
+        setExteriorView("hero");
+        exteriorViewRef.current("hero");
+        return;
+      }
       if (!homeView) return;
       camera.position.copy(homeView.position);
       camera.fov = homeView.fov;
@@ -322,6 +346,7 @@ export function Viewer3D({
         : floorPlanes;
     };
 
+    const windowMaterials = new Map<THREE.MeshStandardMaterial, { color: THREE.Color; intensity: number }>();
     const applyLighting = (night: boolean) => {
       currentNight = night;
       scene.background = new THREE.Color(
@@ -332,11 +357,18 @@ export function Viewer3D({
         night ? 0.0025 : referenceVisual ? 0.00082 : 0.0015,
       );
       hemi.intensity = night ? 0.72 : referenceVisual ? 0.62 : 1.45;
+      sun.color.setHex(night ? 0xb1caff : referenceVisual ? 0xffd3a6 : 0xffe4c2);
+      fill.color.setHex(night ? 0xffb370 : 0x99bfe0);
       sun.intensity = night ? 0.38 : referenceVisual ? 1.78 : 2.25;
       fill.intensity = night ? 0.3 : referenceVisual ? 0.10 : 0.55;
       warmFill.intensity = night ? 7 : referenceVisual ? 2.6 : 0;
       renderer.toneMappingExposure = night ? 0.82 : referenceVisual ? 0.84 : 0.9;
       scene.environmentIntensity = night ? 0.42 : referenceVisual ? 0.34 : 0.65;
+      for (const [material, original] of windowMaterials) {
+        material.emissive.copy(night ? new THREE.Color("#ffbe72") : original.color);
+        material.emissiveIntensity = night ? 0.28 : original.intensity;
+      }
+      sky?.setNight(night);
       siteEnvironment?.setNight(night);
       projectExperience?.setNight(night);
       referenceExterior?.setNight(night);
@@ -730,6 +762,13 @@ export function Viewer3D({
       const materialEnhancerPromise =
         loadModelProfileMaterialEnhancer(modelProfile);
       enhanceArchitecturalModel(object, renderer, referenceVisual);
+      windowMaterials.clear();
+      if (clientPresentation) object.traverse((node) => {
+        if (!(node instanceof THREE.Mesh)) return;
+        for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
+          if (material instanceof THREE.MeshStandardMaterial && /glass|window/i.test(material.name) && !/tile/i.test(material.name)) windowMaterials.set(material, { color: material.emissive.clone(), intensity: material.emissiveIntensity });
+        }
+      });
       void materialEnhancerPromise
         .then((enhancer) => {
           if (
@@ -770,12 +809,27 @@ export function Viewer3D({
 
       siteEnvironment?.dispose();
       if (siteEnvironment) scene.remove(siteEnvironment.root);
+      let includedSourceSite = false;
+      object.traverse((node) => {
+        if (node.userData.sourceGeometry?.siteGeometry === "included-in-source") includedSourceSite = true;
+      });
       siteEnvironment = createArchitecturalSiteEnvironment(
         bounds,
         renderer,
         mobile,
+        clientPresentation && !includedSourceSite,
       );
       scene.add(siteEnvironment.root);
+      if (clientPresentation) {
+        const span = Math.max(sizeForView.x, sizeForView.y, sizeForView.z, 1);
+        sun.position.copy(centerForView).add(new THREE.Vector3(span * -0.7, span * 1.2, span));
+        sun.target.position.copy(centerForView);
+        scene.add(sun.target);
+        Object.assign(sun.shadow.camera, { left: -span, right: span, top: span, bottom: -span, near: 0.1, far: span * 5 });
+        sun.shadow.camera.updateProjectionMatrix();
+        warmFill.position.set(centerForView.x, bounds.min.y + sizeForView.y * 0.15, bounds.max.z + span * 0.1);
+        warmFill.distance = span * 3;
+      }
       walkColliders = collectWalkColliders(object);
 
       projectExperience?.dispose();
@@ -906,6 +960,34 @@ export function Viewer3D({
         };
       };
       presentationRef.current = setView;
+      exteriorViewRef.current = (view, instant = false) => {
+        if (!homeView || walkActive || currentExperienceMode !== "site") return;
+        const next = exteriorCameraView(cameraBounds, homeView, camera.aspect, view, sourcePresentation?.heroDirection);
+        controls.minDistance = Math.max(radiusForView * 0.15, 1);
+        controls.maxDistance = Math.max(controls.maxDistance, next.position.distanceTo(next.target) * 3);
+        if (instant || reducedMotion) {
+          cameraTween = undefined;
+          camera.position.copy(next.position);
+          controls.target.copy(next.target);
+          camera.fov = next.fov;
+          camera.updateProjectionMatrix();
+          controls.update();
+        } else {
+          cameraTween = { start: performance.now(), duration: 850, fromPosition: camera.position.clone(), toPosition: next.position, fromTarget: controls.target.clone(), toTarget: next.target, fromFov: camera.fov, toFov: next.fov };
+        }
+      };
+      if (clientPresentation) {
+        selectedExteriorRef.current = "hero";
+        setExteriorView("hero");
+        exteriorViewRef.current("hero", true);
+        if (!reducedMotion) {
+          const destination = camera.position.clone();
+          const reveal = destination.clone().sub(controls.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), 0.055).multiplyScalar(1.06).add(controls.target);
+          camera.position.copy(reveal);
+          cameraTween = { start: performance.now(), duration: 1800, fromPosition: reveal, toPosition: destination, fromTarget: controls.target.clone(), toTarget: controls.target.clone(), fromFov: camera.fov, toFov: camera.fov };
+        }
+      }
+
 
       const setExperience = (nextMode: ExperienceMode, instant = false) => {
         currentExperienceMode = nextMode;
@@ -963,7 +1045,7 @@ export function Viewer3D({
       };
       experienceRef.current = setExperience;
       setExperience(experienceMode, true);
-      if (experienceMode === "site") setView(presentationView, true);
+      if (experienceMode === "site" && !clientPresentation) setView(presentationView, true);
 
       void experiencePromise
         .then((experience) => {
@@ -1039,7 +1121,24 @@ export function Viewer3D({
 
       const loader = new GLTFLoader();
       loader.setMeshoptDecoder(MeshoptDecoder);
-      loader.load(
+      if (sourcePresentation) {
+        const controller = new AbortController();
+        abortModelLoad = () => controller.abort();
+        void fetch(modelUrl, { signal: controller.signal }).then(async (response) => {
+          if (!response.ok) throw new Error(`Model request failed: ${response.status}`);
+          const bytes = await response.arrayBuffer();
+          if (disposed) return;
+          setProgress(60);
+          const gltf = await loader.parseAsync(bytes, new URL(".", new URL(modelUrl, window.location.href)).href);
+          if (disposed) { disposeViewerObject(gltf.scene); return; }
+          mountObject(gltf.scene, Boolean(cameraPreset));
+          setProgress(100);
+          setMode("model");
+          await applySourcePresentation(gltf.scene, sourcePresentation, bytes, renderer, () => disposed || activeObject !== gltf.scene);
+        }).catch((error) => {
+          if (!disposed) { console.error("3D model load failed", error); mountPreview("The building could not be loaded. Please reload to try again."); }
+        });
+      } else loader.load(
         modelUrl,
         (gltf) => {
           if (disposed) {
@@ -1077,6 +1176,7 @@ export function Viewer3D({
       if (document.hidden) return;
 
       const delta = Math.min(clock.getDelta(), 0.05);
+      sky?.update(delta, camera);
 
       if (cameraTween && !walkActive) {
         const elapsed = performance.now() - cameraTween.start;
@@ -1101,9 +1201,13 @@ export function Viewer3D({
       } else {
         controls.update();
       }
+      if (clientPresentation && modelBounds && !walkActive) camera.position.y = Math.max(camera.position.y, modelBounds.min.y + 0.4);
       renderer.render(scene, camera);
     };
     render();
+
+    const cancelCameraTween = () => { cameraTween = undefined; };
+    controls.addEventListener("start", cancelCameraTween);
 
     const handleContextLost = (event: Event) => {
       event.preventDefault();
@@ -1116,10 +1220,13 @@ export function Viewer3D({
 
     return () => {
       disposed = true;
+      abortModelLoad?.();
       profileLoadGeneration += 1;
       window.cancelAnimationFrame(animationFrame);
       observer.disconnect();
+      controls.removeEventListener("start", cancelCameraTween);
       controls.dispose();
+      sky?.dispose();
       renderer.domElement.removeEventListener("webglcontextlost", handleContextLost);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
@@ -1146,6 +1253,7 @@ export function Viewer3D({
       renderer.dispose();
       renderer.forceContextLoss();
       renderer.domElement.remove();
+      exteriorViewRef.current = null;
       resetRef.current = null;
       floorRef.current = null;
       sectionRef.current = null;
@@ -1160,6 +1268,8 @@ export function Viewer3D({
       setWalkNotice("");
     };
   }, [
+    sourcePresentation,
+    clientPresentation,
     modelUrl,
     cameraPreset,
     interactionMode,
@@ -1253,10 +1363,10 @@ export function Viewer3D({
         </div>
       )}
       {!compactUi && <div className="viewer-toolbar" aria-label="3D viewer controls">
-        <span className={`viewer-status viewer-status--${mode}`}>
+        {!clientPresentation && <span className={`viewer-status viewer-status--${mode}`}>
           <i aria-hidden="true" />
           {statusLabel}
-        </span>
+        </span>}
         <div className="viewer-actions">
           <button
             type="button"
@@ -1276,6 +1386,7 @@ export function Viewer3D({
           >
             {nightMode ? "Day" : "Night"}
           </button>
+          {allowInteriorControls && <>
           <button
             type="button"
             className={walkMode ? "viewer-action viewer-action--active" : "viewer-action"}
@@ -1316,6 +1427,7 @@ export function Viewer3D({
           >
             Section
           </button>
+          </>}
           <button
             type="button"
             className="viewer-action"
@@ -1326,7 +1438,7 @@ export function Viewer3D({
         </div>
       </div>}
 
-      {!compactUi && <div className="viewer-floor-controls" aria-label="Building floor selector">
+      {!compactUi && allowInteriorControls && <div className="viewer-floor-controls" aria-label="Building floor selector">
         <button
           type="button"
           className={selectedFloor === null ? "viewer-floor viewer-floor--active" : "viewer-floor"}
@@ -1360,6 +1472,12 @@ export function Viewer3D({
         ))}
       </div>}
 
+      {clientPresentation && <nav className="client-camera-views" aria-label="Camera views">
+        {(["hero", "front", "corner", "entrance", "aerial"] as ExteriorView[]).map((view) => <button
+          type="button" key={view} aria-pressed={exteriorView === view}
+          onClick={() => { selectedExteriorRef.current = view; setExteriorView(view); exteriorViewRef.current?.(view); }}
+        >{view === "hero" ? "Overview" : view === "entrance" ? "Entry view" : view.charAt(0).toUpperCase() + view.slice(1)}</button>)}
+      </nav>}
       {walkMode && (
         <div className="viewer-walk-controls" aria-label="Walkthrough movement controls">
           {(["forward", "left", "back", "right"] as WalkDirection[]).map((direction, index) => (

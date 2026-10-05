@@ -15,6 +15,10 @@ import {
   type SemanticInteriorRuntime,
 } from "./viewer/semanticInteriorRuntime";
 
+import { parseSourcePresentation, type SourcePresentation } from "./viewer/sourcePresentation";
+
+export type ClientExperience = Public3DExperience & { sourcePresentation?: SourcePresentation };
+
 export class ExperienceApiError extends Error {
   status?: number;
 
@@ -28,7 +32,7 @@ export class ExperienceApiError extends Error {
 export async function loadPublicExperience(
   slug: string,
   signal?: AbortSignal,
-): Promise<Public3DExperience> {
+): Promise<ClientExperience> {
   clearPublicRuntimeSiteElements();
   clearSemanticInteriorRuntime();
   const headers = { Accept: "application/json" };
@@ -91,7 +95,16 @@ export async function loadPublicExperience(
     );
   }
 
+  const release = body.release as { manifestSha256?: string } | undefined;
+  const model = body.model as { id?: string } | undefined;
+  let sourcePresentation: SourcePresentation | undefined;
+  if (release?.manifestSha256 && /^[a-f0-9]{64}$/.test(release.manifestSha256) && model?.id) {
+    try {
+      const response = await fetch(`${PUBLIC_BASE_PATH}/presentations/${release.manifestSha256}/manifest.json`, { signal, cache: "no-cache" });
+      if (response.ok && response.headers.get("content-type")?.includes("application/json")) sourcePresentation = parseSourcePresentation(await response.json(), release.manifestSha256, model.id);
+    } catch { /* Presentation assets never block an otherwise valid published model. */ }
+  }
   setPublicRuntimeSiteElements(siteElements ?? []);
   setSemanticInteriorRuntime(semanticInterior);
-  return enriched as unknown as Public3DExperience;
+  return { ...enriched, sourcePresentation } as unknown as ClientExperience;
 }

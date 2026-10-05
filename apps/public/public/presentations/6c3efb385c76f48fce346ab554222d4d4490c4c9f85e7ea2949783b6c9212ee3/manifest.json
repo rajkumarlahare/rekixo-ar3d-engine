@@ -1,0 +1,237 @@
+{
+  "format": "rekixo-public-presentation-v1",
+  "releaseManifestSha256": "6c3efb385c76f48fce346ab554222d4d4490c4c9f85e7ea2949783b6c9212ee3",
+  "modelId": "faa4b7f6-22ac-4ca1-8fe9-8c7e26e4e07f",
+  "modelSha256": "f1e3486a07d7a865f83aab90d2ed00d7b60df8cafacdfce4cf82ae5e8d5674d4",
+  "sourceArchiveSha256": "198f31dadb379211a2e70380f10b9c16dafa89e36b0887324041354c11e3083f",
+  "materials": [
+    {
+      "name": "Basic_Tile",
+      "color": "#cbceca",
+      "sourcePath": "materials/[Basic Tile]/material.xml",
+      "texture": "e6c88668cdbe100039c1.webp"
+    },
+    {
+      "name": "Color_J08",
+      "color": "#330066",
+      "sourcePath": "materials/[Color J08]/material.xml"
+    },
+    {
+      "name": "Color_M00",
+      "color": "#ffffff",
+      "sourcePath": "materials/[Color M00]/material.xml"
+    },
+    {
+      "name": "Color_M06",
+      "color": "#565656",
+      "sourcePath": "materials/[Color M06]/material.xml"
+    },
+    {
+      "name": "Color_004",
+      "color": "#8e8e8e",
+      "sourcePath": "materials/[Color_004]/material.xml"
+    },
+    {
+      "name": "Color_A06",
+      "color": "#c29b7a",
+      "sourcePath": "materials/[Color_A06]/material.xml"
+    },
+    {
+      "name": "Concrete_Pavers_Block_Multi",
+      "color": "#7c8c91",
+      "sourcePath": "materials/[Concrete Pavers Block Multi]/material.xml",
+      "texture": "736a8124fa67ecae39f5.webp"
+    },
+    {
+      "name": "Concrete_Tile",
+      "color": "#cbbea4",
+      "sourcePath": "materials/[Concrete Tile]/material.xml",
+      "texture": "5f7b66dd5a1ca9366e06.webp"
+    },
+    {
+      "name": "Encaustic_Tile_Circular_01",
+      "color": "#7b7b7a",
+      "sourcePath": "materials/[Encaustic Tile Circular 01]/material.xml",
+      "texture": "0d81f10bbbe09ae4956c.webp"
+    },
+    {
+      "name": "Encaustic_Tile_Circular_02",
+      "color": "#bbaea2",
+      "sourcePath": "materials/[Encaustic Tile Circular 02]/material.xml",
+      "texture": "94eb050415e8901342cf.webp"
+    },
+    {
+      "name": "Field_Rectangle_Tile",
+      "color": "#c4bdb3",
+      "sourcePath": "materials/[Field Rectangle Tile]/material.xml",
+      "texture": "72b355122b8d10c4f3c7.webp"
+    },
+    {
+      "name": "Field_Square_Tile",
+      "color": "#d9c9a9",
+      "sourcePath": "materials/[Field Square Tile]/material.xml",
+      "texture": "fd1e534cfe562b087d7b.webp"
+    },
+    {
+      "name": "Granite_Tile",
+      "color": "#9b948f",
+      "sourcePath": "materials/[Granite Tile]/material.xml",
+      "texture": "2ae8a206175b394ff267.webp"
+    },
+    {
+      "name": "Herringbone",
+      "color": "#828282",
+      "sourcePath": "materials/[Herringbone]/material.xml",
+      "texture": "90e7ea224568c3fb629e.webp"
+    },
+    {
+      "name": "Marble_Carrara_Floor_Tile",
+      "color": "#ccd0db",
+      "sourcePath": "materials/[Marble Carrara Floor Tile]/material.xml",
+      "texture": "b0fbb9bf1d83b6f84418.webp"
+    },
+    {
+      "name": "Marble_Carrara_Gold_Floor_Tile",
+      "color": "#e1dfd9",
+      "sourcePath": "materials/[Marble Carrara Gold Floor Tile]/material.xml",
+      "texture": "9a422d3b027e4e7bd4e6.webp"
+    },
+    {
+      "name": "Metal_Panel",
+      "color": "#8f9d9e",
+      "sourcePath": "materials/[Metal Panel]/material.xml",
+      "texture": "c9f7b9ec16ba7dea84d2.webp"
+    },
+    {
+      "name": "Mosaic_Hexagonal_Tile",
+      "color": "#a8c2df",
+      "sourcePath": "materials/[Mosaic Hexagonal Tile]/material.xml",
+      "texture": "6a62a94d1ddd897209f4.webp"
+    },
+    {
+      "name": "Ornate_Tile_01",
+      "color": "#cacaca",
+      "sourcePath": "materials/[Ornate Tile 01]/material.xml",
+      "texture": "510185123b84eb279807.webp"
+    },
+    {
+      "name": "Ornate_Tile_02",
+      "color": "#c9c9c9",
+      "sourcePath": "materials/[Ornate Tile 02]/material.xml",
+      "texture": "e5e1aac5b2e2f858a8e5.webp"
+    },
+    {
+      "name": "Roofing_Slate_Tan",
+      "color": "#c8af80",
+      "sourcePath": "materials/[Roofing Slate Tan]/material.xml",
+      "texture": "08aa45b9e271419cdaf2.webp"
+    },
+    {
+      "name": "Slate_Light_Tile",
+      "color": "#363636",
+      "sourcePath": "materials/[Slate Light Tile]/material.xml",
+      "texture": "70b9bbc59444a8c23af3.webp"
+    },
+    {
+      "name": "Slate",
+      "color": "#666e6c",
+      "sourcePath": "materials/[Slate]/material.xml",
+      "texture": "523a3520d824f284889e.webp"
+    },
+    {
+      "name": "Square_Glass_Tile_01",
+      "color": "#7b8e97",
+      "sourcePath": "materials/[Square Glass Tile 01]/material.xml",
+      "texture": "f0aefa0697565265e601.webp"
+    },
+    {
+      "name": "Square_Glass_Tile_02",
+      "color": "#78b78c",
+      "sourcePath": "materials/[Square Glass Tile 02]/material.xml",
+      "texture": "8634473c689178ab6dd5.webp"
+    },
+    {
+      "name": "Square_Glass_Tile_03",
+      "color": "#a0a38d",
+      "sourcePath": "materials/[Square Glass Tile 03]/material.xml",
+      "texture": "d8bb75f31e10970576da.webp"
+    },
+    {
+      "name": "Square_Glass_Tile_04",
+      "color": "#ddc57a",
+      "sourcePath": "materials/[Square Glass Tile 04]/material.xml",
+      "texture": "a5af32112c3ea3767a3a.webp"
+    },
+    {
+      "name": "Tile_Border_Travertine",
+      "color": "#a08e70",
+      "sourcePath": "materials/[Tile Border Travertine]/material.xml",
+      "texture": "495295dc38dfdc7c308d.webp"
+    },
+    {
+      "name": "Tile_Canvas",
+      "color": "#c7c0ad",
+      "sourcePath": "materials/[Tile Canvas]/material.xml",
+      "texture": "1f2a5819a802b3cca946.webp"
+    },
+    {
+      "name": "Tile_Ceramic_Multi",
+      "color": "#a57354",
+      "sourcePath": "materials/[Tile Ceramic Multi]/material.xml",
+      "texture": "992ecd762284ab406f09.webp"
+    },
+    {
+      "name": "Tile_Ceramic_Natural",
+      "color": "#bdb486",
+      "sourcePath": "materials/[Tile Ceramic Natural]/material.xml",
+      "texture": "3b4b714e57561c1a7791.webp"
+    },
+    {
+      "name": "Tile_Checker_BW",
+      "color": "#7d706b",
+      "sourcePath": "materials/[Tile Checker BW]/material.xml",
+      "texture": "9a8d9f2d8c303915d45e.webp"
+    },
+    {
+      "name": "Tile_Grey",
+      "color": "#858585",
+      "sourcePath": "materials/[Tile Grey]/material.xml",
+      "texture": "c9567374b6c867dea240.webp"
+    },
+    {
+      "name": "Tile_Large_Brown",
+      "color": "#c3b29f",
+      "sourcePath": "materials/[Tile Large Brown]/material.xml",
+      "texture": "557367164c13b32565a1.webp"
+    },
+    {
+      "name": "Tile_Mosaic_Multi",
+      "color": "#876760",
+      "sourcePath": "materials/[Tile Mosaic Multi]/material.xml",
+      "texture": "1eeb816965146ed2eec1.webp"
+    },
+    {
+      "name": "Translucent_Glass_Blue",
+      "color": "#626b68",
+      "sourcePath": "materials/[Translucent_Glass_Blue]/material.xml",
+      "opacity": 0.65
+    },
+    {
+      "name": "White_Subway_Tile",
+      "color": "#f3fcfd",
+      "sourcePath": "materials/[White Subway Tile]/material.xml",
+      "texture": "d8535e41dca99caa734a.webp"
+    }
+  ],
+  "gallery": [
+    {
+      "asset": "exterior-reference.webp",
+      "caption": "Architectural exterior reference"
+    }
+  ],
+  "heroDirection": [
+    -1,
+    0,
+    1
+  ]
+}

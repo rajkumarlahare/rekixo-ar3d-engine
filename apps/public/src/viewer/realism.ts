@@ -22,31 +22,12 @@ function tuneTexture(texture: THREE.Texture | null | undefined, anisotropy: numb
   texture.needsUpdate = true;
 }
 
-function gentlyWarmUntexturedSurface(
-  material: THREE.MeshStandardMaterial,
-  name: string,
-) {
-  if (material.map) return;
-  if (/glass|window|translucent/.test(name) && !/tile/.test(name)) {
-    material.color.lerp(new THREE.Color("#9fc6d0"), 0.2);
-    return;
-  }
-  if (/wood|timber|veneer|laminate/.test(name)) {
-    material.color.lerp(new THREE.Color("#b27b50"), 0.16);
-    return;
-  }
-  if (/wall|plaster|paint|concrete|facade|façade/.test(name)) {
-    material.color.lerp(new THREE.Color("#eee8dd"), 0.1);
-  }
-}
-
 /**
  * Project-neutral architectural material tuning.
  *
  * Never place customer/source-specific material names, colors, texture data or
  * source fingerprints in this module. Missing texture bytes are not fabricated;
- * untextured architectural materials only receive a subtle neutral presentation
- * grade while source colors remain dominant.
+ * source colors remain unchanged while physical surface response is improved.
  */
 export function enhanceArchitecturalModel(
   root: THREE.Object3D,
@@ -73,7 +54,6 @@ export function enhanceArchitecturalModel(
       tuneTexture(material.aoMap, anisotropy);
       tuneTexture(material.emissiveMap, anisotropy);
       material.envMapIntensity = referenceVisual ? 0.56 : 0.78;
-      gentlyWarmUntexturedSurface(material, name);
 
       if (/glass|window|translucent/.test(name) && !/tile/.test(name)) {
         material.roughness = Math.min(
