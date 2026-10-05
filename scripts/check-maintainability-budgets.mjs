@@ -25,6 +25,9 @@ for (const retiredPath of [
   "apps/admin/src/studio/SceneCanvas.tsx",
   "apps/admin/src/studio/SceneCanvasOverlays.tsx",
   "apps/admin/src/studio/CanvasAuthoringHints.tsx",
+  "apps/admin/src/studio/MaterialQuickEditor.tsx",
+  "apps/admin/src/studio/ModelNodeInspector.tsx",
+  "apps/admin/src/studio/ReferenceWorkspace.tsx",
 ])
   if (fs.existsSync(retiredPath))
     throw new Error(`Detached legacy Studio authoring surface returned: ${retiredPath}`);
