@@ -365,6 +365,7 @@ export function createArchitecturalSiteEnvironment(
   _renderer: THREE.WebGLRenderer,
   mobile: boolean,
   presentation = false,
+  groundElevation?: number,
 ) {
   const root = new THREE.Group();
   root.name = "source-backed-site-environment";
@@ -379,8 +380,10 @@ export function createArchitecturalSiteEnvironment(
   const structural = elements.filter((item) => STRUCTURAL_KINDS.has(item.kind));
 
   const presentationBulbs: THREE.MeshStandardMaterial[] = [];
-  if (!elements.length && presentation && !bounds.isEmpty()) {
-    addPresentationFallback(root, bounds, mobile, presentationBulbs);
+  // Basement bounds are not a ground survey. Omit optional dressing if grade is unknown.
+  const knownGrade = typeof groundElevation === "number" && Number.isFinite(groundElevation);
+  if (!elements.length && presentation && !bounds.isEmpty() && (knownGrade || bounds.min.y >= -0.25)) {
+    addPresentationFallback(root, bounds, mobile, presentationBulbs, knownGrade ? groundElevation : bounds.min.y);
   }
 
   addAreaBatches(root, areas);

@@ -98,3 +98,17 @@ test("checked-in presentation assets are release-bound, small, and contain recov
     assert.ok(total < 2 * 1024 * 1024);
   }
 });
+
+test("published walkthrough remains available when the Floor Explorer scene is disabled", () => {
+  const capability = client.clientViewerCapabilities({ scenes: [{ type: "typical-floor", enabled: false }], walkthrough: { rooms: [{ id: "reviewed-room" }] } });
+  assert.deepEqual(capability, { floors: false, walk: true });
+});
+test("basement presentation uses an authored ground elevation or omits uncertain dressing", () => {
+  runtime.clearPublicRuntimeSiteElements();
+  const bounds = new THREE.Box3(new THREE.Vector3(-4, -3, -4), new THREE.Vector3(4, 20, 4));
+  const unknown = environment.createArchitecturalSiteEnvironment(bounds, {}, false, true);
+  assert.equal(unknown.root.children.length, 0); unknown.dispose();
+  const known = environment.createArchitecturalSiteEnvironment(bounds, {}, false, true, 0);
+  const road = known.root.children.find((node) => node.name === "Presentation road");
+  assert.ok(road && road.position.y > -0.1); known.dispose();
+});

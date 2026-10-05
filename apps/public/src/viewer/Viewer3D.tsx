@@ -52,6 +52,7 @@ interface Viewer3DProps {
   sourcePresentation?: SourcePresentation;
   clientPresentation?: boolean;
   allowInteriorControls?: boolean;
+  allowWalkControls?: boolean;
   modelUrl?: string;
   cameraPreset?: CameraPreset3D;
   modelLabel?: string;
@@ -81,6 +82,7 @@ export function Viewer3D({
   sourcePresentation,
   clientPresentation = false,
   allowInteriorControls = true,
+  allowWalkControls = allowInteriorControls,
   modelUrl,
   cameraPreset,
   modelLabel,
@@ -818,6 +820,7 @@ export function Viewer3D({
         renderer,
         mobile,
         clientPresentation && !includedSourceSite,
+        floorGeometry.find((level) => level.floor === 0 && Number.isFinite(level.elevationM))?.elevationM ?? modelProfile?.floorGeometry?.find((level) => level.floor === 0)?.elevationM,
       );
       scene.add(siteEnvironment.root);
       if (clientPresentation) {
@@ -1386,8 +1389,7 @@ export function Viewer3D({
           >
             {nightMode ? "Day" : "Night"}
           </button>
-          {allowInteriorControls && <>
-          <button
+          {allowWalkControls && <button
             type="button"
             className={walkMode ? "viewer-action viewer-action--active" : "viewer-action"}
             onClick={() => {
@@ -1403,7 +1405,8 @@ export function Viewer3D({
             }}
           >
             {walkMode ? "Orbit" : "Walk"}
-          </button>
+          </button>}
+          {allowInteriorControls && <>
           <button
             type="button"
             className={exploded ? "viewer-action viewer-action--active" : "viewer-action"}

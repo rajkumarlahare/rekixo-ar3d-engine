@@ -203,10 +203,11 @@ export function addPresentationFallback(
   bounds: THREE.Box3,
   mobile: boolean,
   bulbMaterials: THREE.MeshStandardMaterial[],
+  groundElevation = bounds.min.y,
 ) {
   const size = bounds.getSize(new THREE.Vector3());
   const center = bounds.getCenter(new THREE.Vector3());
-  const baseY = bounds.min.y;
+  const baseY = groundElevation;
   const span = Math.max(size.x, size.z, size.y * 0.48, 8);
   const margin = Math.max(span * 0.24, 2.8);
   const siteWidth = Math.max(size.x + margin * 2.4, span * 1.9);
@@ -380,4 +381,3 @@ export function addPresentationFallback(
     }
   }
 }
-

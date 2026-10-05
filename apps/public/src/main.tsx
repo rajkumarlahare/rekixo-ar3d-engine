@@ -10,7 +10,7 @@ import { loadPublicExperience, type ClientExperience } from "./api";
 import { Viewer3D } from "./viewer/Viewer3D";
 import "./styles.css";
 import { BuildingDetails } from "./BuildingDetails";
-import { availableClientModules, buildingPresentation } from "./clientPresentation";
+import { availableClientModules, buildingPresentation, clientViewerCapabilities } from "./clientPresentation";
 import "./viewer/walkthrough-ui.css";
 
 const GeoPublicDemo = lazy(() => import("./geo/GeoPublicDemo"));
@@ -147,7 +147,8 @@ function ProjectNavigation({ experience, walkFloor }: { experience: ClientExperi
   const { model, camera, project } = experience;
   const settings = settingsOf<ProjectSettings>(sceneOf(experience, "project-navigation"));
   const floorSettings = settingsOf<FloorSettings>(sceneOf(experience, "typical-floor"));
-  const floorReady = Boolean(sceneOf(experience, "typical-floor")?.enabled);
+  const capabilities = clientViewerCapabilities(experience);
+  const floorReady = capabilities.floors;
   const availableFloors = floorReady ? floorIdsOf(floorSettings) : [];
   const presentation = buildingPresentation(experience);
   const render = mediaUrl(experience, settings.exteriorRenderKey);
@@ -167,6 +168,7 @@ function ProjectNavigation({ experience, walkFloor }: { experience: ClientExperi
           clientPresentation
           sourcePresentation={experience.sourcePresentation}
           allowInteriorControls={floorReady}
+          allowWalkControls={capabilities.walk}
         />
         <div className="client-hero-overlay" aria-hidden="true">
           <span className="client-hero-kicker">EXPLORE THE BUILDING</span>

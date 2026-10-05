@@ -44,3 +44,8 @@ export function contactLinks(contact: BuildingPresentation["contact"]) {
     email: /^[^\s@?&#]+@[^\s@?&#]+\.[^\s@?&#]+$/.test(email) ? `mailto:${email}` : undefined,
   };
 }
+
+export function clientViewerCapabilities(experience: Public3DExperience) {
+  const floors = Boolean(experience.scenes?.some((scene) => scene.type === "typical-floor" && scene.enabled));
+  return { floors, walk: floors || Boolean(experience.walkthrough?.rooms.length) };
+}
