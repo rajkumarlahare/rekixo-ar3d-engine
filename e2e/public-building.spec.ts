@@ -14,6 +14,7 @@ function sourceFixture() {
 }
 
 test("public exterior client flow works on desktop and mobile without pending/admin controls", async ({ page }) => {
+  test.setTimeout(120_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => { if (message.type() === "error" && /THREE|shader|WebGL/i.test(message.text())) errors.push(message.text()); });
@@ -26,7 +27,12 @@ test("public exterior client flow works on desktop and mobile without pending/ad
   await page.route("**/3Dprojects/api/releases/projects/test-building/studio", (route) => route.fulfill({ status: 404, contentType: "application/json", body: "{}" }));
   await page.route("**/3Dprojects/api/models/model_test", (route) => route.fulfill({ contentType: "model/gltf+json", body: JSON.stringify(sourceFixture()) }));
   await page.goto("http://127.0.0.1:5174/3Dprojects/test-building");
-  await expect(page.locator(".viewer-loader")).toBeHidden();
+  try {
+    // Software WebGL on shared CI runners can spend several seconds compiling the exterior shaders.
+    await expect(page.locator(".viewer-loader")).toBeHidden({ timeout: 60_000 });
+  } catch (error) {
+    throw new Error(`Public viewer did not finish loading. Browser errors: ${JSON.stringify(errors)}. ${String(error)}`);
+  }
   await expect(page.locator(".viewer-canvas")).toBeVisible();
   await expect(page.locator(".viewer-notice")).toHaveCount(0);
   await expect(page.getByText(/Source pending|Media unavailable|MODEL STATUS|Production/)).toHaveCount(0);
