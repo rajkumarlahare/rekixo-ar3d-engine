@@ -6,6 +6,9 @@ const retired = [
   "apps/admin/src/studio/SceneCanvas.tsx",
   "apps/admin/src/studio/SceneCanvasOverlays.tsx",
   "apps/admin/src/studio/CanvasAuthoringHints.tsx",
+  "apps/admin/src/studio/MaterialQuickEditor.tsx",
+  "apps/admin/src/studio/ModelNodeInspector.tsx",
+  "apps/admin/src/studio/ReferenceWorkspace.tsx",
 ];
 
 const retained = [
@@ -15,15 +18,17 @@ const retained = [
   "apps/admin/src/studio/autoBuildPipeline.ts",
   "apps/admin/src/studio/readiness.ts",
   "apps/admin/src/studio/storage.ts",
+  "apps/admin/src/studio/materialPresets.ts",
+  "apps/admin/src/studio/pdfReferenceRaster.ts",
   "apps/admin/src/geo/GeoMapper3D.tsx",
 ];
 
-test("detached authoring canvas shell stays retired", () => {
+test("detached authoring canvas shell and editor panels stay retired", () => {
   for (const path of retired)
     assert.equal(fs.existsSync(path), false, `${path} must stay retired`);
 });
 
-test("Automatic Engine and read-only presentation boundaries remain", () => {
+test("Automatic Engine and read-only presentation foundations remain", () => {
   for (const path of retained)
     assert.equal(fs.existsSync(path), true, `${path} must remain available`);
 
