@@ -10,13 +10,16 @@ const retiredStudioShell = [
   "apps/admin/src/studio/FurnitureShelf.tsx",
   "apps/admin/src/studio/RoomNavigationPanel.tsx",
   "apps/admin/src/studio/VisualRoomMapper.tsx",
+  "apps/admin/src/studio/SceneCanvas.tsx",
+  "apps/admin/src/studio/SceneCanvasOverlays.tsx",
+  "apps/admin/src/studio/ReferenceWorkspace.tsx",
   "apps/admin/src/studio/studio-editor-core.css",
   "apps/admin/src/studio/studio-operations.css",
   "apps/admin/src/studio/studio-superadmin-theme.css",
 ];
 
 const retainedFoundations = [
-  "apps/admin/src/studio/SceneCanvas.tsx",
+  "apps/admin/src/studio/PresentationCanvas.tsx",
   "apps/admin/src/studio/PublishedViewer.tsx",
   "apps/admin/src/studio/fbxWebModel.ts",
   "apps/admin/src/studio/sketchUpRecovery.ts",
