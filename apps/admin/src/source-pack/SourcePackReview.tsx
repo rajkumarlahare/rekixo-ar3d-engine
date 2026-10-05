@@ -243,6 +243,10 @@ export default function SourcePackReview() {
     () => new Map((data?.suggestions ?? []).map((item) => [item.sourceFileId, item])),
     [data],
   );
+  const suggestedAuthorityId =
+    data?.authoritySuggestion.status === "suggested"
+      ? data.authoritySuggestion.sourceFileId
+      : null;
 
   return (
     <main className="source-review">
@@ -276,8 +280,8 @@ export default function SourcePackReview() {
         <article>
           <span>AUTO SUGGESTION</span>
           <strong>
-            {data?.authoritySuggestion.status === "suggested"
-              ? suggestionById.get(data.authoritySuggestion.sourceFileId)?.filename ?? "Candidate ready"
+            {suggestedAuthorityId
+              ? suggestionById.get(suggestedAuthorityId)?.filename ?? "Candidate ready"
               : "Operator decision required"}
           </strong>
           <small>{data?.authoritySuggestion.reason ?? "Run automatic analysis first"}</small>
@@ -309,13 +313,13 @@ export default function SourcePackReview() {
         </section>
       ) : (
         <>
-          {data?.authoritySuggestion.status === "suggested" && !authorityId ? (
+          {suggestedAuthorityId && !authorityId ? (
             <section className="source-review__suggestion">
               <div>
                 <strong>Recommended geometry authority</strong>
-                <span>{suggestionById.get(data.authoritySuggestion.sourceFileId)?.filename}</span>
+                <span>{suggestionById.get(suggestedAuthorityId)?.filename}</span>
               </div>
-              <button type="button" onClick={() => chooseAuthority(data.authoritySuggestion.sourceFileId)}>
+              <button type="button" onClick={() => chooseAuthority(suggestedAuthorityId)}>
                 Use recommendation
               </button>
             </section>
