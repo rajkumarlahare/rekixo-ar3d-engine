@@ -87,8 +87,10 @@ CREATE TABLE IF NOT EXISTS source_pack_files_3d (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (source_pack_id, source_file_id),
+  -- One delete path only: pack -> mapping. project_id remains an ownership
+  -- assertion but does not create a second project -> mapping cascade.
   FOREIGN KEY (source_pack_id) REFERENCES source_packs_3d(id) ON DELETE CASCADE,
-  FOREIGN KEY (project_id) REFERENCES projects_3d(id) ON DELETE CASCADE,
+  FOREIGN KEY (project_id) REFERENCES projects_3d(id) ON DELETE NO ACTION,
   -- Like the authority FK above, NO ACTION protects ordinary source deletion but
   -- permits a single whole-project cascade once every referencing row disappears.
   FOREIGN KEY (source_file_id) REFERENCES source_files_3d(id) ON DELETE NO ACTION
@@ -276,8 +278,10 @@ CREATE TABLE IF NOT EXISTS source_upload_sessions_3d (
   created_by TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  -- One delete path only: source file -> session -> parts. project_id is retained
+  -- as a project-isolation assertion without a second project -> session cascade.
   FOREIGN KEY (source_file_id) REFERENCES source_files_3d(id) ON DELETE CASCADE,
-  FOREIGN KEY (project_id) REFERENCES projects_3d(id) ON DELETE CASCADE,
+  FOREIGN KEY (project_id) REFERENCES projects_3d(id) ON DELETE NO ACTION,
   UNIQUE (source_file_id, upload_id)
 );
 
