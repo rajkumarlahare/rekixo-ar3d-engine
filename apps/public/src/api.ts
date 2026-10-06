@@ -1,6 +1,7 @@
 import {
   PUBLIC_BASE_PATH,
   assertPublic3DExperiencePayload,
+  type BuildingPresentationManifestV1,
   type Public3DExperience,
 } from "@rekixo/3d-contracts";
 import {
@@ -17,7 +18,10 @@ import {
 
 import { parseSourcePresentation, type SourcePresentation } from "./viewer/sourcePresentation";
 
-export type ClientExperience = Public3DExperience & { sourcePresentation?: SourcePresentation };
+export type ClientExperience = Public3DExperience & {
+  sourcePresentation?: SourcePresentation;
+  buildingPresentation?: BuildingPresentationManifestV1;
+};
 
 export class ExperienceApiError extends Error {
   status?: number;
