@@ -13,7 +13,7 @@ export default {
     const reviewResponse = await handleSourcePackReviewRequest(request, env, url);
     if (reviewResponse) return reviewResponse;
 
-    const processingResponse = await handleProcessingRequest(request, env, url);
+    const processingResponse = await handleProcessingRequest(request, env, url, ctx);
     if (processingResponse) return processingResponse;
 
     const classificationResponse = await handleSourceClassificationRequest(
