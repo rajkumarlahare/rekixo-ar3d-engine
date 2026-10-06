@@ -2,7 +2,7 @@ export const NODE_CATALOG_FORMAT = "rekixo-node-catalog" as const;
 export const NODE_CATALOG_VERSION = 1 as const;
 
 export interface NodeCatalogNodeV1 {
-  /** Canonical-model-scoped stable ID: node:<sha256-prefix>:<gltf-node-index>. */
+  /** Canonical-model-scoped stable ID: node:<canonical-sha256>:<gltf-node-index>. */
   id: string;
   /** Original glTF node index inside the verified canonical GLB. */
   index: number;
