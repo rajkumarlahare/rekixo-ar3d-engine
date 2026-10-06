@@ -38,6 +38,22 @@ function indexList(value, upperBound, fieldName) {
   });
 }
 
+function assertAcyclic(childrenByIndex) {
+  const state = new Uint8Array(childrenByIndex.length);
+  const visit = (index) => {
+    if (state[index] === 1)
+      throw catalogError(
+        "NODE_CATALOG_CYCLIC_HIERARCHY",
+        `glTF node hierarchy contains a cycle at node ${index}.`,
+      );
+    if (state[index] === 2) return;
+    state[index] = 1;
+    for (const childIndex of childrenByIndex[index]) visit(childIndex);
+    state[index] = 2;
+  };
+  for (let index = 0; index < childrenByIndex.length; index += 1) visit(index);
+}
+
 export function buildNodeCatalogData(gltf, canonicalModelSha256) {
   if (!gltf || typeof gltf !== "object" || Array.isArray(gltf))
     throw catalogError("NODE_CATALOG_INVALID_GLTF", "Node catalog source must be a glTF JSON object.");
@@ -62,6 +78,7 @@ export function buildNodeCatalogData(gltf, canonicalModelSha256) {
     }
     return children;
   });
+  assertAcyclic(childrenByIndex);
 
   const names = new Map();
   const nodes = sourceNodes.map((node, index) => {
