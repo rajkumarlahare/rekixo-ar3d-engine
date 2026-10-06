@@ -1,0 +1,83 @@
+name: Validate Model Processor
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "services/model-processor/**"
+      - "scripts/asset-pipeline/convert-source-fbx.mjs"
+      - "apps/public/package.json"
+      - "package.json"
+      - "package-lock.json"
+      - "wrangler.admin.jsonc"
+      - ".github/workflows/validate-model-processor.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-model-processor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build dormant FBX model processor image
+        run: >-
+          docker build
+          --file services/model-processor/Dockerfile
+          --tag rekixo-model-processor:test
+          .
+
+      - name: Start processor
+        run: |
+          docker run --detach --rm \
+            --name rekixo-model-processor-test \
+            --publish 18081:8080 \
+            rekixo-model-processor:test
+
+      - name: Verify health, dependencies, and fail-closed intake
+        shell: bash
+        run: |
+          set -euo pipefail
+          HEALTH="$(mktemp)"
+          CODE="000"
+          for attempt in $(seq 1 30); do
+            CODE="$(curl --silent --show-error --output "$HEALTH" --write-out '%{http_code}' \
+              http://127.0.0.1:18081/health || true)"
+            if [ "$CODE" = "200" ]; then
+              break
+            fi
+            sleep 1
+          done
+          test "$CODE" = "200"
+          grep -Fq '"processor":"rekixo-model-processor"' "$HEALTH"
+          grep -Fq '"contract":"rekixo-fbx-canonical-glb"' "$HEALTH"
+          grep -Fq '"maxFbxBytes":67108864' "$HEALTH"
+
+          docker exec rekixo-model-processor-test \
+            node -e "import('/app/scripts/asset-pipeline/convert-source-fbx.mjs').then(m => { if (typeof m.convertSourceFbx !== 'function') process.exit(1); })"
+
+          BAD="$(mktemp)"
+          BAD_CODE="$(printf 'not-an-fbx' | curl --silent --show-error \
+            --output "$BAD" --write-out '%{http_code}' \
+            --request POST \
+            --header 'X-Rekixo-Source-File-Id: source_test_12345' \
+            --header 'X-Rekixo-Source-Pack-Id: pack_test_12345' \
+            --header 'X-Rekixo-Processing-Job-Id: job_test_12345' \
+            --header 'X-Rekixo-Source-Sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+            --header 'X-Rekixo-Source-Name: sample.fbx' \
+            --data-binary @- \
+            http://127.0.0.1:18081/v1/model/fbx-to-glb)"
+          test "$BAD_CODE" = "409"
+          grep -Fq 'SOURCE_SHA256_MISMATCH' "$BAD"
+
+      - name: Show processor logs on failure
+        if: failure()
+        run: docker logs rekixo-model-processor-test || true
+
+      - name: Stop processor
+        if: always()
+        run: docker stop rekixo-model-processor-test || true
