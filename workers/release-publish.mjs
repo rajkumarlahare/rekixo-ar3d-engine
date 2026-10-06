@@ -1,5 +1,5 @@
 import { releaseSchemaReady } from "./release-runtime.mjs";
-import { validateStoredBindingTargets } from "./reviewed-component-bindings.mjs";
+import { validateStoredBindingTargets } from "./reviewed-component-binding-policy.mjs";
 import {
   assertDraftAssetKey,
   assertProjectAssetKey,
