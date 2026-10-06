@@ -182,6 +182,8 @@ export interface Public3DExperience {
   mediaBaseUrl?: string;
   walkthrough?: PublicWalkthroughGraph;
   siteElements?: PublicSiteElement[];
+  /** Immutable, release-bound automatic presentation instructions. */
+  buildingPresentation?: BuildingPresentationManifestV1;
 }
 
 export interface Admin3DProjectStatus {
