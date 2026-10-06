@@ -1,5 +1,6 @@
 export * from "./runtime-validation";
 export * from "./release-manifest-v1";
+export * from "./building-presentation-manifest-v1";
 export * from "./scene-source-evidence";
 export * from "./source-pack-v1";
 export * from "./source-pack-v2";
