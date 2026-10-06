@@ -56,7 +56,7 @@ function bindingBlock(overrides = {}) {
     sourcePackVersion: job.source_pack_version,
     sourcePackManifestSha256: sourcePackSha,
     processorVersion: job.processor_version,
-    outputManifestSha256,
+    outputManifestSha256: outputManifestSha,
     canonicalModelArtifactId: artifacts[0].id,
     canonicalModelSha256: canonicalSha,
     nodeCatalogArtifactId: artifacts[1].id,
