@@ -1,6 +1,6 @@
 export const FBX_MODEL_PROCESSOR_CONTRACT = "rekixo-fbx-canonical-glb";
-export const FBX_MODEL_PROCESSOR_VERSION = 2;
-export const FBX_MODEL_PROCESSOR_EXECUTION = "serialized-node-fbx-v2-canonical-metres";
+export const FBX_MODEL_PROCESSOR_VERSION = 3;
+export const FBX_MODEL_PROCESSOR_EXECUTION = "serialized-node-fbx-v3-metric-sanity";
 export const MAX_FBX_PROCESSOR_INPUT_BYTES = 64 * 1024 * 1024;
 export const MAX_FBX_PROCESSOR_OUTPUT_BYTES = 256 * 1024 * 1024;
 
@@ -9,10 +9,11 @@ const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const HEALTH_JSON_LIMIT = 16 * 1024;
 const ERROR_JSON_LIMIT = 16 * 1024;
 
-function adapterError(code, message, status = 503) {
+function adapterError(code, message, status = 503, details) {
   const error = new Error(message);
   error.code = code;
   error.status = status;
+  if (details !== undefined) error.details = details;
   return error;
 }
 
@@ -27,6 +28,15 @@ function validSha256(value) {
 function positiveFinite(value) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function finiteTriplet(value) {
+  const values = String(value || "")
+    .split(",")
+    .map((item) => Number(item));
+  return values.length === 3 && values.every((item) => Number.isFinite(item) && item >= 0)
+    ? values
+    : null;
 }
 
 function bindingClient(env, sourceSha256 = "0".repeat(64)) {
@@ -73,6 +83,7 @@ function validateHealth(payload) {
       Number(payload.version) === FBX_MODEL_PROCESSOR_VERSION &&
       payload.outputUnits === "metre" &&
       payload.execution === FBX_MODEL_PROCESSOR_EXECUTION &&
+      payload.metricSanity === "required" &&
       Number(payload.maxFbxBytes) === MAX_FBX_PROCESSOR_INPUT_BYTES &&
       Number(payload.maxGlbBytes) === MAX_FBX_PROCESSOR_OUTPUT_BYTES,
   );
@@ -197,7 +208,16 @@ async function processorFailure(response) {
     typeof payload?.error === "string" && payload.error.length > 0
       ? payload.error.slice(0, 1000)
       : `FBX model processor returned HTTP ${response.status}.`;
-  throw adapterError(code, message, response.status >= 400 && response.status < 600 ? response.status : 502);
+  const details =
+    payload?.details && typeof payload.details === "object" && !Array.isArray(payload.details)
+      ? payload.details
+      : undefined;
+  throw adapterError(
+    code,
+    message,
+    response.status >= 400 && response.status < 600 ? response.status : 502,
+    details,
+  );
 }
 
 function responseHeader(response, name) {
@@ -210,6 +230,11 @@ function validateConversionResponse(response, identity) {
   const outputSha256 = responseHeader(response, "x-rekixo-output-sha256").toLowerCase();
   const sourceScale = positiveFinite(responseHeader(response, "x-rekixo-source-unit-scale-factor"));
   const metreScale = positiveFinite(responseHeader(response, "x-rekixo-applied-metre-scale"));
+  const rawDimensions = finiteTriplet(responseHeader(response, "x-rekixo-raw-bounds-dimensions"));
+  const canonicalDimensionsM = finiteTriplet(
+    responseHeader(response, "x-rekixo-canonical-bounds-dimensions-m"),
+  );
+  const scaleSanityPolicy = responseHeader(response, "x-rekixo-scale-sanity-policy");
 
   if (!contentType.startsWith("model/gltf-binary"))
     throw adapterError("FBX_PROCESSOR_CONTENT_TYPE_MISMATCH", "FBX model processor did not return canonical GLB content.", 502);
@@ -228,17 +253,25 @@ function validateConversionResponse(response, identity) {
     responseHeader(response, "x-rekixo-source-sha256").toLowerCase() !== identity.sourceSha256 ||
     responseHeader(response, "x-rekixo-output-units") !== "metre" ||
     responseHeader(response, "x-rekixo-coordinate-policy") !== "fbx-unit-scale-factor-normalized-to-metres" ||
+    responseHeader(response, "x-rekixo-scale-sanity") !== "pass" ||
+    !scaleSanityPolicy ||
     !validSha256(outputSha256) ||
     sourceScale === null ||
-    metreScale === null
+    metreScale === null ||
+    rawDimensions === null ||
+    canonicalDimensionsM === null
   )
-    throw adapterError("FBX_PROCESSOR_PROVENANCE_MISMATCH", "FBX model processor response failed canonical provenance validation.", 502);
+    throw adapterError("FBX_PROCESSOR_PROVENANCE_MISMATCH", "FBX model processor response failed canonical provenance and metric-sanity validation.", 502);
 
   return {
     byteSize: contentLength,
     sha256: outputSha256,
     sourceUnitScaleFactorCmPerUnit: sourceScale,
     appliedMetreScale: metreScale,
+    scaleSanity: "pass",
+    scaleSanityPolicy,
+    rawDimensions,
+    canonicalDimensionsM,
     execution: FBX_MODEL_PROCESSOR_EXECUTION,
     coordinatePolicy: "fbx-unit-scale-factor-normalized-to-metres",
     outputUnits: "metre",
