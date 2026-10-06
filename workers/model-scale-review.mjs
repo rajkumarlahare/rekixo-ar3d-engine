@@ -1,6 +1,5 @@
 import { engineAdminReadAccess } from "./admin-cloud.mjs";
 import { activeDeletionJob } from "./project-deletion.mjs";
-import { FBX_MODEL_PROCESSOR_VERSION } from "./fbx-model-processor-adapter.mjs";
 import { validProjectSlug } from "../shared/project-slug-policy.js";
 
 const BASE_PATH = "/3Dprojects";
@@ -153,7 +152,6 @@ function reviewResponse(row) {
     sourcePackId: row.source_pack_id,
     sourceFileId: row.source_file_id,
     sourceSha256: row.source_sha256,
-    modelProcessorVersion: Number(row.model_processor_version),
     status: row.status,
     diagnostic: parseDiagnostic(row.diagnostic_json),
     metresPerSourceUnit:
@@ -179,13 +177,12 @@ async function latestReview(env, projectId) {
          ON job.id=review.processing_job_id
         AND job.project_id=review.project_id
       WHERE review.project_id=?
-        AND review.model_processor_version=?
         AND pack.status IN ('ready','superseded')
         AND pack.operator_approved=1
         AND job.failure_code='FBX_SCALE_REVIEW_REQUIRED'
       ORDER BY pack.version DESC,review.created_at DESC,review.id DESC
       LIMIT 1`,
-  ).bind(projectId, FBX_MODEL_PROCESSOR_VERSION).first();
+  ).bind(projectId).first();
 }
 
 async function reviewForApproval(env, projectId, reviewId) {
@@ -200,7 +197,6 @@ async function reviewForApproval(env, projectId, reviewId) {
         AND pack.project_id=review.project_id
       WHERE review.project_id=?
         AND review.id=?
-        AND review.model_processor_version=?
         AND review.status='pending'
         AND job.state='failed'
         AND job.failure_code='FBX_SCALE_REVIEW_REQUIRED'
@@ -212,14 +208,13 @@ async function reviewForApproval(env, projectId, reviewId) {
              AND newer.source_pack_id=review.source_pack_id
              AND newer.source_file_id=review.source_file_id
              AND newer.source_sha256=review.source_sha256
-             AND newer.model_processor_version=review.model_processor_version
              AND (
                newer.created_at>review.created_at
                OR (newer.created_at=review.created_at AND newer.id>review.id)
              )
         )
       LIMIT 1`,
-  ).bind(projectId, reviewId, FBX_MODEL_PROCESSOR_VERSION).first();
+  ).bind(projectId, reviewId).first();
 }
 
 async function readSmallJson(request) {
@@ -241,7 +236,6 @@ async function responseState(env, project) {
   return {
     contractVersion: 1,
     schemaReady: true,
-    modelProcessorVersion: FBX_MODEL_PROCESSOR_VERSION,
     project: {
       id: project.id,
       slug: project.slug,
@@ -267,7 +261,6 @@ export async function handleModelScaleReviewRequest(request, env, url = new URL(
       {
         contractVersion: 1,
         schemaReady: false,
-        modelProcessorVersion: FBX_MODEL_PROCESSOR_VERSION,
         error: "Model scale review schema is not installed.",
       },
       { status: 503 },
@@ -330,7 +323,6 @@ export async function handleModelScaleReviewRequest(request, env, url = new URL(
       sourceFileId: review.source_file_id,
       sourceSha256: review.source_sha256,
       failedProcessingJobId: review.processing_job_id,
-      modelProcessorVersion: Number(review.model_processor_version),
       metresPerSourceUnit,
       resultingDimensionsM: bounds.dimensionsM,
       decisionNote,
@@ -340,7 +332,7 @@ export async function handleModelScaleReviewRequest(request, env, url = new URL(
         `UPDATE model_scale_reviews_3d
             SET status='approved',metres_per_source_unit=?,decision_note=?,
                 approved_by=?,approved_at=?,updated_at=?
-          WHERE id=? AND project_id=? AND status='pending' AND model_processor_version=?`,
+          WHERE id=? AND project_id=? AND status='pending'`,
       ).bind(
         metresPerSourceUnit,
         decisionNote,
@@ -349,7 +341,6 @@ export async function handleModelScaleReviewRequest(request, env, url = new URL(
         now,
         review.id,
         project.id,
-        FBX_MODEL_PROCESSOR_VERSION,
       ),
       env.DB.prepare(
         `INSERT INTO engine_admin_audit
