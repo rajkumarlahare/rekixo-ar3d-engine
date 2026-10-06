@@ -42,8 +42,7 @@ export function buildNodeCatalogData(gltf, canonicalModelSha256) {
   if (!gltf || typeof gltf !== "object" || Array.isArray(gltf))
     throw catalogError("NODE_CATALOG_INVALID_GLTF", "Node catalog source must be a glTF JSON object.");
 
-  const canonicalSha = canonicalSha256(canonicalModelSha256);
-  const modelScope = canonicalSha.slice(0, 16);
+  const modelScope = canonicalSha256(canonicalModelSha256);
   const sourceNodes = Array.isArray(gltf.nodes) ? gltf.nodes : [];
   const meshes = Array.isArray(gltf.meshes) ? gltf.meshes : [];
   const parentByIndex = new Array(sourceNodes.length).fill(null);
