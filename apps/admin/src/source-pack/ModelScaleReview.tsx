@@ -24,6 +24,7 @@ type ScaleReview = {
   status: "pending" | "approved";
   diagnostic: ScaleDiagnostic;
   metresPerSourceUnit: number | null;
+  decisionNote: string | null;
   approvedBy: string | null;
   approvedAt: string | null;
   createdAt: string;
@@ -42,7 +43,12 @@ function reviewPath(slug: string) {
   return `${ADMIN_BASE_PATH}/api/cloud/projects/${encodeURIComponent(slug)}/model-scale-review`;
 }
 
-function dimensions(values: number[] | undefined) {
+function sourceDimensions(values: number[] | undefined) {
+  if (!Array.isArray(values) || values.length !== 3) return "Unavailable";
+  return values.map((value) => Number(value).toFixed(3)).join(" × ");
+}
+
+function metreDimensions(values: number[] | undefined) {
   if (!Array.isArray(values) || values.length !== 3) return "Unavailable";
   return values.map((value) => `${Number(value).toFixed(3)} m`).join(" × ");
 }
@@ -53,9 +59,16 @@ function resultingDimensions(values: number[] | undefined, scale: number) {
   return values.map((value) => `${(Number(value) * scale).toFixed(3)} m`).join(" × ");
 }
 
-export default function ModelScaleReview({ slug }: { slug: string }) {
+export default function ModelScaleReview({
+  slug,
+  onApprovalChange,
+}: {
+  slug: string;
+  onApprovalChange?: (approved: boolean) => void;
+}) {
   const [data, setData] = useState<ScaleReviewPayload>();
-  const [scaleText, setScaleText] = useState("1");
+  const [scaleText, setScaleText] = useState("");
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -76,15 +89,21 @@ export default function ModelScaleReview({ slug }: { slug: string }) {
       .then((body) => {
         setData(body);
         setError("");
-        const approved = body.review?.metresPerSourceUnit;
-        if (Number.isFinite(approved) && Number(approved) > 0) setScaleText(String(approved));
+        const approved = body.review?.status === "approved";
+        onApprovalChange?.(approved);
+        const approvedScale = body.review?.metresPerSourceUnit;
+        if (Number.isFinite(approvedScale) && Number(approvedScale) > 0)
+          setScaleText(String(approvedScale));
+        if (body.review?.decisionNote) setNote(body.review.decisionNote);
       })
       .catch((reason) => {
-        if (!controller.signal.aborted)
+        if (!controller.signal.aborted) {
+          onApprovalChange?.(false);
           setError(reason instanceof Error ? reason.message : "Scale review load nahi hua.");
+        }
       });
     return () => controller.abort();
-  }, [slug]);
+  }, [slug, onApprovalChange]);
 
   const review = data?.review ?? null;
   const selectedScale = Number(scaleText);
@@ -103,6 +122,11 @@ export default function ModelScaleReview({ slug }: { slug: string }) {
       setError("Valid metres-per-source-unit value enter karo.");
       return;
     }
+    const cleanNote = note.trim();
+    if (cleanNote.length < 12 || cleanNote.length > 1000) {
+      setError("Approval note 12 se 1000 characters ke beech hona chahiye.");
+      return;
+    }
     setBusy(true);
     setError("");
     setMessage("");
@@ -114,12 +138,14 @@ export default function ModelScaleReview({ slug }: { slug: string }) {
           action: "approve",
           reviewId: review.id,
           metresPerSourceUnit: selectedScale,
+          note: cleanNote,
         }),
       });
       const body = (await response.json()) as ScaleReviewPayload;
       if (!response.ok) throw new Error(body.error || `Scale approval failed (${response.status}).`);
       setData(body);
-      setMessage("Scale decision approved and locked. Ab Retry Processing dabao; next attempt isi exact scale ko use karega.");
+      onApprovalChange?.(body.review?.status === "approved");
+      setMessage("Scale decision approved and locked. Ab Retry Processing isi exact audited scale ko use karega.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Scale approve nahi hua.");
     } finally {
@@ -136,7 +162,7 @@ export default function ModelScaleReview({ slug }: { slug: string }) {
           <p>METRIC SAFETY REVIEW</p>
           <h3>Building scale needs explicit approval</h3>
           <span>
-            FBX metadata se nikla size suspicious hai. Engine koi scale guess nahi karega; approved value audit history me lock hogi.
+            FBX metadata se nikla size suspicious hai. Engine koi replacement scale guess nahi karega; approved value aur reason audit history me lock honge.
           </span>
         </div>
         <strong>{review?.status === "approved" ? "APPROVED" : "REVIEW REQUIRED"}</strong>
@@ -150,12 +176,12 @@ export default function ModelScaleReview({ slug }: { slug: string }) {
           <div className="model-scale-review__facts">
             <article>
               <span>SOURCE BOUNDS</span>
-              <strong>{dimensions(review.diagnostic.rawDimensions)}</strong>
-              <small>Numbers are source-space units before metre conversion.</small>
+              <strong>{sourceDimensions(review.diagnostic.rawDimensions)}</strong>
+              <small>Source-space units before any metre conversion.</small>
             </article>
             <article>
               <span>DECLARED RESULT</span>
-              <strong>{dimensions(review.diagnostic.canonicalDimensionsM)}</strong>
+              <strong>{metreDimensions(review.diagnostic.canonicalDimensionsM)}</strong>
               <small>
                 UnitScaleFactor {Number(review.diagnostic.sourceUnitScaleFactorCmPerUnit ?? 0)} · applied {Number(review.diagnostic.appliedMetreScale ?? 0)} m/unit
               </small>
@@ -177,20 +203,33 @@ export default function ModelScaleReview({ slug }: { slug: string }) {
                   max="1000000"
                   step="any"
                   inputMode="decimal"
+                  placeholder="Example: 1"
                   value={scaleText}
                   onChange={(event) => setScaleText(event.target.value)}
                   disabled={busy}
                 />
               </label>
-              <div>
+              <div className="model-scale-review__preview">
                 <span>Preview with this value</span>
                 <strong>{preview}</strong>
                 <small>
-                  1.0 ka matlab: 1 source unit = 1 metre. Sirf source/evidence dekhkar confirm hone par approve karein.
+                  Koi default scale assume nahi kiya gaya hai. Source drawing/evidence se confirm value hi enter karein.
                 </small>
               </div>
+              <label className="model-scale-review__note">
+                <span>Approval reason / evidence</span>
+                <textarea
+                  rows={3}
+                  maxLength={1000}
+                  placeholder="Example: supplied plan dimensions confirm 1 source unit = 1 metre."
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  disabled={busy}
+                />
+                <small>{note.trim().length}/1000 · minimum 12 characters</small>
+              </label>
               <button type="button" onClick={() => void approve()} disabled={busy}>
-                {busy ? "Approving…" : "Approve scale"}
+                {busy ? "Approving…" : "Approve audited scale"}
               </button>
             </div>
           ) : (
@@ -203,7 +242,8 @@ export default function ModelScaleReview({ slug }: { slug: string }) {
                   {review.approvedAt ? ` · ${new Date(review.approvedAt).toLocaleString()}` : ""}
                 </small>
               </div>
-              <p>Ab Retry Processing use karo. Processor decision ID aur exact scale provenance verify karega.</p>
+              {review.decisionNote ? <p>{review.decisionNote}</p> : null}
+              <p>Retry Processing ab decision ID aur exact scale provenance ke saath chalega.</p>
             </div>
           )}
         </>
