@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ADMIN_BASE_PATH } from "@rekixo/3d-contracts";
+import ModelScaleReview from "./ModelScaleReview";
 import "./processing-spine.css";
 
 type ProcessingJobV1 = {
@@ -130,9 +131,14 @@ export default function ProcessingSpine({
 }) {
   const [data, setData] = useState<ProcessingPayload>();
   const [schemaPending, setSchemaPending] = useState(false);
+  const [scaleReviewApproved, setScaleReviewApproved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    setScaleReviewApproved(false);
+  }, [slug, sourcePackSignal]);
 
   useEffect(() => {
     if (!slug) return;
@@ -176,9 +182,14 @@ export default function ProcessingSpine({
 
   const job = data?.currentJob ?? null;
   const canonicalOutput = data?.canonicalOutput ?? null;
-  const canRetry = job?.state === "failed" || job?.state === "cancelled";
+  const retryableTerminal = job?.state === "failed" || job?.state === "cancelled";
+  const retryNeedsScaleApproval =
+    job?.state === "failed" && job.failureCode === "FBX_SCALE_REVIEW_REQUIRED";
+  const canRetry = Boolean(
+    retryableTerminal && (!retryNeedsScaleApproval || scaleReviewApproved),
+  );
   const canStart = Boolean(data?.sourcePack && (!job || canRetry));
-  const actionLabel = canRetry ? "Retry Processing" : "Start Processing";
+  const actionLabel = retryableTerminal ? "Retry Processing" : "Start Processing";
   const sha = data?.sourcePack?.manifestSha256;
   const statusClass = job ? ` processing-spine--${job.state}` : "";
   const attemptText = useMemo(
@@ -196,7 +207,7 @@ export default function ProcessingSpine({
         method: "POST",
         headers: { Accept: "application/json", "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: canRetry ? "retry" : "start",
+          action: retryableTerminal ? "retry" : "start",
           sourcePackId: data.sourcePack.id,
         }),
       });
@@ -204,6 +215,7 @@ export default function ProcessingSpine({
       if (!response.ok)
         throw new Error(body.error || `Processing start failed (${response.status}).`);
       setData(body);
+      setScaleReviewApproved(false);
       setMessage(
         body.created
           ? `Processing attempt ${body.requestedJob?.attempt ?? body.currentJob?.attempt ?? ""} durably queued.`
@@ -231,100 +243,105 @@ export default function ProcessingSpine({
   if (!data?.sourcePack) return null;
 
   return (
-    <section className={`processing-spine${statusClass}`} aria-label="Automatic processing status">
-      <div className="processing-spine__head">
-        <div>
-          <p>02 · DURABLE PROCESSING</p>
-          <h2>Sealed Source Pack → processing job</h2>
-          <span>{stateHelp(job)}</span>
+    <>
+      <section className={`processing-spine${statusClass}`} aria-label="Automatic processing status">
+        <div className="processing-spine__head">
+          <div>
+            <p>02 · DURABLE PROCESSING</p>
+            <h2>Sealed Source Pack → processing job</h2>
+            <span>{stateHelp(job)}</span>
+          </div>
+          <div className="processing-spine__status">
+            <small>{job ? stateLabel(job.state) : "READY TO START"}</small>
+            <strong>{attemptText}</strong>
+          </div>
         </div>
-        <div className="processing-spine__status">
-          <small>{job ? stateLabel(job.state) : "READY TO START"}</small>
-          <strong>{attemptText}</strong>
-        </div>
-      </div>
 
-      {error ? <div className="processing-spine__alert processing-spine__alert--error">{error}</div> : null}
-      {message ? <div className="processing-spine__alert processing-spine__alert--ok">{message}</div> : null}
+        {error ? <div className="processing-spine__alert processing-spine__alert--error">{error}</div> : null}
+        {message ? <div className="processing-spine__alert processing-spine__alert--ok">{message}</div> : null}
 
-      <div className="processing-spine__grid">
-        <article>
-          <span>SOURCE PACK</span>
-          <strong>v{data.sourcePack.version} · {data.sourcePack.status.toUpperCase()}</strong>
-          <small>{sha ? `SHA ${sha.slice(0, 16)}…` : "Manifest SHA unavailable"}</small>
-        </article>
-        <article>
-          <span>PROCESSOR</span>
-          <strong>{data.processorVersion}</strong>
-          <small>Exact processor version is pinned per attempt.</small>
-        </article>
-        <article>
-          <span>ARTIFACT BOUNDARY</span>
-          <strong>{job ? `attempt-${job.attempt}` : "Reserved on start"}</strong>
-          <small>{job?.artifactPrefix ?? "Attempt-specific R2 prefix will be immutable."}</small>
-        </article>
-        {canonicalOutput ? (
-          <>
-            <article>
-              <span>CANONICAL MODEL</span>
-              <strong>READY · {formatBytes(canonicalOutput.model.byteSize)}</strong>
-              <small>SHA {shortSha(canonicalOutput.model.sha256)}</small>
-            </article>
-            <article>
-              <span>CANONICAL MANIFEST</span>
-              <strong>READY · {formatBytes(canonicalOutput.manifest.byteSize)}</strong>
-              <small>SHA {shortSha(canonicalOutput.manifest.sha256)}</small>
-            </article>
-            <article>
-              <span>NODE CATALOG</span>
-              <strong>
-                {canonicalOutput.nodeCatalog
-                  ? `READY · ${formatBytes(canonicalOutput.nodeCatalog.byteSize)}`
-                  : "LEGACY OUTPUT"}
-              </strong>
-              <small>
-                {canonicalOutput.nodeCatalog
-                  ? `SHA ${shortSha(canonicalOutput.nodeCatalog.sha256)}`
-                  : "Run a catalog-capable canonical processing output before component mapping."}
-              </small>
-            </article>
-          </>
-        ) : job?.state === "succeeded" ? (
+        <div className="processing-spine__grid">
           <article>
-            <span>CANONICAL HANDOFF</span>
-            <strong>INCOMPLETE</strong>
-            <small>Model + manifest identity did not satisfy the handoff gate. Downstream mapping remains blocked.</small>
+            <span>SOURCE PACK</span>
+            <strong>v{data.sourcePack.version} · {data.sourcePack.status.toUpperCase()}</strong>
+            <small>{sha ? `SHA ${sha.slice(0, 16)}…` : "Manifest SHA unavailable"}</small>
           </article>
-        ) : null}
-      </div>
-
-      <div className="processing-spine__actions">
-        <div>
-          <strong>{job ? stateLabel(job.state) : "Ready for durable queue"}</strong>
-          <span>
-            {canonicalOutput
-              ? canonicalOutput.nodeCatalog
-                ? `Canonical handoff ${shortSha(canonicalOutput.outputManifestSha256)} and verified node catalog are ready for component review.`
-                : "Canonical model is ready, but this legacy output has no node catalog; component mapping remains blocked."
-              : job?.state === "succeeded"
-                ? "Processing finished, but canonical handoff is fail-closed until artifact identities agree."
-                : "Source bytes, Building release and Geo release are not mutated by this action."}
-          </span>
+          <article>
+            <span>PROCESSOR</span>
+            <strong>{data.processorVersion}</strong>
+            <small>Exact processor version is pinned per attempt.</small>
+          </article>
+          <article>
+            <span>ARTIFACT BOUNDARY</span>
+            <strong>{job ? `attempt-${job.attempt}` : "Reserved on start"}</strong>
+            <small>{job?.artifactPrefix ?? "Attempt-specific R2 prefix will be immutable."}</small>
+          </article>
+          {canonicalOutput ? (
+            <>
+              <article>
+                <span>CANONICAL MODEL</span>
+                <strong>READY · {formatBytes(canonicalOutput.model.byteSize)}</strong>
+                <small>SHA {shortSha(canonicalOutput.model.sha256)}</small>
+              </article>
+              <article>
+                <span>CANONICAL MANIFEST</span>
+                <strong>READY · {formatBytes(canonicalOutput.manifest.byteSize)}</strong>
+                <small>SHA {shortSha(canonicalOutput.manifest.sha256)}</small>
+              </article>
+              <article>
+                <span>NODE CATALOG</span>
+                <strong>
+                  {canonicalOutput.nodeCatalog
+                    ? `READY · ${formatBytes(canonicalOutput.nodeCatalog.byteSize)}`
+                    : "LEGACY OUTPUT"}
+                </strong>
+                <small>
+                  {canonicalOutput.nodeCatalog
+                    ? `SHA ${shortSha(canonicalOutput.nodeCatalog.sha256)}`
+                    : "Run a catalog-capable canonical processing output before component mapping."}
+                </small>
+              </article>
+            </>
+          ) : job?.state === "succeeded" ? (
+            <article>
+              <span>CANONICAL HANDOFF</span>
+              <strong>INCOMPLETE</strong>
+              <small>Model + manifest identity did not satisfy the handoff gate. Downstream mapping remains blocked.</small>
+            </article>
+          ) : null}
         </div>
-        {canonicalOutput?.nodeCatalog ? (
-          <a
-            className="processing-spine__mapper-link"
-            href={`/3Dprojects/component-mapper?project=${encodeURIComponent(slug)}`}
-          >
-            Review components
-          </a>
-        ) : null}
-        {canStart ? (
-          <button type="button" onClick={() => void start()} disabled={busy}>
-            {busy ? "Queuing…" : actionLabel}
-          </button>
-        ) : null}
-      </div>
-    </section>
+
+        <div className="processing-spine__actions">
+          <div>
+            <strong>{job ? stateLabel(job.state) : "Ready for durable queue"}</strong>
+            <span>
+              {canonicalOutput
+                ? canonicalOutput.nodeCatalog
+                  ? `Canonical handoff ${shortSha(canonicalOutput.outputManifestSha256)} and verified node catalog are ready for component review.`
+                  : "Canonical model is ready, but this legacy output has no node catalog; component mapping remains blocked."
+                : retryNeedsScaleApproval && !scaleReviewApproved
+                  ? "Retry is blocked until the explicit FBX scale review below is approved."
+                  : job?.state === "succeeded"
+                    ? "Processing finished, but canonical handoff is fail-closed until artifact identities agree."
+                    : "Source bytes, Building release and Geo release are not mutated by this action."}
+            </span>
+          </div>
+          {canonicalOutput?.nodeCatalog ? (
+            <a
+              className="processing-spine__mapper-link"
+              href={`/3Dprojects/component-mapper?project=${encodeURIComponent(slug)}`}
+            >
+              Review components
+            </a>
+          ) : null}
+          {canStart ? (
+            <button type="button" onClick={() => void start()} disabled={busy}>
+              {busy ? "Queuing…" : actionLabel}
+            </button>
+          ) : null}
+        </div>
+      </section>
+      <ModelScaleReview slug={slug} onApprovalChange={setScaleReviewApproved} />
+    </>
   );
 }
