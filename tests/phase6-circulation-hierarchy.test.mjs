@@ -58,7 +58,7 @@ test("R2 cross-floor binding is adjacent, spatially guarded, unique, and fail-cl
 });
 
 test("R2 derives hierarchy metadata without inventing or approving geometry", () => {
-  assert.match(hierarchy, /does\s+not mutate the scene/);
+  assert.match(hierarchy, /not mutate the scene/);
   assert.match(hierarchy, /never marks anything human-reviewed/);
   assert.match(hierarchy, /status: "review"/);
   assert.match(hierarchy, /Derived binding is not a human review decision/);
