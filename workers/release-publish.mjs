@@ -9,6 +9,7 @@ import {
   publicStudioSnapshot,
   validateStudioDraft,
 } from "./studio-draft-validation.mjs";
+import { sanitizeBuildingPresentationForRelease } from "./building-presentation-policy.mjs";
 
 const RELEASE_FORMAT = "rekixo-release-manifest";
 const RELEASE_VERSION = 1;
@@ -671,6 +672,32 @@ export async function buildAndActivateRelease(
       }
     }
 
+    const sourceEvidence = sourceEvidenceFromDraft(cloudDraft?.draft);
+    const presentationCandidate = cloudDraft?.draft?.scene?.buildingPresentation;
+    let buildingPresentation;
+    if (presentationCandidate !== undefined) {
+      if (!frozenModel)
+        throw Error("Building presentation requires an immutable release model.");
+      const frozenModelAsset = releaseAssets
+        .map((asset) => asset.manifest)
+        .find(
+          (asset) =>
+            asset.kind === "model" &&
+            asset.id === frozenModel.releaseAssetId,
+        );
+      if (!validSha256(frozenModelAsset?.sha256))
+        throw Error(
+          "Building presentation requires a SHA-256 pinned immutable release model.",
+        );
+      buildingPresentation = sanitizeBuildingPresentationForRelease(
+        presentationCandidate,
+        {
+          modelSha256: String(frozenModelAsset.sha256).toLowerCase(),
+          sourceEvidence,
+        },
+      );
+    }
+
     const manifest = {
       format: RELEASE_FORMAT,
       version: RELEASE_VERSION,
@@ -695,12 +722,13 @@ export async function buildAndActivateRelease(
         scenes: experience.scenes,
         ...(experience.camera ? { camera: experience.camera } : {}),
         ...(frozenModel ? { model: frozenModel } : {}),
+        ...(buildingPresentation ? { buildingPresentation } : {}),
         mediaFiles,
       },
       ...(publicStudioProject
         ? { studio: { project: publicStudioProject } }
         : {}),
-      sourceEvidence: sourceEvidenceFromDraft(cloudDraft?.draft),
+      sourceEvidence,
       assets: releaseAssets.map((asset) => asset.manifest),
     };
 
