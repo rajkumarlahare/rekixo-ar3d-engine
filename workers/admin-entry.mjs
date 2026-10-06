@@ -1,5 +1,6 @@
 import adminWorker from "./admin.mjs";
 import { handleProcessingRequest } from "./processing-jobs.mjs";
+import { handleReviewedComponentBindingsRequest } from "./reviewed-component-bindings.mjs";
 import { handleSourceClassificationRequest } from "./source-classification.mjs";
 import { handleSourcePackReviewRequest } from "./source-pack-review.mjs";
 import { handleSourceVerificationRequest } from "./source-verification.mjs";
@@ -12,6 +13,13 @@ export default {
     const url = new URL(request.url);
     const reviewResponse = await handleSourcePackReviewRequest(request, env, url);
     if (reviewResponse) return reviewResponse;
+
+    const bindingResponse = await handleReviewedComponentBindingsRequest(
+      request,
+      env,
+      url,
+    );
+    if (bindingResponse) return bindingResponse;
 
     const processingResponse = await handleProcessingRequest(request, env, url, ctx);
     if (processingResponse) return processingResponse;
