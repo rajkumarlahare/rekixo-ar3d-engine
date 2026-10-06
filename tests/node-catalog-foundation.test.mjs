@@ -58,7 +58,7 @@ test("node catalog preserves hierarchy and mapper-relevant mesh metadata without
   assert.notEqual(catalog.nodes[1].id, catalog.nodes[2].id);
 });
 
-test("node catalog fails closed on ambiguous or invalid glTF hierarchy", () => {
+test("node catalog fails closed on ambiguous, cyclic, or invalid glTF hierarchy", () => {
   assert.throws(
     () =>
       buildNodeCatalogData(
@@ -68,6 +68,10 @@ test("node catalog fails closed on ambiguous or invalid glTF hierarchy", () => {
         SHA_A,
       ),
     /more than one parent/,
+  );
+  assert.throws(
+    () => buildNodeCatalogData({ nodes: [{ children: [1] }, { children: [0] }] }, SHA_A),
+    /contains a cycle/,
   );
   assert.throws(
     () => buildNodeCatalogData({ nodes: [{ mesh: 1 }], meshes: [{}] }, SHA_A),
