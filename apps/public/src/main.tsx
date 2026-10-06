@@ -167,6 +167,7 @@ function ProjectNavigation({ experience, walkFloor }: { experience: ClientExperi
           walkthrough={experience.walkthrough}
           clientPresentation
           sourcePresentation={experience.sourcePresentation}
+          buildingPresentation={experience.buildingPresentation}
           allowInteriorControls={floorReady}
           allowWalkControls={capabilities.walk}
         />
@@ -348,7 +349,8 @@ function ModelModule({
         interactionMode={interactionMode}
         availableFloors={availableFloors}
         floorGeometry={floorSettings.floorLevels ?? []}
-          walkthrough={experience.walkthrough}
+        walkthrough={experience.walkthrough}
+        buildingPresentation={experience.buildingPresentation}
       />
     </section>
   );
@@ -458,6 +460,7 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
           availableFloors={availableFloors}
           floorGeometry={floorSettings.floorLevels ?? []}
           walkthrough={experience.walkthrough}
+          buildingPresentation={experience.buildingPresentation}
           compactUi
         />
 
