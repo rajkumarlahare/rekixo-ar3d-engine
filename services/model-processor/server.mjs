@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const FBX_PROCESSOR_CONTRACT = "rekixo-fbx-canonical-glb";
-export const FBX_PROCESSOR_VERSION = 1;
+export const FBX_PROCESSOR_VERSION = 2;
 export const MAX_FBX_BYTES = 64 * 1024 * 1024;
 export const MAX_GLB_BYTES = 256 * 1024 * 1024;
 
@@ -179,6 +179,25 @@ function serializeConversion(task) {
   return run;
 }
 
+function requireCanonicalMetreReport(report) {
+  const sourceUnitScaleFactorCmPerUnit = Number(report?.sourceUnitScaleFactorCmPerUnit);
+  const appliedMetreScale = Number(report?.appliedMetreScale);
+  if (
+    report?.outputUnits !== "metre" ||
+    !Number.isFinite(sourceUnitScaleFactorCmPerUnit) ||
+    sourceUnitScaleFactorCmPerUnit <= 0 ||
+    !Number.isFinite(appliedMetreScale) ||
+    appliedMetreScale <= 0
+  ) {
+    throw new RequestError(
+      502,
+      "CONVERTER_UNIT_POLICY_MISMATCH",
+      "FBX converter did not prove canonical metre normalization.",
+    );
+  }
+  return { sourceUnitScaleFactorCmPerUnit, appliedMetreScale };
+}
+
 async function convertVerifiedFbx(identity, bytes) {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "rekixo-fbx-"));
   const input = path.join(tempRoot, "source.fbx");
@@ -191,9 +210,17 @@ async function convertVerifiedFbx(identity, bytes) {
         const { convertSourceFbx } = await import(
           "../../scripts/asset-pipeline/convert-source-fbx.mjs"
         );
-        return convertSourceFbx(input, output);
+        return convertSourceFbx(input, output, { normalizeUnitsToMeters: true });
       });
     } catch (error) {
+      if (error?.code === "FBX_UNIT_METADATA_INVALID") {
+        throw new RequestError(
+          422,
+          "FBX_UNIT_METADATA_INVALID",
+          "FBX source must declare a valid GlobalSettings.UnitScaleFactor before canonical conversion.",
+        );
+      }
+      if (error instanceof RequestError) throw error;
       console.error("FBX conversion failed:", error instanceof Error ? error.message : error);
       throw new RequestError(422, "FBX_CONVERSION_FAILED", "FBX source could not be converted to canonical GLB.");
     }
@@ -201,13 +228,14 @@ async function convertVerifiedFbx(identity, bytes) {
     if (!safeEqualHex(String(report?.sourceSha256 || ""), identity.sourceSha256))
       throw new RequestError(502, "CONVERTER_SOURCE_IDENTITY_MISMATCH", "FBX converter source identity did not match the verified request.");
 
+    const unitReport = requireCanonicalMetreReport(report);
     const stat = await fs.stat(output);
     if (!Number.isSafeInteger(stat.size) || stat.size <= 0 || stat.size > MAX_GLB_BYTES)
       throw new RequestError(502, "GLB_OUTPUT_LIMIT", "Canonical GLB output exceeded the 256 MiB safety boundary.");
     const glb = await fs.readFile(output);
     inspectGlbBuffer(glb);
     const outputSha256 = createHash("sha256").update(glb).digest("hex");
-    return { glb, outputSha256, report };
+    return { glb, outputSha256, report, unitReport };
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
   }
@@ -224,7 +252,7 @@ async function handleConversion(request, response) {
   if (!safeEqualHex(actualSha256, identity.sourceSha256))
     throw new RequestError(409, "SOURCE_SHA256_MISMATCH", "Received FBX bytes do not match the declared source SHA-256.");
 
-  const { glb, outputSha256, report } = await convertVerifiedFbx(identity, bytes);
+  const { glb, outputSha256, report, unitReport } = await convertVerifiedFbx(identity, bytes);
   response.writeHead(200, {
     "content-type": "model/gltf-binary",
     "content-length": String(glb.length),
@@ -237,7 +265,10 @@ async function handleConversion(request, response) {
     "x-rekixo-processing-job-id": identity.processingJobId,
     "x-rekixo-source-sha256": identity.sourceSha256,
     "x-rekixo-output-sha256": outputSha256,
-    "x-rekixo-coordinate-policy": "unchanged-source-coordinates",
+    "x-rekixo-coordinate-policy": "fbx-unit-scale-factor-normalized-to-metres",
+    "x-rekixo-output-units": "metre",
+    "x-rekixo-source-unit-scale-factor": String(unitReport.sourceUnitScaleFactorCmPerUnit),
+    "x-rekixo-applied-metre-scale": String(unitReport.appliedMetreScale),
     "x-rekixo-mesh-count": String(Number(report?.meshCount || 0)),
     "x-rekixo-triangle-count": String(Number(report?.triangleCount || 0)),
     "x-rekixo-material-count": String(Number(report?.materialCount || 0)),
@@ -256,7 +287,8 @@ export function createModelProcessorServer() {
           version: FBX_PROCESSOR_VERSION,
           maxFbxBytes: MAX_FBX_BYTES,
           maxGlbBytes: MAX_GLB_BYTES,
-          execution: "serialized-node-fbx-v1",
+          outputUnits: "metre",
+          execution: "serialized-node-fbx-v2-canonical-metres",
         });
         return;
       }
