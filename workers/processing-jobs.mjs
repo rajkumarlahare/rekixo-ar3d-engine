@@ -203,15 +203,20 @@ export function canonicalOutputHandoff(job, artifacts) {
       item.kind === "canonical-model-manifest" &&
       item.logical_id === "canonical-model-manifest-v1",
   );
-  if (models.length !== 1 || manifests.length !== 1) return null;
+  const nodeCatalogs = ready.filter(
+    (item) => item.kind === "node-catalog" && item.logical_id === "node-catalog-v1",
+  );
+  if (models.length !== 1 || manifests.length !== 1 || nodeCatalogs.length > 1) return null;
   const model = artifactResponse(models[0]);
   const manifest = artifactResponse(manifests[0]);
+  const nodeCatalog = nodeCatalogs.length === 1 ? artifactResponse(nodeCatalogs[0]) : null;
   if (
     !model?.sha256 ||
     !manifest?.sha256 ||
     manifest.sha256 !== job.output_manifest_sha256 ||
     model.byteSize === null ||
-    manifest.byteSize === null
+    manifest.byteSize === null ||
+    (nodeCatalog && (!nodeCatalog.sha256 || nodeCatalog.byteSize === null))
   )
     return null;
   return {
@@ -222,6 +227,7 @@ export function canonicalOutputHandoff(job, artifacts) {
     outputManifestSha256: job.output_manifest_sha256,
     model,
     manifest,
+    ...(nodeCatalog ? { nodeCatalog } : {}),
   };
 }
 
