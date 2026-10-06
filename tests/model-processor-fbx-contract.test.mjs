@@ -64,7 +64,7 @@ test("FBX processor accepts reviewed scale only as a complete pinned decision pa
   headers.set("x-rekixo-reviewed-metres-per-source-unit", "1");
   const identity = validateFbxRequestHeaders(headers);
   assert.deepEqual(identity.scaleDecision, {
-    decisionId: "scale_review_12345",
+    id: "scale_review_12345",
     metresPerSourceUnit: 1,
   });
 
