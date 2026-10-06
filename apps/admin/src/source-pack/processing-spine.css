@@ -98,7 +98,8 @@
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.processing-spine button {
+.processing-spine button,
+.processing-spine__mapper-link {
   border: 1px solid #1c5cff;
   border-radius: 10px;
   background: #1c5cff;
@@ -108,6 +109,16 @@
   font: inherit;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.processing-spine__mapper-link {
+  text-decoration: none;
+  background: #236f55;
+  border-color: rgba(108, 227, 178, 0.38);
+}
+
+.processing-spine__mapper-link:hover {
+  background: #2b8566;
 }
 
 .processing-spine button:disabled {
@@ -157,7 +168,10 @@
     grid-template-columns: 1fr;
   }
 
-  .processing-spine button {
+  .processing-spine button,
+  .processing-spine__mapper-link {
     width: 100%;
+    box-sizing: border-box;
+    text-align: center;
   }
 }
