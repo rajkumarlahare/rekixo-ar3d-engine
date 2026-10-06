@@ -5,6 +5,11 @@ import {
   convertFbxWithModelProcessor,
   fbxModelProcessorCapability,
 } from "./fbx-model-processor-adapter.mjs";
+import {
+  NODE_CATALOG_FORMAT,
+  NODE_CATALOG_VERSION,
+  buildNodeCatalogData,
+} from "./node-catalog.mjs";
 
 export const CANONICAL_MODEL_FORMAT = "rekixo-canonical-model";
 export const CANONICAL_MODEL_VERSION = 1;
@@ -115,7 +120,7 @@ export function inspectGlbJson(value) {
   };
 }
 
-async function readGlbInspectionAtKey(env, r2Key, expectedByteSize) {
+async function readGlbInspectionAtKey(env, r2Key, expectedByteSize, canonicalModelSha256) {
   const headerObject = await env.MODEL_ASSETS.get(r2Key, {
     range: { offset: 0, length: 20 },
   });
@@ -138,7 +143,10 @@ async function readGlbInspectionAtKey(env, r2Key, expectedByteSize) {
   } catch {
     throw processingError("INVALID_GLTF_JSON", "Canonical GLB JSON chunk is not valid UTF-8 JSON.");
   }
-  return inspectGlbJson(parsed);
+  return {
+    ...inspectGlbJson(parsed),
+    nodeCatalog: buildNodeCatalogData(parsed, canonicalModelSha256),
+  };
 }
 
 async function jobById(env, jobId) {
@@ -304,7 +312,12 @@ async function ensureCanonicalGlbSourceObject(env, job, context, modelKey) {
 async function canonicalizeGlbSource(env, job, context) {
   const modelKey = `${job.artifact_prefix}canonical/model.glb`;
   await ensureCanonicalGlbSourceObject(env, job, context, modelKey);
-  const inspection = await readGlbInspectionAtKey(env, modelKey, Number(context.byte_size));
+  const inspection = await readGlbInspectionAtKey(
+    env,
+    modelKey,
+    Number(context.byte_size),
+    context.sha256,
+  );
   return {
     modelKey,
     byteSize: Number(context.byte_size),
@@ -387,7 +400,12 @@ async function canonicalizeFbxSource(env, job, context) {
         "Canonical FBX-derived GLB failed R2 size, checksum, or ownership verification.",
       );
 
-    const inspection = await readGlbInspectionAtKey(env, modelKey, Number(conversion.byteSize));
+    const inspection = await readGlbInspectionAtKey(
+      env,
+      modelKey,
+      Number(conversion.byteSize),
+      conversion.sha256,
+    );
     return {
       modelKey,
       byteSize: Number(conversion.byteSize),
@@ -436,6 +454,7 @@ async function markFailed(env, job, reason) {
 async function finalizeSuccess(env, job, context, canonical) {
   const modelKey = canonical.modelKey;
   const manifestKey = `${job.artifact_prefix}canonical/model-manifest.json`;
+  const nodeCatalogKey = `${job.artifact_prefix}canonical/node-catalog.json`;
   const processedAt = job.started_at || job.requested_at;
   const manifest = {
     format: CANONICAL_MODEL_FORMAT,
@@ -474,8 +493,24 @@ async function finalizeSuccess(env, job, context, canonical) {
     },
     processedAt,
   };
+  const nodeCatalog = {
+    format: NODE_CATALOG_FORMAT,
+    version: NODE_CATALOG_VERSION,
+    project: { id: job.project_id, slug: context.project_slug },
+    sourcePack: {
+      id: job.source_pack_id,
+      version: Number(job.source_pack_version),
+      manifestSha256: job.source_pack_manifest_sha256,
+    },
+    processingJob: { id: job.id, processorVersion: job.processor_version },
+    canonicalModel: { r2Key: modelKey, sha256: canonical.sha256 },
+    ...canonical.inspection.nodeCatalog,
+    generatedAt: processedAt,
+  };
   const manifestJson = JSON.stringify(manifest);
   const manifestSha256 = await sha256Text(manifestJson);
+  const nodeCatalogJson = JSON.stringify(nodeCatalog);
+  const nodeCatalogSha256 = await sha256Text(nodeCatalogJson);
 
   await env.MODEL_ASSETS.put(manifestKey, manifestJson, {
     httpMetadata: { contentType: "application/json; charset=utf-8" },
@@ -486,6 +521,18 @@ async function finalizeSuccess(env, job, context, canonical) {
       processorVersion: job.processor_version,
       sha256: manifestSha256,
       artifactKind: "canonical-model-manifest",
+    },
+  });
+  await env.MODEL_ASSETS.put(nodeCatalogKey, nodeCatalogJson, {
+    httpMetadata: { contentType: "application/json; charset=utf-8" },
+    customMetadata: {
+      projectId: job.project_id,
+      sourcePackId: job.source_pack_id,
+      processingJobId: job.id,
+      processorVersion: job.processor_version,
+      canonicalSha256: canonical.sha256,
+      sha256: nodeCatalogSha256,
+      artifactKind: "node-catalog",
     },
   });
 
@@ -502,6 +549,12 @@ async function finalizeSuccess(env, job, context, canonical) {
   const manifestMetadataJson = JSON.stringify({
     format: CANONICAL_MODEL_FORMAT,
     version: CANONICAL_MODEL_VERSION,
+    processorVersion: job.processor_version,
+    canonicalSha256: canonical.sha256,
+  });
+  const nodeCatalogMetadataJson = JSON.stringify({
+    format: NODE_CATALOG_FORMAT,
+    version: NODE_CATALOG_VERSION,
     processorVersion: job.processor_version,
     canonicalSha256: canonical.sha256,
   });
@@ -543,6 +596,24 @@ async function finalizeSuccess(env, job, context, canonical) {
       now,
     ),
     env.DB.prepare(
+      `INSERT INTO processing_artifacts_3d
+        (id,processing_job_id,project_id,kind,logical_id,state,r2_key,mime_type,byte_size,sha256,metadata_json,created_at,updated_at)
+       VALUES (?,?,?,?,?,'ready',?,?,?,?,?,?,?)`,
+    ).bind(
+      `artifact_${job.id}_node_catalog`,
+      job.id,
+      job.project_id,
+      "node-catalog",
+      "node-catalog-v1",
+      nodeCatalogKey,
+      "application/json",
+      new TextEncoder().encode(nodeCatalogJson).byteLength,
+      nodeCatalogSha256,
+      nodeCatalogMetadataJson,
+      now,
+      now,
+    ),
+    env.DB.prepare(
       `UPDATE processing_jobs_3d
           SET state='succeeded',failure_code=NULL,failure_reason=NULL,
               finished_at=?,heartbeat_at=?,output_manifest_json=?,output_manifest_sha256=?,updated_at=?
@@ -563,13 +634,15 @@ async function finalizeSuccess(env, job, context, canonical) {
         execution: canonical.execution,
         canonicalModelKey: modelKey,
         canonicalModelSha256: canonical.sha256,
+        nodeCatalogKey,
+        nodeCatalogSha256,
         outputManifestSha256: manifestSha256,
       }),
       now,
     ),
   ]);
 
-  if (Number(results?.[2]?.meta?.changes || 0) <= 0)
+  if (Number(results?.[3]?.meta?.changes || 0) <= 0)
     throw processingError("PROCESSING_STATE_RACE", "Processing job state changed before canonical output could be finalized.");
   return manifest;
 }
