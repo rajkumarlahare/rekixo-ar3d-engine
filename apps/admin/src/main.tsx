@@ -5,6 +5,7 @@ import "./source-pack/dashboard-link.css";
 
 const EngineDashboard = lazy(() => import("./dashboard/EngineDashboard"));
 const SourcePackReview = lazy(() => import("./source-pack/SourcePackReview"));
+const ComponentMapper = lazy(() => import("./source-pack/ComponentMapper"));
 const GeoMapper3D = lazy(() => import("./geo/GeoMapper3D"));
 const PublishedViewer = lazy(() => import("./studio/PublishedViewer"));
 const CloudLogin = lazy(() => import("./CloudLogin"));
@@ -60,6 +61,14 @@ function AdminRouter() {
     return (
       <Suspense fallback={<RouteLoading label="Opening Source Pack Review…" />}>
         <SourcePackReview />
+      </Suspense>
+    );
+  }
+
+  if (path === "/3Dprojects/component-mapper") {
+    return (
+      <Suspense fallback={<RouteLoading label="Opening Component Mapper…" />}>
+        <ComponentMapper />
       </Suspense>
     );
   }

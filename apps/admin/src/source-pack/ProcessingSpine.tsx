@@ -48,6 +48,7 @@ type CanonicalOutputHandoffV1 = {
   outputManifestSha256: string;
   model: ProcessingArtifactV1;
   manifest: ProcessingArtifactV1;
+  nodeCatalog?: ProcessingArtifactV1;
 };
 
 type ProcessingSpineResponseV1 = {
@@ -274,6 +275,19 @@ export default function ProcessingSpine({
               <strong>READY · {formatBytes(canonicalOutput.manifest.byteSize)}</strong>
               <small>SHA {shortSha(canonicalOutput.manifest.sha256)}</small>
             </article>
+            <article>
+              <span>NODE CATALOG</span>
+              <strong>
+                {canonicalOutput.nodeCatalog
+                  ? `READY · ${formatBytes(canonicalOutput.nodeCatalog.byteSize)}`
+                  : "LEGACY OUTPUT"}
+              </strong>
+              <small>
+                {canonicalOutput.nodeCatalog
+                  ? `SHA ${shortSha(canonicalOutput.nodeCatalog.sha256)}`
+                  : "Run a catalog-capable canonical processing output before component mapping."}
+              </small>
+            </article>
           </>
         ) : job?.state === "succeeded" ? (
           <article>
@@ -289,12 +303,22 @@ export default function ProcessingSpine({
           <strong>{job ? stateLabel(job.state) : "Ready for durable queue"}</strong>
           <span>
             {canonicalOutput
-              ? `Canonical handoff ${shortSha(canonicalOutput.outputManifestSha256)} is ready for the next Engine phase.`
+              ? canonicalOutput.nodeCatalog
+                ? `Canonical handoff ${shortSha(canonicalOutput.outputManifestSha256)} and verified node catalog are ready for component review.`
+                : "Canonical model is ready, but this legacy output has no node catalog; component mapping remains blocked."
               : job?.state === "succeeded"
                 ? "Processing finished, but canonical handoff is fail-closed until artifact identities agree."
                 : "Source bytes, Building release and Geo release are not mutated by this action."}
           </span>
         </div>
+        {canonicalOutput?.nodeCatalog ? (
+          <a
+            className="processing-spine__mapper-link"
+            href={`/3Dprojects/component-mapper?project=${encodeURIComponent(slug)}`}
+          >
+            Review components
+          </a>
+        ) : null}
         {canStart ? (
           <button type="button" onClick={() => void start()} disabled={busy}>
             {busy ? "Queuing…" : actionLabel}
