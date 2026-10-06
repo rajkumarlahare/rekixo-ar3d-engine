@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS model_scale_reviews_3d (
   source_pack_id TEXT NOT NULL,
   source_file_id TEXT NOT NULL,
   source_sha256 TEXT NOT NULL CHECK (length(source_sha256)=64),
-  model_processor_version INTEGER NOT NULL CHECK (model_processor_version >= 1),
   diagnostic_json TEXT NOT NULL
     CHECK (json_valid(diagnostic_json) AND json_type(diagnostic_json)='object'),
   status TEXT NOT NULL DEFAULT 'pending'
@@ -40,9 +39,7 @@ CREATE TABLE IF NOT EXISTS model_scale_reviews_3d (
 );
 
 CREATE INDEX IF NOT EXISTS idx_model_scale_reviews_3d_source
-  ON model_scale_reviews_3d(
-    project_id,source_pack_id,source_file_id,model_processor_version,created_at DESC
-  );
+  ON model_scale_reviews_3d(project_id,source_pack_id,source_file_id,created_at DESC);
 
 -- Only the exact running FBX processing attempt may create a review record for
 -- its sealed geometry authority. This prevents an API caller from inventing
@@ -70,14 +67,14 @@ BEGIN
   SELECT RAISE(ABORT, 'Scale review must belong to the running FBX geometry-authority attempt');
 END;
 
--- Review identity, processor contract and diagnostic are append-only. Operator
--- approval may only fill the explicit scale/rationale/reviewer fields once.
+-- Review identity and processor diagnostic are append-only. Operator approval
+-- may only fill the explicit scale/rationale/reviewer fields once.
 CREATE TRIGGER IF NOT EXISTS trg_model_scale_reviews_3d_identity_immutable
 BEFORE UPDATE OF id,processing_job_id,project_id,source_pack_id,source_file_id,
-  source_sha256,model_processor_version,diagnostic_json,created_at
+  source_sha256,diagnostic_json,created_at
 ON model_scale_reviews_3d
 BEGIN
-  SELECT RAISE(ABORT, 'Scale review identity, processor version and diagnostic are immutable');
+  SELECT RAISE(ABORT, 'Scale review identity and diagnostic are immutable');
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_model_scale_reviews_3d_transition
