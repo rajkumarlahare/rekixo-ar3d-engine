@@ -1,4 +1,10 @@
 import { sourceFileKey } from "./source-upload-policy.mjs";
+import {
+  FBX_MODEL_PROCESSOR_EXECUTION,
+  MAX_FBX_PROCESSOR_INPUT_BYTES,
+  convertFbxWithModelProcessor,
+  fbxModelProcessorCapability,
+} from "./fbx-model-processor-adapter.mjs";
 
 export const CANONICAL_MODEL_FORMAT = "rekixo-canonical-model";
 export const CANONICAL_MODEL_VERSION = 1;
@@ -24,6 +30,11 @@ function hex(bytes) {
   return [...new Uint8Array(bytes)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
+}
+
+function objectSha256(object) {
+  const checksum = object?.checksums?.sha256;
+  return checksum ? hex(checksum) : "";
 }
 
 async function sha256Text(value) {
@@ -104,19 +115,19 @@ export function inspectGlbJson(value) {
   };
 }
 
-async function readGlbInspection(env, source) {
-  const headerObject = await env.MODEL_ASSETS.get(source.r2_key, {
+async function readGlbInspectionAtKey(env, r2Key, expectedByteSize) {
+  const headerObject = await env.MODEL_ASSETS.get(r2Key, {
     range: { offset: 0, length: 20 },
   });
   if (!headerObject)
-    throw processingError("SOURCE_OBJECT_MISSING", "Verified geometry authority is missing from R2.");
-  const header = parseGlbHeader(await headerObject.arrayBuffer(), Number(source.byte_size));
+    throw processingError("CANONICAL_MODEL_MISSING", "Canonical GLB is missing from R2.");
+  const header = parseGlbHeader(await headerObject.arrayBuffer(), Number(expectedByteSize));
 
-  const jsonObject = await env.MODEL_ASSETS.get(source.r2_key, {
+  const jsonObject = await env.MODEL_ASSETS.get(r2Key, {
     range: { offset: 20, length: header.jsonChunkLength },
   });
   if (!jsonObject)
-    throw processingError("SOURCE_OBJECT_MISSING", "GLB JSON chunk could not be read from R2.");
+    throw processingError("CANONICAL_MODEL_MISSING", "Canonical GLB JSON chunk could not be read from R2.");
   const jsonBytes = new Uint8Array(await jsonObject.arrayBuffer());
   const text = new TextDecoder("utf-8", { fatal: true })
     .decode(jsonBytes)
@@ -125,7 +136,7 @@ async function readGlbInspection(env, source) {
   try {
     parsed = JSON.parse(text);
   } catch {
-    throw processingError("INVALID_GLTF_JSON", "GLB JSON chunk is not valid UTF-8 JSON.");
+    throw processingError("INVALID_GLTF_JSON", "Canonical GLB JSON chunk is not valid UTF-8 JSON.");
   }
   return inspectGlbJson(parsed);
 }
@@ -191,6 +202,15 @@ async function processingContext(env, job) {
   ).bind(job.source_pack_id, job.project_id).first();
 }
 
+export function geometryAuthorityFormat(context) {
+  const filename = String(context?.filename || "").toLowerCase();
+  const mediaType = String(context?.media_type || "").toLowerCase();
+  if (filename.endsWith(".glb")) return "glb";
+  if (filename.endsWith(".fbx")) return "fbx";
+  if (mediaType === MODEL_MIME) return "glb";
+  return null;
+}
+
 function assertPinnedContext(job, context) {
   if (!context)
     throw processingError("PROCESSING_INPUT_MISSING", "Pinned Source Pack processing input could not be resolved.");
@@ -205,18 +225,24 @@ function assertPinnedContext(job, context) {
   if (!context.geometry_authority_file_id || context.geometry_authority_file_id !== context.source_id)
     throw processingError("GEOMETRY_AUTHORITY_MISSING", "Sealed Source Pack geometry authority is missing.");
 
-  const filename = String(context.filename || "").toLowerCase();
-  const mediaType = String(context.media_type || "").toLowerCase();
-  if (!filename.endsWith(".glb") && mediaType !== MODEL_MIME)
+  const format = geometryAuthorityFormat(context);
+  if (!format)
     throw processingError(
       "UNSUPPORTED_GEOMETRY_AUTHORITY_FORMAT",
-      "This production slice supports verified self-contained GLB geometry authority only. FBX/SKP remain fail-closed until the isolated server processor is available.",
+      "Canonical Building processing supports verified self-contained GLB and capability-gated FBX geometry authority only. SKP and other formats remain fail-closed.",
     );
-  if (Number(context.byte_size) > MAX_WORKER_CANONICAL_BYTES)
+
+  if (format === "glb" && Number(context.byte_size) > MAX_WORKER_CANONICAL_BYTES)
     throw processingError(
       "WORKER_CANONICAL_SIZE_LIMIT",
-      "GLB exceeds the 512 MiB Worker-native canonicalization boundary; use the isolated server processor path.",
+      "GLB exceeds the 512 MiB Worker-native canonicalization boundary.",
     );
+  if (format === "fbx" && Number(context.byte_size) > MAX_FBX_PROCESSOR_INPUT_BYTES)
+    throw processingError(
+      "FBX_PROCESSOR_INPUT_LIMIT",
+      "FBX exceeds the 64 MiB isolated model-processor boundary.",
+    );
+  return format;
 }
 
 async function assertSourceObject(env, job, context) {
@@ -240,7 +266,7 @@ async function assertSourceObject(env, job, context) {
     throw processingError("SOURCE_ETAG_MISMATCH", "R2 geometry authority ETag no longer matches the verified source record.");
 }
 
-async function ensureCanonicalModelObject(env, job, context, modelKey) {
+async function ensureCanonicalGlbSourceObject(env, job, context, modelKey) {
   const existing = await env.MODEL_ASSETS.head(modelKey);
   const metadata = existing?.customMetadata || {};
   if (
@@ -264,13 +290,121 @@ async function ensureCanonicalModelObject(env, job, context, modelKey) {
       processorVersion: job.processor_version,
       sourceFileId: context.source_id,
       sourceSha256: context.sha256,
+      canonicalSha256: context.sha256,
       artifactKind: "canonical-model",
+      canonicalization: "source-glb-preserved",
     },
   });
 
   const written = await env.MODEL_ASSETS.head(modelKey);
   if (!written || Number(written.size) !== Number(context.byte_size))
     throw processingError("CANONICAL_MODEL_WRITE_FAILED", "Canonical GLB could not be durably verified after the R2 write.");
+}
+
+async function canonicalizeGlbSource(env, job, context) {
+  const modelKey = `${job.artifact_prefix}canonical/model.glb`;
+  await ensureCanonicalGlbSourceObject(env, job, context, modelKey);
+  const inspection = await readGlbInspectionAtKey(env, modelKey, Number(context.byte_size));
+  return {
+    modelKey,
+    byteSize: Number(context.byte_size),
+    sha256: context.sha256,
+    inspection,
+    execution: "cloudflare-worker-glb-v1",
+    geometryTransform: "preserved",
+    validationDetails: {},
+  };
+}
+
+async function canonicalizeFbxSource(env, job, context) {
+  const capability = await fbxModelProcessorCapability(env);
+  if (!capability.available)
+    throw processingError(
+      "FBX_PROCESSOR_UNAVAILABLE",
+      `FBX canonical processor capability is unavailable (${capability.reason || "unknown"}).`,
+    );
+  if (
+    capability.execution !== FBX_MODEL_PROCESSOR_EXECUTION ||
+    capability.outputUnits !== "metre"
+  )
+    throw processingError(
+      "FBX_PROCESSOR_CAPABILITY_MISMATCH",
+      "FBX model processor did not advertise the required canonical metre execution contract.",
+    );
+
+  const sourceObject = await env.MODEL_ASSETS.get(context.r2_key);
+  if (!sourceObject?.body)
+    throw processingError("SOURCE_OBJECT_MISSING", "Verified FBX geometry authority body could not be read from R2.");
+
+  const conversion = await convertFbxWithModelProcessor(
+    env,
+    {
+      sourceFileId: context.source_id,
+      sourcePackId: job.source_pack_id,
+      processingJobId: job.id,
+      sourceSha256: context.sha256,
+      sourceName: context.filename,
+      byteSize: Number(context.byte_size),
+    },
+    sourceObject.body,
+  );
+
+  const modelKey = `${job.artifact_prefix}canonical/model.glb`;
+  try {
+    const written = await env.MODEL_ASSETS.put(modelKey, conversion.body, {
+      httpMetadata: { contentType: MODEL_MIME },
+      customMetadata: {
+        projectId: job.project_id,
+        sourcePackId: job.source_pack_id,
+        processingJobId: job.id,
+        processorVersion: job.processor_version,
+        sourceFileId: context.source_id,
+        sourceSha256: context.sha256,
+        canonicalSha256: conversion.sha256,
+        artifactKind: "canonical-model",
+        canonicalization: "fbx-unit-normalized",
+      },
+      sha256: conversion.sha256,
+    });
+    if (!written)
+      throw processingError("CANONICAL_MODEL_WRITE_FAILED", "Canonical FBX-derived GLB was not stored in R2.");
+
+    const stored = await env.MODEL_ASSETS.head(modelKey);
+    const metadata = stored?.customMetadata || {};
+    if (
+      !stored ||
+      Number(stored.size) !== Number(conversion.byteSize) ||
+      objectSha256(stored) !== conversion.sha256 ||
+      metadata.projectId !== job.project_id ||
+      metadata.sourcePackId !== job.source_pack_id ||
+      metadata.processingJobId !== job.id ||
+      metadata.sourceFileId !== context.source_id ||
+      metadata.sourceSha256 !== context.sha256 ||
+      metadata.canonicalSha256 !== conversion.sha256
+    )
+      throw processingError(
+        "CANONICAL_MODEL_INTEGRITY_MISMATCH",
+        "Canonical FBX-derived GLB failed R2 size, checksum, or ownership verification.",
+      );
+
+    const inspection = await readGlbInspectionAtKey(env, modelKey, Number(conversion.byteSize));
+    return {
+      modelKey,
+      byteSize: Number(conversion.byteSize),
+      sha256: conversion.sha256,
+      inspection,
+      execution: conversion.execution,
+      geometryTransform: "unit-normalized",
+      validationDetails: {
+        coordinatePolicy: conversion.coordinatePolicy,
+        sourceUnitScaleFactorCmPerUnit: conversion.sourceUnitScaleFactorCmPerUnit,
+        appliedMetreScale: conversion.appliedMetreScale,
+      },
+    };
+  } catch (reason) {
+    await env.MODEL_ASSETS.delete(modelKey).catch(() => {});
+    throw reason;
+  }
 }
 
 async function markFailed(env, job, reason) {
@@ -299,8 +433,8 @@ async function markFailed(env, job, reason) {
   }
 }
 
-async function finalizeSuccess(env, job, context, inspection) {
-  const modelKey = `${job.artifact_prefix}canonical/model.glb`;
+async function finalizeSuccess(env, job, context, canonical) {
+  const modelKey = canonical.modelKey;
   const manifestKey = `${job.artifact_prefix}canonical/model-manifest.json`;
   const processedAt = job.started_at || job.requested_at;
   const manifest = {
@@ -312,7 +446,7 @@ async function finalizeSuccess(env, job, context, inspection) {
       version: Number(job.source_pack_version),
       manifestSha256: job.source_pack_manifest_sha256,
     },
-    processor: { version: job.processor_version, execution: "cloudflare-worker-glb-v1" },
+    processor: { version: job.processor_version, execution: canonical.execution },
     geometryAuthority: {
       sourceFileId: context.source_id,
       filename: context.filename,
@@ -323,18 +457,19 @@ async function finalizeSuccess(env, job, context, inspection) {
     model: {
       r2Key: modelKey,
       mimeType: MODEL_MIME,
-      byteSize: Number(context.byte_size),
-      sha256: context.sha256,
-      gltfVersion: inspection.assetVersion,
-      sourceGenerator: inspection.generator,
+      byteSize: Number(canonical.byteSize),
+      sha256: canonical.sha256,
+      gltfVersion: canonical.inspection.assetVersion,
+      sourceGenerator: canonical.inspection.generator,
       coordinateSystem: { units: "metre", upAxis: "+Y", handedness: "right" },
-      statistics: inspection.statistics,
-      requiredExtensions: inspection.requiredExtensions,
+      statistics: canonical.inspection.statistics,
+      requiredExtensions: canonical.inspection.requiredExtensions,
       validation: {
         glbHeader: "validated",
         selfContained: true,
         sourceIdentity: "verified",
-        geometryTransform: "preserved",
+        geometryTransform: canonical.geometryTransform,
+        ...canonical.validationDetails,
       },
     },
     processedAt,
@@ -342,7 +477,6 @@ async function finalizeSuccess(env, job, context, inspection) {
   const manifestJson = JSON.stringify(manifest);
   const manifestSha256 = await sha256Text(manifestJson);
 
-  await ensureCanonicalModelObject(env, job, context, modelKey);
   await env.MODEL_ASSETS.put(manifestKey, manifestJson, {
     httpMetadata: { contentType: "application/json; charset=utf-8" },
     customMetadata: {
@@ -361,12 +495,15 @@ async function finalizeSuccess(env, job, context, inspection) {
     sourcePackManifestSha256: job.source_pack_manifest_sha256,
     sourceFileId: context.source_id,
     sourceSha256: context.sha256,
+    canonicalSha256: canonical.sha256,
     processorVersion: job.processor_version,
+    execution: canonical.execution,
   });
   const manifestMetadataJson = JSON.stringify({
     format: CANONICAL_MODEL_FORMAT,
     version: CANONICAL_MODEL_VERSION,
     processorVersion: job.processor_version,
+    canonicalSha256: canonical.sha256,
   });
   const results = await env.DB.batch([
     env.DB.prepare(
@@ -381,8 +518,8 @@ async function finalizeSuccess(env, job, context, inspection) {
       "building-model",
       modelKey,
       MODEL_MIME,
-      Number(context.byte_size),
-      context.sha256,
+      Number(canonical.byteSize),
+      canonical.sha256,
       metadataJson,
       now,
       now,
@@ -423,8 +560,9 @@ async function finalizeSuccess(env, job, context, inspection) {
       job.id,
       JSON.stringify({
         attempt: Number(job.attempt),
+        execution: canonical.execution,
         canonicalModelKey: modelKey,
-        canonicalModelSha256: context.sha256,
+        canonicalModelSha256: canonical.sha256,
         outputManifestSha256: manifestSha256,
       }),
       now,
@@ -443,12 +581,17 @@ export async function executeCanonicalProcessingJob(env, jobId) {
 
   try {
     const context = await processingContext(env, job);
-    assertPinnedContext(job, context);
+    const format = assertPinnedContext(job, context);
     await assertSourceObject(env, job, context);
     await touchHeartbeat(env, job.id);
-    const inspection = await readGlbInspection(env, context);
+
+    const canonical =
+      format === "glb"
+        ? await canonicalizeGlbSource(env, job, context)
+        : await canonicalizeFbxSource(env, job, context);
+
     await touchHeartbeat(env, job.id);
-    const manifest = await finalizeSuccess(env, job, context, inspection);
+    const manifest = await finalizeSuccess(env, job, context, canonical);
     return { executed: true, state: "succeeded", manifest };
   } catch (reason) {
     await markFailed(env, job, reason);

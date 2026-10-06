@@ -77,7 +77,10 @@ test("FBX Worker adapter is unavailable by default and does not imply production
   const canonical = fs.readFileSync("workers/canonical-glb-processor.mjs", "utf8");
   assert.doesNotMatch(wrangler, /MODEL_PROCESSOR|model-processor/i);
   assert.doesNotMatch(entry, /MODEL_PROCESSOR|fbx-model-processor/i);
-  assert.doesNotMatch(canonical, /convertFbxWithModelProcessor|fbx-model-processor-adapter/);
+  assert.match(canonical, /fbx-model-processor-adapter/);
+  assert.match(canonical, /fbxModelProcessorCapability\(env\)/);
+  assert.match(canonical, /convertFbxWithModelProcessor/);
+  assert.doesNotMatch(canonical, /env\.MODEL_PROCESSOR/);
 });
 
 test("capability gate accepts only the exact v2 canonical-metre health contract", async () => {

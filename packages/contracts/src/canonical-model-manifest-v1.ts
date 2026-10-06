@@ -50,7 +50,10 @@ export interface CanonicalModelManifestV1 {
       glbHeader: "validated";
       selfContained: true;
       sourceIdentity: "verified";
-      geometryTransform: "preserved";
+      geometryTransform: "preserved" | "unit-normalized";
+      coordinatePolicy?: "fbx-unit-scale-factor-normalized-to-metres";
+      sourceUnitScaleFactorCmPerUnit?: number;
+      appliedMetreScale?: number;
     };
   };
   processedAt: string;
