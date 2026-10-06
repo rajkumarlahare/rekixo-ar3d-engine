@@ -19,6 +19,26 @@ class BlobReader {
   }
 }
 
+function invalidFbxUnitMetadata() {
+  const error = new Error(
+    "FBX GlobalSettings.UnitScaleFactor must be a finite positive centimetres-per-unit value.",
+  );
+  error.code = "FBX_UNIT_METADATA_INVALID";
+  return error;
+}
+
+export function metreScaleFromFbxUnitScaleFactor(unitScaleFactor) {
+  const centimetresPerUnit = Number(unitScaleFactor);
+  if (!Number.isFinite(centimetresPerUnit) || centimetresPerUnit <= 0) {
+    throw invalidFbxUnitMetadata();
+  }
+  const metresPerUnit = centimetresPerUnit / 100;
+  if (!Number.isFinite(metresPerUnit) || metresPerUnit <= 0) {
+    throw invalidFbxUnitMetadata();
+  }
+  return metresPerUnit;
+}
+
 export function consolidateMaterialGroups(geometry) {
   if (geometry.groups.length < 2) return;
   const batches = new Map();
@@ -38,7 +58,11 @@ export function consolidateMaterialGroups(geometry) {
   geometry.setIndex(indices);
 }
 
-export async function convertSourceFbx(input, output, { authoredSite = false } = {}) {
+export async function convertSourceFbx(
+  input,
+  output,
+  { authoredSite = false, normalizeUnitsToMeters = false } = {},
+) {
   const bytes = await fs.readFile(input);
   const previousWindow = globalThis.window;
   const previousReader = globalThis.FileReader;
@@ -52,6 +76,22 @@ export async function convertSourceFbx(input, output, { authoredSite = false } =
     const root = new FBXLoader(manager).parse(
       bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), "",
     );
+
+    let sourceUnitScaleFactorCmPerUnit = null;
+    let appliedMetreScale = 1;
+    let outputUnits = "source";
+    if (normalizeUnitsToMeters) {
+      sourceUnitScaleFactorCmPerUnit = Number(root.userData?.unitScaleFactor);
+      appliedMetreScale = metreScaleFromFbxUnitScaleFactor(sourceUnitScaleFactorCmPerUnit);
+      root.scale.multiplyScalar(appliedMetreScale);
+      // FBXLoader exposes the source UnitScaleFactor on the root. After the
+      // canonical root scale is applied, keep the source value separately and
+      // describe the exported coordinate unit as one metre per glTF unit.
+      root.userData.sourceUnitScaleFactorCmPerUnit = sourceUnitScaleFactorCmPerUnit;
+      root.userData.unitScaleFactor = 100;
+      outputUnits = "metre";
+    }
+
     root.updateMatrixWorld(true);
     const bounds = new THREE.Box3().setFromObject(root);
     const materials = new Map();
@@ -82,8 +122,17 @@ export async function convertSourceFbx(input, output, { authoredSite = false } =
     });
     root.userData.sourceGeometry = {
       sha256: createHash("sha256").update(bytes).digest("hex"),
-      coordinatePolicy: "unchanged-source-coordinates",
+      coordinatePolicy: normalizeUnitsToMeters
+        ? "fbx-unit-scale-factor-normalized-to-metres"
+        : "unchanged-source-coordinates",
       siteGeometry: authoredSite ? "included-in-source" : "unspecified",
+      ...(normalizeUnitsToMeters
+        ? {
+            sourceUnitScaleFactorCmPerUnit,
+            appliedMetreScale,
+            outputUnits,
+          }
+        : {}),
     };
     const buffer = await new GLTFExporter().parseAsync(root, { binary: true });
     await fs.mkdir(path.dirname(output), { recursive: true });
@@ -92,7 +141,15 @@ export async function convertSourceFbx(input, output, { authoredSite = false } =
       sourceSha256: root.userData.sourceGeometry.sha256,
       meshCount, multiMaterialMeshes, triangleCount, materialCount: materials.size,
       bounds: { min: bounds.min.toArray(), max: bounds.max.toArray() },
-      coordinatePolicy: "No rescaling, rotation, recentering or replacement geometry",
+      coordinatePolicy: normalizeUnitsToMeters
+        ? "Uniform FBX UnitScaleFactor normalization to canonical metres; no recentering or replacement geometry"
+        : "No rescaling, rotation, recentering or replacement geometry",
+      unitPolicy: normalizeUnitsToMeters
+        ? "FBX UnitScaleFactor centimetres-per-unit converted to metres"
+        : "Source units preserved",
+      sourceUnitScaleFactorCmPerUnit,
+      appliedMetreScale,
+      outputUnits,
       textures: "UVs and material names retained; external bitmaps restored by viewer",
       bytes: buffer.byteLength,
     };
@@ -107,5 +164,8 @@ export async function convertSourceFbx(input, output, { authoredSite = false } =
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const [input, output, ...flags] = process.argv.slice(2);
   if (!input || !output) throw new Error("Usage: node scripts/asset-pipeline/convert-source-fbx.mjs input.fbx output.glb");
-  console.log(JSON.stringify(await convertSourceFbx(input, output, { authoredSite: flags.includes("--authored-site") }), null, 2));
+  console.log(JSON.stringify(await convertSourceFbx(input, output, {
+    authoredSite: flags.includes("--authored-site"),
+    normalizeUnitsToMeters: flags.includes("--canonical-metres"),
+  }), null, 2));
 }
