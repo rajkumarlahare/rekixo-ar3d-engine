@@ -1,10 +1,13 @@
 import { engineAdminReadAccess } from "./admin-cloud.mjs";
 import { activeDeletionJob } from "./project-deletion.mjs";
+import { FBX_MODEL_PROCESSOR_VERSION } from "./fbx-model-processor-adapter.mjs";
 import { validProjectSlug } from "../shared/project-slug-policy.js";
 
 const BASE_PATH = "/3Dprojects";
 const ROUTE_PREFIX = `${BASE_PATH}/api/cloud/projects/`;
 const MAX_JSON_BYTES = 8 * 1024;
+const DEFAULT_MIN_BUILDING_DIMENSION_M = 2;
+const DEFAULT_MAX_BUILDING_DIMENSION_M = 2000;
 const SECURITY_HEADERS = {
   "Referrer-Policy": "same-origin",
   "X-Content-Type-Options": "nosniff",
@@ -98,6 +101,50 @@ function parseDiagnostic(raw) {
   }
 }
 
+function finiteTriplet(value) {
+  return (
+    Array.isArray(value) &&
+    value.length === 3 &&
+    value.every((item) => Number.isFinite(Number(item)) && Number(item) >= 0)
+  );
+}
+
+function reviewedBounds(diagnostic, metresPerSourceUnit) {
+  const rawDimensions = diagnostic?.rawDimensions;
+  if (!finiteTriplet(rawDimensions))
+    throw Object.assign(
+      Error("Scale review diagnostic does not contain valid source-space bounds."),
+      { status: 409 },
+    );
+
+  const dimensionsM = rawDimensions.map((value) => Number(value) * metresPerSourceUnit);
+  const largestDimensionM = Math.max(...dimensionsM);
+  const diagnosticMin = Number(diagnostic?.minLargestDimensionM);
+  const diagnosticMax = Number(diagnostic?.maxLargestDimensionM);
+  const minLargestDimensionM =
+    Number.isFinite(diagnosticMin) && diagnosticMin > 0
+      ? diagnosticMin
+      : DEFAULT_MIN_BUILDING_DIMENSION_M;
+  const maxLargestDimensionM =
+    Number.isFinite(diagnosticMax) && diagnosticMax > minLargestDimensionM
+      ? diagnosticMax
+      : DEFAULT_MAX_BUILDING_DIMENSION_M;
+
+  if (
+    !Number.isFinite(largestDimensionM) ||
+    largestDimensionM < minLargestDimensionM ||
+    largestDimensionM > maxLargestDimensionM
+  )
+    throw Object.assign(
+      Error(
+        `Reviewed scale still produces implausible Building bounds. Largest dimension must remain between ${minLargestDimensionM} m and ${maxLargestDimensionM} m.`,
+      ),
+      { status: 400 },
+    );
+
+  return { dimensionsM, largestDimensionM, minLargestDimensionM, maxLargestDimensionM };
+}
+
 function reviewResponse(row) {
   if (!row) return null;
   return {
@@ -106,12 +153,14 @@ function reviewResponse(row) {
     sourcePackId: row.source_pack_id,
     sourceFileId: row.source_file_id,
     sourceSha256: row.source_sha256,
+    modelProcessorVersion: Number(row.model_processor_version),
     status: row.status,
     diagnostic: parseDiagnostic(row.diagnostic_json),
     metresPerSourceUnit:
       row.metres_per_source_unit === null || row.metres_per_source_unit === undefined
         ? null
         : Number(row.metres_per_source_unit),
+    decisionNote: row.decision_note ?? null,
     approvedBy: row.approved_by ?? null,
     approvedAt: row.approved_at ?? null,
     createdAt: row.created_at,
@@ -130,12 +179,13 @@ async function latestReview(env, projectId) {
          ON job.id=review.processing_job_id
         AND job.project_id=review.project_id
       WHERE review.project_id=?
+        AND review.model_processor_version=?
         AND pack.status IN ('ready','superseded')
         AND pack.operator_approved=1
         AND job.failure_code='FBX_SCALE_REVIEW_REQUIRED'
       ORDER BY pack.version DESC,review.created_at DESC,review.id DESC
       LIMIT 1`,
-  ).bind(projectId).first();
+  ).bind(projectId, FBX_MODEL_PROCESSOR_VERSION).first();
 }
 
 async function reviewForApproval(env, projectId, reviewId) {
@@ -150,6 +200,7 @@ async function reviewForApproval(env, projectId, reviewId) {
         AND pack.project_id=review.project_id
       WHERE review.project_id=?
         AND review.id=?
+        AND review.model_processor_version=?
         AND review.status='pending'
         AND job.state='failed'
         AND job.failure_code='FBX_SCALE_REVIEW_REQUIRED'
@@ -161,13 +212,14 @@ async function reviewForApproval(env, projectId, reviewId) {
              AND newer.source_pack_id=review.source_pack_id
              AND newer.source_file_id=review.source_file_id
              AND newer.source_sha256=review.source_sha256
+             AND newer.model_processor_version=review.model_processor_version
              AND (
                newer.created_at>review.created_at
                OR (newer.created_at=review.created_at AND newer.id>review.id)
              )
         )
       LIMIT 1`,
-  ).bind(projectId, reviewId).first();
+  ).bind(projectId, reviewId, FBX_MODEL_PROCESSOR_VERSION).first();
 }
 
 async function readSmallJson(request) {
@@ -189,6 +241,7 @@ async function responseState(env, project) {
   return {
     contractVersion: 1,
     schemaReady: true,
+    modelProcessorVersion: FBX_MODEL_PROCESSOR_VERSION,
     project: {
       id: project.id,
       slug: project.slug,
@@ -214,6 +267,7 @@ export async function handleModelScaleReviewRequest(request, env, url = new URL(
       {
         contractVersion: 1,
         schemaReady: false,
+        modelProcessorVersion: FBX_MODEL_PROCESSOR_VERSION,
         error: "Model scale review schema is not installed.",
       },
       { status: 503 },
@@ -254,6 +308,12 @@ export async function handleModelScaleReviewRequest(request, env, url = new URL(
         { error: "Scale must be between 0.000001 and 1000000 metres per source unit." },
         { status: 400 },
       );
+    const decisionNote = String(body.note || "").trim();
+    if (decisionNote.length < 12 || decisionNote.length > 1000)
+      return json(
+        { error: "Approval note must be between 12 and 1000 characters." },
+        { status: 400 },
+      );
 
     const review = await reviewForApproval(env, project.id, reviewId);
     if (!review)
@@ -262,24 +322,39 @@ export async function handleModelScaleReviewRequest(request, env, url = new URL(
         { status: 409 },
       );
 
+    const diagnostic = parseDiagnostic(review.diagnostic_json);
+    const bounds = reviewedBounds(diagnostic, metresPerSourceUnit);
     const now = new Date().toISOString();
     const auditDetails = JSON.stringify({
       sourcePackId: review.source_pack_id,
       sourceFileId: review.source_file_id,
       sourceSha256: review.source_sha256,
       failedProcessingJobId: review.processing_job_id,
+      modelProcessorVersion: Number(review.model_processor_version),
       metresPerSourceUnit,
+      resultingDimensionsM: bounds.dimensionsM,
+      decisionNote,
     });
     const results = await env.DB.batch([
       env.DB.prepare(
         `UPDATE model_scale_reviews_3d
-            SET status='approved',metres_per_source_unit=?,approved_by=?,approved_at=?,updated_at=?
-          WHERE id=? AND project_id=? AND status='pending'`,
-      ).bind(metresPerSourceUnit, access.actor.email, now, now, review.id, project.id),
+            SET status='approved',metres_per_source_unit=?,decision_note=?,
+                approved_by=?,approved_at=?,updated_at=?
+          WHERE id=? AND project_id=? AND status='pending' AND model_processor_version=?`,
+      ).bind(
+        metresPerSourceUnit,
+        decisionNote,
+        access.actor.email,
+        now,
+        now,
+        review.id,
+        project.id,
+        FBX_MODEL_PROCESSOR_VERSION,
+      ),
       env.DB.prepare(
         `INSERT INTO engine_admin_audit
           (id,actor_email,action,project_id,target_id,details_json,created_at)
-         SELECT ?,?,'processing.scale_approved',?,?,?,?
+         SELECT ?,?,'processing.scale_review_approved',?,?,?,?
           WHERE EXISTS (
             SELECT 1 FROM model_scale_reviews_3d
              WHERE id=? AND project_id=? AND status='approved' AND approved_at=?
