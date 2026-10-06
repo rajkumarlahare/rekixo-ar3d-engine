@@ -1,4 +1,5 @@
 import { releaseSchemaReady } from "./release-runtime.mjs";
+import { validateStoredBindingTargets } from "./reviewed-component-binding-policy.mjs";
 import {
   assertDraftAssetKey,
   assertProjectAssetKey,
@@ -23,6 +24,123 @@ function parseJson(value, fallback) {
 
 function validSha256(value) {
   return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
+}
+
+function validReviewedBindingToken(value, max = 200) {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= max &&
+    /^[A-Za-z0-9_.-]+$/.test(value)
+  );
+}
+
+function sameSha(left, right) {
+  return (
+    validSha256(left) &&
+    validSha256(right) &&
+    String(left).toLowerCase() === String(right).toLowerCase()
+  );
+}
+
+export async function validateReviewedBindingsForRelease(env, project, draft) {
+  const block = draft?.scene?.reviewedComponentBindings;
+  if (block === undefined) return undefined;
+
+  validateStoredBindingTargets(draft, block);
+  if (
+    !validReviewedBindingToken(block.processingJobId) ||
+    !validReviewedBindingToken(block.sourcePackId) ||
+    !Number.isInteger(block.sourcePackVersion) ||
+    block.sourcePackVersion < 1 ||
+    !validSha256(block.sourcePackManifestSha256) ||
+    !validReviewedBindingToken(block.processorVersion) ||
+    !validSha256(block.outputManifestSha256) ||
+    !validReviewedBindingToken(block.canonicalModelArtifactId) ||
+    !validSha256(block.canonicalModelSha256) ||
+    !validReviewedBindingToken(block.nodeCatalogArtifactId) ||
+    !validSha256(block.nodeCatalogSha256) ||
+    !Number.isInteger(block.reviewedAgainstDraftRevision) ||
+    block.reviewedAgainstDraftRevision < 0 ||
+    typeof block.reviewedBy !== "string" ||
+    !block.reviewedBy.trim() ||
+    block.reviewedBy.length > 320 ||
+    typeof block.reviewedAt !== "string" ||
+    !Number.isFinite(Date.parse(block.reviewedAt))
+  )
+    throw Error("Reviewed component bindings provenance metadata is invalid.");
+
+  const job = await env.DB.prepare(
+    `SELECT id,project_id,source_pack_id,source_pack_version,
+            source_pack_manifest_sha256,processor_version,state,
+            output_manifest_sha256
+       FROM processing_jobs_3d
+      WHERE id=? AND project_id=?
+      LIMIT 1`,
+  ).bind(block.processingJobId, project.id).first();
+  if (!job || job.state !== "succeeded")
+    throw Error(
+      "Reviewed component bindings processing job is no longer a succeeded project-owned job.",
+    );
+  if (
+    job.source_pack_id !== block.sourcePackId ||
+    Number(job.source_pack_version) !== Number(block.sourcePackVersion) ||
+    !sameSha(job.source_pack_manifest_sha256, block.sourcePackManifestSha256) ||
+    job.processor_version !== block.processorVersion ||
+    !sameSha(job.output_manifest_sha256, block.outputManifestSha256)
+  )
+    throw Error(
+      "Reviewed component bindings processing provenance no longer matches durable processing state.",
+    );
+
+  const artifactRows = await env.DB.prepare(
+    `SELECT id,processing_job_id,project_id,kind,logical_id,state,sha256
+       FROM processing_artifacts_3d
+      WHERE processing_job_id=? AND project_id=? AND state='ready'
+        AND id IN (?,?)
+      ORDER BY id ASC`,
+  ).bind(
+    job.id,
+    project.id,
+    block.canonicalModelArtifactId,
+    block.nodeCatalogArtifactId,
+  ).all();
+  const artifacts = artifactRows.results || [];
+  const model = artifacts.find(
+    (item) =>
+      item.id === block.canonicalModelArtifactId &&
+      item.kind === "canonical-model" &&
+      item.logical_id === "building-model",
+  );
+  const catalog = artifacts.find(
+    (item) =>
+      item.id === block.nodeCatalogArtifactId &&
+      item.kind === "node-catalog" &&
+      item.logical_id === "node-catalog-v1",
+  );
+  if (
+    !model ||
+    !catalog ||
+    artifacts.length !== 2 ||
+    !sameSha(model.sha256, block.canonicalModelSha256) ||
+    !sameSha(catalog.sha256, block.nodeCatalogSha256)
+  )
+    throw Error(
+      "Reviewed component bindings canonical artifact provenance no longer matches durable processing state.",
+    );
+
+  const canonicalSha = String(block.canonicalModelSha256).toLowerCase();
+  for (const binding of block.bindings) {
+    const match = /^node:([a-f0-9]{64}):(0|[1-9][0-9]{0,8})$/i.exec(
+      String(binding.nodeId || ""),
+    );
+    if (!match || match[1].toLowerCase() !== canonicalSha)
+      throw Error(
+        "Reviewed component binding node identity no longer matches the canonical model checksum.",
+      );
+  }
+
+  return block;
 }
 
 function safeSegment(value) {
@@ -179,6 +297,15 @@ async function cloudDraftForRelease(env, project) {
     throw Error(
       `Cloud draft validation failed; release creation stopped: ${
         error instanceof Error ? error.message : "invalid Studio draft"
+      }`,
+    );
+  }
+  try {
+    await validateReviewedBindingsForRelease(env, project, draft);
+  } catch (error) {
+    throw Error(
+      `Reviewed component bindings validation failed; release creation stopped: ${
+        error instanceof Error ? error.message : "invalid reviewed component bindings"
       }`,
     );
   }
