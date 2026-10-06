@@ -493,10 +493,7 @@ async function canonicalizeFbxSource(env, job, context) {
       sha256: conversion.sha256,
       inspection,
       execution: conversion.execution,
-      geometryTransform:
-        conversion.scaleBasis === "reviewed-operator"
-          ? "reviewed-scale-normalized"
-          : "unit-normalized",
+      geometryTransform: "unit-normalized",
       validationDetails: {
         coordinatePolicy: conversion.coordinatePolicy,
         sourceUnitScaleFactorCmPerUnit: conversion.sourceUnitScaleFactorCmPerUnit,

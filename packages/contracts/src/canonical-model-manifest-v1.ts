@@ -51,9 +51,17 @@ export interface CanonicalModelManifestV1 {
       selfContained: true;
       sourceIdentity: "verified";
       geometryTransform: "preserved" | "unit-normalized";
-      coordinatePolicy?: "fbx-unit-scale-factor-normalized-to-metres";
+      coordinatePolicy?:
+        | "fbx-unit-scale-factor-normalized-to-metres"
+        | "fbx-reviewed-scale-normalized-to-metres";
       sourceUnitScaleFactorCmPerUnit?: number;
       appliedMetreScale?: number;
+      scaleBasis?: "declared-fbx-unit" | "reviewed-operator";
+      scaleDecisionId?: string | null;
+      scaleSanity?: "pass";
+      scaleSanityPolicy?: string;
+      rawDimensions?: number[];
+      canonicalDimensionsM?: number[];
     };
   };
   processedAt: string;

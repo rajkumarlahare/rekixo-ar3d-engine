@@ -61,7 +61,7 @@ test("canonical retry consumes only the durable approved source-identity scale d
   assert.match(canonical, /source_file_id=\?/);
   assert.match(canonical, /source_sha256=\?/);
   assert.match(canonical, /status !== "approved"/);
-  assert.match(canonical, /scaleDecision:/);
+  assert.match(canonical, /scaleDecision(?:\s*:|\s*,)/);
   assert.match(canonical, /scaleDecisionId/);
 });
 

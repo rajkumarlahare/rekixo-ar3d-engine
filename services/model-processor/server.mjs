@@ -57,7 +57,7 @@ function reviewedScaleHeaders(headers) {
       "Reviewed scale requires a valid decision ID and finite metres-per-source-unit value.",
     );
   }
-  return { decisionId, metresPerSourceUnit };
+  return { id: decisionId, metresPerSourceUnit };
 }
 
 export function validateFbxRequestHeaders(headers) {
@@ -207,8 +207,12 @@ function requireCanonicalMetreReport(report, identity) {
   const appliedMetreScale = Number(report?.appliedMetreScale);
   const scaleSanity = report?.scaleSanity;
   const expectedBasis = identity.scaleDecision ? "reviewed-operator" : "declared-fbx-unit";
+  const expectedCoordinatePolicy = identity.scaleDecision
+    ? "fbx-reviewed-scale-normalized-to-metres"
+    : "fbx-unit-scale-factor-normalized-to-metres";
   if (
     report?.outputUnits !== "metre" ||
+    report?.coordinatePolicy !== expectedCoordinatePolicy ||
     report?.scaleBasis !== expectedBasis ||
     !Number.isFinite(sourceUnitScaleFactorCmPerUnit) ||
     sourceUnitScaleFactorCmPerUnit <= 0 ||
@@ -233,6 +237,7 @@ function requireCanonicalMetreReport(report, identity) {
     sourceUnitScaleFactorCmPerUnit,
     appliedMetreScale,
     scaleBasis: expectedBasis,
+    coordinatePolicy: expectedCoordinatePolicy,
     scaleSanity,
   };
 }
@@ -326,13 +331,13 @@ async function handleConversion(request, response) {
     "x-rekixo-processing-job-id": identity.processingJobId,
     "x-rekixo-source-sha256": identity.sourceSha256,
     "x-rekixo-output-sha256": outputSha256,
-    "x-rekixo-coordinate-policy": report.coordinatePolicy,
+    "x-rekixo-coordinate-policy": unitReport.coordinatePolicy,
     "x-rekixo-output-units": "metre",
     "x-rekixo-source-unit-scale-factor": String(unitReport.sourceUnitScaleFactorCmPerUnit),
     "x-rekixo-applied-metre-scale": String(unitReport.appliedMetreScale),
     "x-rekixo-scale-basis": unitReport.scaleBasis,
     ...(identity.scaleDecision
-      ? { "x-rekixo-scale-decision-id": identity.scaleDecision.decisionId }
+      ? { "x-rekixo-scale-decision-id": identity.scaleDecision.id }
       : {}),
     "x-rekixo-scale-sanity": unitReport.scaleSanity.status,
     "x-rekixo-scale-sanity-policy": unitReport.scaleSanity.policy,
