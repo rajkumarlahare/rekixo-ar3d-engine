@@ -1,3 +1,5 @@
+import type { BuildingPresentationManifestV1 } from "./building-presentation-manifest-v1";
+
 export * from "./runtime-validation";
 export * from "./release-manifest-v1";
 export * from "./building-presentation-manifest-v1";
