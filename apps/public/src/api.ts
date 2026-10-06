@@ -1,5 +1,6 @@
 import {
   PUBLIC_BASE_PATH,
+  assertBuildingPresentationManifestV1,
   assertPublic3DExperiencePayload,
   type BuildingPresentationManifestV1,
   type Public3DExperience,
@@ -88,6 +89,8 @@ export async function loadPublicExperience(
   const enriched = siteElements?.length ? { ...body, siteElements } : body;
   try {
     assertPublic3DExperiencePayload(enriched);
+    if (body.buildingPresentation !== undefined)
+      assertBuildingPresentationManifestV1(body.buildingPresentation);
   } catch (error) {
     clearPublicRuntimeSiteElements();
     clearSemanticInteriorRuntime();
