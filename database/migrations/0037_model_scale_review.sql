@@ -67,6 +67,30 @@ BEGIN
   SELECT RAISE(ABORT, 'Scale review must belong to the running FBX geometry-authority attempt');
 END;
 
+-- A direct API caller cannot create another processing attempt while the exact
+-- preceding failed attempt still has an unresolved scale decision. Approval is
+-- the only path that unlocks retry; no client-side gating is trusted for safety.
+CREATE TRIGGER IF NOT EXISTS trg_processing_jobs_3d_scale_review_retry_gate
+BEFORE INSERT ON processing_jobs_3d
+WHEN NEW.attempt > 1
+ AND EXISTS (
+   SELECT 1
+     FROM processing_jobs_3d previous
+     JOIN model_scale_reviews_3d review
+       ON review.processing_job_id=previous.id
+      AND review.project_id=previous.project_id
+    WHERE previous.project_id=NEW.project_id
+      AND previous.source_pack_id=NEW.source_pack_id
+      AND previous.processor_version=NEW.processor_version
+      AND previous.attempt=NEW.attempt-1
+      AND previous.state='failed'
+      AND previous.failure_code='FBX_SCALE_REVIEW_REQUIRED'
+      AND review.status='pending'
+ )
+BEGIN
+  SELECT RAISE(ABORT, 'Approve pending model scale review before retrying processing');
+END;
+
 -- Review identity and processor diagnostic are append-only. Operator approval
 -- may only fill the explicit scale/rationale/reviewer fields once.
 CREATE TRIGGER IF NOT EXISTS trg_model_scale_reviews_3d_identity_immutable
