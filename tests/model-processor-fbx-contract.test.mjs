@@ -4,12 +4,17 @@ import test from "node:test";
 
 import {
   FBX_PROCESSOR_CONTRACT,
+  FBX_PROCESSOR_EXECUTION,
   FBX_PROCESSOR_VERSION,
   MAX_FBX_BYTES,
   inspectGlbBuffer,
   validateFbxRequestHeaders,
 } from "../services/model-processor/server.mjs";
 import {
+  FBX_SCALE_SANITY_POLICY,
+  MAX_CANONICAL_BUILDING_MAX_DIMENSION_M,
+  MIN_CANONICAL_BUILDING_MAX_DIMENSION_M,
+  assessCanonicalBuildingScale,
   metreScaleFromFbxUnitScaleFactor,
 } from "../scripts/asset-pipeline/convert-source-fbx.mjs";
 
@@ -38,7 +43,7 @@ function minimalGlb() {
   return glb;
 }
 
-test("FBX processor contract pins V2 source/job provenance", () => {
+test("FBX processor contract pins V3 source/job provenance and metric-sanity execution", () => {
   const identity = validateFbxRequestHeaders(validHeaders());
   assert.equal(identity.sourceFileId, "source_test_12345");
   assert.equal(identity.sourcePackId, "pack_test_12345");
@@ -46,7 +51,8 @@ test("FBX processor contract pins V2 source/job provenance", () => {
   assert.equal(identity.sourceSha256, "a".repeat(64));
   assert.equal(identity.sourceName, "Building authority.fbx");
   assert.equal(FBX_PROCESSOR_CONTRACT, "rekixo-fbx-canonical-glb");
-  assert.equal(FBX_PROCESSOR_VERSION, 2);
+  assert.equal(FBX_PROCESSOR_VERSION, 3);
+  assert.equal(FBX_PROCESSOR_EXECUTION, "serialized-node-fbx-v3-metric-sanity");
   assert.equal(MAX_FBX_BYTES, 64 * 1024 * 1024);
 });
 
@@ -78,6 +84,41 @@ test("FBX UnitScaleFactor converts deterministically from centimetres to canonic
   }
 });
 
+test("metric sanity fails closed when declared FBX units would create a miniature Building", () => {
+  const assessment = assessCanonicalBuildingScale({
+    rawDimensions: [26, 21, 28],
+    canonicalDimensionsM: [0.26, 0.21, 0.28],
+    sourceUnitScaleFactorCmPerUnit: 1,
+    appliedMetreScale: 0.01,
+  });
+
+  assert.equal(assessment.status, "review-required");
+  assert.equal(assessment.reason, "canonical-bounds-too-small");
+  assert.equal(assessment.policy, FBX_SCALE_SANITY_POLICY);
+  assert.equal(assessment.minLargestDimensionM, MIN_CANONICAL_BUILDING_MAX_DIMENSION_M);
+});
+
+test("metric sanity accepts broad plausible Building bounds and rejects extreme giant bounds", () => {
+  const plausible = assessCanonicalBuildingScale({
+    rawDimensions: [26, 21, 28],
+    canonicalDimensionsM: [26, 21, 28],
+    sourceUnitScaleFactorCmPerUnit: 100,
+    appliedMetreScale: 1,
+  });
+  assert.equal(plausible.status, "pass");
+  assert.equal(plausible.reason, null);
+
+  const giant = assessCanonicalBuildingScale({
+    rawDimensions: [2600, 2100, 2800],
+    canonicalDimensionsM: [2600, 2100, 2800],
+    sourceUnitScaleFactorCmPerUnit: 100,
+    appliedMetreScale: 1,
+  });
+  assert.equal(giant.status, "review-required");
+  assert.equal(giant.reason, "canonical-bounds-too-large");
+  assert.equal(giant.maxLargestDimensionM, MAX_CANONICAL_BUILDING_MAX_DIMENSION_M);
+});
+
 test("FBX processor accepts only structurally valid self-contained GLB 2.x output", () => {
   const glb = minimalGlb();
   assert.deepEqual(inspectGlbBuffer(glb), {
@@ -106,14 +147,14 @@ test("FBX processor accepts only structurally valid self-contained GLB 2.x outpu
   assert.throws(() => inspectGlbBuffer(externalGlb), /self-contained/);
 });
 
-test("Phase 2B model processor stays dormant until explicit Container wiring", () => {
+test("model processor remains dormant until explicit Container wiring", () => {
   const wrangler = fs.readFileSync("wrangler.admin.jsonc", "utf8");
   const adminEntry = fs.readFileSync("workers/admin-entry.mjs", "utf8");
   assert.doesNotMatch(wrangler, /MODEL_PROCESSOR|model-processor/i);
   assert.doesNotMatch(adminEntry, /fbx-to-glb|MODEL_PROCESSOR/);
 });
 
-test("model processor opts into canonical metres while legacy converter default stays unchanged", () => {
+test("model processor opts into canonical metres and metric sanity while legacy converter default stays unchanged", () => {
   const dockerfile = fs.readFileSync("services/model-processor/Dockerfile", "utf8");
   const server = fs.readFileSync("services/model-processor/server.mjs", "utf8");
   const converter = fs.readFileSync("scripts/asset-pipeline/convert-source-fbx.mjs", "utf8");
@@ -124,6 +165,8 @@ test("model processor opts into canonical metres while legacy converter default 
   assert.match(server, /normalizeUnitsToMeters:\s*true/);
   assert.match(server, /fbx-unit-scale-factor-normalized-to-metres/);
   assert.match(server, /"x-rekixo-output-units": "metre"/);
+  assert.match(server, /"x-rekixo-scale-sanity": unitReport\.scaleSanity\.status/);
+  assert.match(converter, /FBX_SCALE_REVIEW_REQUIRED/);
   assert.match(converter, /normalizeUnitsToMeters = false/);
   assert.match(converter, /Source units preserved/);
   assert.match(converter, /--canonical-metres/);

@@ -38,7 +38,7 @@ jobs:
             --publish 18081:8080 \
             rekixo-model-processor:test
 
-      - name: Verify health, metre contract, dependencies, and fail-closed intake
+      - name: Verify health, metre contract, metric sanity, dependencies, and fail-closed intake
         shell: bash
         run: |
           set -euo pipefail
@@ -55,13 +55,14 @@ jobs:
           test "$CODE" = "200"
           grep -Fq '"processor":"rekixo-model-processor"' "$HEALTH"
           grep -Fq '"contract":"rekixo-fbx-canonical-glb"' "$HEALTH"
-          grep -Fq '"version":2' "$HEALTH"
+          grep -Fq '"version":3' "$HEALTH"
           grep -Fq '"maxFbxBytes":67108864' "$HEALTH"
           grep -Fq '"outputUnits":"metre"' "$HEALTH"
-          grep -Fq '"execution":"serialized-node-fbx-v2-canonical-metres"' "$HEALTH"
+          grep -Fq '"execution":"serialized-node-fbx-v3-metric-sanity"' "$HEALTH"
+          grep -Fq '"metricSanity":"required"' "$HEALTH"
 
           docker exec rekixo-model-processor-test \
-            node -e "import('/app/scripts/asset-pipeline/convert-source-fbx.mjs').then(m => { if (typeof m.convertSourceFbx !== 'function' || typeof m.metreScaleFromFbxUnitScaleFactor !== 'function') process.exit(1); if (m.metreScaleFromFbxUnitScaleFactor(1) !== 0.01 || m.metreScaleFromFbxUnitScaleFactor(100) !== 1) process.exit(1); let failedClosed = false; try { m.metreScaleFromFbxUnitScaleFactor(0); } catch (error) { failedClosed = error?.code === 'FBX_UNIT_METADATA_INVALID'; } if (!failedClosed) process.exit(1); })"
+            node -e "import('/app/scripts/asset-pipeline/convert-source-fbx.mjs').then(m => { if (typeof m.convertSourceFbx !== 'function' || typeof m.metreScaleFromFbxUnitScaleFactor !== 'function' || typeof m.assessCanonicalBuildingScale !== 'function') process.exit(1); if (m.metreScaleFromFbxUnitScaleFactor(1) !== 0.01 || m.metreScaleFromFbxUnitScaleFactor(100) !== 1) process.exit(1); const review = m.assessCanonicalBuildingScale({ rawDimensions: [26,21,28], canonicalDimensionsM: [0.26,0.21,0.28], sourceUnitScaleFactorCmPerUnit: 1, appliedMetreScale: 0.01 }); if (review.status !== 'review-required' || review.reason !== 'canonical-bounds-too-small') process.exit(1); let failedClosed = false; try { m.metreScaleFromFbxUnitScaleFactor(0); } catch (error) { failedClosed = error?.code === 'FBX_UNIT_METADATA_INVALID'; } if (!failedClosed) process.exit(1); })"
 
           BAD="$(mktemp)"
           BAD_CODE="$(printf 'not-an-fbx' | curl --silent --show-error \
