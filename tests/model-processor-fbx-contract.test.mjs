@@ -9,6 +9,9 @@ import {
   inspectGlbBuffer,
   validateFbxRequestHeaders,
 } from "../services/model-processor/server.mjs";
+import {
+  metreScaleFromFbxUnitScaleFactor,
+} from "../scripts/asset-pipeline/convert-source-fbx.mjs";
 
 function validHeaders() {
   return new Headers({
@@ -43,7 +46,7 @@ test("FBX processor contract pins V2 source/job provenance", () => {
   assert.equal(identity.sourceSha256, "a".repeat(64));
   assert.equal(identity.sourceName, "Building authority.fbx");
   assert.equal(FBX_PROCESSOR_CONTRACT, "rekixo-fbx-canonical-glb");
-  assert.equal(FBX_PROCESSOR_VERSION, 1);
+  assert.equal(FBX_PROCESSOR_VERSION, 2);
   assert.equal(MAX_FBX_BYTES, 64 * 1024 * 1024);
 });
 
@@ -59,6 +62,20 @@ test("FBX processor rejects malformed identity, digest, and filenames", () => {
   const badName = validHeaders();
   badName.set("x-rekixo-source-name", encodeURIComponent("model.obj"));
   assert.throws(() => validateFbxRequestHeaders(badName), /FBX source filename/);
+});
+
+test("FBX UnitScaleFactor converts deterministically from centimetres to canonical metres", () => {
+  assert.equal(metreScaleFromFbxUnitScaleFactor(1), 0.01);
+  assert.equal(metreScaleFromFbxUnitScaleFactor(100), 1);
+  assert.equal(metreScaleFromFbxUnitScaleFactor(30.48), 0.3048);
+  assert.equal(metreScaleFromFbxUnitScaleFactor("2.54"), 0.0254);
+
+  for (const invalid of [undefined, null, 0, -1, Number.NaN, Number.POSITIVE_INFINITY, "bad"]) {
+    assert.throws(
+      () => metreScaleFromFbxUnitScaleFactor(invalid),
+      (error) => error?.code === "FBX_UNIT_METADATA_INVALID",
+    );
+  }
 });
 
 test("FBX processor accepts only structurally valid self-contained GLB 2.x output", () => {
@@ -96,12 +113,18 @@ test("Phase 2B model processor stays dormant until explicit Container wiring", (
   assert.doesNotMatch(adminEntry, /fbx-to-glb|MODEL_PROCESSOR/);
 });
 
-test("model processor image runs non-root and reuses the source FBX converter", () => {
+test("model processor opts into canonical metres while legacy converter default stays unchanged", () => {
   const dockerfile = fs.readFileSync("services/model-processor/Dockerfile", "utf8");
   const server = fs.readFileSync("services/model-processor/server.mjs", "utf8");
+  const converter = fs.readFileSync("scripts/asset-pipeline/convert-source-fbx.mjs", "utf8");
   assert.match(dockerfile, /npm ci --omit=dev --ignore-scripts/);
   assert.match(dockerfile, /USER node/);
   assert.match(dockerfile, /convert-source-fbx\.mjs/);
   assert.match(server, /convert-source-fbx\.mjs/);
-  assert.match(server, /unchanged-source-coordinates/);
+  assert.match(server, /normalizeUnitsToMeters:\s*true/);
+  assert.match(server, /fbx-unit-scale-factor-normalized-to-metres/);
+  assert.match(server, /"x-rekixo-output-units": "metre"/);
+  assert.match(converter, /normalizeUnitsToMeters = false/);
+  assert.match(converter, /Source units preserved/);
+  assert.match(converter, /--canonical-metres/);
 });
