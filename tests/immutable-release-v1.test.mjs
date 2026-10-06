@@ -3,16 +3,45 @@ import fs from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 
+const compilerOptions = {
+  module: ts.ModuleKind.ESNext,
+  target: ts.ScriptTarget.ES2022,
+};
+
+const buildingPresentationContractSource = fs.readFileSync(
+  "packages/contracts/src/building-presentation-manifest-v1.ts",
+  "utf8",
+);
+const buildingPresentationContractJs = ts.transpileModule(
+  buildingPresentationContractSource,
+  { compilerOptions },
+).outputText;
+const buildingPresentationContractUrl =
+  "data:text/javascript;base64," +
+  Buffer.from(buildingPresentationContractJs).toString("base64");
+
 const contractSource = fs.readFileSync(
   "packages/contracts/src/release-manifest-v1.ts",
   "utf8",
 );
-const contractJs = ts.transpileModule(contractSource, {
-  compilerOptions: {
-    module: ts.ModuleKind.ESNext,
-    target: ts.ScriptTarget.ES2022,
-  },
+const contractJsRaw = ts.transpileModule(contractSource, {
+  compilerOptions,
 }).outputText;
+
+const contractImport =
+  'from "./building-presentation-manifest-v1";';
+
+if (!contractJsRaw.includes(contractImport)) {
+  throw new Error(
+    "release-manifest-v1 transpilation no longer contains the expected building presentation contract import.",
+  );
+}
+
+const contractJs = contractJsRaw.replace(
+  contractImport,
+  `from ${JSON.stringify(buildingPresentationContractUrl)};`,
+);
+
 const contract = await import(
   "data:text/javascript;base64," +
     Buffer.from(contractJs).toString("base64")
