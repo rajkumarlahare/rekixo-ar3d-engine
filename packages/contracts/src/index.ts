@@ -219,8 +219,7 @@ export interface PlatformEngineProjectContract {
   release?: {
     id: string;
     version: number;
-    manifestSha256: string;
-    createdAt: string;
-    source: "immutable-release";
+    manifestSha256?: string;
+    createdAt?: string;
   };
 }
