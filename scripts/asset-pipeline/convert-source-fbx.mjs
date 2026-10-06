@@ -10,6 +10,10 @@ const THREE = await import(pathToFileURL(path.join(path.dirname(require.resolve(
 const { FBXLoader } = await import(pathToFileURL(require.resolve("three/examples/jsm/loaders/FBXLoader.js")));
 const { GLTFExporter } = await import(pathToFileURL(require.resolve("three/examples/jsm/exporters/GLTFExporter.js")));
 
+export const FBX_SCALE_SANITY_POLICY = "broad-building-bounds-v1";
+export const MIN_CANONICAL_BUILDING_MAX_DIMENSION_M = 2;
+export const MAX_CANONICAL_BUILDING_MAX_DIMENSION_M = 2000;
+
 class BlobReader {
   readAsArrayBuffer(blob) {
     blob.arrayBuffer().then((result) => {
@@ -27,6 +31,16 @@ function invalidFbxUnitMetadata() {
   return error;
 }
 
+function scaleReviewRequired(details) {
+  const dimensions = details.canonicalDimensionsM.map((value) => Number(value.toFixed(4))).join(" × ");
+  const error = new Error(
+    `FBX declared units produce implausible canonical Building bounds (${dimensions} m). Explicit scale review is required before canonicalization.`,
+  );
+  error.code = "FBX_SCALE_REVIEW_REQUIRED";
+  error.details = details;
+  return error;
+}
+
 export function metreScaleFromFbxUnitScaleFactor(unitScaleFactor) {
   const centimetresPerUnit = Number(unitScaleFactor);
   if (!Number.isFinite(centimetresPerUnit) || centimetresPerUnit <= 0) {
@@ -37,6 +51,63 @@ export function metreScaleFromFbxUnitScaleFactor(unitScaleFactor) {
     throw invalidFbxUnitMetadata();
   }
   return metresPerUnit;
+}
+
+function finiteDimensions(value) {
+  return (
+    Array.isArray(value) &&
+    value.length === 3 &&
+    value.every((item) => Number.isFinite(Number(item)) && Number(item) >= 0)
+  );
+}
+
+function boxDimensions(box) {
+  if (!box || box.isEmpty()) return [0, 0, 0];
+  const size = box.getSize(new THREE.Vector3());
+  return [size.x, size.y, size.z];
+}
+
+export function assessCanonicalBuildingScale({
+  rawDimensions,
+  canonicalDimensionsM,
+  sourceUnitScaleFactorCmPerUnit,
+  appliedMetreScale,
+}) {
+  if (!finiteDimensions(rawDimensions) || !finiteDimensions(canonicalDimensionsM)) {
+    return {
+      status: "review-required",
+      reason: "invalid-bounds",
+      policy: FBX_SCALE_SANITY_POLICY,
+      rawDimensions: Array.isArray(rawDimensions) ? rawDimensions : [0, 0, 0],
+      canonicalDimensionsM: Array.isArray(canonicalDimensionsM)
+        ? canonicalDimensionsM
+        : [0, 0, 0],
+      sourceUnitScaleFactorCmPerUnit,
+      appliedMetreScale,
+      minLargestDimensionM: MIN_CANONICAL_BUILDING_MAX_DIMENSION_M,
+      maxLargestDimensionM: MAX_CANONICAL_BUILDING_MAX_DIMENSION_M,
+    };
+  }
+
+  const largestDimensionM = Math.max(...canonicalDimensionsM.map(Number));
+  let reason = null;
+  if (largestDimensionM < MIN_CANONICAL_BUILDING_MAX_DIMENSION_M)
+    reason = "canonical-bounds-too-small";
+  else if (largestDimensionM > MAX_CANONICAL_BUILDING_MAX_DIMENSION_M)
+    reason = "canonical-bounds-too-large";
+
+  return {
+    status: reason ? "review-required" : "pass",
+    reason,
+    policy: FBX_SCALE_SANITY_POLICY,
+    rawDimensions: rawDimensions.map(Number),
+    canonicalDimensionsM: canonicalDimensionsM.map(Number),
+    largestDimensionM,
+    sourceUnitScaleFactorCmPerUnit,
+    appliedMetreScale,
+    minLargestDimensionM: MIN_CANONICAL_BUILDING_MAX_DIMENSION_M,
+    maxLargestDimensionM: MAX_CANONICAL_BUILDING_MAX_DIMENSION_M,
+  };
 }
 
 export function consolidateMaterialGroups(geometry) {
@@ -77,9 +148,14 @@ export async function convertSourceFbx(
       bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), "",
     );
 
+    root.updateMatrixWorld(true);
+    const rawBounds = new THREE.Box3().setFromObject(root);
+    const rawDimensions = boxDimensions(rawBounds);
+
     let sourceUnitScaleFactorCmPerUnit = null;
     let appliedMetreScale = 1;
     let outputUnits = "source";
+    let scaleSanity = null;
     if (normalizeUnitsToMeters) {
       sourceUnitScaleFactorCmPerUnit = Number(root.userData?.unitScaleFactor);
       appliedMetreScale = metreScaleFromFbxUnitScaleFactor(sourceUnitScaleFactorCmPerUnit);
@@ -90,6 +166,16 @@ export async function convertSourceFbx(
       root.userData.sourceUnitScaleFactorCmPerUnit = sourceUnitScaleFactorCmPerUnit;
       root.userData.unitScaleFactor = 100;
       outputUnits = "metre";
+
+      root.updateMatrixWorld(true);
+      const candidateBounds = new THREE.Box3().setFromObject(root);
+      scaleSanity = assessCanonicalBuildingScale({
+        rawDimensions,
+        canonicalDimensionsM: boxDimensions(candidateBounds),
+        sourceUnitScaleFactorCmPerUnit,
+        appliedMetreScale,
+      });
+      if (scaleSanity.status !== "pass") throw scaleReviewRequired(scaleSanity);
     }
 
     root.updateMatrixWorld(true);
@@ -131,6 +217,7 @@ export async function convertSourceFbx(
             sourceUnitScaleFactorCmPerUnit,
             appliedMetreScale,
             outputUnits,
+            scaleSanity,
           }
         : {}),
     };
@@ -141,6 +228,7 @@ export async function convertSourceFbx(
       sourceSha256: root.userData.sourceGeometry.sha256,
       meshCount, multiMaterialMeshes, triangleCount, materialCount: materials.size,
       bounds: { min: bounds.min.toArray(), max: bounds.max.toArray() },
+      rawBounds: { min: rawBounds.min.toArray(), max: rawBounds.max.toArray() },
       coordinatePolicy: normalizeUnitsToMeters
         ? "Uniform FBX UnitScaleFactor normalization to canonical metres; no recentering or replacement geometry"
         : "No rescaling, rotation, recentering or replacement geometry",
@@ -150,6 +238,7 @@ export async function convertSourceFbx(
       sourceUnitScaleFactorCmPerUnit,
       appliedMetreScale,
       outputUnits,
+      scaleSanity,
       textures: "UVs and material names retained; external bitmaps restored by viewer",
       bytes: buffer.byteLength,
     };
