@@ -183,5 +183,8 @@ test("sealed Source Pack V2 can cascade only inside the exact resumable hard-del
   assert.match(verifier, /Verifying sealed Source Pack V2 rows can be removed only/);
   assert.match(verifier, /db_cleanup_pending/);
   assert.match(verifier, /DELETE FROM projects_3d WHERE id=/);
-  assert.match(verifier, /Sealed Source Pack V2 project cascade left project-owned rows behind/);
+  assert.match(
+    verifier,
+    /Sealed Source Pack V2 \/ processing project cascade left project-owned rows behind/,
+  );
 });
