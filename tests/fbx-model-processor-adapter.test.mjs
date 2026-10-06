@@ -33,6 +33,7 @@ function healthPayload(overrides = {}) {
     maxGlbBytes: MAX_FBX_PROCESSOR_OUTPUT_BYTES,
     outputUnits: "metre",
     execution: FBX_MODEL_PROCESSOR_EXECUTION,
+    metricSanity: "required",
     ...overrides,
   };
 }
@@ -52,8 +53,12 @@ function canonicalResponse(overrides = {}) {
     "x-rekixo-output-sha256": "b".repeat(64),
     "x-rekixo-coordinate-policy": "fbx-unit-scale-factor-normalized-to-metres",
     "x-rekixo-output-units": "metre",
-    "x-rekixo-source-unit-scale-factor": "1",
-    "x-rekixo-applied-metre-scale": "0.01",
+    "x-rekixo-source-unit-scale-factor": "100",
+    "x-rekixo-applied-metre-scale": "1",
+    "x-rekixo-scale-sanity": "pass",
+    "x-rekixo-scale-sanity-policy": "broad-building-bounds-v1",
+    "x-rekixo-raw-bounds-dimensions": "26,21,28",
+    "x-rekixo-canonical-bounds-dimensions-m": "26,21,28",
   });
   for (const [key, value] of Object.entries(overrides)) headers.set(key, String(value));
   return new Response(bytes, { status: 200, headers });
@@ -83,7 +88,7 @@ test("FBX Worker adapter is unavailable by default and does not imply production
   assert.doesNotMatch(canonical, /env\.MODEL_PROCESSOR/);
 });
 
-test("capability gate accepts only the exact v2 canonical-metre health contract", async () => {
+test("capability gate accepts only the exact v3 canonical-metre metric-sanity health contract", async () => {
   const env = {
     MODEL_PROCESSOR: {
       async fetch(url) {
@@ -97,13 +102,13 @@ test("capability gate accepts only the exact v2 canonical-metre health contract"
   const capability = await fbxModelProcessorCapability(env);
   assert.equal(capability.available, true);
   assert.equal(capability.contract, FBX_MODEL_PROCESSOR_CONTRACT);
-  assert.equal(capability.version, 2);
+  assert.equal(capability.version, 3);
   assert.equal(capability.outputUnits, "metre");
 
   const mismatch = {
     MODEL_PROCESSOR: {
       async fetch() {
-        return new Response(JSON.stringify(healthPayload({ outputUnits: "centimetre" })));
+        return new Response(JSON.stringify(healthPayload({ metricSanity: "optional" })));
       },
     },
   };
@@ -111,7 +116,7 @@ test("capability gate accepts only the exact v2 canonical-metre health contract"
   assert.equal((await fbxModelProcessorCapability(mismatch)).reason, "health-contract-mismatch");
 });
 
-test("adapter forwards pinned source provenance and returns a streaming canonical GLB result", async () => {
+test("adapter forwards pinned source provenance and returns metric-sanity provenance", async () => {
   let captured = null;
   const env = {
     MODEL_PROCESSOR: {
@@ -139,11 +144,15 @@ test("adapter forwards pinned source provenance and returns a streaming canonica
   assert.equal(headers.get("content-length"), "4");
 
   assert.equal(result.contract, FBX_MODEL_PROCESSOR_CONTRACT);
-  assert.equal(result.contractVersion, 2);
+  assert.equal(result.contractVersion, 3);
   assert.equal(result.byteSize, 4);
   assert.equal(result.sha256, "b".repeat(64));
   assert.equal(result.outputUnits, "metre");
-  assert.equal(result.appliedMetreScale, 0.01);
+  assert.equal(result.appliedMetreScale, 1);
+  assert.equal(result.scaleSanity, "pass");
+  assert.equal(result.scaleSanityPolicy, "broad-building-bounds-v1");
+  assert.deepEqual(result.rawDimensions, [26, 21, 28]);
+  assert.deepEqual(result.canonicalDimensionsM, [26, 21, 28]);
   assert.ok(result.body instanceof ReadableStream);
   assert.deepEqual(
     [...new Uint8Array(await new Response(result.body).arrayBuffer())],
@@ -151,13 +160,15 @@ test("adapter forwards pinned source provenance and returns a streaming canonica
   );
 });
 
-test("adapter fails closed on response provenance or unit-policy mismatches", async () => {
+test("adapter fails closed on response provenance, unit-policy, or metric-sanity mismatches", async () => {
   for (const override of [
     { "x-rekixo-contract-version": "1" },
     { "x-rekixo-source-pack-id": "pack_wrong_12345" },
     { "x-rekixo-output-units": "centimetre" },
     { "x-rekixo-coordinate-policy": "unchanged-source-coordinates" },
     { "x-rekixo-output-sha256": "not-a-sha" },
+    { "x-rekixo-scale-sanity": "review-required" },
+    { "x-rekixo-raw-bounds-dimensions": "bad" },
   ]) {
     const env = {
       MODEL_PROCESSOR: {
@@ -171,6 +182,37 @@ test("adapter fails closed on response provenance or unit-policy mismatches", as
       (error) => error?.code === "FBX_PROCESSOR_PROVENANCE_MISMATCH" && error?.status === 502,
     );
   }
+});
+
+test("adapter preserves structured scale-review details from processor rejection", async () => {
+  const details = {
+    status: "review-required",
+    reason: "canonical-bounds-too-small",
+    policy: "broad-building-bounds-v1",
+    rawDimensions: [26, 21, 28],
+    canonicalDimensionsM: [0.26, 0.21, 0.28],
+  };
+  const env = {
+    MODEL_PROCESSOR: {
+      async fetch() {
+        return new Response(
+          JSON.stringify({
+            code: "FBX_SCALE_REVIEW_REQUIRED",
+            error: "Explicit scale review is required.",
+            details,
+          }),
+          { status: 422, headers: { "content-type": "application/json" } },
+        );
+      },
+    },
+  };
+  await assert.rejects(
+    () => convertFbxWithModelProcessor(env, identity(), new Uint8Array([1, 2, 3, 4])),
+    (error) =>
+      error?.code === "FBX_SCALE_REVIEW_REQUIRED" &&
+      error?.status === 422 &&
+      error?.details?.reason === "canonical-bounds-too-small",
+  );
 });
 
 test("adapter supports a future named Durable Object capability without binding it today", async () => {
