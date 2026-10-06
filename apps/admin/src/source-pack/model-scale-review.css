@@ -1,0 +1,210 @@
+.model-scale-review {
+  width: min(1180px, calc(100% - 40px));
+  margin: 14px auto 0;
+  padding: 20px;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 178, 71, 0.3);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(77, 48, 13, 0.38), rgba(9, 13, 20, 0.96));
+}
+
+.model-scale-review__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.model-scale-review__head > div {
+  display: grid;
+  gap: 6px;
+}
+
+.model-scale-review__head p {
+  margin: 0;
+  color: #d9a75d;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+}
+
+.model-scale-review__head h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.model-scale-review__head span,
+.model-scale-review article small,
+.model-scale-review__decision small,
+.model-scale-review__approved p {
+  color: #a9b3c3;
+  line-height: 1.5;
+}
+
+.model-scale-review__head > strong {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 188, 92, 0.35);
+  border-radius: 999px;
+  color: #ffc36d;
+  background: rgba(147, 91, 13, 0.2);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.model-scale-review__facts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.model-scale-review article {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(7, 10, 16, 0.68);
+}
+
+.model-scale-review article > span,
+.model-scale-review__decision label > span,
+.model-scale-review__preview > span,
+.model-scale-review__approved span {
+  color: #8f9caf;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+}
+
+.model-scale-review article strong,
+.model-scale-review article small {
+  overflow-wrap: anywhere;
+}
+
+.model-scale-review__decision {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.85fr) minmax(260px, 1.25fr);
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.model-scale-review__decision label,
+.model-scale-review__preview,
+.model-scale-review__approved > div {
+  display: grid;
+  gap: 7px;
+}
+
+.model-scale-review__decision input,
+.model-scale-review__decision textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(151, 171, 205, 0.25);
+  border-radius: 10px;
+  background: rgba(6, 9, 15, 0.85);
+  color: inherit;
+  padding: 11px 12px;
+  font: inherit;
+}
+
+.model-scale-review__decision input:focus,
+.model-scale-review__decision textarea:focus {
+  outline: 2px solid rgba(255, 184, 77, 0.3);
+  border-color: rgba(255, 184, 77, 0.65);
+}
+
+.model-scale-review__decision textarea {
+  resize: vertical;
+  min-height: 92px;
+}
+
+.model-scale-review__note {
+  grid-column: 1 / -1;
+}
+
+.model-scale-review__preview strong {
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.model-scale-review__decision button {
+  grid-column: 1 / -1;
+  justify-self: end;
+  border: 1px solid #c78220;
+  border-radius: 10px;
+  background: #a9680d;
+  color: #fff;
+  padding: 11px 16px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 850;
+}
+
+.model-scale-review__decision button:hover {
+  background: #bf7811;
+}
+
+.model-scale-review__decision button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.model-scale-review__approved {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid rgba(82, 213, 151, 0.25);
+  border-radius: 12px;
+  background: rgba(22, 105, 68, 0.14);
+}
+
+.model-scale-review__approved p {
+  margin: 0;
+}
+
+.model-scale-review__alert {
+  margin-top: 14px;
+  padding: 11px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.model-scale-review__alert--error {
+  background: rgba(139, 37, 37, 0.18);
+  border-color: rgba(255, 96, 96, 0.28);
+}
+
+.model-scale-review__alert--ok {
+  background: rgba(26, 119, 75, 0.16);
+  border-color: rgba(68, 214, 139, 0.25);
+}
+
+@media (max-width: 880px) {
+  .model-scale-review {
+    width: min(100% - 24px, 1180px);
+  }
+
+  .model-scale-review__head {
+    flex-direction: column;
+  }
+
+  .model-scale-review__facts,
+  .model-scale-review__decision {
+    grid-template-columns: 1fr;
+  }
+
+  .model-scale-review__note,
+  .model-scale-review__decision button {
+    grid-column: auto;
+  }
+
+  .model-scale-review__decision button {
+    width: 100%;
+  }
+}
