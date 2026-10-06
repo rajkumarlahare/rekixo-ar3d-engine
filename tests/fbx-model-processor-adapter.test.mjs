@@ -13,7 +13,7 @@ import {
   hasFbxModelProcessorBinding,
 } from "../workers/fbx-model-processor-adapter.mjs";
 
-function identity() {
+function identity(overrides = {}) {
   return {
     sourceFileId: "source_test_12345",
     sourcePackId: "pack_test_12345",
@@ -21,6 +21,7 @@ function identity() {
     sourceSha256: "a".repeat(64),
     sourceName: "Building authority.fbx",
     byteSize: 4,
+    ...overrides,
   };
 }
 
@@ -34,6 +35,7 @@ function healthPayload(overrides = {}) {
     outputUnits: "metre",
     execution: FBX_MODEL_PROCESSOR_EXECUTION,
     metricSanity: "required",
+    reviewedScaleDecisions: "supported",
     ...overrides,
   };
 }
@@ -55,6 +57,7 @@ function canonicalResponse(overrides = {}) {
     "x-rekixo-output-units": "metre",
     "x-rekixo-source-unit-scale-factor": "100",
     "x-rekixo-applied-metre-scale": "1",
+    "x-rekixo-scale-basis": "declared-fbx-unit",
     "x-rekixo-scale-sanity": "pass",
     "x-rekixo-scale-sanity-policy": "broad-building-bounds-v1",
     "x-rekixo-raw-bounds-dimensions": "26,21,28",
@@ -88,7 +91,7 @@ test("FBX Worker adapter is unavailable by default and does not imply production
   assert.doesNotMatch(canonical, /env\.MODEL_PROCESSOR/);
 });
 
-test("capability gate accepts only the exact v3 canonical-metre metric-sanity health contract", async () => {
+test("capability gate accepts only the exact V4 reviewed-scale canonical-metre contract", async () => {
   const env = {
     MODEL_PROCESSOR: {
       async fetch(url) {
@@ -102,21 +105,27 @@ test("capability gate accepts only the exact v3 canonical-metre metric-sanity he
   const capability = await fbxModelProcessorCapability(env);
   assert.equal(capability.available, true);
   assert.equal(capability.contract, FBX_MODEL_PROCESSOR_CONTRACT);
-  assert.equal(capability.version, 3);
+  assert.equal(capability.version, 4);
   assert.equal(capability.outputUnits, "metre");
 
-  const mismatch = {
-    MODEL_PROCESSOR: {
-      async fetch() {
-        return new Response(JSON.stringify(healthPayload({ metricSanity: "optional" })));
+  for (const override of [
+    { metricSanity: "optional" },
+    { reviewedScaleDecisions: "unsupported" },
+    { version: 3 },
+  ]) {
+    const mismatch = {
+      MODEL_PROCESSOR: {
+        async fetch() {
+          return new Response(JSON.stringify(healthPayload(override)));
+        },
       },
-    },
-  };
-  assert.equal((await fbxModelProcessorCapability(mismatch)).available, false);
-  assert.equal((await fbxModelProcessorCapability(mismatch)).reason, "health-contract-mismatch");
+    };
+    assert.equal((await fbxModelProcessorCapability(mismatch)).available, false);
+    assert.equal((await fbxModelProcessorCapability(mismatch)).reason, "health-contract-mismatch");
+  }
 });
 
-test("adapter forwards pinned source provenance and returns metric-sanity provenance", async () => {
+test("adapter forwards pinned source provenance and returns declared-unit metric provenance", async () => {
   let captured = null;
   const env = {
     MODEL_PROCESSOR: {
@@ -142,13 +151,16 @@ test("adapter forwards pinned source provenance and returns metric-sanity proven
   assert.equal(headers.get("x-rekixo-source-sha256"), source.sourceSha256);
   assert.equal(decodeURIComponent(headers.get("x-rekixo-source-name")), source.sourceName);
   assert.equal(headers.get("content-length"), "4");
+  assert.equal(headers.get("x-rekixo-scale-decision-id"), null);
 
   assert.equal(result.contract, FBX_MODEL_PROCESSOR_CONTRACT);
-  assert.equal(result.contractVersion, 3);
+  assert.equal(result.contractVersion, 4);
   assert.equal(result.byteSize, 4);
   assert.equal(result.sha256, "b".repeat(64));
   assert.equal(result.outputUnits, "metre");
   assert.equal(result.appliedMetreScale, 1);
+  assert.equal(result.scaleBasis, "declared-fbx-unit");
+  assert.equal(result.scaleDecisionId, null);
   assert.equal(result.scaleSanity, "pass");
   assert.equal(result.scaleSanityPolicy, "broad-building-bounds-v1");
   assert.deepEqual(result.rawDimensions, [26, 21, 28]);
@@ -160,7 +172,36 @@ test("adapter forwards pinned source provenance and returns metric-sanity proven
   );
 });
 
-test("adapter fails closed on response provenance, unit-policy, or metric-sanity mismatches", async () => {
+test("adapter forwards and verifies the exact audited reviewed scale decision", async () => {
+  const decision = { id: "scale_review_12345", metresPerSourceUnit: 1 };
+  let captured = null;
+  const env = {
+    MODEL_PROCESSOR: {
+      async fetch(url, init) {
+        captured = { url: String(url), init };
+        return canonicalResponse({
+          "x-rekixo-coordinate-policy": "fbx-reviewed-scale-normalized-to-metres",
+          "x-rekixo-scale-basis": "reviewed-operator",
+          "x-rekixo-scale-decision-id": decision.id,
+        });
+      },
+    },
+  };
+  const result = await convertFbxWithModelProcessor(
+    env,
+    identity({ scaleDecision: decision }),
+    new Uint8Array([1, 2, 3, 4]),
+  );
+  const headers = new Headers(captured.init.headers);
+  assert.equal(headers.get("x-rekixo-scale-decision-id"), decision.id);
+  assert.equal(headers.get("x-rekixo-reviewed-metres-per-source-unit"), "1");
+  assert.equal(result.scaleBasis, "reviewed-operator");
+  assert.equal(result.scaleDecisionId, decision.id);
+  assert.equal(result.appliedMetreScale, 1);
+  assert.equal(result.coordinatePolicy, "fbx-reviewed-scale-normalized-to-metres");
+});
+
+test("adapter fails closed on response provenance, scale-decision, or metric-sanity mismatches", async () => {
   for (const override of [
     { "x-rekixo-contract-version": "1" },
     { "x-rekixo-source-pack-id": "pack_wrong_12345" },
@@ -168,6 +209,7 @@ test("adapter fails closed on response provenance, unit-policy, or metric-sanity
     { "x-rekixo-coordinate-policy": "unchanged-source-coordinates" },
     { "x-rekixo-output-sha256": "not-a-sha" },
     { "x-rekixo-scale-sanity": "review-required" },
+    { "x-rekixo-scale-basis": "reviewed-operator" },
     { "x-rekixo-raw-bounds-dimensions": "bad" },
   ]) {
     const env = {
@@ -182,6 +224,25 @@ test("adapter fails closed on response provenance, unit-policy, or metric-sanity
       (error) => error?.code === "FBX_PROCESSOR_PROVENANCE_MISMATCH" && error?.status === 502,
     );
   }
+
+  const reviewedIdentity = identity({
+    scaleDecision: { id: "scale_review_12345", metresPerSourceUnit: 1 },
+  });
+  const wrongDecision = {
+    MODEL_PROCESSOR: {
+      async fetch() {
+        return canonicalResponse({
+          "x-rekixo-coordinate-policy": "fbx-reviewed-scale-normalized-to-metres",
+          "x-rekixo-scale-basis": "reviewed-operator",
+          "x-rekixo-scale-decision-id": "scale_review_wrong",
+        });
+      },
+    },
+  };
+  await assert.rejects(
+    () => convertFbxWithModelProcessor(wrongDecision, reviewedIdentity, new Uint8Array([1, 2, 3, 4])),
+    (error) => error?.code === "FBX_PROCESSOR_PROVENANCE_MISMATCH" && error?.status === 502,
+  );
 });
 
 test("adapter preserves structured scale-review details from processor rejection", async () => {
