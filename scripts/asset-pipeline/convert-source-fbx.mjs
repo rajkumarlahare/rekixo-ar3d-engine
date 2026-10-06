@@ -31,10 +31,19 @@ function invalidFbxUnitMetadata() {
   return error;
 }
 
+function invalidReviewedScale() {
+  const error = new Error(
+    "Reviewed FBX scale must be a finite positive metres-per-source-unit value.",
+  );
+  error.code = "FBX_REVIEWED_SCALE_INVALID";
+  return error;
+}
+
 function scaleReviewRequired(details) {
   const dimensions = details.canonicalDimensionsM.map((value) => Number(value.toFixed(4))).join(" × ");
+  const source = details.scaleBasis === "reviewed-operator" ? "reviewed scale" : "declared units";
   const error = new Error(
-    `FBX declared units produce implausible canonical Building bounds (${dimensions} m). Explicit scale review is required before canonicalization.`,
+    `FBX ${source} produce implausible canonical Building bounds (${dimensions} m). Explicit scale review is required before canonicalization.`,
   );
   error.code = "FBX_SCALE_REVIEW_REQUIRED";
   error.details = details;
@@ -49,6 +58,18 @@ export function metreScaleFromFbxUnitScaleFactor(unitScaleFactor) {
   const metresPerUnit = centimetresPerUnit / 100;
   if (!Number.isFinite(metresPerUnit) || metresPerUnit <= 0) {
     throw invalidFbxUnitMetadata();
+  }
+  return metresPerUnit;
+}
+
+export function reviewedMetresPerSourceUnit(value) {
+  const metresPerUnit = Number(value);
+  if (
+    !Number.isFinite(metresPerUnit) ||
+    metresPerUnit < 0.000001 ||
+    metresPerUnit > 1000000
+  ) {
+    throw invalidReviewedScale();
   }
   return metresPerUnit;
 }
@@ -72,12 +93,14 @@ export function assessCanonicalBuildingScale({
   canonicalDimensionsM,
   sourceUnitScaleFactorCmPerUnit,
   appliedMetreScale,
+  scaleBasis = "declared-fbx-unit",
 }) {
   if (!finiteDimensions(rawDimensions) || !finiteDimensions(canonicalDimensionsM)) {
     return {
       status: "review-required",
       reason: "invalid-bounds",
       policy: FBX_SCALE_SANITY_POLICY,
+      scaleBasis,
       rawDimensions: Array.isArray(rawDimensions) ? rawDimensions : [0, 0, 0],
       canonicalDimensionsM: Array.isArray(canonicalDimensionsM)
         ? canonicalDimensionsM
@@ -100,6 +123,7 @@ export function assessCanonicalBuildingScale({
     status: reason ? "review-required" : "pass",
     reason,
     policy: FBX_SCALE_SANITY_POLICY,
+    scaleBasis,
     rawDimensions: rawDimensions.map(Number),
     canonicalDimensionsM: canonicalDimensionsM.map(Number),
     largestDimensionM,
@@ -132,7 +156,11 @@ export function consolidateMaterialGroups(geometry) {
 export async function convertSourceFbx(
   input,
   output,
-  { authoredSite = false, normalizeUnitsToMeters = false } = {},
+  {
+    authoredSite = false,
+    normalizeUnitsToMeters = false,
+    metresPerSourceUnitOverride = null,
+  } = {},
 ) {
   const bytes = await fs.readFile(input);
   const previousWindow = globalThis.window;
@@ -156,9 +184,20 @@ export async function convertSourceFbx(
     let appliedMetreScale = 1;
     let outputUnits = "source";
     let scaleSanity = null;
+    let scaleBasis = "source-units-preserved";
     if (normalizeUnitsToMeters) {
       sourceUnitScaleFactorCmPerUnit = Number(root.userData?.unitScaleFactor);
-      appliedMetreScale = metreScaleFromFbxUnitScaleFactor(sourceUnitScaleFactorCmPerUnit);
+      // The declared UnitScaleFactor remains provenance even when an operator has
+      // explicitly reviewed the model and approved a different metre conversion.
+      metreScaleFromFbxUnitScaleFactor(sourceUnitScaleFactorCmPerUnit);
+      scaleBasis =
+        metresPerSourceUnitOverride === null || metresPerSourceUnitOverride === undefined
+          ? "declared-fbx-unit"
+          : "reviewed-operator";
+      appliedMetreScale =
+        scaleBasis === "reviewed-operator"
+          ? reviewedMetresPerSourceUnit(metresPerSourceUnitOverride)
+          : metreScaleFromFbxUnitScaleFactor(sourceUnitScaleFactorCmPerUnit);
       root.scale.multiplyScalar(appliedMetreScale);
       // FBXLoader exposes the source UnitScaleFactor on the root. After the
       // canonical root scale is applied, keep the source value separately and
@@ -174,8 +213,11 @@ export async function convertSourceFbx(
         canonicalDimensionsM: boxDimensions(candidateBounds),
         sourceUnitScaleFactorCmPerUnit,
         appliedMetreScale,
+        scaleBasis,
       });
       if (scaleSanity.status !== "pass") throw scaleReviewRequired(scaleSanity);
+    } else if (metresPerSourceUnitOverride !== null && metresPerSourceUnitOverride !== undefined) {
+      throw invalidReviewedScale();
     }
 
     root.updateMatrixWorld(true);
@@ -206,17 +248,21 @@ export async function convertSourceFbx(
       // assigns the glazing, plaster, frames and cladding triangle by triangle.
       mesh.material = Array.isArray(mesh.material) ? converted : converted[0];
     });
+    const coordinatePolicy = normalizeUnitsToMeters
+      ? scaleBasis === "reviewed-operator"
+        ? "fbx-reviewed-scale-normalized-to-metres"
+        : "fbx-unit-scale-factor-normalized-to-metres"
+      : "unchanged-source-coordinates";
     root.userData.sourceGeometry = {
       sha256: createHash("sha256").update(bytes).digest("hex"),
-      coordinatePolicy: normalizeUnitsToMeters
-        ? "fbx-unit-scale-factor-normalized-to-metres"
-        : "unchanged-source-coordinates",
+      coordinatePolicy,
       siteGeometry: authoredSite ? "included-in-source" : "unspecified",
       ...(normalizeUnitsToMeters
         ? {
             sourceUnitScaleFactorCmPerUnit,
             appliedMetreScale,
             outputUnits,
+            scaleBasis,
             scaleSanity,
           }
         : {}),
@@ -229,15 +275,16 @@ export async function convertSourceFbx(
       meshCount, multiMaterialMeshes, triangleCount, materialCount: materials.size,
       bounds: { min: bounds.min.toArray(), max: bounds.max.toArray() },
       rawBounds: { min: rawBounds.min.toArray(), max: rawBounds.max.toArray() },
-      coordinatePolicy: normalizeUnitsToMeters
-        ? "Uniform FBX UnitScaleFactor normalization to canonical metres; no recentering or replacement geometry"
-        : "No rescaling, rotation, recentering or replacement geometry",
+      coordinatePolicy,
       unitPolicy: normalizeUnitsToMeters
-        ? "FBX UnitScaleFactor centimetres-per-unit converted to metres"
+        ? scaleBasis === "reviewed-operator"
+          ? "Operator-reviewed metres-per-source-unit normalization"
+          : "FBX UnitScaleFactor centimetres-per-unit converted to metres"
         : "Source units preserved",
       sourceUnitScaleFactorCmPerUnit,
       appliedMetreScale,
       outputUnits,
+      scaleBasis,
       scaleSanity,
       textures: "UVs and material names retained; external bitmaps restored by viewer",
       bytes: buffer.byteLength,
