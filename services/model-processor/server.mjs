@@ -6,7 +6,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const FBX_PROCESSOR_CONTRACT = "rekixo-fbx-canonical-glb";
-export const FBX_PROCESSOR_VERSION = 2;
+export const FBX_PROCESSOR_VERSION = 3;
+export const FBX_PROCESSOR_EXECUTION = "serialized-node-fbx-v3-metric-sanity";
 export const MAX_FBX_BYTES = 64 * 1024 * 1024;
 export const MAX_GLB_BYTES = 256 * 1024 * 1024;
 
@@ -16,10 +17,11 @@ const IDENTITY_PATTERN = /^[A-Za-z0-9_-]{8,120}$/;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 
 class RequestError extends Error {
-  constructor(status, code, message) {
+  constructor(status, code, message, details) {
     super(message);
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -182,20 +184,35 @@ function serializeConversion(task) {
 function requireCanonicalMetreReport(report) {
   const sourceUnitScaleFactorCmPerUnit = Number(report?.sourceUnitScaleFactorCmPerUnit);
   const appliedMetreScale = Number(report?.appliedMetreScale);
+  const scaleSanity = report?.scaleSanity;
   if (
     report?.outputUnits !== "metre" ||
     !Number.isFinite(sourceUnitScaleFactorCmPerUnit) ||
     sourceUnitScaleFactorCmPerUnit <= 0 ||
     !Number.isFinite(appliedMetreScale) ||
-    appliedMetreScale <= 0
+    appliedMetreScale <= 0 ||
+    scaleSanity?.status !== "pass" ||
+    typeof scaleSanity?.policy !== "string" ||
+    !Array.isArray(scaleSanity?.rawDimensions) ||
+    scaleSanity.rawDimensions.length !== 3 ||
+    !Array.isArray(scaleSanity?.canonicalDimensionsM) ||
+    scaleSanity.canonicalDimensionsM.length !== 3
   ) {
     throw new RequestError(
       502,
       "CONVERTER_UNIT_POLICY_MISMATCH",
-      "FBX converter did not prove canonical metre normalization.",
+      "FBX converter did not prove canonical metre normalization and metric sanity.",
     );
   }
-  return { sourceUnitScaleFactorCmPerUnit, appliedMetreScale };
+  return {
+    sourceUnitScaleFactorCmPerUnit,
+    appliedMetreScale,
+    scaleSanity,
+  };
+}
+
+function dimensionsHeader(values) {
+  return values.map((value) => Number(value).toPrecision(12)).join(",");
 }
 
 async function convertVerifiedFbx(identity, bytes) {
@@ -218,6 +235,14 @@ async function convertVerifiedFbx(identity, bytes) {
           422,
           "FBX_UNIT_METADATA_INVALID",
           "FBX source must declare a valid GlobalSettings.UnitScaleFactor before canonical conversion.",
+        );
+      }
+      if (error?.code === "FBX_SCALE_REVIEW_REQUIRED") {
+        throw new RequestError(
+          422,
+          "FBX_SCALE_REVIEW_REQUIRED",
+          error instanceof Error ? error.message : "FBX scale review is required.",
+          error?.details,
         );
       }
       if (error instanceof RequestError) throw error;
@@ -269,6 +294,10 @@ async function handleConversion(request, response) {
     "x-rekixo-output-units": "metre",
     "x-rekixo-source-unit-scale-factor": String(unitReport.sourceUnitScaleFactorCmPerUnit),
     "x-rekixo-applied-metre-scale": String(unitReport.appliedMetreScale),
+    "x-rekixo-scale-sanity": unitReport.scaleSanity.status,
+    "x-rekixo-scale-sanity-policy": unitReport.scaleSanity.policy,
+    "x-rekixo-raw-bounds-dimensions": dimensionsHeader(unitReport.scaleSanity.rawDimensions),
+    "x-rekixo-canonical-bounds-dimensions-m": dimensionsHeader(unitReport.scaleSanity.canonicalDimensionsM),
     "x-rekixo-mesh-count": String(Number(report?.meshCount || 0)),
     "x-rekixo-triangle-count": String(Number(report?.triangleCount || 0)),
     "x-rekixo-material-count": String(Number(report?.materialCount || 0)),
@@ -288,7 +317,8 @@ export function createModelProcessorServer() {
           maxFbxBytes: MAX_FBX_BYTES,
           maxGlbBytes: MAX_GLB_BYTES,
           outputUnits: "metre",
-          execution: "serialized-node-fbx-v2-canonical-metres",
+          execution: FBX_PROCESSOR_EXECUTION,
+          metricSanity: "required",
         });
         return;
       }
@@ -299,7 +329,11 @@ export function createModelProcessorServer() {
       sendJson(response, 404, { error: "Not found.", code: "NOT_FOUND" });
     } catch (error) {
       if (error instanceof RequestError) {
-        sendJson(response, error.status, { error: error.message, code: error.code });
+        sendJson(response, error.status, {
+          error: error.message,
+          code: error.code,
+          ...(error.details ? { details: error.details } : {}),
+        });
         return;
       }
       console.error("Model processor request failed:", error);
