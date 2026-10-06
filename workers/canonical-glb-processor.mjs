@@ -274,6 +274,75 @@ async function assertSourceObject(env, job, context) {
     throw processingError("SOURCE_ETAG_MISMATCH", "R2 geometry authority ETag no longer matches the verified source record.");
 }
 
+async function latestScaleReview(env, job, context) {
+  return env.DB.prepare(
+    `SELECT id,status,metres_per_source_unit,approved_by,approved_at,diagnostic_json,created_at
+       FROM model_scale_reviews_3d
+      WHERE project_id=?
+        AND source_pack_id=?
+        AND source_file_id=?
+        AND source_sha256=?
+      ORDER BY created_at DESC,id DESC
+      LIMIT 1`,
+  ).bind(job.project_id, job.source_pack_id, context.source_id, context.sha256).first();
+}
+
+async function approvedScaleDecision(env, job, context) {
+  const review = await latestScaleReview(env, job, context);
+  if (!review || review.status !== "approved") return null;
+  const metresPerSourceUnit = Number(review.metres_per_source_unit);
+  if (!Number.isFinite(metresPerSourceUnit) || metresPerSourceUnit <= 0)
+    throw processingError(
+      "APPROVED_SCALE_DECISION_INVALID",
+      "Approved scale review does not contain a valid metres-per-source-unit value.",
+    );
+  return { id: review.id, metresPerSourceUnit };
+}
+
+async function recordScaleReviewRequired(env, job, context, reason) {
+  const details =
+    reason?.details && typeof reason.details === "object" && !Array.isArray(reason.details)
+      ? reason.details
+      : {};
+  const diagnostic = JSON.stringify({
+    code: "FBX_SCALE_REVIEW_REQUIRED",
+    policy: String(details.policy || "unknown").slice(0, 120),
+    reason: String(details.reason || "metric-sanity-review").slice(0, 160),
+    scaleBasis: String(details.scaleBasis || "declared-fbx-unit").slice(0, 80),
+    rawDimensions: Array.isArray(details.rawDimensions) ? details.rawDimensions.slice(0, 3) : [],
+    canonicalDimensionsM: Array.isArray(details.canonicalDimensionsM)
+      ? details.canonicalDimensionsM.slice(0, 3)
+      : [],
+    sourceUnitScaleFactorCmPerUnit: Number(details.sourceUnitScaleFactorCmPerUnit),
+    appliedMetreScale: Number(details.appliedMetreScale),
+    minLargestDimensionM: Number(details.minLargestDimensionM),
+    maxLargestDimensionM: Number(details.maxLargestDimensionM),
+  });
+  const now = new Date().toISOString();
+  const reviewId = `scale_review_${crypto.randomUUID()}`;
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO model_scale_reviews_3d
+      (id,processing_job_id,project_id,source_pack_id,source_file_id,source_sha256,
+       diagnostic_json,status,created_at,updated_at)
+     VALUES (?,?,?,?,?,?,?,'pending',?,?)`,
+  ).bind(
+    reviewId,
+    job.id,
+    job.project_id,
+    job.source_pack_id,
+    context.source_id,
+    context.sha256,
+    diagnostic,
+    now,
+    now,
+  ).run();
+  return env.DB.prepare(
+    `SELECT id,status,diagnostic_json,created_at
+       FROM model_scale_reviews_3d
+      WHERE processing_job_id=? LIMIT 1`,
+  ).bind(job.id).first();
+}
+
 async function ensureCanonicalGlbSourceObject(env, job, context, modelKey) {
   const existing = await env.MODEL_ASSETS.head(modelKey);
   const metadata = existing?.customMetadata || {};
@@ -338,13 +407,15 @@ async function canonicalizeFbxSource(env, job, context) {
     );
   if (
     capability.execution !== FBX_MODEL_PROCESSOR_EXECUTION ||
-    capability.outputUnits !== "metre"
+    capability.outputUnits !== "metre" ||
+    capability.reviewedScaleDecisions !== "supported"
   )
     throw processingError(
       "FBX_PROCESSOR_CAPABILITY_MISMATCH",
-      "FBX model processor did not advertise the required canonical metre execution contract.",
+      "FBX model processor did not advertise the required canonical metre and reviewed-scale execution contract.",
     );
 
+  const scaleDecision = await approvedScaleDecision(env, job, context);
   const sourceObject = await env.MODEL_ASSETS.get(context.r2_key);
   if (!sourceObject?.body)
     throw processingError("SOURCE_OBJECT_MISSING", "Verified FBX geometry authority body could not be read from R2.");
@@ -358,6 +429,7 @@ async function canonicalizeFbxSource(env, job, context) {
       sourceSha256: context.sha256,
       sourceName: context.filename,
       byteSize: Number(context.byte_size),
+      scaleDecision,
     },
     sourceObject.body,
   );
@@ -375,7 +447,14 @@ async function canonicalizeFbxSource(env, job, context) {
         sourceSha256: context.sha256,
         canonicalSha256: conversion.sha256,
         artifactKind: "canonical-model",
-        canonicalization: "fbx-unit-normalized",
+        canonicalization:
+          conversion.scaleBasis === "reviewed-operator"
+            ? "fbx-reviewed-scale-normalized"
+            : "fbx-unit-normalized",
+        scaleBasis: conversion.scaleBasis,
+        ...(conversion.scaleDecisionId
+          ? { scaleDecisionId: conversion.scaleDecisionId }
+          : {}),
       },
       sha256: conversion.sha256,
     });
@@ -393,11 +472,13 @@ async function canonicalizeFbxSource(env, job, context) {
       metadata.processingJobId !== job.id ||
       metadata.sourceFileId !== context.source_id ||
       metadata.sourceSha256 !== context.sha256 ||
-      metadata.canonicalSha256 !== conversion.sha256
+      metadata.canonicalSha256 !== conversion.sha256 ||
+      metadata.scaleBasis !== conversion.scaleBasis ||
+      (conversion.scaleDecisionId && metadata.scaleDecisionId !== conversion.scaleDecisionId)
     )
       throw processingError(
         "CANONICAL_MODEL_INTEGRITY_MISMATCH",
-        "Canonical FBX-derived GLB failed R2 size, checksum, or ownership verification.",
+        "Canonical FBX-derived GLB failed R2 size, checksum, ownership, or scale provenance verification.",
       );
 
     const inspection = await readGlbInspectionAtKey(
@@ -417,6 +498,12 @@ async function canonicalizeFbxSource(env, job, context) {
         coordinatePolicy: conversion.coordinatePolicy,
         sourceUnitScaleFactorCmPerUnit: conversion.sourceUnitScaleFactorCmPerUnit,
         appliedMetreScale: conversion.appliedMetreScale,
+        scaleBasis: conversion.scaleBasis,
+        scaleDecisionId: conversion.scaleDecisionId,
+        scaleSanity: conversion.scaleSanity,
+        scaleSanityPolicy: conversion.scaleSanityPolicy,
+        rawDimensions: conversion.rawDimensions,
+        canonicalDimensionsM: conversion.canonicalDimensionsM,
       },
     };
   } catch (reason) {
@@ -545,12 +632,16 @@ async function finalizeSuccess(env, job, context, canonical) {
     canonicalSha256: canonical.sha256,
     processorVersion: job.processor_version,
     execution: canonical.execution,
+    scaleBasis: canonical.validationDetails.scaleBasis ?? null,
+    scaleDecisionId: canonical.validationDetails.scaleDecisionId ?? null,
+    appliedMetreScale: canonical.validationDetails.appliedMetreScale ?? null,
   });
   const manifestMetadataJson = JSON.stringify({
     format: CANONICAL_MODEL_FORMAT,
     version: CANONICAL_MODEL_VERSION,
     processorVersion: job.processor_version,
     canonicalSha256: canonical.sha256,
+    scaleDecisionId: canonical.validationDetails.scaleDecisionId ?? null,
   });
   const nodeCatalogMetadataJson = JSON.stringify({
     format: NODE_CATALOG_FORMAT,
@@ -637,6 +728,8 @@ async function finalizeSuccess(env, job, context, canonical) {
         nodeCatalogKey,
         nodeCatalogSha256,
         outputManifestSha256: manifestSha256,
+        scaleBasis: canonical.validationDetails.scaleBasis ?? null,
+        scaleDecisionId: canonical.validationDetails.scaleDecisionId ?? null,
       }),
       now,
     ),
@@ -652,8 +745,9 @@ export async function executeCanonicalProcessingJob(env, jobId) {
   const job = await claimJob(env, jobId);
   if (!job) return { executed: false };
 
+  let context = null;
   try {
-    const context = await processingContext(env, job);
+    context = await processingContext(env, job);
     const format = assertPinnedContext(job, context);
     await assertSourceObject(env, job, context);
     await touchHeartbeat(env, job.id);
@@ -667,6 +761,9 @@ export async function executeCanonicalProcessingJob(env, jobId) {
     const manifest = await finalizeSuccess(env, job, context, canonical);
     return { executed: true, state: "succeeded", manifest };
   } catch (reason) {
+    if (reason?.code === "FBX_SCALE_REVIEW_REQUIRED" && context) {
+      await recordScaleReviewRequired(env, job, context, reason);
+    }
     await markFailed(env, job, reason);
     return {
       executed: true,

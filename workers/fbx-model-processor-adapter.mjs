@@ -1,6 +1,6 @@
 export const FBX_MODEL_PROCESSOR_CONTRACT = "rekixo-fbx-canonical-glb";
-export const FBX_MODEL_PROCESSOR_VERSION = 3;
-export const FBX_MODEL_PROCESSOR_EXECUTION = "serialized-node-fbx-v3-metric-sanity";
+export const FBX_MODEL_PROCESSOR_VERSION = 4;
+export const FBX_MODEL_PROCESSOR_EXECUTION = "serialized-node-fbx-v4-reviewed-scale";
 export const MAX_FBX_PROCESSOR_INPUT_BYTES = 64 * 1024 * 1024;
 export const MAX_FBX_PROCESSOR_OUTPUT_BYTES = 256 * 1024 * 1024;
 
@@ -84,6 +84,7 @@ function validateHealth(payload) {
       payload.outputUnits === "metre" &&
       payload.execution === FBX_MODEL_PROCESSOR_EXECUTION &&
       payload.metricSanity === "required" &&
+      payload.reviewedScaleDecisions === "supported" &&
       Number(payload.maxFbxBytes) === MAX_FBX_PROCESSOR_INPUT_BYTES &&
       Number(payload.maxGlbBytes) === MAX_FBX_PROCESSOR_OUTPUT_BYTES,
   );
@@ -157,9 +158,28 @@ export async function fbxModelProcessorCapability(env) {
     version: Number(payload.version),
     execution: payload.execution,
     outputUnits: payload.outputUnits,
+    reviewedScaleDecisions: payload.reviewedScaleDecisions,
     maxFbxBytes: Number(payload.maxFbxBytes),
     maxGlbBytes: Number(payload.maxGlbBytes),
   };
+}
+
+function validateScaleDecision(value) {
+  if (value === undefined || value === null) return null;
+  const id = String(value.id || "");
+  const metresPerSourceUnit = Number(value.metresPerSourceUnit);
+  if (
+    !validIdentity(id) ||
+    !Number.isFinite(metresPerSourceUnit) ||
+    metresPerSourceUnit < 0.000001 ||
+    metresPerSourceUnit > 1000000
+  )
+    throw adapterError(
+      "INVALID_FBX_SCALE_DECISION",
+      "FBX scale decision must contain a valid durable decision ID and metres-per-source-unit value.",
+      400,
+    );
+  return { id, metresPerSourceUnit };
 }
 
 function validateRequest(identity, sourceBody) {
@@ -189,7 +209,13 @@ function validateRequest(identity, sourceBody) {
     throw adapterError("FBX_PROCESSOR_INPUT_LIMIT", "FBX source exceeds the 64 MiB model-processor boundary.", 413);
   if (!sourceBody)
     throw adapterError("FBX_PROCESSOR_BODY_REQUIRED", "FBX source body is required.", 400);
-  return { ...identity, sourceSha256, sourceName, byteSize };
+  return {
+    ...identity,
+    sourceSha256,
+    sourceName,
+    byteSize,
+    scaleDecision: validateScaleDecision(identity.scaleDecision),
+  };
 }
 
 async function processorFailure(response) {
@@ -235,6 +261,12 @@ function validateConversionResponse(response, identity) {
     responseHeader(response, "x-rekixo-canonical-bounds-dimensions-m"),
   );
   const scaleSanityPolicy = responseHeader(response, "x-rekixo-scale-sanity-policy");
+  const scaleBasis = responseHeader(response, "x-rekixo-scale-basis");
+  const decisionId = responseHeader(response, "x-rekixo-scale-decision-id");
+  const expectedBasis = identity.scaleDecision ? "reviewed-operator" : "declared-fbx-unit";
+  const expectedCoordinatePolicy = identity.scaleDecision
+    ? "fbx-reviewed-scale-normalized-to-metres"
+    : "fbx-unit-scale-factor-normalized-to-metres";
 
   if (!contentType.startsWith("model/gltf-binary"))
     throw adapterError("FBX_PROCESSOR_CONTENT_TYPE_MISMATCH", "FBX model processor did not return canonical GLB content.", 502);
@@ -252,8 +284,12 @@ function validateConversionResponse(response, identity) {
     responseHeader(response, "x-rekixo-processing-job-id") !== identity.processingJobId ||
     responseHeader(response, "x-rekixo-source-sha256").toLowerCase() !== identity.sourceSha256 ||
     responseHeader(response, "x-rekixo-output-units") !== "metre" ||
-    responseHeader(response, "x-rekixo-coordinate-policy") !== "fbx-unit-scale-factor-normalized-to-metres" ||
+    responseHeader(response, "x-rekixo-coordinate-policy") !== expectedCoordinatePolicy ||
     responseHeader(response, "x-rekixo-scale-sanity") !== "pass" ||
+    scaleBasis !== expectedBasis ||
+    (identity.scaleDecision
+      ? decisionId !== identity.scaleDecision.id || metreScale !== identity.scaleDecision.metresPerSourceUnit
+      : decisionId !== "") ||
     !scaleSanityPolicy ||
     !validSha256(outputSha256) ||
     sourceScale === null ||
@@ -261,19 +297,21 @@ function validateConversionResponse(response, identity) {
     rawDimensions === null ||
     canonicalDimensionsM === null
   )
-    throw adapterError("FBX_PROCESSOR_PROVENANCE_MISMATCH", "FBX model processor response failed canonical provenance and metric-sanity validation.", 502);
+    throw adapterError("FBX_PROCESSOR_PROVENANCE_MISMATCH", "FBX model processor response failed canonical, scale-decision, and metric-sanity provenance validation.", 502);
 
   return {
     byteSize: contentLength,
     sha256: outputSha256,
     sourceUnitScaleFactorCmPerUnit: sourceScale,
     appliedMetreScale: metreScale,
+    scaleBasis,
+    scaleDecisionId: identity.scaleDecision?.id ?? null,
     scaleSanity: "pass",
     scaleSanityPolicy,
     rawDimensions,
     canonicalDimensionsM,
     execution: FBX_MODEL_PROCESSOR_EXECUTION,
-    coordinatePolicy: "fbx-unit-scale-factor-normalized-to-metres",
+    coordinatePolicy: expectedCoordinatePolicy,
     outputUnits: "metre",
   };
 }
@@ -297,6 +335,13 @@ export async function convertFbxWithModelProcessor(env, identity, sourceBody) {
     "x-rekixo-source-sha256": verified.sourceSha256,
     "x-rekixo-source-name": encodeURIComponent(verified.sourceName),
   });
+  if (verified.scaleDecision) {
+    headers.set("x-rekixo-scale-decision-id", verified.scaleDecision.id);
+    headers.set(
+      "x-rekixo-reviewed-metres-per-source-unit",
+      String(verified.scaleDecision.metresPerSourceUnit),
+    );
+  }
 
   let response;
   try {

@@ -6,6 +6,9 @@ on:
     paths:
       - "services/model-processor/**"
       - "scripts/asset-pipeline/convert-source-fbx.mjs"
+      - "workers/fbx-model-processor-adapter.mjs"
+      - "workers/canonical-glb-processor.mjs"
+      - "workers/model-scale-review.mjs"
       - "apps/public/package.json"
       - "package.json"
       - "package-lock.json"
@@ -38,7 +41,7 @@ jobs:
             --publish 18081:8080 \
             rekixo-model-processor:test
 
-      - name: Verify health, metre contract, metric sanity, dependencies, and fail-closed intake
+      - name: Verify health, reviewed scale contract, metric sanity, dependencies, and fail-closed intake
         shell: bash
         run: |
           set -euo pipefail
@@ -55,14 +58,15 @@ jobs:
           test "$CODE" = "200"
           grep -Fq '"processor":"rekixo-model-processor"' "$HEALTH"
           grep -Fq '"contract":"rekixo-fbx-canonical-glb"' "$HEALTH"
-          grep -Fq '"version":3' "$HEALTH"
+          grep -Fq '"version":4' "$HEALTH"
           grep -Fq '"maxFbxBytes":67108864' "$HEALTH"
           grep -Fq '"outputUnits":"metre"' "$HEALTH"
-          grep -Fq '"execution":"serialized-node-fbx-v3-metric-sanity"' "$HEALTH"
+          grep -Fq '"execution":"serialized-node-fbx-v4-reviewed-scale"' "$HEALTH"
           grep -Fq '"metricSanity":"required"' "$HEALTH"
+          grep -Fq '"reviewedScaleDecisions":"supported"' "$HEALTH"
 
           docker exec rekixo-model-processor-test \
-            node -e "import('/app/scripts/asset-pipeline/convert-source-fbx.mjs').then(m => { if (typeof m.convertSourceFbx !== 'function' || typeof m.metreScaleFromFbxUnitScaleFactor !== 'function' || typeof m.assessCanonicalBuildingScale !== 'function') process.exit(1); if (m.metreScaleFromFbxUnitScaleFactor(1) !== 0.01 || m.metreScaleFromFbxUnitScaleFactor(100) !== 1) process.exit(1); const review = m.assessCanonicalBuildingScale({ rawDimensions: [26,21,28], canonicalDimensionsM: [0.26,0.21,0.28], sourceUnitScaleFactorCmPerUnit: 1, appliedMetreScale: 0.01 }); if (review.status !== 'review-required' || review.reason !== 'canonical-bounds-too-small') process.exit(1); let failedClosed = false; try { m.metreScaleFromFbxUnitScaleFactor(0); } catch (error) { failedClosed = error?.code === 'FBX_UNIT_METADATA_INVALID'; } if (!failedClosed) process.exit(1); })"
+            node -e "import('/app/scripts/asset-pipeline/convert-source-fbx.mjs').then(m => { if (typeof m.convertSourceFbx !== 'function' || typeof m.metreScaleFromFbxUnitScaleFactor !== 'function' || typeof m.reviewedMetresPerSourceUnit !== 'function' || typeof m.assessCanonicalBuildingScale !== 'function') process.exit(1); if (m.metreScaleFromFbxUnitScaleFactor(1) !== 0.01 || m.metreScaleFromFbxUnitScaleFactor(100) !== 1 || m.reviewedMetresPerSourceUnit(1) !== 1) process.exit(1); const review = m.assessCanonicalBuildingScale({ rawDimensions: [26,21,28], canonicalDimensionsM: [0.26,0.21,0.28], sourceUnitScaleFactorCmPerUnit: 1, appliedMetreScale: 0.01 }); if (review.status !== 'review-required' || review.reason !== 'canonical-bounds-too-small') process.exit(1); const approved = m.assessCanonicalBuildingScale({ rawDimensions: [26,21,28], canonicalDimensionsM: [26,21,28], sourceUnitScaleFactorCmPerUnit: 1, appliedMetreScale: 1, scaleBasis: 'reviewed-operator' }); if (approved.status !== 'pass' || approved.scaleBasis !== 'reviewed-operator') process.exit(1); let failedClosed = false; try { m.reviewedMetresPerSourceUnit(0); } catch (error) { failedClosed = error?.code === 'FBX_REVIEWED_SCALE_INVALID'; } if (!failedClosed) process.exit(1); })"
 
           BAD="$(mktemp)"
           BAD_CODE="$(printf 'not-an-fbx' | curl --silent --show-error \

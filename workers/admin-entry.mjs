@@ -1,5 +1,6 @@
 import adminWorker from "./admin.mjs";
 import { handleComponentMapperDataRequest } from "./component-mapper-data.mjs";
+import { handleModelScaleReviewRequest } from "./model-scale-review.mjs";
 import { handleProcessingRequest } from "./processing-jobs.mjs";
 import { handleReviewedComponentBindingsRequest } from "./reviewed-component-bindings.mjs";
 import { handleSourceClassificationRequest } from "./source-classification.mjs";
@@ -24,6 +25,9 @@ export default {
       url,
     );
     if (bindingResponse) return bindingResponse;
+
+    const scaleReviewResponse = await handleModelScaleReviewRequest(request, env, url);
+    if (scaleReviewResponse) return scaleReviewResponse;
 
     const processingResponse = await handleProcessingRequest(request, env, url, ctx);
     if (processingResponse) return processingResponse;

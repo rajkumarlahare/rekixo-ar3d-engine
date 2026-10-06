@@ -6,8 +6,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const FBX_PROCESSOR_CONTRACT = "rekixo-fbx-canonical-glb";
-export const FBX_PROCESSOR_VERSION = 3;
-export const FBX_PROCESSOR_EXECUTION = "serialized-node-fbx-v3-metric-sanity";
+export const FBX_PROCESSOR_VERSION = 4;
+export const FBX_PROCESSOR_EXECUTION = "serialized-node-fbx-v4-reviewed-scale";
 export const MAX_FBX_BYTES = 64 * 1024 * 1024;
 export const MAX_GLB_BYTES = 256 * 1024 * 1024;
 
@@ -38,6 +38,26 @@ function requiredIdentity(headers, name, label) {
   if (!IDENTITY_PATTERN.test(value))
     throw new RequestError(400, "INVALID_SOURCE_IDENTITY", `Valid ${label} is required.`);
   return value;
+}
+
+function reviewedScaleHeaders(headers) {
+  const decisionId = headerValue(headers, "x-rekixo-scale-decision-id");
+  const scaleText = headerValue(headers, "x-rekixo-reviewed-metres-per-source-unit");
+  if (!decisionId && !scaleText) return null;
+  const metresPerSourceUnit = Number(scaleText);
+  if (
+    !IDENTITY_PATTERN.test(decisionId) ||
+    !Number.isFinite(metresPerSourceUnit) ||
+    metresPerSourceUnit < 0.000001 ||
+    metresPerSourceUnit > 1000000
+  ) {
+    throw new RequestError(
+      400,
+      "INVALID_SCALE_DECISION",
+      "Reviewed scale requires a valid decision ID and finite metres-per-source-unit value.",
+    );
+  }
+  return { id: decisionId, metresPerSourceUnit };
 }
 
 export function validateFbxRequestHeaders(headers) {
@@ -81,6 +101,7 @@ export function validateFbxRequestHeaders(headers) {
     processingJobId,
     sourceSha256,
     sourceName,
+    scaleDecision: reviewedScaleHeaders(headers),
   };
 }
 
@@ -181,17 +202,25 @@ function serializeConversion(task) {
   return run;
 }
 
-function requireCanonicalMetreReport(report) {
+function requireCanonicalMetreReport(report, identity) {
   const sourceUnitScaleFactorCmPerUnit = Number(report?.sourceUnitScaleFactorCmPerUnit);
   const appliedMetreScale = Number(report?.appliedMetreScale);
   const scaleSanity = report?.scaleSanity;
+  const expectedBasis = identity.scaleDecision ? "reviewed-operator" : "declared-fbx-unit";
+  const expectedCoordinatePolicy = identity.scaleDecision
+    ? "fbx-reviewed-scale-normalized-to-metres"
+    : "fbx-unit-scale-factor-normalized-to-metres";
   if (
     report?.outputUnits !== "metre" ||
+    report?.coordinatePolicy !== expectedCoordinatePolicy ||
+    report?.scaleBasis !== expectedBasis ||
     !Number.isFinite(sourceUnitScaleFactorCmPerUnit) ||
     sourceUnitScaleFactorCmPerUnit <= 0 ||
     !Number.isFinite(appliedMetreScale) ||
     appliedMetreScale <= 0 ||
+    (identity.scaleDecision && appliedMetreScale !== identity.scaleDecision.metresPerSourceUnit) ||
     scaleSanity?.status !== "pass" ||
+    scaleSanity?.scaleBasis !== expectedBasis ||
     typeof scaleSanity?.policy !== "string" ||
     !Array.isArray(scaleSanity?.rawDimensions) ||
     scaleSanity.rawDimensions.length !== 3 ||
@@ -201,12 +230,14 @@ function requireCanonicalMetreReport(report) {
     throw new RequestError(
       502,
       "CONVERTER_UNIT_POLICY_MISMATCH",
-      "FBX converter did not prove canonical metre normalization and metric sanity.",
+      "FBX converter did not prove canonical metre normalization, reviewed scale provenance, and metric sanity.",
     );
   }
   return {
     sourceUnitScaleFactorCmPerUnit,
     appliedMetreScale,
+    scaleBasis: expectedBasis,
+    coordinatePolicy: expectedCoordinatePolicy,
     scaleSanity,
   };
 }
@@ -227,7 +258,10 @@ async function convertVerifiedFbx(identity, bytes) {
         const { convertSourceFbx } = await import(
           "../../scripts/asset-pipeline/convert-source-fbx.mjs"
         );
-        return convertSourceFbx(input, output, { normalizeUnitsToMeters: true });
+        return convertSourceFbx(input, output, {
+          normalizeUnitsToMeters: true,
+          metresPerSourceUnitOverride: identity.scaleDecision?.metresPerSourceUnit ?? null,
+        });
       });
     } catch (error) {
       if (error?.code === "FBX_UNIT_METADATA_INVALID") {
@@ -235,6 +269,13 @@ async function convertVerifiedFbx(identity, bytes) {
           422,
           "FBX_UNIT_METADATA_INVALID",
           "FBX source must declare a valid GlobalSettings.UnitScaleFactor before canonical conversion.",
+        );
+      }
+      if (error?.code === "FBX_REVIEWED_SCALE_INVALID") {
+        throw new RequestError(
+          422,
+          "FBX_REVIEWED_SCALE_INVALID",
+          "Reviewed FBX scale is outside the accepted metres-per-source-unit boundary.",
         );
       }
       if (error?.code === "FBX_SCALE_REVIEW_REQUIRED") {
@@ -253,7 +294,7 @@ async function convertVerifiedFbx(identity, bytes) {
     if (!safeEqualHex(String(report?.sourceSha256 || ""), identity.sourceSha256))
       throw new RequestError(502, "CONVERTER_SOURCE_IDENTITY_MISMATCH", "FBX converter source identity did not match the verified request.");
 
-    const unitReport = requireCanonicalMetreReport(report);
+    const unitReport = requireCanonicalMetreReport(report, identity);
     const stat = await fs.stat(output);
     if (!Number.isSafeInteger(stat.size) || stat.size <= 0 || stat.size > MAX_GLB_BYTES)
       throw new RequestError(502, "GLB_OUTPUT_LIMIT", "Canonical GLB output exceeded the 256 MiB safety boundary.");
@@ -290,10 +331,14 @@ async function handleConversion(request, response) {
     "x-rekixo-processing-job-id": identity.processingJobId,
     "x-rekixo-source-sha256": identity.sourceSha256,
     "x-rekixo-output-sha256": outputSha256,
-    "x-rekixo-coordinate-policy": "fbx-unit-scale-factor-normalized-to-metres",
+    "x-rekixo-coordinate-policy": unitReport.coordinatePolicy,
     "x-rekixo-output-units": "metre",
     "x-rekixo-source-unit-scale-factor": String(unitReport.sourceUnitScaleFactorCmPerUnit),
     "x-rekixo-applied-metre-scale": String(unitReport.appliedMetreScale),
+    "x-rekixo-scale-basis": unitReport.scaleBasis,
+    ...(identity.scaleDecision
+      ? { "x-rekixo-scale-decision-id": identity.scaleDecision.id }
+      : {}),
     "x-rekixo-scale-sanity": unitReport.scaleSanity.status,
     "x-rekixo-scale-sanity-policy": unitReport.scaleSanity.policy,
     "x-rekixo-raw-bounds-dimensions": dimensionsHeader(unitReport.scaleSanity.rawDimensions),
@@ -319,6 +364,7 @@ export function createModelProcessorServer() {
           outputUnits: "metre",
           execution: FBX_PROCESSOR_EXECUTION,
           metricSanity: "required",
+          reviewedScaleDecisions: "supported",
         });
         return;
       }

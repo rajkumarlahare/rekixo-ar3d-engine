@@ -16,6 +16,7 @@ import {
   MIN_CANONICAL_BUILDING_MAX_DIMENSION_M,
   assessCanonicalBuildingScale,
   metreScaleFromFbxUnitScaleFactor,
+  reviewedMetresPerSourceUnit,
 } from "../scripts/asset-pipeline/convert-source-fbx.mjs";
 
 function validHeaders() {
@@ -43,17 +44,43 @@ function minimalGlb() {
   return glb;
 }
 
-test("FBX processor contract pins V3 source/job provenance and metric-sanity execution", () => {
+test("FBX processor contract pins V4 source/job provenance and reviewed-scale execution", () => {
   const identity = validateFbxRequestHeaders(validHeaders());
   assert.equal(identity.sourceFileId, "source_test_12345");
   assert.equal(identity.sourcePackId, "pack_test_12345");
   assert.equal(identity.processingJobId, "job_test_12345");
   assert.equal(identity.sourceSha256, "a".repeat(64));
   assert.equal(identity.sourceName, "Building authority.fbx");
+  assert.equal(identity.scaleDecision, null);
   assert.equal(FBX_PROCESSOR_CONTRACT, "rekixo-fbx-canonical-glb");
-  assert.equal(FBX_PROCESSOR_VERSION, 3);
-  assert.equal(FBX_PROCESSOR_EXECUTION, "serialized-node-fbx-v3-metric-sanity");
+  assert.equal(FBX_PROCESSOR_VERSION, 4);
+  assert.equal(FBX_PROCESSOR_EXECUTION, "serialized-node-fbx-v4-reviewed-scale");
   assert.equal(MAX_FBX_BYTES, 64 * 1024 * 1024);
+});
+
+test("FBX processor accepts reviewed scale only as a complete pinned decision pair", () => {
+  const headers = validHeaders();
+  headers.set("x-rekixo-scale-decision-id", "scale_review_12345");
+  headers.set("x-rekixo-reviewed-metres-per-source-unit", "1");
+  const identity = validateFbxRequestHeaders(headers);
+  assert.deepEqual(identity.scaleDecision, {
+    id: "scale_review_12345",
+    metresPerSourceUnit: 1,
+  });
+
+  const missingScale = validHeaders();
+  missingScale.set("x-rekixo-scale-decision-id", "scale_review_12345");
+  assert.throws(
+    () => validateFbxRequestHeaders(missingScale),
+    (error) => error?.code === "INVALID_SCALE_DECISION",
+  );
+
+  const missingId = validHeaders();
+  missingId.set("x-rekixo-reviewed-metres-per-source-unit", "1");
+  assert.throws(
+    () => validateFbxRequestHeaders(missingId),
+    (error) => error?.code === "INVALID_SCALE_DECISION",
+  );
 });
 
 test("FBX processor rejects malformed identity, digest, and filenames", () => {
@@ -84,6 +111,19 @@ test("FBX UnitScaleFactor converts deterministically from centimetres to canonic
   }
 });
 
+test("reviewed metres-per-source-unit is explicit, bounded and never inferred", () => {
+  assert.equal(reviewedMetresPerSourceUnit(1), 1);
+  assert.equal(reviewedMetresPerSourceUnit("0.3048"), 0.3048);
+  assert.equal(reviewedMetresPerSourceUnit(0.000001), 0.000001);
+  assert.equal(reviewedMetresPerSourceUnit(1000000), 1000000);
+  for (const invalid of [undefined, null, 0, -1, 0.0000001, 1000001, Number.NaN, "bad"]) {
+    assert.throws(
+      () => reviewedMetresPerSourceUnit(invalid),
+      (error) => error?.code === "FBX_REVIEWED_SCALE_INVALID",
+    );
+  }
+});
+
 test("metric sanity fails closed when declared FBX units would create a miniature Building", () => {
   const assessment = assessCanonicalBuildingScale({
     rawDimensions: [26, 21, 28],
@@ -95,7 +135,30 @@ test("metric sanity fails closed when declared FBX units would create a miniatur
   assert.equal(assessment.status, "review-required");
   assert.equal(assessment.reason, "canonical-bounds-too-small");
   assert.equal(assessment.policy, FBX_SCALE_SANITY_POLICY);
+  assert.equal(assessment.scaleBasis, "declared-fbx-unit");
   assert.equal(assessment.minLargestDimensionM, MIN_CANONICAL_BUILDING_MAX_DIMENSION_M);
+});
+
+test("reviewed scale is still subject to the same broad Building metric sanity gate", () => {
+  const reviewed = assessCanonicalBuildingScale({
+    rawDimensions: [26, 21, 28],
+    canonicalDimensionsM: [26, 21, 28],
+    sourceUnitScaleFactorCmPerUnit: 1,
+    appliedMetreScale: 1,
+    scaleBasis: "reviewed-operator",
+  });
+  assert.equal(reviewed.status, "pass");
+  assert.equal(reviewed.scaleBasis, "reviewed-operator");
+
+  const invalidReview = assessCanonicalBuildingScale({
+    rawDimensions: [26, 21, 28],
+    canonicalDimensionsM: [0.26, 0.21, 0.28],
+    sourceUnitScaleFactorCmPerUnit: 1,
+    appliedMetreScale: 0.01,
+    scaleBasis: "reviewed-operator",
+  });
+  assert.equal(invalidReview.status, "review-required");
+  assert.equal(invalidReview.reason, "canonical-bounds-too-small");
 });
 
 test("metric sanity accepts broad plausible Building bounds and rejects extreme giant bounds", () => {
@@ -154,7 +217,7 @@ test("model processor remains dormant until explicit Container wiring", () => {
   assert.doesNotMatch(adminEntry, /fbx-to-glb|MODEL_PROCESSOR/);
 });
 
-test("model processor opts into canonical metres and metric sanity while legacy converter default stays unchanged", () => {
+test("model processor opts into canonical metres, reviewed decisions and metric sanity while legacy converter default stays unchanged", () => {
   const dockerfile = fs.readFileSync("services/model-processor/Dockerfile", "utf8");
   const server = fs.readFileSync("services/model-processor/server.mjs", "utf8");
   const converter = fs.readFileSync("scripts/asset-pipeline/convert-source-fbx.mjs", "utf8");
@@ -163,9 +226,11 @@ test("model processor opts into canonical metres and metric sanity while legacy 
   assert.match(dockerfile, /convert-source-fbx\.mjs/);
   assert.match(server, /convert-source-fbx\.mjs/);
   assert.match(server, /normalizeUnitsToMeters:\s*true/);
-  assert.match(server, /fbx-unit-scale-factor-normalized-to-metres/);
+  assert.match(server, /metresPerSourceUnitOverride:/);
+  assert.match(server, /fbx-reviewed-scale-normalized-to-metres/);
   assert.match(server, /"x-rekixo-output-units": "metre"/);
-  assert.match(server, /"x-rekixo-scale-sanity": unitReport\.scaleSanity\.status/);
+  assert.match(server, /"x-rekixo-scale-basis": unitReport\.scaleBasis/);
+  assert.match(server, /reviewedScaleDecisions: "supported"/);
   assert.match(converter, /FBX_SCALE_REVIEW_REQUIRED/);
   assert.match(converter, /normalizeUnitsToMeters = false/);
   assert.match(converter, /Source units preserved/);
