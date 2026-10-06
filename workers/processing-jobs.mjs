@@ -1,5 +1,6 @@
 import { engineAdminReadAccess } from "./admin-cloud.mjs";
 import { activeDeletionJob } from "./project-deletion.mjs";
+import { scheduleCanonicalProcessingJob } from "./canonical-glb-processor.mjs";
 import { validProjectSlug } from "../shared/project-slug-policy.js";
 
 export const AUTOMATIC_PROCESSOR_VERSION = "canonical-building-v1";
@@ -359,6 +360,7 @@ export async function handleProcessingRequest(
   request,
   env,
   url = new URL(request.url),
+  ctx,
 ) {
   const route = parseRoute(url);
   if (!route) return null;
@@ -382,7 +384,11 @@ export async function handleProcessingRequest(
 
   const project = await projectBySlug(env, route.slug);
   if (!project) return json({ error: "Cloud project not found." }, { status: 404 });
-  if (request.method === "GET") return json(await responseState(env, project));
+  if (request.method === "GET") {
+    const state = await responseState(env, project);
+    scheduleCanonicalProcessingJob(env, ctx, state.currentJob?.id);
+    return json(state);
+  }
 
   if (project.status === "archived")
     return json({ error: "Restore the project before starting processing." }, { status: 409 });
@@ -415,6 +421,7 @@ export async function handleProcessingRequest(
       );
 
     const queued = await enqueue(env, access.actor, project, pack, action);
+    scheduleCanonicalProcessingJob(env, ctx, queued.job.id);
     const state = await responseState(env, project);
     return json({
       ...state,

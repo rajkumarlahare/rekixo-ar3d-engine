@@ -3,6 +3,7 @@ export * from "./release-manifest-v1";
 export * from "./scene-source-evidence";
 export * from "./source-pack-v1";
 export * from "./source-pack-v2";
+export * from "./canonical-model-manifest-v1";
 export * from "./scene-manifest-v2";
 export * from "./geo-presentation-manifest-v1";
 export const ADMIN_BASE_PATH = "/3Dprojects" as const;
