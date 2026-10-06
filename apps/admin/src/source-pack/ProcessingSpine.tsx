@@ -24,6 +24,32 @@ type ProcessingJobV1 = {
   updatedAt: string;
 };
 
+type ProcessingArtifactV1 = {
+  id: string;
+  processingJobId: string;
+  projectId: string;
+  kind: string;
+  logicalId: string;
+  state: "staged" | "ready" | "failed";
+  r2Key: string;
+  mimeType: string;
+  byteSize: number | null;
+  sha256: string | null;
+  failureReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type CanonicalOutputHandoffV1 = {
+  processingJobId: string;
+  sourcePackId: string;
+  sourcePackManifestSha256: string;
+  processorVersion: string;
+  outputManifestSha256: string;
+  model: ProcessingArtifactV1;
+  manifest: ProcessingArtifactV1;
+};
+
 type ProcessingSpineResponseV1 = {
   contractVersion: 1;
   schemaReady: true;
@@ -41,6 +67,8 @@ type ProcessingSpineResponseV1 = {
     updatedAt: string;
   } | null;
   currentJob: ProcessingJobV1 | null;
+  currentArtifacts: ProcessingArtifactV1[];
+  canonicalOutput: CanonicalOutputHandoffV1 | null;
   jobs: ProcessingJobV1[];
   requestedJob?: ProcessingJobV1;
   created?: boolean;
@@ -74,10 +102,22 @@ function stateHelp(job: ProcessingJobV1 | null) {
   if (job.state === "running")
     return "Processor owns this attempt. Input identity and artifact storage boundary are immutable.";
   if (job.state === "succeeded")
-    return "Processing output is immutable. Future changes require a new Source Pack or processor version.";
+    return "Processing output is immutable. Canonical handoff is exposed only when its model and manifest identities agree.";
   if (job.state === "failed")
     return job.failureReason || "Attempt failed without mutating the sealed Source Pack. Retry creates a new attempt.";
   return "Attempt was cancelled. Retry creates a new attempt without overwriting history.";
+}
+
+function formatBytes(value: number | null) {
+  if (value === null || !Number.isFinite(value) || value < 0) return "size unavailable";
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  if (value < 1024 * 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function shortSha(value: string | null | undefined) {
+  return value ? `${value.slice(0, 16)}…` : "SHA unavailable";
 }
 
 export default function ProcessingSpine({
@@ -134,6 +174,7 @@ export default function ProcessingSpine({
   }, [slug, sourcePackSignal]);
 
   const job = data?.currentJob ?? null;
+  const canonicalOutput = data?.canonicalOutput ?? null;
   const canRetry = job?.state === "failed" || job?.state === "cancelled";
   const canStart = Boolean(data?.sourcePack && (!job || canRetry));
   const actionLabel = canRetry ? "Retry Processing" : "Start Processing";
@@ -221,15 +262,37 @@ export default function ProcessingSpine({
           <strong>{job ? `attempt-${job.attempt}` : "Reserved on start"}</strong>
           <small>{job?.artifactPrefix ?? "Attempt-specific R2 prefix will be immutable."}</small>
         </article>
+        {canonicalOutput ? (
+          <>
+            <article>
+              <span>CANONICAL MODEL</span>
+              <strong>READY · {formatBytes(canonicalOutput.model.byteSize)}</strong>
+              <small>SHA {shortSha(canonicalOutput.model.sha256)}</small>
+            </article>
+            <article>
+              <span>CANONICAL MANIFEST</span>
+              <strong>READY · {formatBytes(canonicalOutput.manifest.byteSize)}</strong>
+              <small>SHA {shortSha(canonicalOutput.manifest.sha256)}</small>
+            </article>
+          </>
+        ) : job?.state === "succeeded" ? (
+          <article>
+            <span>CANONICAL HANDOFF</span>
+            <strong>INCOMPLETE</strong>
+            <small>Model + manifest identity did not satisfy the handoff gate. Downstream mapping remains blocked.</small>
+          </article>
+        ) : null}
       </div>
 
       <div className="processing-spine__actions">
         <div>
           <strong>{job ? stateLabel(job.state) : "Ready for durable queue"}</strong>
           <span>
-            {job?.state === "succeeded"
-              ? `Output ${job.outputManifestSha256?.slice(0, 16) ?? "manifest"}…`
-              : "Source bytes, Building release and Geo release are not mutated by this action."}
+            {canonicalOutput
+              ? `Canonical handoff ${shortSha(canonicalOutput.outputManifestSha256)} is ready for the next Engine phase.`
+              : job?.state === "succeeded"
+                ? "Processing finished, but canonical handoff is fail-closed until artifact identities agree."
+                : "Source bytes, Building release and Geo release are not mutated by this action."}
           </span>
         </div>
         {canStart ? (

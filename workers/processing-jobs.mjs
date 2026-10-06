@@ -165,6 +165,66 @@ function jobResponse(row) {
   };
 }
 
+function artifactResponse(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    processingJobId: row.processing_job_id,
+    projectId: row.project_id,
+    kind: row.kind,
+    logicalId: row.logical_id,
+    state: row.state,
+    r2Key: row.r2_key,
+    mimeType: row.mime_type,
+    byteSize: row.byte_size === null || row.byte_size === undefined ? null : Number(row.byte_size),
+    sha256: row.sha256 ?? null,
+    failureReason: row.failure_reason ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function canonicalOutputHandoff(job, artifacts) {
+  if (!job || job.state !== "succeeded" || !job.output_manifest_sha256) return null;
+  const ready = Array.isArray(artifacts)
+    ? artifacts.filter(
+        (item) =>
+          item &&
+          item.processing_job_id === job.id &&
+          item.project_id === job.project_id &&
+          item.state === "ready",
+      )
+    : [];
+  const models = ready.filter(
+    (item) => item.kind === "canonical-model" && item.logical_id === "building-model",
+  );
+  const manifests = ready.filter(
+    (item) =>
+      item.kind === "canonical-model-manifest" &&
+      item.logical_id === "canonical-model-manifest-v1",
+  );
+  if (models.length !== 1 || manifests.length !== 1) return null;
+  const model = artifactResponse(models[0]);
+  const manifest = artifactResponse(manifests[0]);
+  if (
+    !model?.sha256 ||
+    !manifest?.sha256 ||
+    manifest.sha256 !== job.output_manifest_sha256 ||
+    model.byteSize === null ||
+    manifest.byteSize === null
+  )
+    return null;
+  return {
+    processingJobId: job.id,
+    sourcePackId: job.source_pack_id,
+    sourcePackManifestSha256: job.source_pack_manifest_sha256,
+    processorVersion: job.processor_version,
+    outputManifestSha256: job.output_manifest_sha256,
+    model,
+    manifest,
+  };
+}
+
 async function jobsForPack(env, projectId, packId) {
   const rows = await env.DB.prepare(
     `SELECT *
@@ -173,6 +233,18 @@ async function jobsForPack(env, projectId, packId) {
       ORDER BY attempt DESC
       LIMIT 20`,
   ).bind(projectId, packId, AUTOMATIC_PROCESSOR_VERSION).all();
+  return rows.results || [];
+}
+
+async function artifactsForJob(env, projectId, jobId) {
+  if (!jobId) return [];
+  const rows = await env.DB.prepare(
+    `SELECT id,processing_job_id,project_id,kind,logical_id,state,r2_key,mime_type,
+            byte_size,sha256,failure_reason,created_at,updated_at
+       FROM processing_artifacts_3d
+      WHERE project_id=? AND processing_job_id=?
+      ORDER BY kind ASC,logical_id ASC,id ASC`,
+  ).bind(projectId, jobId).all();
   return rows.results || [];
 }
 
@@ -228,6 +300,10 @@ async function readSmallJson(request) {
 async function responseState(env, project) {
   const sourcePack = await latestSealedPack(env, project.id);
   const jobs = sourcePack ? await jobsForPack(env, project.id, sourcePack.id) : [];
+  const currentJob = jobs[0] || null;
+  const currentArtifacts = currentJob
+    ? await artifactsForJob(env, project.id, currentJob.id)
+    : [];
   return {
     contractVersion: 1,
     schemaReady: true,
@@ -239,7 +315,9 @@ async function responseState(env, project) {
     },
     processorVersion: AUTOMATIC_PROCESSOR_VERSION,
     sourcePack: packResponse(sourcePack),
-    currentJob: jobResponse(jobs[0]),
+    currentJob: jobResponse(currentJob),
+    currentArtifacts: currentArtifacts.map(artifactResponse),
+    canonicalOutput: canonicalOutputHandoff(currentJob, currentArtifacts),
     jobs: jobs.map(jobResponse),
   };
 }
