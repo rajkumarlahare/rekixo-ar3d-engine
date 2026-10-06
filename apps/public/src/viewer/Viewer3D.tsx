@@ -5,6 +5,7 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import type {
+  BuildingPresentationManifestV1,
   CameraPreset3D,
   PublicWalkthroughGraph,
 } from "@rekixo/3d-contracts";
@@ -40,6 +41,11 @@ import {
 } from "./projectProfiles";
 import { applyPreset, fitCamera, type HomeView } from "./viewerCamera";
 import { applySourcePresentation, type SourcePresentation } from "./sourcePresentation";
+import {
+  applyBuildingPresentationMaterials,
+  authoredExteriorView,
+  presentationStartsAtNight,
+} from "./buildingPresentationRuntime";
 import { createExteriorSky } from "./exteriorSky";
 import { exteriorCameraView, type ExteriorView } from "./exteriorCamera";
 import { createPreviewBuilding } from "./viewerPreview";
@@ -50,6 +56,7 @@ type PresentationView = "default" | "aerial" | "building" | "top" | "balcony" | 
 
 interface Viewer3DProps {
   sourcePresentation?: SourcePresentation;
+  buildingPresentation?: BuildingPresentationManifestV1;
   clientPresentation?: boolean;
   allowInteriorControls?: boolean;
   allowWalkControls?: boolean;
@@ -80,6 +87,7 @@ function isMobileDevice() {
 
 export function Viewer3D({
   sourcePresentation,
+  buildingPresentation,
   clientPresentation = false,
   allowInteriorControls = true,
   allowWalkControls = allowInteriorControls,
@@ -183,17 +191,21 @@ export function Viewer3D({
     };
 
     const mobile = isMobileDevice();
-    const referenceVisual = visualPreset === "reference-render";
+    const presentationAppearance = buildingPresentation?.appearance;
+    const referenceVisual =
+      visualPreset === "reference-render" ||
+      presentationAppearance?.referenceVisual === true;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const scene = new THREE.Scene();
     const sky = clientPresentation ? createExteriorSky(reducedMotion) : undefined;
     if (sky) scene.add(sky.root);
-    scene.background = new THREE.Color(0x8faec8);
-    scene.fog = new THREE.FogExp2(0xa9bfd0, 0.0015);
-    if (referenceVisual) {
-      scene.background = new THREE.Color(0x65798f);
-      scene.fog = new THREE.FogExp2(0x71859a, 0.00082);
-    }
+    scene.background = new THREE.Color(
+      presentationAppearance?.background ?? (referenceVisual ? "#65798f" : "#8faec8"),
+    );
+    scene.fog = new THREE.FogExp2(
+      referenceVisual ? 0x71859a : 0xa9bfd0,
+      referenceVisual ? 0.00082 : 0.0015,
+    );
     let modelBounds: THREE.Box3 | undefined;
     let resolvedFloorGeometry: FloorGeometryLevel[] = [];
     let walkColliders: THREE.Object3D[] = [];
@@ -208,8 +220,8 @@ export function Viewer3D({
     });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.9;
-    if (referenceVisual) renderer.toneMappingExposure = 0.84;
+    renderer.toneMappingExposure =
+      presentationAppearance?.exposure ?? (referenceVisual ? 0.84 : 0.9);
     renderer.shadowMap.enabled = referenceVisual || !mobile;
     renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? (referenceVisual ? 1.55 : 1.35) : 2));
@@ -234,19 +246,22 @@ export function Viewer3D({
       camera.quaternion.setFromEuler(euler);
     };
 
-    const hemi = new THREE.HemisphereLight(0xdcecff, 0x514b45, 1.45);
+    const hemi = new THREE.HemisphereLight(
+      0xdcecff,
+      0x514b45,
+      presentationAppearance?.hemisphereIntensity ?? (referenceVisual ? 0.62 : 1.45),
+    );
     if (referenceVisual) {
       hemi.color.setHex(0xd6e4ef);
       hemi.groundColor.setHex(0x5b5148);
-      hemi.intensity = 0.62;
     }
     scene.add(hemi);
 
-    const sun = new THREE.DirectionalLight(0xffe4c2, 2.25);
-    if (referenceVisual) {
-      sun.color.setHex(0xffd3a6);
-      sun.intensity = 1.78;
-    }
+    const sun = new THREE.DirectionalLight(
+      0xffe4c2,
+      presentationAppearance?.sunIntensity ?? (referenceVisual ? 1.78 : 2.25),
+    );
+    if (referenceVisual) sun.color.setHex(0xffd3a6);
     sun.position.set(referenceVisual ? 14 : 10, referenceVisual ? 13 : 18, referenceVisual ? 17 : 12);
     sun.castShadow = renderer.shadowMap.enabled;
     sun.shadow.mapSize.set(mobile ? 1024 : 2048, mobile ? 1024 : 2048);
@@ -267,8 +282,7 @@ export function Viewer3D({
     const pmrem = new THREE.PMREMGenerator(renderer);
     const environmentTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     scene.environment = environmentTexture;
-    scene.environmentIntensity = 0.65;
-    if (referenceVisual) scene.environmentIntensity = 0.34;
+    scene.environmentIntensity = referenceVisual ? 0.34 : 0.65;
 
     const updateSize = () => {
       const width = Math.max(hostElement.clientWidth, 1);
@@ -352,19 +366,27 @@ export function Viewer3D({
     const applyLighting = (night: boolean) => {
       currentNight = night;
       scene.background = new THREE.Color(
-        night ? 0x101827 : referenceVisual ? 0x65798f : 0x8faec8,
+        night
+          ? 0x101827
+          : presentationAppearance?.background ?? (referenceVisual ? "#65798f" : "#8faec8"),
       );
       scene.fog = new THREE.FogExp2(
         night ? 0x182130 : referenceVisual ? 0x71859a : 0xa9bfd0,
         night ? 0.0025 : referenceVisual ? 0.00082 : 0.0015,
       );
-      hemi.intensity = night ? 0.72 : referenceVisual ? 0.62 : 1.45;
+      hemi.intensity = night
+        ? 0.72
+        : presentationAppearance?.hemisphereIntensity ?? (referenceVisual ? 0.62 : 1.45);
       sun.color.setHex(night ? 0xb1caff : referenceVisual ? 0xffd3a6 : 0xffe4c2);
       fill.color.setHex(night ? 0xffb370 : 0x99bfe0);
-      sun.intensity = night ? 0.38 : referenceVisual ? 1.78 : 2.25;
+      sun.intensity = night
+        ? 0.38
+        : presentationAppearance?.sunIntensity ?? (referenceVisual ? 1.78 : 2.25);
       fill.intensity = night ? 0.3 : referenceVisual ? 0.10 : 0.55;
       warmFill.intensity = night ? 7 : referenceVisual ? 2.6 : 0;
-      renderer.toneMappingExposure = night ? 0.82 : referenceVisual ? 0.84 : 0.9;
+      renderer.toneMappingExposure = night
+        ? Math.min(presentationAppearance?.exposure ?? 0.82, 0.9)
+        : presentationAppearance?.exposure ?? (referenceVisual ? 0.84 : 0.9);
       scene.environmentIntensity = night ? 0.42 : referenceVisual ? 0.34 : 0.65;
       for (const [material, original] of windowMaterials) {
         material.emissive.copy(night ? new THREE.Color("#ffbe72") : original.color);
@@ -819,7 +841,9 @@ export function Viewer3D({
         bounds,
         renderer,
         mobile,
-        clientPresentation && !includedSourceSite,
+        clientPresentation &&
+          (buildingPresentation?.environment.genericDressing ?? true) &&
+          !includedSourceSite,
         floorGeometry.find((level) => level.floor === 0 && Number.isFinite(level.elevationM))?.elevationM ?? modelProfile?.floorGeometry?.find((level) => level.floor === 0)?.elevationM,
       );
       scene.add(siteEnvironment.root);
@@ -965,7 +989,14 @@ export function Viewer3D({
       presentationRef.current = setView;
       exteriorViewRef.current = (view, instant = false) => {
         if (!homeView || walkActive || currentExperienceMode !== "site") return;
-        const next = exteriorCameraView(cameraBounds, homeView, camera.aspect, view, sourcePresentation?.heroDirection);
+        const next = authoredExteriorView(buildingPresentation, view) ??
+          exteriorCameraView(
+            cameraBounds,
+            homeView,
+            camera.aspect,
+            view,
+            sourcePresentation?.heroDirection,
+          );
         controls.minDistance = Math.max(radiusForView * 0.15, 1);
         controls.maxDistance = Math.max(controls.maxDistance, next.position.distanceTo(next.target) * 3);
         if (instant || reducedMotion) {
@@ -980,6 +1011,11 @@ export function Viewer3D({
         }
       };
       if (clientPresentation) {
+        const startsAtNight = presentationStartsAtNight(buildingPresentation);
+        if (startsAtNight) {
+          applyLighting(true);
+          setNightMode(true);
+        }
         selectedExteriorRef.current = "hero";
         setExteriorView("hero");
         exteriorViewRef.current("hero", true);
@@ -1124,7 +1160,7 @@ export function Viewer3D({
 
       const loader = new GLTFLoader();
       loader.setMeshoptDecoder(MeshoptDecoder);
-      if (sourcePresentation) {
+      if (sourcePresentation || buildingPresentation) {
         const controller = new AbortController();
         abortModelLoad = () => controller.abort();
         void fetch(modelUrl, { signal: controller.signal }).then(async (response) => {
@@ -1137,7 +1173,21 @@ export function Viewer3D({
           mountObject(gltf.scene, Boolean(cameraPreset));
           setProgress(100);
           setMode("model");
-          await applySourcePresentation(gltf.scene, sourcePresentation, bytes, renderer, () => disposed || activeObject !== gltf.scene);
+          if (sourcePresentation)
+            await applySourcePresentation(
+              gltf.scene,
+              sourcePresentation,
+              bytes,
+              renderer,
+              () => disposed || activeObject !== gltf.scene,
+            );
+          if (buildingPresentation)
+            await applyBuildingPresentationMaterials(
+              gltf.scene,
+              buildingPresentation,
+              bytes,
+              () => disposed || activeObject !== gltf.scene,
+            );
         }).catch((error) => {
           if (!disposed) { console.error("3D model load failed", error); mountPreview("The building could not be loaded. Please reload to try again."); }
         });
@@ -1272,6 +1322,7 @@ export function Viewer3D({
     };
   }, [
     sourcePresentation,
+    buildingPresentation,
     clientPresentation,
     modelUrl,
     cameraPreset,
