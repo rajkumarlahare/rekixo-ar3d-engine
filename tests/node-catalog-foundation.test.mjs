@@ -32,13 +32,13 @@ function fixture() {
   };
 }
 
-test("node catalog IDs are deterministic and scoped to canonical model identity", () => {
+test("node catalog IDs are deterministic and scoped to full canonical model identity", () => {
   const first = buildNodeCatalogData(fixture(), SHA_A);
   const second = buildNodeCatalogData(fixture(), SHA_A);
   const otherRevision = buildNodeCatalogData(fixture(), SHA_B);
 
   assert.deepEqual(first, second);
-  assert.equal(first.nodes[0].id, "node:aaaaaaaaaaaaaaaa:0");
+  assert.equal(first.nodes[0].id, `node:${SHA_A}:0`);
   assert.equal(first.nodes[1].parentId, first.nodes[0].id);
   assert.deepEqual(first.nodes[0].childIds, [first.nodes[1].id, first.nodes[2].id]);
   assert.deepEqual(first.rootIds, [first.nodes[0].id]);
@@ -92,6 +92,7 @@ test("node catalog contract is additive and exported", () => {
   assert.equal(NODE_CATALOG_VERSION, 1);
   assert.match(contract, /NODE_CATALOG_FORMAT = "rekixo-node-catalog"/);
   assert.match(contract, /canonicalModel:/);
+  assert.match(contract, /canonical-sha256/);
   assert.match(contract, /duplicateNameGroupCount:/);
   assert.match(contractIndex, /export \* from "\.\/node-catalog-v1"/);
 });
