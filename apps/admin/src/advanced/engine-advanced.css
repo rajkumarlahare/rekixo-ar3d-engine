@@ -1,0 +1,227 @@
+.engine-advanced-page {
+  display: grid;
+  gap: 16px;
+}
+
+.engine-advanced-alert {
+  border-radius: 11px;
+  padding: 11px 13px;
+  font-size: 11px;
+}
+
+.engine-advanced-alert--error {
+  border: 1px solid #6b3341;
+  background: #311824;
+  color: #ffd3dc;
+}
+
+.engine-advanced-alert--ok {
+  border: 1px solid #286247;
+  background: #102d24;
+  color: #6de5ad;
+}
+
+.engine-advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.engine-advanced-panel,
+.engine-advanced-danger {
+  padding: 20px;
+}
+
+.engine-advanced-panel > header,
+.engine-advanced-danger > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.engine-advanced-panel header p,
+.engine-advanced-danger header p {
+  margin: 0;
+  color: #2fd087;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.16em;
+}
+
+.engine-advanced-panel header h2,
+.engine-advanced-danger header h2 {
+  margin: 5px 0 0;
+  font-size: 19px;
+}
+
+.engine-advanced-panel header span,
+.engine-advanced-danger header span {
+  display: block;
+  margin-top: 6px;
+  color: #7f8fa8;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.engine-advanced-diagnostics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin: 18px 0 0;
+}
+
+.engine-advanced-diagnostics > div,
+.engine-advanced-technical > div {
+  border: 1px solid #243550;
+  border-radius: 10px;
+  background: #0a1527;
+  padding: 11px;
+}
+
+.engine-advanced-diagnostics dt,
+.engine-advanced-technical dt {
+  color: #74839b;
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.engine-advanced-diagnostics dd,
+.engine-advanced-technical dd {
+  margin: 5px 0 0;
+  color: #e3ebf7;
+  font-size: 11px;
+  font-weight: 800;
+  word-break: break-word;
+}
+
+.engine-advanced-state,
+.engine-advanced-danger header > b {
+  border-radius: 999px;
+  background: #402f1b;
+  color: #efbd4a;
+  padding: 6px 9px;
+  font-size: 8px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.engine-advanced-state--ready {
+  background: #123b31;
+  color: #39dc93;
+}
+
+.engine-advanced-map-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.engine-advanced-key,
+.engine-advanced-danger > label {
+  display: block;
+  margin-top: 18px;
+}
+
+.engine-advanced-map-fields .engine-advanced-key {
+  margin-top: 0;
+}
+
+.engine-advanced-key > span,
+.engine-advanced-danger > label > span {
+  display: block;
+  margin-bottom: 6px;
+  color: #7c8ca5;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.engine-advanced-key input,
+.engine-advanced-danger input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #2a3953;
+  border-radius: 10px;
+  background: #081221;
+  color: #fff;
+  padding: 0 11px;
+  outline: none;
+}
+
+.engine-advanced-key input:focus,
+.engine-advanced-danger input:focus {
+  border-color: #2bc981;
+  box-shadow: 0 0 0 3px rgba(43, 201, 129, 0.1);
+}
+
+.engine-advanced-key small {
+  display: block;
+  margin-top: 6px;
+  color: #687994;
+  font-size: 9px;
+}
+
+.engine-advanced-panel > .engine-control-button {
+  margin-top: 12px;
+}
+
+.engine-advanced-technical {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin: 18px 0 0;
+}
+
+.engine-advanced-danger {
+  border-color: #6b3341;
+  background: linear-gradient(145deg, #25131c, #15121b);
+}
+
+.engine-advanced-danger header p {
+  color: #ff7488;
+}
+
+.engine-advanced-danger header > b {
+  background: #421e29;
+  color: #ff7188;
+}
+
+.engine-advanced-danger > button {
+  min-height: 42px;
+  margin-top: 12px;
+  border: 1px solid #8a3348;
+  border-radius: 10px;
+  background: #4a1d2a;
+  color: #ffd8df;
+  padding: 0 14px;
+  font-size: 10px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.engine-advanced-danger > button:disabled {
+  opacity: 0.46;
+  cursor: not-allowed;
+}
+
+@media (max-width: 920px) {
+  .engine-advanced-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .engine-advanced-technical {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .engine-advanced-diagnostics {
+    grid-template-columns: 1fr;
+  }
+
+  .engine-advanced-panel > header,
+  .engine-advanced-danger > header {
+    flex-direction: column;
+  }
+}

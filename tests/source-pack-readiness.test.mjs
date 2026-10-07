@@ -219,11 +219,11 @@ test("Automatic Engine browser smoke enforces the source-decision product bounda
   );
   const e2e = fs.readFileSync("e2e/automatic-engine-entry.spec.ts", "utf8");
 
-  assert.match(review, /AUTOMATIC PRESENTATION ENGINE · SOURCE DECISION/);
+  assert.match(review, /AUTOMATIC ENGINE · INPUT WORKSPACE/);
   assert.match(review, /One geometry authority/);
-  assert.match(review, /architecture rebuild नहीं करेंगे/);
+  assert.match(review, /Finished FBX\/GLB geometry is primary when available/);
   assert.match(e2e, /Source Pack Review/);
-  assert.match(e2e, /AUTOMATIC PRESENTATION ENGINE · SOURCE DECISION/);
+  assert.match(e2e, /AUTOMATIC ENGINE · INPUT WORKSPACE/);
   assert.match(e2e, /One geometry authority/);
   assert.match(e2e, /Smart 3D project builder/);
   assert.match(e2e, /3D editor tools/);

@@ -259,6 +259,7 @@ export default function SourcePackReview() {
       ? data.authoritySuggestion.sourceFileId
       : null;
   const processingSignal = `${pack?.id ?? ""}:${pack?.status ?? ""}:${pack?.manifestSha256 ?? ""}`;
+  const packReady = pack?.status === "ready";
 
   return (
     <main className="source-review">
@@ -280,20 +281,28 @@ export default function SourcePackReview() {
 
       <section className="source-review__hero">
         <div>
-          <p>AUTOMATIC PRESENTATION ENGINE · SOURCE DECISION</p>
-          <h1>{data?.project.name ?? "Source Pack Review"}</h1>
-          <span>{slug || "No project selected"}</span>
+          <p>AUTOMATIC ENGINE · INPUT WORKSPACE</p>
+          <h1>{data?.project.name ?? "Source Pack"}</h1>
+          <span>Verified sources → operator review → scale/processing → component mapping → ready handoff</span>
         </div>
         <div className="source-review__rule">
           <strong>One geometry authority</strong>
-          <span>FBX/GLB जैसे finished model को primary geometry रखें. DWG/PDF/reference files evidence हैं; architecture rebuild नहीं करेंगे.</span>
+          <span>Finished FBX/GLB geometry is primary when available. DWG/PDF/reference files remain evidence; they never silently replace approved geometry.</span>
         </div>
       </section>
+
+      <nav className="source-review__workflow-nav" aria-label="Source Pack workflow">
+        <a href="#source-step-sources"><span>01</span><b>Sources</b><small>Verified originals</small></a>
+        <a href="#source-step-review"><span>02</span><b>Review</b><small>Authority and roles</small></a>
+        <a href="#source-step-processing"><span>03</span><b>Scale & Processing</b><small>Durable canonical output</small></a>
+        <a href={`/3Dprojects/component-mapper?project=${encodeURIComponent(slug)}`}><span>04</span><b>Components</b><small>Canonical node mapping</small></a>
+        <a href="#source-step-ready"><span>05</span><b>Ready</b><small>Building handoff</small></a>
+      </nav>
 
       {error ? <div className="source-review__alert source-review__alert--error">{error}</div> : null}
       {message ? <div className="source-review__alert source-review__alert--ok">{message}</div> : null}
 
-      <section className="source-review__summary">
+      <section className="source-review__summary" id="source-step-sources">
         <article>
           <span>AUTO SUGGESTION</span>
           <strong>
@@ -315,25 +324,28 @@ export default function SourcePackReview() {
         </article>
       </section>
 
-      <ProcessingSpine slug={slug} sourcePackSignal={processingSignal} />
-
       {!pack || pack.status !== "draft" ? (
-        <section className="source-review__start">
+        <section className="source-review__start" id="source-step-review">
           <div>
-            <p>{pack?.status === "ready" ? "SEALED SOURCE PACK" : "OPERATOR REVIEW"}</p>
-            <h2>{pack?.status === "ready" ? `Source Pack v${pack.version} is immutable` : "Create review draft from verified originals"}</h2>
+            <p>{packReady ? "SEALED SOURCE PACK" : "OPERATOR REVIEW"}</p>
+            <h2>{packReady ? `Source Pack v${pack.version} is immutable` : "Create review draft from verified originals"}</h2>
             <span>
-              Automatic classifier suggestions copy होंगे, लेकिन geometry-authority role जानबूझकर blank रहेगा ताकि final source decision इंसान approve करे.
+              Automatic classifier suggestions copy honge, lekin geometry-authority role final operator decision ke bina seal nahi hoga.
             </span>
           </div>
-          <button type="button" onClick={() => void startDraft()} disabled={Boolean(busy) || !data?.suggestions.length}>
-            {busy === "start" ? "Preparing…" : pack?.status === "ready" ? "+ Start next Source Pack version" : "Start Source Pack Review"}
-          </button>
+          <div className="source-review__start-actions">
+            <button type="button" onClick={() => void refreshClassification()} disabled={Boolean(busy) || !slug}>
+              {busy === "classify" ? "Analyzing…" : "Refresh Analysis"}
+            </button>
+            <button type="button" onClick={() => void startDraft()} disabled={Boolean(busy) || !data?.suggestions.length}>
+              {busy === "start" ? "Preparing…" : packReady ? "+ Start next Source Pack version" : "Start Source Pack Review"}
+            </button>
+          </div>
         </section>
       ) : (
-        <>
+        <section id="source-step-review" className="source-review__review-workspace">
           {suggestedAuthorityId && !authorityId ? (
-            <section className="source-review__suggestion">
+            <div className="source-review__suggestion">
               <div>
                 <strong>Recommended geometry authority</strong>
                 <span>{suggestionById.get(suggestedAuthorityId)?.filename}</span>
@@ -341,16 +353,16 @@ export default function SourcePackReview() {
               <button type="button" onClick={() => chooseAuthority(suggestedAuthorityId)}>
                 Use recommendation
               </button>
-            </section>
+            </div>
           ) : null}
 
           <section className="source-review__files">
             <div className="source-review__section-head">
               <div>
-                <p>VERIFIED ORIGINALS</p>
+                <p>02 · OPERATOR REVIEW</p>
                 <h2>Review file roles</h2>
               </div>
-              <span>Geometry authority exactly one होना चाहिए.</span>
+              <span>Geometry authority exactly one hona chahiye.</span>
             </div>
 
             {files.map((file) => {
@@ -445,8 +457,35 @@ export default function SourcePackReview() {
               {busy === "seal" ? "Sealing…" : "Seal Source Pack"}
             </button>
           </section>
-        </>
+        </section>
       )}
+
+      <section id="source-step-processing" className="source-review__processing-stage">
+        <div className="source-review__stage-label">
+          <p>03 · SCALE & PROCESSING</p>
+          <h2>Canonical processing</h2>
+          <span>Sealed Source Pack ke baad scale gate aur durable processing yahin continue hota hai.</span>
+        </div>
+        <ProcessingSpine slug={slug} sourcePackSignal={processingSignal} />
+      </section>
+
+      <section className="source-review__ready-stage" id="source-step-ready">
+        <div>
+          <p>05 · BUILDING HANDOFF</p>
+          <h2>{packReady ? "Source decision is immutable" : "Complete and seal Source Pack first"}</h2>
+          <span>
+            {packReady
+              ? "Processing/component review complete hote hi Building workspace se customer-facing release workflow continue karein."
+              : "Source Pack ready hone tak downstream Building release intentionally fail-closed rahega."}
+          </span>
+        </div>
+        <div>
+          <a href={`/3Dprojects/component-mapper?project=${encodeURIComponent(slug)}`}>Open Components</a>
+          <a className={packReady ? "source-review__ready-primary" : "source-review__ready-disabled"} href={packReady ? `/3Dprojects/building?project=${encodeURIComponent(slug)}` : "#source-step-review"}>
+            Continue to Building
+          </a>
+        </div>
+      </section>
     </main>
   );
 }

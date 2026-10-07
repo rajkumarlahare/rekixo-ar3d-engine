@@ -35,7 +35,7 @@ test("legacy Studio URL enters the Automatic Engine without exposing authoring U
 
   await expect(page).toHaveURL(/\/3Dprojects\/source-pack\?project=e2e-project$/);
   await expect(page.getByText("Source Pack Review", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("AUTOMATIC PRESENTATION ENGINE · SOURCE DECISION")).toBeVisible();
+  await expect(page.getByText("AUTOMATIC ENGINE · INPUT WORKSPACE")).toBeVisible();
   await expect(page.getByText("One geometry authority", { exact: true })).toBeVisible();
 
   await expect(page.getByLabel("Smart 3D project builder")).toHaveCount(0);
