@@ -303,6 +303,10 @@ export async function buildGeoPresentationManifestV1({
     model.mimeType !== "model/gltf-binary")
     throw Error("Geo V2 requires an immutable Building GLB reference.");
 
+  const [siteBoundary, masterplanOverlay] = await Promise.all([
+    loadBoundary(env, project, context),
+    loadOverlay(env, project, context),
+  ]);
   const manifest = {
     format: GEO_FORMAT,
     version: GEO_VERSION,
@@ -335,12 +339,8 @@ export async function buildGeoPresentationManifestV1({
     },
     modelAnchor: contextAnchor(context),
     placement: placementFromGeoContext(context),
-    ...(await loadBoundary(env, project, context)
-      ? { siteBoundary: await loadBoundary(env, project, context) }
-      : {}),
-    ...(await loadOverlay(env, project, context)
-      ? { masterplanOverlay: await loadOverlay(env, project, context) }
-      : {}),
+    ...(siteBoundary ? { siteBoundary } : {}),
+    ...(masterplanOverlay ? { masterplanOverlay } : {}),
     display: {
       showMasterplanByDefault: true,
       showBoundaryByDefault: true,
