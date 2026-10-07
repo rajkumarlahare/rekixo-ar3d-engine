@@ -16,7 +16,7 @@ test("browser E2E smoke covers Automatic Engine entry and source decision bounda
   assert.doesNotMatch(main, /lazy\(\(\) => import\("\.\/studio\/Studio"\)\)/);
   assert.match(e2e, /legacy Studio URL enters the Automatic Engine/);
   assert.match(e2e, /Source Pack Review/);
-  assert.match(e2e, /AUTOMATIC PRESENTATION ENGINE · SOURCE DECISION/);
+  assert.match(e2e, /AUTOMATIC ENGINE · INPUT WORKSPACE/);
   assert.match(e2e, /One geometry authority/);
   assert.match(e2e, /Smart 3D project builder/);
   assert.match(e2e, /3D editor tools/);
