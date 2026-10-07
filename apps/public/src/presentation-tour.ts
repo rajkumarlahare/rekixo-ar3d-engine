@@ -235,20 +235,20 @@ function installPresentationTour(stage: HTMLElement) {
 
   const startManifestTour = (value: BuildingPresentationManifestV1) => {
     const shots = new Map(value.cameras.shots.map((shot) => [shot.id, shot]));
-    const steps: PremiumTourStep[] = value.tour.steps
-      .map((step) => {
-        const shot = shots.get(step.shotId);
-        if (!shot) return undefined;
-        return {
+    const steps = value.tour.steps.flatMap<PremiumTourStep>((step) => {
+      const shot = shots.get(step.shotId);
+      if (!shot) return [];
+      return [
+        {
           id: shot.kind,
           transitionMs: step.durationMs,
           holdMs: step.holdMs,
           run: () => {
             if (running) activateCamera(stage, shot.kind);
           },
-        } satisfies PremiumTourStep;
-      })
-      .filter((step): step is PremiumTourStep => Boolean(step));
+        },
+      ];
+    });
     return steps.length
       ? runPremiumTour(steps, "immutable-manifest")
       : false;
