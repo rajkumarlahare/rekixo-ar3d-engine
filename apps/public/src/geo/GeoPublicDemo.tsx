@@ -72,10 +72,12 @@ type GeoPayload = {
   error?: string;
 };
 
+type MapCapabilities = { isWebGLOverlayViewAvailable?: boolean };
 type GoogleMap = {
   setCenter(position: { lat: number; lng: number }): void;
   moveCamera?(options: Record<string, unknown>): void;
   getRenderingType?(): string;
+  getMapCapabilities?(): MapCapabilities;
 };
 
 type WebGLTransformer = {
@@ -165,6 +167,9 @@ function renderingTypeLabel(map: GoogleMap) {
 }
 
 function webglTimeoutMessage(map: GoogleMap) {
+  const capabilities = map.getMapCapabilities?.();
+  if (capabilities?.isWebGLOverlayViewAvailable === false)
+    return "Configured Google Maps Map ID WebGLOverlayView support expose nahi kar raha. JavaScript Vector Map ID, billing aur browser hardware acceleration verify karein.";
   const renderingType = renderingTypeLabel(map);
   if (renderingType.includes("RASTER"))
     return "Google Maps raster mode mila after vector startup window. API key aur production JavaScript Vector Map ID same Cloud project me verify karein.";
@@ -326,6 +331,11 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
         };
 
         overlay = new WebGLOverlayView();
+        overlay.onAdd = () => {
+          if (cancelled) return;
+          setFailure("");
+          setQuality("Preparing integrated vector 3D map");
+        };
         overlay.onContextRestored = ({ gl }) => {
           if (cancelled) return;
           contextRestored = true;
@@ -334,7 +344,7 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
           renderer = new THREE.WebGLRenderer({
             canvas: gl.canvas as HTMLCanvasElement,
             context: gl,
-            antialias: true,
+            ...(gl.getContextAttributes() || {}),
           });
           renderer.autoClear = false;
           renderer.outputColorSpace = THREE.SRGBColorSpace;
