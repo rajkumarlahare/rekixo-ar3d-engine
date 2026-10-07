@@ -1,0 +1,40 @@
+.geo-camera-toolbar--fullscreen-clone {
+  position: absolute !important;
+  z-index: 2147483646 !important;
+  top: 14px !important;
+  left: 50% !important;
+  right: auto !important;
+  max-width: calc(100% - 360px) !important;
+  transform: translateX(-50%) !important;
+  pointer-events: auto !important;
+}
+
+@media (max-width: 1100px) {
+  .geo-integrated-scene .geo-camera-toolbar,
+  .geo-camera-toolbar--fullscreen-clone {
+    top: 68px !important;
+    left: 14px !important;
+    right: 14px !important;
+    max-width: none !important;
+    transform: none !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .geo-integrated-scene .geo-camera-toolbar,
+  .geo-camera-toolbar--fullscreen-clone {
+    top: 68px !important;
+    left: 8px !important;
+    right: 8px !important;
+    max-width: none !important;
+    transform: none !important;
+  }
+
+  .geo-integrated-scene .geo-camera-toolbar {
+    scrollbar-width: none;
+  }
+
+  .geo-integrated-scene .geo-camera-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+}
