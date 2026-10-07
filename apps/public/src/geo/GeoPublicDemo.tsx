@@ -72,6 +72,7 @@ type GeoPayload = {
   error?: string;
 };
 
+type GeoCameraView = "overview" | "front" | "corner" | "entry" | "aerial";
 type MapsListener = { remove(): void };
 type MapCapabilities = { isWebGLOverlayViewAvailable?: boolean };
 type GoogleMap = {
@@ -80,6 +81,13 @@ type GoogleMap = {
   moveCamera?(options: Record<string, unknown>): void;
   getRenderingType?(): string;
   getMapCapabilities?(): MapCapabilities;
+  getMapTypeId?(): string;
+  getZoom?(): number | undefined;
+};
+
+type MaxZoomResult = { zoom?: number };
+type GoogleMaxZoomService = {
+  getMaxZoomAtLatLng(position: { lat: number; lng: number }): Promise<MaxZoomResult>;
 };
 
 type WebGLTransformer = {
@@ -110,6 +118,7 @@ type GoogleWebGLOverlay = {
 type GoogleRoot = {
   maps: {
     Map: new (node: HTMLElement, options: Record<string, unknown>) => GoogleMap;
+    MaxZoomService?: new () => GoogleMaxZoomService;
     WebGLOverlayView?: new () => GoogleWebGLOverlay;
     RenderingType?: { VECTOR?: string; RASTER?: string; UNINITIALIZED?: string };
   };
@@ -122,6 +131,13 @@ type GeoWindow = Window &
   };
 
 const WEBGL_CONTEXT_TIMEOUT_MS = 12_000;
+const GEO_CAMERA_VIEWS: Array<{ id: GeoCameraView; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "front", label: "Front" },
+  { id: "corner", label: "Corner" },
+  { id: "entry", label: "Entry view" },
+  { id: "aerial", label: "Aerial" },
+];
 let mapsPromise: Promise<GoogleRoot> | null = null;
 let mapsKeyLoaded = "";
 
@@ -238,8 +254,36 @@ function mapAltitude(data: GeoPayload) {
     : 0;
 }
 
+function normalizeHeading(value: number) {
+  return ((value % 360) + 360) % 360;
+}
+
+function isSatelliteMapType(mapTypeId?: string) {
+  const value = String(mapTypeId || "").toLowerCase();
+  return value.includes("satellite") || value.includes("hybrid");
+}
+
+function cameraPreset(view: GeoCameraView, buildingHeading: number) {
+  const heading = normalizeHeading(buildingHeading);
+  switch (view) {
+    case "front":
+      return { zoom: 20.1, tilt: 67.5, heading };
+    case "corner":
+      return { zoom: 19.85, tilt: 67.5, heading: normalizeHeading(heading + 35) };
+    case "entry":
+      return { zoom: 21.25, tilt: 67.5, heading };
+    case "aerial":
+      return { zoom: 18.65, tilt: 20, heading };
+    default:
+      return { zoom: 19, tilt: 67.5, heading };
+  }
+}
+
 function IntegratedGeoScene({ data }: { data: GeoPayload }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const cameraActionRef = useRef<((view: GeoCameraView) => void) | null>(null);
+  const [cameraView, setCameraView] = useState<GeoCameraView>("overview");
+  const [satelliteMaxZoom, setSatelliteMaxZoom] = useState<number | null>(null);
   const [quality, setQuality] = useState("Preparing integrated 3D map");
   const [failure, setFailure] = useState("");
 
@@ -248,11 +292,14 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
     let cancelled = false;
     let overlay: GoogleWebGLOverlay | undefined;
     let mapIdle: MapsListener | undefined;
+    let mapTypeChanged: MapsListener | undefined;
     let renderer: THREE.WebGLRenderer | undefined;
     let loadedModel: THREE.Object3D | undefined;
     let root: THREE.Group | undefined;
     let contextTimer: number | undefined;
     let contextRestored = false;
+    let satelliteLimit: number | undefined;
+    let activeCameraView: GeoCameraView = "overview";
 
     const clearContextTimer = () => {
       if (contextTimer !== undefined) window.clearTimeout(contextTimer);
@@ -276,13 +323,13 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
           lat: data.placement.anchor.latitude,
           lng: data.placement.anchor.longitude,
         };
+        const initialCamera = cameraPreset("overview", data.placement.headingDeg);
         const map = new google.maps.Map(hostRef.current, {
           center,
-          zoom: 19,
-          tilt: 67.5,
-          heading: data.placement.headingDeg,
+          ...initialCamera,
           mapId: data.maps.mapId,
           renderingType: google.maps.RenderingType?.VECTOR || "VECTOR",
+          isFractionalZoomEnabled: true,
           tiltInteractionEnabled: true,
           headingInteractionEnabled: true,
           mapTypeControl: true,
@@ -385,16 +432,48 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
           renderer = undefined;
         };
         overlay.setMap(map);
+
+        const applyCamera = (view: GeoCameraView) => {
+          const preset = cameraPreset(view, data.placement.headingDeg);
+          const satellite = isSatelliteMapType(map.getMapTypeId?.());
+          const zoom = satellite && satelliteLimit !== undefined
+            ? Math.min(preset.zoom, satelliteLimit)
+            : preset.zoom;
+          activeCameraView = view;
+          setCameraView(view);
+          map.moveCamera?.({ center, ...preset, zoom });
+          overlay?.requestRedraw();
+        };
+        cameraActionRef.current = applyCamera;
+
+        const maxZoomService = google.maps.MaxZoomService
+          ? new google.maps.MaxZoomService()
+          : undefined;
+        const refreshSatelliteLimit = async () => {
+          if (!maxZoomService) return;
+          try {
+            const result = await maxZoomService.getMaxZoomAtLatLng(center);
+            if (cancelled) return;
+            const candidate = Number(result.zoom);
+            if (!Number.isFinite(candidate)) return;
+            satelliteLimit = candidate;
+            setSatelliteMaxZoom(candidate);
+            if (isSatelliteMapType(map.getMapTypeId?.())) applyCamera(activeCameraView);
+          } catch {
+            // Google still enforces its own imagery ceiling if this optional lookup fails.
+          }
+        };
+
         mapIdle = map.addListener("idle", () => {
           overlay?.requestRedraw();
         });
-        armContextTimer();
-        map.moveCamera?.({
-          center,
-          zoom: 19,
-          tilt: 67.5,
-          heading: data.placement.headingDeg,
+        mapTypeChanged = map.addListener("maptypeid_changed", () => {
+          if (isSatelliteMapType(map.getMapTypeId?.())) void refreshSatelliteLimit();
+          overlay?.requestRedraw();
         });
+        void refreshSatelliteLimit();
+        armContextTimer();
+        applyCamera("overview");
       })
       .catch((reason) => {
         if (cancelled) return;
@@ -410,7 +489,9 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
     return () => {
       cancelled = true;
       clearContextTimer();
+      cameraActionRef.current = null;
       mapIdle?.remove();
+      mapTypeChanged?.remove();
       overlay?.setMap(null);
       renderer?.dispose();
       if (loadedModel) disposeObject(loadedModel);
@@ -421,6 +502,26 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
   return (
     <div className="geo-integrated-scene">
       <div ref={hostRef} className="geo-integrated-map" aria-label={`${data.project.name} integrated 3D geographic scene`} />
+      {!failure && (
+        <div className="geo-camera-toolbar" aria-label="3D Geo camera views">
+          {GEO_CAMERA_VIEWS.map((view) => (
+            <button
+              key={view.id}
+              type="button"
+              className={cameraView === view.id ? "is-active" : ""}
+              aria-pressed={cameraView === view.id}
+              title={
+                view.id === "entry" && satelliteMaxZoom !== null
+                  ? `Closest available satellite detail at this site is zoom ${satelliteMaxZoom}`
+                  : `${view.label} camera view`
+              }
+              onClick={() => cameraActionRef.current?.(view.id)}
+            >
+              {view.label}
+            </button>
+          ))}
+        </div>
+      )}
       {failure && (
         <div className="geo-integrated-fallback">
           <Viewer3D
