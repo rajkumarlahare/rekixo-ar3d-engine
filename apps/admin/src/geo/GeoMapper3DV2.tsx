@@ -1,3 +1,4 @@
+import type { GeoGuidedRigidSolution, GeoGuidedSourcePoint } from "@rekixo/3d-engine-core";
 import { useEffect, useMemo, useState } from "react";
 import {
   activateGeoRelease,
@@ -14,7 +15,12 @@ import {
   type CloudProjectSummary,
   type CloudReleaseSummary,
 } from "../studio/cloud";
+import GeoGuidedRigidAlignment, {
+  type GeoGuidedFineDelta,
+  type GeoGuidedPairDraft,
+} from "./GeoGuidedRigidAlignment";
 import GeoIntegratedAuthoringMap, {
+  type GeoAlignmentMapTarget,
   type GeoIntegratedPreviewState,
 } from "./GeoIntegratedAuthoringMap";
 import {
@@ -79,6 +85,12 @@ type ParsedAlignment = {
   scale: number;
   heightMode: GeoHeightMode;
 };
+
+const GUIDED_POINT_IDS = ["P1", "P2", "P3", "P4"] as const;
+
+function blankGuidedPairs(): GeoGuidedPairDraft[] {
+  return GUIDED_POINT_IDS.map((id) => ({ id, label: id, source: null, target: null }));
+}
 
 function requestedProjectSlug() {
   return new URLSearchParams(window.location.search)
@@ -185,6 +197,18 @@ function draftMatchesForm(
     (draft.modelAnchorId || "") === form.modelAnchorId;
 }
 
+function normalizeHeading(value: number) {
+  let next = value % 360;
+  if (next <= -180) next += 360;
+  if (next > 180) next -= 360;
+  return next;
+}
+
+function formatFormNumber(value: number, digits: number) {
+  const rounded = Number(value.toFixed(digits));
+  return String(Object.is(rounded, -0) ? 0 : rounded);
+}
+
 async function integration(slug: string) {
   const response = await fetch(
     `/3Dprojects/api/integration/projects/${encodeURIComponent(slug)}`,
@@ -226,6 +250,10 @@ export default function GeoMapper3DV2() {
     yM: "0",
     zM: "0",
   });
+  const [guidedPairs, setGuidedPairs] = useState<GeoGuidedPairDraft[]>(blankGuidedPairs);
+  const [guidedSourceId, setGuidedSourceId] = useState<string | null>(null);
+  const [guidedTargetId, setGuidedTargetId] = useState<string | null>(null);
+  const [guidedAllowScale, setGuidedAllowScale] = useState(false);
   const [mapsApiKey, setMapsApiKey] = useState("");
   const [configuredMapsApiKey, setConfiguredMapsApiKey] = useState("");
   const [previewState, setPreviewState] = useState<GeoIntegratedPreviewState>("loading-map");
@@ -307,6 +335,13 @@ export default function GeoMapper3DV2() {
     return () => { live = false; };
   }, [selectedSlug]);
 
+  useEffect(() => {
+    setGuidedPairs(blankGuidedPairs());
+    setGuidedSourceId(null);
+    setGuidedTargetId(null);
+    setGuidedAllowScale(false);
+  }, [selectedSlug, sourceReleaseId]);
+
   const selectedRelease = useMemo(
     () => releaseItems.find((item) => item.id === sourceReleaseId),
     [releaseItems, sourceReleaseId],
@@ -354,6 +389,17 @@ export default function GeoMapper3DV2() {
     () => draftMatchesForm(state?.draft, form, sourceReleaseId),
     [state?.draft, form, sourceReleaseId],
   );
+  const guidedMapTargets = useMemo<GeoAlignmentMapTarget[]>(
+    () => guidedPairs.flatMap((pair) => pair.target
+      ? [{
+          id: pair.id,
+          label: pair.label,
+          latitude: pair.target.latitude,
+          longitude: pair.target.longitude,
+        }]
+      : []),
+    [guidedPairs],
+  );
 
   const verificationBlocker = useMemo(() => {
     if (!state?.draft) return "Geo draft missing hai.";
@@ -396,6 +442,70 @@ export default function GeoMapper3DV2() {
       latitude: latitude.toFixed(7),
       longitude: longitude.toFixed(7),
     }));
+  }
+
+  function captureGuidedSource(pointId: string, point: GeoGuidedSourcePoint) {
+    setGuidedPairs((current) => current.map((pair) =>
+      pair.id === pointId ? { ...pair, source: point } : pair,
+    ));
+    setGuidedSourceId(null);
+  }
+
+  function captureGuidedTarget(pointId: string, latitude: number, longitude: number) {
+    setGuidedPairs((current) => current.map((pair) =>
+      pair.id === pointId
+        ? { ...pair, target: { latitude, longitude } }
+        : pair,
+    ));
+    setGuidedTargetId(null);
+  }
+
+  function clearGuidedPair(pointId: string) {
+    setGuidedPairs((current) => current.map((pair) =>
+      pair.id === pointId ? { ...pair, source: null, target: null } : pair,
+    ));
+    if (guidedSourceId === pointId) setGuidedSourceId(null);
+    if (guidedTargetId === pointId) setGuidedTargetId(null);
+  }
+
+  function applyGuidedSolution(solution: GeoGuidedRigidSolution) {
+    setForm((current) => ({
+      ...current,
+      eastOffsetM: formatFormNumber(solution.eastOffsetM, 4),
+      northOffsetM: formatFormNumber(solution.northOffsetM, 4),
+      headingDeg: formatFormNumber(solution.headingDeg, 6),
+      scale: formatFormNumber(solution.scale, 6),
+    }));
+    setError("");
+    setMessage(
+      `Guided rigid solution applied (${solution.pointCount} points, RMS ${solution.rmsErrorM.toFixed(3)} m). Review live map, fine-align if needed, then Save Geo V2 Draft.`,
+    );
+  }
+
+  function fineAdjustGuided(delta: GeoGuidedFineDelta) {
+    setForm((current) => {
+      const east = Number(current.eastOffsetM);
+      const north = Number(current.northOffsetM);
+      const vertical = Number(current.verticalOffsetM);
+      const heading = Number(current.headingDeg);
+      const scale = Number(current.scale);
+      const nextScale = delta.scaleMultiplier
+        ? Math.min(1.5, Math.max(0.5, (Number.isFinite(scale) ? scale : 1) * delta.scaleMultiplier))
+        : (Number.isFinite(scale) ? scale : 1);
+      return {
+        ...current,
+        eastOffsetM: formatFormNumber((Number.isFinite(east) ? east : 0) + (delta.eastM || 0), 4),
+        northOffsetM: formatFormNumber((Number.isFinite(north) ? north : 0) + (delta.northM || 0), 4),
+        verticalOffsetM: formatFormNumber((Number.isFinite(vertical) ? vertical : 0) + (delta.verticalM || 0), 4),
+        headingDeg: formatFormNumber(
+          normalizeHeading((Number.isFinite(heading) ? heading : 0) + (delta.headingDeg || 0)),
+          6,
+        ),
+        scale: formatFormNumber(nextScale, 6),
+      };
+    });
+    setError("");
+    setMessage("Fine alignment applied to the unsaved form. Confirm on the live map, then Save Geo V2 Draft.");
   }
 
   async function run(action: () => Promise<void>) {
@@ -578,18 +688,43 @@ export default function GeoMapper3DV2() {
                 <div><p className="eyebrow">WGS84 + RIGID BUILDING</p><h3>Integrated exact-placement preview</h3></div>
                 <div className="geo3d-preview-status"><strong>{renderModel?.variant || "building"}</strong><span>{renderModel?.name || "No active immutable preview"}</span></div>
               </div>
-              <GeoIntegratedAuthoringMap
-                apiKey={configuredMapsApiKey}
-                projectKey={selectedSlug}
-                modelUrl={renderModel?.url || null}
-                modelName={renderModel?.name || "Building"}
-                coordinate={previewCoordinate}
-                anchor={selectedAnchor}
-                placement={previewPlacement}
-                onCoordinateChange={setCoordinate}
-                onPreviewStateChange={setPreviewState}
-              />
-              <p className="geo3d-help">Click/drag the WGS84 marker for the real site anchor. Building movement is live: use heading plus East/North/Vertical metre offsets while the map stays north-up for visual alignment.</p>
+              <div className="geo-v2-exact-placement-grid">
+                <div className="geo-v2-map-column">
+                  <GeoIntegratedAuthoringMap
+                    apiKey={configuredMapsApiKey}
+                    projectKey={selectedSlug}
+                    modelUrl={renderModel?.url || null}
+                    modelName={renderModel?.name || "Building"}
+                    coordinate={previewCoordinate}
+                    anchor={selectedAnchor}
+                    placement={previewPlacement}
+                    alignmentCaptureId={guidedTargetId}
+                    alignmentTargets={guidedMapTargets}
+                    onCoordinateChange={setCoordinate}
+                    onAlignmentTargetCapture={captureGuidedTarget}
+                    onPreviewStateChange={setPreviewState}
+                  />
+                </div>
+                <GeoGuidedRigidAlignment
+                  modelUrl={renderModel?.url || null}
+                  modelName={renderModel?.name || "Building"}
+                  coordinate={previewCoordinate}
+                  anchor={selectedAnchor}
+                  pairs={guidedPairs}
+                  activeSourceId={guidedSourceId}
+                  activeTargetId={guidedTargetId}
+                  allowScale={guidedAllowScale}
+                  onActivateSource={setGuidedSourceId}
+                  onActivateTarget={setGuidedTargetId}
+                  onSourceCapture={captureGuidedSource}
+                  onClearPair={clearGuidedPair}
+                  onAllowScaleChange={setGuidedAllowScale}
+                  onApply={applyGuidedSolution}
+                  onFineAdjust={fineAdjustGuided}
+                />
+              </div>
+              <p className="geo3d-help">Normal map click/drag moves the WGS84 anchor. While a P1–P4 Map capture is active, the WGS84 anchor is locked and the next map click records only that real-site control point.</p>
+              <p className="geo3d-help">Guided alignment solves a rigid least-squares Building fit only. P1/P2 provide heading + East/North; P3/P4 expose residual error without homography, shear, or Building deformation.</p>
               <p className="geo3d-help">Verify is fail-closed: the current values must be saved, the selected source must be ACTIVE, the exact model anchor must be selected, and the same-map Building frame must render successfully.</p>
             </article>
           </section>
