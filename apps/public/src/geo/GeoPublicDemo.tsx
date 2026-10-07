@@ -167,7 +167,7 @@ function renderingTypeLabel(map: GoogleMap) {
 function webglTimeoutMessage(map: GoogleMap) {
   const renderingType = renderingTypeLabel(map);
   if (renderingType.includes("RASTER"))
-    return "Google Maps raster mode mila. Integrated 3D ke liye VECTOR rendering required hai.";
+    return "Google Maps raster mode mila after vector startup window. API key aur production JavaScript Vector Map ID same Cloud project me verify karein.";
   if (!browserSupportsWebGL())
     return "Browser WebGL unavailable hai. Hardware acceleration/WebGL enable karke reload karein.";
   return `Integrated vector WebGL context ${WEBGL_CONTEXT_TIMEOUT_MS / 1000}s me ready nahi hua (${renderingType}).`;
@@ -283,10 +283,6 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
           gestureHandling: "greedy",
           clickableIcons: false,
         });
-
-        const renderingType = renderingTypeLabel(map);
-        if (renderingType.includes("RASTER"))
-          throw new Error("Configured Google Maps Map ID raster mode de raha hai. JavaScript Vector Map ID required hai.");
 
         const scene = new THREE.Scene();
         const camera = new THREE.Camera();
