@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 const helper = fs.readFileSync("apps/public/src/geo/fullscreen-controls.ts", "utf8");
+const loader = fs.readFileSync("apps/public/src/geo/fullscreen-controls-loader.ts", "utf8");
 const css = fs.readFileSync("apps/public/src/geo/fullscreen-controls.css", "utf8");
 const html = fs.readFileSync("apps/public/index.html", "utf8");
 
@@ -36,7 +37,12 @@ test("customer camera controls use transparent glass styling", () => {
   assert.match(css, /backdrop-filter:\s*blur\(9px\)/);
 });
 
-test("fullscreen bridge assets are loaded by the public shell", () => {
+test("camera bridge is lazy-loaded only for public Geo routes", () => {
+  assert.match(loader, /parts\.length === 3/);
+  assert.match(loader, /parts\[0\] === "3Dprojects"/);
+  assert.match(loader, /parts\[2\] === "geo"/);
+  assert.match(loader, /import\("\.\/fullscreen-controls"\)/);
   assert.match(html, /\/src\/geo\/fullscreen-controls\.css/);
-  assert.match(html, /\/src\/geo\/fullscreen-controls\.ts/);
+  assert.match(html, /\/src\/geo\/fullscreen-controls-loader\.ts/);
+  assert.doesNotMatch(html, /src="\/src\/geo\/fullscreen-controls\.ts"/);
 });
