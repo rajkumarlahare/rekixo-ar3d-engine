@@ -55,8 +55,8 @@ test("admin discovers projects dynamically instead of assuming one tenant", () =
   assert.match(worker, /async function listProjects/);
   assert.match(worker, /\/api\/projects/);
   assert.match(worker, /ORDER BY p\.created_at ASC, p\.slug ASC/);
-  assert.match(admin, /fetch\(\`\$\{ADMIN_BASE_PATH\}\/api\/projects\`/);
-  assert.match(admin, /items\[0\]\?\.slug/);
+  assert.match(admin, /projects\("", "active", 100, 0\)/);
+  assert.match(admin, /result\.projects\[0\]\?\.slug/);
   assert.doesNotMatch(admin, /FIRST_PROJECT_SLUG/);
 });
 

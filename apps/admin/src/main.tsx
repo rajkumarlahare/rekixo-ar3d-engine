@@ -1,40 +1,36 @@
-import React, { Suspense, lazy, useEffect } from "react";
+import React, { Suspense, lazy, useEffect, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
-import "./source-pack/dashboard-link.css";
+import "./source-pack/source-pack-control-center.css";
+import EngineAdminShell from "./layout/EngineAdminShell";
 
 const EngineDashboard = lazy(() => import("./dashboard/EngineDashboard"));
 const SourcePackReview = lazy(() => import("./source-pack/SourcePackReview"));
 const ComponentMapper = lazy(() => import("./source-pack/ComponentMapper"));
-const GeoMapper3D = lazy(() => import("./geo/GeoMapper3DV2"));
+const BuildingWorkspace = lazy(() => import("./building/BuildingWorkspace"));
+const GeoWorkspace = lazy(() => import("./geo/GeoWorkspace"));
+const EngineReleases = lazy(() => import("./releases/EngineReleases"));
+const EngineAdvanced = lazy(() => import("./advanced/EngineAdvanced"));
 const PublishedViewer = lazy(() => import("./studio/PublishedViewer"));
 const CloudLogin = lazy(() => import("./CloudLogin"));
 
 function RouteLoading({ label }: { label: string }) {
   return (
-    <main className="route-loading">
+    <div className="route-loading">
+      <small>AUTOMATIC ENGINE</small>
       <p className="eyebrow">REKIXO AR3D ENGINE</p>
       <h1>{label}</h1>
-    </main>
+    </div>
   );
 }
 
-function DashboardRoute() {
-  const project = new URLSearchParams(window.location.search).get("project")?.trim().toLowerCase() || "";
+function AdminShellRoute({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <>
-      <EngineDashboard />
-      {project ? (
-        <a
-          className="source-pack-dashboard-link"
-          href={`/3Dprojects/source-pack?project=${encodeURIComponent(project)}`}
-        >
-          <small>AUTOMATIC ENGINE</small>
-          <strong>Review Source Pack</strong>
-          <span>Classify → choose geometry authority → seal</span>
-        </a>
-      ) : null}
-    </>
+    <EngineAdminShell>
+      <Suspense fallback={<RouteLoading label={label} />}>
+        {children}
+      </Suspense>
+    </EngineAdminShell>
   );
 }
 
@@ -43,7 +39,7 @@ function LegacyStudioRedirect() {
     window.location.replace(`/3Dprojects/source-pack${window.location.search}`);
   }, []);
 
-  return <RouteLoading label="Opening Automatic Engine…" />;
+  return <RouteLoading label="Opening Review Source Pack…" />;
 }
 
 function AdminRouter() {
@@ -57,34 +53,6 @@ function AdminRouter() {
     );
   }
 
-  if (path === "/3Dprojects/source-pack") {
-    return (
-      <Suspense fallback={<RouteLoading label="Opening Source Pack Review…" />}>
-        <SourcePackReview />
-      </Suspense>
-    );
-  }
-
-  if (path === "/3Dprojects/component-mapper") {
-    return (
-      <Suspense fallback={<RouteLoading label="Opening Component Mapper…" />}>
-        <ComponentMapper />
-      </Suspense>
-    );
-  }
-
-  if (path === "/3Dprojects/geo-mapper") {
-    return (
-      <Suspense fallback={<RouteLoading label="Opening 3D Geo Mapper…" />}>
-        <GeoMapper3D />
-      </Suspense>
-    );
-  }
-
-  if (path === "/3Dprojects/studio") {
-    return <LegacyStudioRedirect />;
-  }
-
   if (path === "/3Dprojects/login") {
     return (
       <Suspense fallback={<RouteLoading label="Opening Engine Admin sign-in…" />}>
@@ -93,10 +61,62 @@ function AdminRouter() {
     );
   }
 
+  if (path === "/3Dprojects/studio") {
+    return <LegacyStudioRedirect />;
+  }
+
+  if (path === "/3Dprojects/source-pack") {
+    return (
+      <AdminShellRoute label="Opening Source Pack…">
+        <SourcePackReview />
+      </AdminShellRoute>
+    );
+  }
+
+  if (path === "/3Dprojects/component-mapper") {
+    return (
+      <AdminShellRoute label="Opening Component Review…">
+        <ComponentMapper />
+      </AdminShellRoute>
+    );
+  }
+
+  if (path === "/3Dprojects/building") {
+    return (
+      <AdminShellRoute label="Opening Building workspace…">
+        <BuildingWorkspace />
+      </AdminShellRoute>
+    );
+  }
+
+  if (path === "/3Dprojects/geo-mapper") {
+    return (
+      <AdminShellRoute label="Opening 3D Geo Mapper…">
+        <GeoWorkspace />
+      </AdminShellRoute>
+    );
+  }
+
+  if (path === "/3Dprojects/releases") {
+    return (
+      <AdminShellRoute label="Opening immutable releases…">
+        <EngineReleases />
+      </AdminShellRoute>
+    );
+  }
+
+  if (path === "/3Dprojects/advanced") {
+    return (
+      <AdminShellRoute label="Opening Engine administration…">
+        <EngineAdvanced />
+      </AdminShellRoute>
+    );
+  }
+
   return (
-    <Suspense fallback={<RouteLoading label="Opening Engine projects…" />}>
-      <DashboardRoute />
-    </Suspense>
+    <AdminShellRoute label="Opening Engine overview…">
+      <EngineDashboard />
+    </AdminShellRoute>
   );
 }
 

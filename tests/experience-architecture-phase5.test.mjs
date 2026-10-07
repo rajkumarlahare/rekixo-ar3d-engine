@@ -131,9 +131,9 @@ test("dashboard distinguishes immutable Geo release from customer Geo website", 
   const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
 
   assert.match(dashboard, /geoReleases\(selectedSlug\)/);
-  assert.match(dashboard, /activeImmutableGeoRelease/);
-  assert.match(dashboard, /Active immutable Geo release/);
-  assert.match(dashboard, /Customer Geo website/);
+  assert.match(dashboard, /const activeGeo = geoState\?\.activeRelease/);
+  assert.match(dashboard, /geoPublicProjectPath\(selectedProject\.slug\)/);
+  assert.match(dashboard, /Open Geo Live/);
 });
 
 test("project hard-delete removes immutable Geo release state before Experiences and Building releases", () => {

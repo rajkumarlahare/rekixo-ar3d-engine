@@ -109,18 +109,19 @@ test("pending deletion freezes project recreation and project mutations", () => 
   );
 });
 
-test("Dashboard can discover and resume a cleanup after reload", () => {
-  const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
+test("Advanced control center can discover and resume a cleanup after reload", () => {
+  const advanced = read("apps/admin/src/advanced/EngineAdvanced.tsx");
   const cloud = read("apps/admin/src/studio/cloud.ts");
 
   assert.match(cloud, /export interface CloudDeletionJob/);
   assert.match(cloud, /export async function deletionStatus/);
   assert.match(cloud, /deletion-status/);
-  assert.match(dashboard, /Finish project cleanup/);
-  assert.match(dashboard, /Finish permanent cleanup/);
-  assert.match(dashboard, /deletionJob\?\.expectedProjectCount \?\? projects\.length/);
-  assert.match(dashboard, /CLEANUP PENDING/);
-  assert.match(dashboard, /DELETE ALL PROJECTS/);
+  assert.match(advanced, /deletionStatus\(\)/);
+  assert.match(advanced, /deleteAllProjects\(deletionJob\?\.expectedProjectCount \?\? projectCount, deleteConfirm\)/);
+  assert.match(advanced, /Finish pending permanent cleanup/);
+  assert.match(advanced, /Resume Permanent Cleanup/);
+  assert.match(advanced, /CLEANUP PENDING/);
+  assert.match(advanced, /DELETE ALL PROJECTS/);
 });
 
 test("delete-all does not mutate global Engine settings or authentication state", () => {

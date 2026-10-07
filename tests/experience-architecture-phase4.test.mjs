@@ -123,14 +123,18 @@ test("Geo Mapper edits the draft and no longer exposes direct live publication c
   assert.match(cloud, /export async function resetGeoDraft/);
 });
 
-test("Dashboard distinguishes editable Geo draft source from immutable customer Geo website", () => {
+test("control-center separates editable Geo V2 draft/source state from immutable customer Geo website state", () => {
   const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
+  const mapper = read("apps/admin/src/geo/GeoMapper3DV2.tsx");
 
-  assert.match(dashboard, /geoDraftState/);
-  assert.match(dashboard, /geoDraftSourceId/);
-  assert.match(dashboard, /Geo draft source/);
-  assert.match(dashboard, /Customer Geo website/);
-  assert.match(dashboard, /preview before draft upgrade/);
+  assert.match(mapper, /const \[sourceReleaseId, setSourceReleaseId\] = useState\(""\)/);
+  assert.match(mapper, /state\?\.draft/);
+  assert.match(mapper, /sourceBuildingReleaseId: sourceReleaseId/);
+  assert.match(mapper, /Historical Building release/);
+  assert.match(mapper, /Verification deliberately requires the active immutable Building release/);
+  assert.match(dashboard, /geoReleases\(selectedSlug\)/);
+  assert.match(dashboard, /geoPublicProjectPath\(selectedProject\.slug\)/);
+  assert.match(dashboard, /Open Geo Live/);
 });
 
 test("Phase 4 mutable Geo draft and legacy placement are not current public runtime sources", () => {

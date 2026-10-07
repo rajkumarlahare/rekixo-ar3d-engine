@@ -126,8 +126,9 @@ test("Geo publish and rollback become public immediately through active immutabl
   assert.match(mapper, /Publish verified draft se naya immutable Geo Release/);
   assert.match(mapper, /Activate \/ Rollback/);
 
-  assert.match(dashboard, /const activeImmutableGeoRelease = geoReleaseState\?\.activeRelease/);
-  assert.match(dashboard, /Customer Geo website/);
+  assert.match(dashboard, /const activeGeo = geoState\?\.activeRelease/);
+  assert.match(dashboard, /geoPublicProjectPath\(selectedProject\.slug\)/);
+  assert.match(dashboard, /Open Geo Live/);
   assert.doesNotMatch(dashboard, /geoPlacement\(selectedSlug\)/);
   assert.doesNotMatch(dashboard, /Public compatibility snapshot/);
 });
