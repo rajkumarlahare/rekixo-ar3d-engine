@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   activateGeoRelease,
   createGeoExperience,
@@ -14,13 +14,16 @@ import {
   type CloudProjectSummary,
   type CloudReleaseSummary,
 } from "../studio/cloud";
-import GeoModelPreview from "./GeoModelPreview";
+import GeoIntegratedAuthoringMap, {
+  type GeoIntegratedPreviewState,
+} from "./GeoIntegratedAuthoringMap";
 import {
   createGeoV2Anchor,
   loadGeoV2,
   saveGeoV2,
   type GeoAnchorKind,
   type GeoHeightMode,
+  type GeoV2Draft,
   type GeoV2State,
 } from "./geoV2Api";
 import "./geo-mapper.css";
@@ -65,33 +68,17 @@ type AnchorForm = {
   zM: string;
 };
 
-type LatLngLike = { lat(): number; lng(): number };
-type MapMouseEvent = { latLng?: LatLngLike | null };
-type GoogleMap = {
-  addListener(name: string, listener: (event: MapMouseEvent) => void): { remove(): void };
-  setCenter(position: { lat: number; lng: number }): void;
-  setZoom(zoom: number): void;
+type ParsedAlignment = {
+  altitudeM: number;
+  eastOffsetM: number;
+  northOffsetM: number;
+  verticalOffsetM: number;
+  headingDeg: number;
+  pitchDeg: number;
+  rollDeg: number;
+  scale: number;
+  heightMode: GeoHeightMode;
 };
-type GoogleMarker = {
-  setMap(map: GoogleMap | null): void;
-  setPosition(position: { lat: number; lng: number }): void;
-  addListener(name: string, listener: () => void): { remove(): void };
-  getPosition(): LatLngLike | null;
-};
-type GoogleRoot = {
-  maps: {
-    Map: new (node: HTMLElement, options: Record<string, unknown>) => GoogleMap;
-    Marker: new (options: Record<string, unknown>) => GoogleMarker;
-  };
-};
-
-type GeoWindow = Window & typeof globalThis & {
-  google?: GoogleRoot;
-  __rekixoEngineGeoV2MapsReady?: () => void;
-};
-
-let mapsPromise: Promise<GoogleRoot> | null = null;
-let mapsKeyLoaded = "";
 
 function requestedProjectSlug() {
   return new URLSearchParams(window.location.search)
@@ -105,11 +92,38 @@ function numberValue(value: string) {
   return Number.isFinite(result) ? result : NaN;
 }
 
+function inRange(value: number, min: number, max: number) {
+  return Number.isFinite(value) && value >= min && value <= max;
+}
+
 function validCoordinate(form: FormState) {
   const longitude = numberValue(form.longitude);
   const latitude = numberValue(form.latitude);
   return form.longitude.trim() !== "" && form.latitude.trim() !== "" &&
-    longitude >= -180 && longitude <= 180 && latitude >= -90 && latitude <= 90;
+    inRange(longitude, -180, 180) && inRange(latitude, -90, 90);
+}
+
+function parsedAlignment(form: FormState): ParsedAlignment | null {
+  const value: ParsedAlignment = {
+    altitudeM: numberValue(form.altitudeM),
+    eastOffsetM: numberValue(form.eastOffsetM),
+    northOffsetM: numberValue(form.northOffsetM),
+    verticalOffsetM: numberValue(form.verticalOffsetM),
+    headingDeg: numberValue(form.headingDeg),
+    pitchDeg: numberValue(form.pitchDeg),
+    rollDeg: numberValue(form.rollDeg),
+    scale: numberValue(form.scale),
+    heightMode: form.heightMode,
+  };
+  if (!inRange(value.altitudeM, -12000, 100000) ||
+    !inRange(value.headingDeg, -360000, 360000) ||
+    !inRange(value.pitchDeg, -180, 180) ||
+    !inRange(value.rollDeg, -180, 180) ||
+    !inRange(value.scale, 0.01, 100) ||
+    !inRange(value.eastOffsetM, -100000, 100000) ||
+    !inRange(value.northOffsetM, -100000, 100000) ||
+    !inRange(value.verticalOffsetM, -12000, 100000)) return null;
+  return value;
 }
 
 function blankForm(): FormState {
@@ -148,31 +162,27 @@ function formFromState(state: GeoV2State): FormState {
   };
 }
 
-function loadGoogleMaps(apiKey: string) {
-  const geoWindow = window as GeoWindow;
-  if (geoWindow.google?.maps?.Map && mapsKeyLoaded === apiKey)
-    return Promise.resolve(geoWindow.google);
-  if (mapsPromise && mapsKeyLoaded === apiKey) return mapsPromise;
-  mapsKeyLoaded = apiKey;
-  mapsPromise = new Promise<GoogleRoot>((resolve, reject) => {
-    const callback = "__rekixoEngineGeoV2MapsReady";
-    geoWindow[callback] = () => {
-      if (geoWindow.google?.maps?.Map) resolve(geoWindow.google);
-      else reject(new Error("Google Maps initialize nahi hui."));
-    };
-    document.getElementById("rekixo-engine-geo-v2-maps-js")?.remove();
-    const script = document.createElement("script");
-    script.id = "rekixo-engine-geo-v2-maps-js";
-    script.async = true;
-    script.defer = true;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&loading=async&callback=${callback}`;
-    script.onerror = () => {
-      mapsPromise = null;
-      reject(new Error("Google Maps load nahi hui."));
-    };
-    document.head.appendChild(script);
-  });
-  return mapsPromise;
+function draftMatchesForm(
+  draft: GeoV2Draft | null | undefined,
+  form: FormState,
+  sourceReleaseId: string,
+) {
+  if (!draft || !validCoordinate(form)) return false;
+  const alignment = parsedAlignment(form);
+  if (!alignment) return false;
+  return draft.sourceBuildingReleaseId === sourceReleaseId &&
+    draft.longitude === Number(form.longitude) &&
+    draft.latitude === Number(form.latitude) &&
+    draft.altitudeM === alignment.altitudeM &&
+    draft.eastOffsetM === alignment.eastOffsetM &&
+    draft.northOffsetM === alignment.northOffsetM &&
+    draft.verticalOffsetM === alignment.verticalOffsetM &&
+    draft.headingDeg === alignment.headingDeg &&
+    draft.pitchDeg === alignment.pitchDeg &&
+    draft.rollDeg === alignment.rollDeg &&
+    draft.scale === alignment.scale &&
+    draft.heightMode === alignment.heightMode &&
+    (draft.modelAnchorId || "") === form.modelAnchorId;
 }
 
 async function integration(slug: string) {
@@ -186,6 +196,20 @@ async function integration(slug: string) {
   return body;
 }
 
+function previewStateLabel(state: GeoIntegratedPreviewState) {
+  switch (state) {
+    case "ready": return "Integrated map preview rendered";
+    case "map-key-required": return "Save Google Maps browser key";
+    case "loading-map": return "Integrated 3D map is loading";
+    case "map-ready": return "Active immutable Building preview unavailable";
+    case "loading-model": return "Current Building placement is rendering";
+    case "waiting-coordinate": return "Set real WGS84 Building anchor";
+    case "waiting-anchor": return "Select exact Building-local model anchor";
+    case "invalid-alignment": return "Fix invalid rigid alignment values";
+    case "error": return "Integrated preview has an error";
+  }
+}
+
 export default function GeoMapper3DV2() {
   const [projectList, setProjectList] = useState<CloudProjectSummary[]>([]);
   const [selectedSlug, setSelectedSlug] = useState("");
@@ -196,20 +220,18 @@ export default function GeoMapper3DV2() {
   const [sourceReleaseId, setSourceReleaseId] = useState("");
   const [form, setForm] = useState<FormState>(blankForm);
   const [anchorForm, setAnchorForm] = useState<AnchorForm>({
-    name: "Main entrance",
-    kind: "entrance",
+    name: "Model origin",
+    kind: "custom",
     xM: "0",
     yM: "0",
     zM: "0",
   });
   const [mapsApiKey, setMapsApiKey] = useState("");
+  const [configuredMapsApiKey, setConfiguredMapsApiKey] = useState("");
+  const [previewState, setPreviewState] = useState<GeoIntegratedPreviewState>("loading-map");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const mapHostRef = useRef<HTMLDivElement | null>(null);
-  const markerRef = useRef<GoogleMarker | null>(null);
-  const formRef = useRef(form);
-  formRef.current = form;
 
   useEffect(() => {
     let live = true;
@@ -230,7 +252,10 @@ export default function GeoMapper3DV2() {
         if (!live || !payload) return;
         const [projectResult, maps] = payload;
         setProjectList(projectResult.projects);
-        if (maps.apiKey) setMapsApiKey(maps.apiKey);
+        if (maps.apiKey) {
+          setMapsApiKey(maps.apiKey);
+          setConfiguredMapsApiKey(maps.apiKey);
+        }
         const requested = requestedProjectSlug();
         setSelectedSlug(
           projectResult.projects.find((item) => item.slug === requested)?.slug ||
@@ -270,6 +295,7 @@ export default function GeoMapper3DV2() {
     setBusy(true);
     setError("");
     setMessage("");
+    setPreviewState("loading-map");
     void reload(selectedSlug)
       .catch((reason) => {
         if (live) setError(reason instanceof Error ? reason.message : "Geo V2 load nahi hua.");
@@ -300,69 +326,76 @@ export default function GeoMapper3DV2() {
       source && geo.sourceModelId === source.id) return geo;
     return source?.url && source.mimeType === "model/gltf-binary" ? source : null;
   }, [engine, sourcePreviewAvailable]);
+  const selectedAnchor = useMemo(
+    () => state?.anchors.find((anchor) =>
+      anchor.id === form.modelAnchorId &&
+      anchor.sourceBuildingReleaseId === sourceReleaseId,
+    ) || null,
+    [state?.anchors, form.modelAnchorId, sourceReleaseId],
+  );
+  const previewCoordinate = useMemo(
+    () => validCoordinate(form)
+      ? { latitude: Number(form.latitude), longitude: Number(form.longitude) }
+      : null,
+    [form.latitude, form.longitude],
+  );
+  const previewPlacement = useMemo(() => parsedAlignment(form), [
+    form.altitudeM,
+    form.eastOffsetM,
+    form.northOffsetM,
+    form.verticalOffsetM,
+    form.headingDeg,
+    form.pitchDeg,
+    form.rollDeg,
+    form.scale,
+    form.heightMode,
+  ]);
+  const savedForm = useMemo(
+    () => draftMatchesForm(state?.draft, form, sourceReleaseId),
+    [state?.draft, form, sourceReleaseId],
+  );
 
-  useEffect(() => {
-    if (!mapsApiKey || !mapHostRef.current) return;
-    let cancelled = false;
-    let mapClick: { remove(): void } | null = null;
-    let markerDrag: { remove(): void } | null = null;
-    let marker: GoogleMarker | null = null;
-    void loadGoogleMaps(mapsApiKey)
-      .then((google) => {
-        if (cancelled || !mapHostRef.current) return;
-        const hasCoords = validCoordinate(formRef.current);
-        const center = hasCoords
-          ? { lat: Number(formRef.current.latitude), lng: Number(formRef.current.longitude) }
-          : { lat: 20.5937, lng: 78.9629 };
-        const map = new google.maps.Map(mapHostRef.current, {
-          center,
-          zoom: hasCoords ? 19 : 5,
-          mapTypeId: "hybrid",
-          streetViewControl: false,
-          mapTypeControl: true,
-          fullscreenControl: true,
-          gestureHandling: "greedy",
-          tilt: 0,
-        });
-        marker = new google.maps.Marker({ map, position: center, draggable: true, title: "WGS84 Building anchor" });
-        markerRef.current = marker;
-        const setCoordinate = (lat: number, lng: number) => {
-          setForm((current) => ({ ...current, latitude: lat.toFixed(7), longitude: lng.toFixed(7) }));
-        };
-        mapClick = map.addListener("click", (event) => {
-          if (!event.latLng) return;
-          const next = { lat: event.latLng.lat(), lng: event.latLng.lng() };
-          marker?.setPosition(next);
-          setCoordinate(next.lat, next.lng);
-        });
-        markerDrag = marker.addListener("dragend", () => {
-          const next = marker?.getPosition();
-          if (next) setCoordinate(next.lat(), next.lng());
-        });
-      })
-      .catch((reason) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "Map load nahi hua.");
-      });
-    return () => {
-      cancelled = true;
-      mapClick?.remove();
-      markerDrag?.remove();
-      marker?.setMap(null);
-      markerRef.current = null;
-      mapHostRef.current?.replaceChildren();
-    };
-  }, [mapsApiKey, selectedSlug]);
+  const verificationBlocker = useMemo(() => {
+    if (!state?.draft) return "Geo draft missing hai.";
+    if (sourceReleaseId !== state.project.activeBuildingReleaseId)
+      return "Verification ke liye current ACTIVE Building release select karein.";
+    if (!previewCoordinate) return "Valid WGS84 latitude/longitude set karein.";
+    if (!previewPlacement) return "Rigid alignment values valid range me karein.";
+    if (!selectedAnchor) return "Exact Building-local model anchor select karein.";
+    if (!renderModel) return "Active immutable Building GLB preview available hona chahiye.";
+    if (!savedForm) return "Current map placement ko Save Geo V2 Draft karke revision lock karein.";
+    if (previewState !== "ready") return previewStateLabel(previewState);
+    return "";
+  }, [
+    state?.draft,
+    state?.project.activeBuildingReleaseId,
+    sourceReleaseId,
+    previewCoordinate,
+    previewPlacement,
+    selectedAnchor,
+    renderModel,
+    savedForm,
+    previewState,
+  ]);
 
-  useEffect(() => {
-    if (!validCoordinate(form)) return;
-    markerRef.current?.setPosition({
-      lat: Number(form.latitude),
-      lng: Number(form.longitude),
-    });
-  }, [form.longitude, form.latitude]);
+  const publishReady = Boolean(
+    state?.draft &&
+    geoReleaseState?.previewVerified &&
+    savedForm &&
+    sourceReleaseId === state.project.activeBuildingReleaseId &&
+    previewState === "ready",
+  );
 
   function patch<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function setCoordinate(latitude: number, longitude: number) {
+    setForm((current) => ({
+      ...current,
+      latitude: latitude.toFixed(7),
+      longitude: longitude.toFixed(7),
+    }));
   }
 
   async function run(action: () => Promise<void>) {
@@ -378,80 +411,80 @@ export default function GeoMapper3DV2() {
     }
   }
 
-  function draftBody(modelAnchorId = form.modelAnchorId || null) {
-    if (!state?.draft) throw new Error("Geo draft missing.");
-    if (!sourceReleaseId || !selectedRelease) throw new Error("Building release select karein.");
-    if (!validCoordinate(form)) throw new Error("Valid WGS84 longitude/latitude required hai.");
-    const numeric = {
-      altitudeM: numberValue(form.altitudeM),
-      eastOffsetM: numberValue(form.eastOffsetM),
-      northOffsetM: numberValue(form.northOffsetM),
-      verticalOffsetM: numberValue(form.verticalOffsetM),
-      headingDeg: numberValue(form.headingDeg),
-      pitchDeg: numberValue(form.pitchDeg),
-      rollDeg: numberValue(form.rollDeg),
-      scale: numberValue(form.scale),
-    };
-    if (Object.values(numeric).some((value) => !Number.isFinite(value)))
-      throw new Error("All Geo alignment values finite numbers hone chahiye.");
+  function draftBody(
+    modelAnchorId = form.modelAnchorId || null,
+    expectedRevision = state?.draft?.revision,
+  ) {
+    if (!state?.draft || expectedRevision === undefined)
+      throw new Error("Geo draft missing.");
+    if (!sourceReleaseId || !selectedRelease)
+      throw new Error("Building release select karein.");
+    if (!validCoordinate(form))
+      throw new Error("Valid WGS84 longitude/latitude required hai.");
+    const alignment = parsedAlignment(form);
+    if (!alignment)
+      throw new Error("Geo V2 rigid alignment values valid range me hone chahiye.");
     return {
-      expectedRevision: state.draft.revision,
+      expectedRevision,
       sourceBuildingReleaseId: sourceReleaseId,
       longitude: Number(form.longitude),
       latitude: Number(form.latitude),
-      ...numeric,
-      heightMode: form.heightMode,
+      ...alignment,
       modelAnchorId,
     };
   }
 
   async function save() {
     const next = await saveGeoV2(selectedSlug, draftBody());
-    setState(next);
-    setForm(formFromState(next));
-    setSourceReleaseId(next.draft?.sourceBuildingReleaseId || sourceReleaseId);
+    await reload(selectedSlug);
     setMessage(next.draft?.modelAnchorId
-      ? "WGS84 + ENU rigid alignment saved. Preview verify kar sakte hain."
+      ? "Current integrated WGS84 + ENU placement saved. Render complete hone ke baad verify karein."
       : "Alignment saved. Ab exact Building-local model anchor create/select karein.");
   }
 
   async function createAnchor() {
     if (!selectedRelease) throw new Error("Building release select karein.");
-    // Source ownership must be saved first. If the release changed, save with
-    // no anchor, reload, then create the new release-pinned anchor.
+    const anchorName = anchorForm.name.trim();
+    if (!anchorName) throw new Error("Model anchor name required hai.");
+    if (anchorName.length > 160) throw new Error("Model anchor name 160 characters se chhota rakhein.");
+
+    let workingRevision = state?.draft?.revision;
+    if (workingRevision === undefined) throw new Error("Geo draft missing.");
     if (state?.experience?.sourceBuildingReleaseId !== sourceReleaseId) {
-      const switched = await saveGeoV2(selectedSlug, draftBody(null));
-      setState(switched);
-      setForm(formFromState(switched));
+      const switched = await saveGeoV2(
+        selectedSlug,
+        draftBody(null, workingRevision),
+      );
+      workingRevision = switched.draft?.revision;
+      if (workingRevision === undefined)
+        throw new Error("Geo source switch ke baad draft revision missing hai.");
     }
+
     const values = [anchorForm.xM, anchorForm.yM, anchorForm.zM].map(Number);
-    if (values.some((value) => !Number.isFinite(value)))
-      throw new Error("Model anchor X/Y/Z canonical metres me finite hone chahiye.");
+    if (values.some((value) => !inRange(value, -100000, 100000)))
+      throw new Error("Model anchor X/Y/Z canonical metres me -100000 se 100000 ke beech hone chahiye.");
+
     const next = await createGeoV2Anchor(selectedSlug, {
       sourceBuildingReleaseId: sourceReleaseId,
       kind: anchorForm.kind,
-      name: anchorForm.name.trim(),
+      name: anchorName,
       xM: values[0],
       yM: values[1],
       zM: values[2],
     });
     const created = next.anchors.find((anchor) =>
       anchor.sourceBuildingReleaseId === sourceReleaseId &&
-      anchor.name === anchorForm.name.trim() &&
-      anchor.xM === values[0] && anchor.yM === values[1] && anchor.zM === values[2],
+      anchor.name === anchorName &&
+      anchor.xM === values[0] &&
+      anchor.yM === values[1] &&
+      anchor.zM === values[2],
     );
-    setState(next);
-    if (created) {
-      const selected = await saveGeoV2(selectedSlug, {
-        ...draftBody(created.id),
-        expectedRevision: next.draft?.revision ?? state?.draft?.revision ?? 0,
-      });
-      setState(selected);
-      setForm(formFromState(selected));
-      setMessage(`Model anchor “${created.name}” created and selected.`);
-    } else {
-      setMessage("Model anchor created. Select it and save alignment.");
-    }
+    if (!created) throw new Error("Created model anchor response me resolve nahi hua.");
+
+    const revision = next.draft?.revision ?? workingRevision;
+    await saveGeoV2(selectedSlug, draftBody(created.id, revision));
+    await reload(selectedSlug);
+    setMessage(`Model anchor “${created.name}” created, selected and draft-saved.`);
   }
 
   async function enableGeo() {
@@ -463,19 +496,17 @@ export default function GeoMapper3DV2() {
   }
 
   async function verify() {
-    if (!state?.draft?.modelAnchorId)
-      throw new Error("Explicit Building model anchor select karke save karein.");
-    if (sourceReleaseId !== state.project.activeBuildingReleaseId)
-      throw new Error("Preview verification ke liye selected Building release current active release hona chahiye.");
+    if (verificationBlocker) throw new Error(verificationBlocker);
+    if (!state?.draft) throw new Error("Geo draft missing.");
     await verifyGeoPreview(selectedSlug, state.draft.revision);
     await reload(selectedSlug);
-    setMessage("Current Geo V2 preview revision verified.");
+    setMessage("Current saved revision verified from the integrated same-map Building preview.");
   }
 
   async function publish() {
     if (!state?.draft) throw new Error("Geo draft missing.");
-    if (!geoReleaseState?.previewVerified)
-      throw new Error("Current Geo preview ko pehle verify karein.");
+    if (!publishReady)
+      throw new Error("Current saved revision ko integrated preview me render + verify karke publish karein.");
     await publishGeoRelease(selectedSlug, state.draft.revision);
     await reload(selectedSlug);
     setMessage("Immutable Geo V2 release published and activated.");
@@ -488,18 +519,13 @@ export default function GeoMapper3DV2() {
   }
 
   async function saveKey() {
-    if (!mapsApiKey.trim()) throw new Error("Google Maps browser key enter karein.");
-    await saveGeoMapsKey(mapsApiKey.trim());
-    setMessage("Google Maps browser key saved.");
+    const key = mapsApiKey.trim();
+    if (!key) throw new Error("Google Maps browser key enter karein.");
+    const saved = await saveGeoMapsKey(key);
+    setMapsApiKey(saved.apiKey);
+    setConfiguredMapsApiKey(saved.apiKey);
+    setMessage("Google Maps browser key saved. Integrated map is reloading with the saved key.");
   }
-
-  const previewPlacement = {
-    altitudeM: numberValue(form.verticalOffsetM) || 0,
-    headingDeg: numberValue(form.headingDeg) || 0,
-    pitchDeg: numberValue(form.pitchDeg) || 0,
-    rollDeg: numberValue(form.rollDeg) || 0,
-    scale: Math.max(0.001, numberValue(form.scale) || 1),
-  };
 
   return (
     <main className="geo3d-shell geo3d-v2-shell">
@@ -523,8 +549,8 @@ export default function GeoMapper3DV2() {
 
       <section className="geo3d-health">
         <article><span>BUILDING SOURCE</span><strong>{selectedRelease ? `v${selectedRelease.version}` : "—"}</strong><small>{sourcePreviewAvailable ? "Immutable preview available" : "Select active release for verification"}</small></article>
-        <article><span>GEO DRAFT</span><strong>{state?.draft ? `r${state.draft.revision}` : "Not enabled"}</strong><small>{state?.draft?.modelAnchorId ? "Explicit model anchor selected" : "Anchor required"}</small></article>
-        <article><span>VERIFICATION</span><strong>{geoReleaseState?.previewVerified ? "Verified" : "Pending"}</strong><small>Exact current revision only</small></article>
+        <article><span>GEO DRAFT</span><strong>{state?.draft ? `r${state.draft.revision}` : "Not enabled"}</strong><small>{savedForm ? "Current form matches saved revision" : "Unsaved placement changes"}</small></article>
+        <article><span>INTEGRATED PREVIEW</span><strong>{previewState === "ready" ? "Ready" : "Pending"}</strong><small>{previewStateLabel(previewState)}</small></article>
         <article><span>LIVE GEO</span><strong>{geoReleaseState?.activeRelease ? `v${geoReleaseState.activeRelease.version}` : "None"}</strong><small>Immutable Geo release</small></article>
       </section>
 
@@ -542,20 +568,29 @@ export default function GeoMapper3DV2() {
               <label><span>BUILDING RELEASE</span><select value={sourceReleaseId} disabled={busy} onChange={(event) => { setSourceReleaseId(event.target.value); patch("modelAnchorId", ""); }}>
                 {releaseItems.map((release) => <option key={release.id} value={release.id}>v{release.version}{release.active ? " · ACTIVE" : ""} · {release.id}</option>)}
               </select></label>
-              <div className="geo3d-source-note"><strong>{sourceReleaseId === state.project.activeBuildingReleaseId ? "Active Building release" : "Historical Building release"}</strong><span>Preview verification deliberately requires the selected source to be active, preventing unseen release drift.</span></div>
+              <div className="geo3d-source-note"><strong>{sourceReleaseId === state.project.activeBuildingReleaseId ? "Active Building release" : "Historical Building release"}</strong><span>Verification deliberately requires the active immutable Building release so authoring cannot approve an unseen source.</span></div>
             </div>
           </section>
 
-          <section className="geo3d-workspace">
-            <article className="geo3d-map-card">
-              <div className="geo3d-section-head"><div><p className="eyebrow">WGS84 TRUTH</p><h3>Geographic anchor</h3></div></div>
-              {mapsApiKey ? <div ref={mapHostRef} className="geo3d-map" /> : <div className="geo3d-map-placeholder"><strong>Google Maps key required</strong><span>Save the browser key below.</span></div>}
-              <p className="geo3d-help">Click/drag marker to set latitude/longitude. Fine placement uses ENU metre offsets, not repeated lat/lng nudging.</p>
-            </article>
-            <article className="geo3d-preview-card">
-              <div className="geo3d-section-head"><div><p className="eyebrow">RIGID MODEL PREVIEW</p><h3>Building orientation</h3></div><div className="geo3d-preview-status"><strong>{renderModel?.variant || "building"}</strong><span>{renderModel?.name || "No active preview"}</span></div></div>
-              <GeoModelPreview modelUrl={renderModel?.url || null} placement={previewPlacement} />
-              <p className="geo3d-help">Preview is rigid/uniform-scale only. Exact Building-local anchor is selected below and public Geo applies it in ENU.</p>
+          <section className="geo3d-workspace geo-v2-workspace--integrated">
+            <article className="geo3d-map-card geo-v2-integrated-card">
+              <div className="geo3d-section-head">
+                <div><p className="eyebrow">WGS84 + RIGID BUILDING</p><h3>Integrated exact-placement preview</h3></div>
+                <div className="geo3d-preview-status"><strong>{renderModel?.variant || "building"}</strong><span>{renderModel?.name || "No active immutable preview"}</span></div>
+              </div>
+              <GeoIntegratedAuthoringMap
+                apiKey={configuredMapsApiKey}
+                projectKey={selectedSlug}
+                modelUrl={renderModel?.url || null}
+                modelName={renderModel?.name || "Building"}
+                coordinate={previewCoordinate}
+                anchor={selectedAnchor}
+                placement={previewPlacement}
+                onCoordinateChange={setCoordinate}
+                onPreviewStateChange={setPreviewState}
+              />
+              <p className="geo3d-help">Click/drag the WGS84 marker for the real site anchor. Building movement is live: use heading plus East/North/Vertical metre offsets while the map stays north-up for visual alignment.</p>
+              <p className="geo3d-help">Verify is fail-closed: the current values must be saved, the selected source must be ACTIVE, the exact model anchor must be selected, and the same-map Building frame must render successfully.</p>
             </article>
           </section>
 
@@ -568,7 +603,7 @@ export default function GeoMapper3DV2() {
               <label><span>HEIGHT MODE</span><select value={form.heightMode} onChange={(event) => patch("heightMode", event.target.value as GeoHeightMode)}><option value="ground-clamped">ground-clamped</option><option value="ground-relative">ground-relative</option><option value="absolute">absolute</option></select></label>
               <label><span>MODEL ANCHOR</span><select value={form.modelAnchorId} onChange={(event) => patch("modelAnchorId", event.target.value)}><option value="">Select explicit anchor</option>{state.anchors.filter((anchor) => anchor.sourceBuildingReleaseId === sourceReleaseId).map((anchor) => <option key={anchor.id} value={anchor.id}>{anchor.name} · {anchor.kind}</option>)}</select></label>
             </div>
-            <div className="geo3d-save-row"><button className="geo3d-primary" disabled={busy} onClick={() => void run(save)}>Save Geo V2 Draft</button><span>Saving changes revision and invalidates prior preview verification.</span></div>
+            <div className="geo3d-save-row"><button className="geo3d-primary" disabled={busy || !previewCoordinate || !previewPlacement} onClick={() => void run(save)}>Save Geo V2 Draft</button><span>Every save advances the draft revision; verification applies only to that saved revision.</span></div>
           </section>
 
           <section className="geo3d-form-card">
@@ -578,15 +613,16 @@ export default function GeoMapper3DV2() {
               <label><span>KIND</span><select value={anchorForm.kind} onChange={(event) => setAnchorForm((current) => ({ ...current, kind: event.target.value as GeoAnchorKind }))}><option value="entrance">entrance</option><option value="main-gate">main-gate</option><option value="site-center">site-center</option><option value="south-west-corner">south-west-corner</option><option value="custom">custom</option></select></label>
               {(["xM", "yM", "zM"] as const).map((key) => <label key={key}><span>{key.toUpperCase()} · CANONICAL M</span><input value={anchorForm[key]} onChange={(event) => setAnchorForm((current) => ({ ...current, [key]: event.target.value }))} /></label>)}
             </div>
-            <p className="geo3d-help">These coordinates are measured in the immutable Building model's canonical metre frame. They are never guessed from map pixels.</p>
+            <p className="geo3d-help">Coordinates are measured in the immutable Building model's canonical metre frame. Keep “Model origin / custom / 0,0,0” unless a semantic gate/corner has actually been measured; map pixels are never used to guess Building-local coordinates.</p>
             <div className="geo3d-save-row"><button disabled={busy} onClick={() => void run(createAnchor)}>Create & Select Anchor</button></div>
           </section>
 
-          <section className="geo3d-form-card">
+          <section className="geo3d-form-card geo3d-release-card">
             <div className="geo3d-section-head"><div><p className="eyebrow">VERIFY → IMMUTABLE RELEASE</p><h3>Publication gate</h3></div></div>
             <div className="geo3d-save-row">
-              <button disabled={busy || !state.draft?.modelAnchorId} onClick={() => void run(verify)}>Verify Current Preview</button>
-              <button className="geo3d-primary" disabled={busy || !geoReleaseState?.previewVerified} onClick={() => void run(publish)}>Publish Immutable Geo Release</button>
+              <button disabled={busy || Boolean(verificationBlocker)} onClick={() => void run(verify)}>Verify Current Preview</button>
+              <button className="geo3d-primary" disabled={busy || !publishReady} onClick={() => void run(publish)}>Publish Immutable Geo Release</button>
+              <span className={verificationBlocker ? "geo-v2-verification-note geo-v2-verification-note--blocked" : "geo-v2-verification-note"}>{verificationBlocker || (geoReleaseState?.previewVerified ? "Current saved revision is verified and ready to publish." : "Integrated preview is ready. Verify this saved revision next.")}</span>
             </div>
             {!!geoReleaseState?.releases.length && <div className="geo-v2-release-list">{geoReleaseState.releases.map((release) => <article key={release.id}><div><strong>Geo v{release.version}{release.active ? " · LIVE" : ""}</strong><small>{release.id}</small></div>{!release.active && <button disabled={busy} onClick={() => void run(() => activate(release.id))}>Activate</button>}</article>)}</div>}
           </section>
@@ -596,6 +632,7 @@ export default function GeoMapper3DV2() {
       <section className="geo3d-form-card">
         <div className="geo3d-section-head"><div><p className="eyebrow">MAP PROVIDER</p><h3>Browser key</h3></div></div>
         <div className="geo3d-key-row"><input type="password" value={mapsApiKey} onChange={(event) => setMapsApiKey(event.target.value)} placeholder="Google Maps browser API key" /><button disabled={busy} onClick={() => void run(saveKey)}>Save Key</button></div>
+        <p className="geo3d-help">The authoring map uses only the last saved key, so editing this field cannot tear down a live placement session.</p>
       </section>
     </main>
   );
