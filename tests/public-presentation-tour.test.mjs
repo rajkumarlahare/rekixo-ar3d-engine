@@ -30,10 +30,12 @@ test("tour waits for the real viewer and stops on user interaction", () => {
   assert.match(tour, /addEventListener\("keydown", cancelFromUserInput, true\)/);
 });
 
-test("cinematic intro respects reduced-motion preference", () => {
+test("cinematic intro respects reduced-motion and uses semantic rail/camera selection", () => {
   assert.match(tour, /prefers-reduced-motion: reduce/);
-  assert.match(tour, /INTRO_CONTEXT_RAIL_INDEX/);
-  assert.match(tour, /INTRO_BUILDING_RAIL_INDEX/);
+  assert.match(tour, /activateRailMode\(stage, "context"\)/);
+  assert.match(tour, /activateRailMode\(stage, "building"\)/);
+  assert.match(tour, /shot\.kind === "hero"/);
+  assert.match(tour, /activateCamera\(stage, "hero"\)/);
 });
 
 test("tour UI is project-agnostic and responsive", () => {

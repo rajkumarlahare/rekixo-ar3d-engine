@@ -46,10 +46,15 @@ test("preview verification is bound to exact saved draft revision and active Bui
 
 test("immutable Geo publication freezes source Building identity and placement manifest", () => {
   const publish = read("workers/geo-release-publish.mjs");
+  const policy = read("workers/geo-presentation-policy.mjs");
 
-  assert.match(publish, /format: GEO_RELEASE_FORMAT/);
-  assert.match(publish, /sourceBuilding:/);
-  assert.match(publish, /placement:/);
+  assert.match(publish, /buildGeoPresentationManifestV1/);
+  assert.match(publish, /Geo V2 alignment schema is required/);
+  assert.match(publish, /model: source\.model/);
+  assert.match(policy, /format: GEO_FORMAT/);
+  assert.match(policy, /sourceBuilding:/);
+  assert.match(policy, /placement: placementFromGeoContext\(context\)/);
+  assert.match(policy, /return assertGeoPresentationManifestV1\(manifest\)/);
   assert.match(publish, /sourceDraftRevision: Number\(context\.revision\)/);
   assert.match(publish, /manifestSha256 = await digestHex\(manifestJson\)/);
   assert.match(publish, /INSERT INTO geo_releases_3d/);

@@ -1,3 +1,8 @@
+import {
+  assertBuildingPresentationManifestV1,
+  type BuildingPresentationManifestV1,
+} from "./building-presentation-manifest-v1";
+
 export type ReleaseAssetKindV1 = "model" | "media" | "studio";
 
 export interface ReleaseAssetV1 {
@@ -35,6 +40,7 @@ export interface ReleaseManifestV1 {
     camera?: Record<string, unknown>;
     model?: Record<string, unknown> & { releaseAssetId: string };
     mediaFiles: string[];
+    buildingPresentation?: BuildingPresentationManifestV1;
   };
   studio?: {
     project: Record<string, unknown>;
@@ -58,6 +64,13 @@ const uniqueTextArray = (value: unknown, maxItems = 500) =>
   value.length <= maxItems &&
   value.every((item) => text(item, 240)) &&
   new Set(value).size === value.length;
+
+function sameTextSet(left: readonly string[], right: readonly string[]) {
+  return (
+    left.length === right.length &&
+    left.every((value) => right.includes(value))
+  );
+}
 
 export function assertReleaseManifestV1(
   value: unknown,
@@ -107,12 +120,27 @@ export function assertReleaseManifestV1(
   )
     throw Error("Invalid release public experience.");
 
+  if (experience.buildingPresentation !== undefined)
+    assertBuildingPresentationManifestV1(experience.buildingPresentation);
+
   if (
     !sourceEvidence ||
     !uniqueTextArray(sourceEvidence.sourcePackSourceIds, 1000) ||
     !uniqueTextArray(sourceEvidence.sourceClaimIds, 5000)
   )
     throw Error("Invalid release source evidence.");
+
+  if (experience.buildingPresentation) {
+    const provenance = experience.buildingPresentation.provenance;
+    if (
+      !sameTextSet(
+        provenance.sourcePackSourceIds,
+        sourceEvidence.sourcePackSourceIds,
+      ) ||
+      !sameTextSet(provenance.sourceClaimIds, sourceEvidence.sourceClaimIds)
+    )
+      throw Error("Building presentation provenance does not match release source evidence.");
+  }
 
   if (!Array.isArray(assets) || assets.length > 5000)
     throw Error("Invalid release assets.");
@@ -150,6 +178,17 @@ export function assertReleaseManifestV1(
       !assetIds.has(experience.model.releaseAssetId))
   )
     throw Error("Release model asset is missing.");
+
+  if (experience.buildingPresentation && experience.model) {
+    const modelAsset = assets.find(
+      (asset) => asset.id === experience.model.releaseAssetId,
+    );
+    if (
+      modelAsset?.sha256 &&
+      modelAsset.sha256 !== experience.buildingPresentation.model.canonicalSha256
+    )
+      throw Error("Building presentation model checksum does not match immutable release model.");
+  }
 
   if (manifest.studio !== undefined) {
     const studioProject = manifest.studio?.project;

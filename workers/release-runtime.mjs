@@ -1,6 +1,7 @@
 import { assertReleaseAssetKey } from "./storage-boundary.mjs";
 import { serveR2Object } from "./http-range.mjs";
 import { validProjectSlug } from "../shared/project-slug-policy.js";
+import { sanitizeBuildingPresentationForRelease } from "./building-presentation-policy.mjs";
 const BASE_PATH = "/3Dprojects";
 const RELEASE_BASE = `${BASE_PATH}/api/releases`;
 
@@ -191,6 +192,24 @@ function validateManifestShape(
       !assetIds.has(model.releaseAssetId))
   )
     throw Error("Active release model payload is invalid.");
+
+  const buildingPresentation = manifest.experience.buildingPresentation;
+  if (buildingPresentation !== undefined) {
+    if (!model)
+      throw Error("Active Building presentation is missing its immutable model.");
+    const modelAsset = manifest.assets.find(
+      (asset) =>
+        asset.id === model.releaseAssetId &&
+        asset.kind === "model" &&
+        asset.logicalId === model.id,
+    );
+    if (!modelAsset?.sha256)
+      throw Error("Active Building presentation model is not checksum pinned.");
+    sanitizeBuildingPresentationForRelease(buildingPresentation, {
+      modelSha256: modelAsset.sha256,
+      sourceEvidence: manifest.sourceEvidence,
+    });
+  }
 
   const camera = manifest.experience.camera;
   if (
@@ -506,6 +525,9 @@ function publicExperience(manifest, manifestSha256) {
     camera: frozen.camera,
     model,
     mediaBaseUrl: `${RELEASE_BASE}/${encodeURIComponent(release.id)}/media`,
+    ...(frozen.buildingPresentation
+      ? { buildingPresentation: structuredClone(frozen.buildingPresentation) }
+      : {}),
     ...(walkthrough ? { walkthrough } : {}),
     release: {
       id: release.id,

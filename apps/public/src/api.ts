@@ -1,6 +1,8 @@
 import {
   PUBLIC_BASE_PATH,
+  assertBuildingPresentationManifestV1,
   assertPublic3DExperiencePayload,
+  type BuildingPresentationManifestV1,
   type Public3DExperience,
 } from "@rekixo/3d-contracts";
 import {
@@ -17,7 +19,10 @@ import {
 
 import { parseSourcePresentation, type SourcePresentation } from "./viewer/sourcePresentation";
 
-export type ClientExperience = Public3DExperience & { sourcePresentation?: SourcePresentation };
+export type ClientExperience = Public3DExperience & {
+  sourcePresentation?: SourcePresentation;
+  buildingPresentation?: BuildingPresentationManifestV1;
+};
 
 export class ExperienceApiError extends Error {
   status?: number;
@@ -84,6 +89,8 @@ export async function loadPublicExperience(
   const enriched = siteElements?.length ? { ...body, siteElements } : body;
   try {
     assertPublic3DExperiencePayload(enriched);
+    if (body.buildingPresentation !== undefined)
+      assertBuildingPresentationManifestV1(body.buildingPresentation);
   } catch (error) {
     clearPublicRuntimeSiteElements();
     clearSemanticInteriorRuntime();

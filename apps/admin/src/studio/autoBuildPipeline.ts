@@ -55,6 +55,18 @@ import {
   buildVisualFacadeMatchPlan,
   type VisualFacadeMatchPlan,
 } from "./visualFacadeMatching";
+import {
+  buildCirculationHierarchy,
+  type CirculationHierarchyReport,
+} from "./circulationHierarchy";
+import {
+  buildUnitHierarchy,
+  type UnitHierarchyReport,
+} from "./unitHierarchy";
+import {
+  buildAutomaticProcessingAcceptance,
+  type AutomaticProcessingAcceptance,
+} from "./automaticProcessingAcceptance";
 
 export interface AutoBuildPipelineOptions
   extends LegacyAutoBuildPipelineOptions {
@@ -79,11 +91,14 @@ export interface AutoBuildPipelineResult
   sourceIntelligence: DeepSourceIntelligenceReport;
   reconstructionPlan: BuildingReconstructionPlan;
   reconstructionExecution: BuildingReconstructionExecution;
+  circulationHierarchy: CirculationHierarchyReport;
+  unitHierarchy: UnitHierarchyReport;
   visualFacadeMatch: VisualFacadeMatchPlan;
   certificationReport: AutoBuildExecutionReport;
   sceneFingerprint: NormalizedSceneFingerprint;
   geometryIntegrity: SceneGeometryIntegrityReport;
   reviewQueue: ActionableReviewQueue;
+  processingAcceptance: AutomaticProcessingAcceptance;
 }
 
 function unique(values: readonly string[]) {
@@ -157,6 +172,13 @@ export async function runAutoBuildPipeline(
     ...structured.summary,
     parseIssues: parsedRoomSheets.issues.length,
   };
+  const circulationHierarchy = buildCirculationHierarchy(
+    structured.project.scene,
+  );
+  const unitHierarchy = buildUnitHierarchy(
+    structured.project.scene,
+    circulationHierarchy,
+  );
   const visualFacadeMatch = buildVisualFacadeMatchPlan(
     structured.project,
     audits,
@@ -170,6 +192,8 @@ export async function runAutoBuildPipeline(
     ...phase2.issues,
     ...parsedRoomSheets.issues,
     ...structured.issues,
+    ...circulationHierarchy.issues,
+    ...unitHierarchy.issues,
   ]);
   const reportFiles = [...files, ...base.assets].filter(
     (asset, index, all) => all.findIndex((candidate) => candidate.id === asset.id) === index,
@@ -194,6 +218,14 @@ export async function runAutoBuildPipeline(
     certificationReport,
     geometryIntegrity,
   );
+  const processingAcceptance = buildAutomaticProcessingAcceptance({
+    sourcePlan,
+    certificationReport,
+    geometryIntegrity,
+    circulationHierarchy,
+    unitHierarchy,
+    sceneFingerprint: sceneFingerprint.hash,
+  });
 
   return {
     ...base,
@@ -204,11 +236,14 @@ export async function runAutoBuildPipeline(
     sourceIntelligence,
     reconstructionPlan,
     reconstructionExecution,
+    circulationHierarchy,
+    unitHierarchy,
     visualFacadeMatch,
     certificationReport,
     sceneFingerprint,
     geometryIntegrity,
     reviewQueue,
+    processingAcceptance,
     issues,
   };
 }
@@ -243,6 +278,12 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
     : execution.skippedFloorIds.length
       ? ` · Phase 3 execution preserved ${execution.skippedFloorIds.length} floor${execution.skippedFloorIds.length === 1 ? "" : "s"} for review`
       : "";
+  const hierarchy = result.unitHierarchy;
+  const hierarchyText =
+    result.circulationHierarchy.counts.sourceBackedElements ||
+    hierarchy.counts.sourceBackedUnits
+      ? ` · hierarchy ${result.circulationHierarchy.counts.boundCores} circulation core${result.circulationHierarchy.counts.boundCores === 1 ? "" : "s"} bound · ${hierarchy.counts.sourceBackedUnits} source-backed unit${hierarchy.counts.sourceBackedUnits === 1 ? "" : "s"} · ${hierarchy.counts.circulationLinks} reviewed access link${hierarchy.counts.circulationLinks === 1 ? "" : "s"}`
+      : "";
   const visual = result.visualFacadeMatch;
   const visualText = visual.status === "unavailable"
     ? ""
@@ -250,9 +291,10 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   const certification = result.certificationReport;
   const certificationText = ` · certification ${certification.checkCoveragePercent}% (${certification.counts.blocked} blocked · ${certification.counts.needsReview} review)`;
   const integrityText = ` · geometry ${result.geometryIntegrity.counts.blocker} blocked · ${result.geometryIntegrity.counts.review} review`;
+  const acceptanceText = ` · R2 acceptance ${result.processingAcceptance.status}`;
   const replayText = ` · scene ${result.sceneFingerprint.hash.slice(0, 12)}…`;
 
-  return `${base}${phase2Text}${structuralText}${structuredText}${intelligenceText}${reconstructionText}${executionText}${visualText}${certificationText}${integrityText}${replayText}.`;
+  return `${base}${phase2Text}${structuralText}${structuredText}${intelligenceText}${reconstructionText}${executionText}${hierarchyText}${visualText}${certificationText}${integrityText}${acceptanceText}${replayText}.`;
 }
 
 /**
@@ -281,6 +323,9 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
  * buildDeepSourceIntelligence · sourceIntelligence · authorityMatrix
  * buildBuildingReconstructionPlan · reconstructionPlan · auto-ready
  * applyBuildingReconstructionPlan · reconstructionExecution · human-reviewed geometry
+ * buildCirculationHierarchy · circulationHierarchy · adjacent-floor source-backed stair/lift hierarchy
+ * buildUnitHierarchy · unitHierarchy · reviewed-door unit access evidence
+ * buildAutomaticProcessingAcceptance · processingAcceptance · fail-closed R2 acceptance
  * buildVisualFacadeMatchPlan · visualFacadeMatch · visual-non-metric
  * scene.publishModelId · scene.modelId
  */

@@ -9,6 +9,11 @@ import {
   publicStudioSnapshot,
   validateStudioDraft,
 } from "./studio-draft-validation.mjs";
+import { sanitizeBuildingPresentationForRelease } from "./building-presentation-policy.mjs";
+import {
+  buildAutomaticBuildingPresentation,
+  resolveCanonicalReleaseSource,
+} from "./automatic-building-release.mjs";
 
 const RELEASE_FORMAT = "rekixo-release-manifest";
 const RELEASE_VERSION = 1;
@@ -604,71 +609,157 @@ export async function buildAndActivateRelease(
       cloudDraft?.draft?.scene?.modelId;
     if (!frozenModel && studioReleaseModelId) {
       const studioModel = studioById.get(studioReleaseModelId);
-      if (!studioModel)
+      if (!studioModel && explicitStudioPublishModelId)
         throw Error("Studio release model asset metadata is missing.");
-      if (!/\.glb$/i.test(String(studioModel.name || "")))
-        throw Error("Studio customer release model must be a self-contained GLB.");
-      assertDraftAssetKey(
-        currentProject.slug,
-        studioModel.id,
-        studioModel.r2_key,
+      if (studioModel) {
+        if (!/\.glb$/i.test(String(studioModel.name || "")))
+          throw Error("Studio customer release model must be a self-contained GLB.");
+        assertDraftAssetKey(
+          currentProject.slug,
+          studioModel.id,
+          studioModel.r2_key,
+        );
+        const targetKey = `projects/${currentProject.slug}/releases/${releaseId}/models/${safeSegment(
+          studioModel.id,
+        )}`;
+        assertReleaseAssetKey(
+          currentProject.slug,
+          releaseId,
+          "model",
+          studioModel.id,
+          targetKey,
+        );
+        const copied = await copyImmutableObject(env, {
+          sourceKey: studioModel.r2_key,
+          targetKey,
+          project: currentProject,
+          releaseId,
+          releaseVersion: version,
+          kind: "model",
+          logicalId: studioModel.id,
+          name: studioModel.name,
+          mimeType: studioModel.mime_type,
+          sha256: studioModel.sha256,
+        });
+        createdKeys.push(targetKey);
+        releaseAssets.push(copied);
+        frozenModel = {
+          id: studioModel.id,
+          projectId: currentProject.id,
+          name: studioModel.name,
+          version,
+          byteSize: copied.manifest.byteSize,
+          sourceFilename: studioModel.name,
+          mimeType: copied.manifest.mimeType,
+          releaseAssetId: copied.manifest.id,
+        };
+        if (explicitStudioPublishModelId && experience.scenes.length) {
+          experience.scenes = experience.scenes.map((scene) =>
+            scene.modelId
+              ? { ...scene, modelId: studioModel.id }
+              : scene,
+          );
+        }
+      }
+    }
+
+    let automaticCanonical = null;
+    if (!frozenModel && cloudDraft) {
+      automaticCanonical = await resolveCanonicalReleaseSource(
+        env,
+        currentProject,
+        cloudDraft.draft,
       );
-      const targetKey = `projects/${currentProject.slug}/releases/${releaseId}/models/${safeSegment(
-        studioModel.id,
-      )}`;
-      assertReleaseAssetKey(
-        currentProject.slug,
-        releaseId,
-        "model",
-        studioModel.id,
-        targetKey,
-      );
-      const copied = await copyImmutableObject(env, {
-        sourceKey: studioModel.r2_key,
-        targetKey,
-        project: currentProject,
-        releaseId,
-        releaseVersion: version,
-        kind: "model",
-        logicalId: studioModel.id,
-        name: studioModel.name,
-        mimeType: studioModel.mime_type,
-        sha256: studioModel.sha256,
-      });
-      createdKeys.push(targetKey);
-      releaseAssets.push(copied);
-      frozenModel = {
-        id: studioModel.id,
-        projectId: currentProject.id,
-        name: studioModel.name,
-        version,
-        byteSize: copied.manifest.byteSize,
-        sourceFilename: studioModel.name,
-        mimeType: copied.manifest.mimeType,
-        releaseAssetId: copied.manifest.id,
-      };
-      if (explicitStudioPublishModelId && experience.scenes.length) {
+      if (automaticCanonical) {
+        const canonicalModelId = "canonical_building";
+        const targetKey = `projects/${currentProject.slug}/releases/${releaseId}/models/${canonicalModelId}`;
+        assertReleaseAssetKey(
+          currentProject.slug,
+          releaseId,
+          "model",
+          canonicalModelId,
+          targetKey,
+        );
+        const copied = await copyImmutableObject(env, {
+          sourceKey: automaticCanonical.modelArtifact.r2_key,
+          targetKey,
+          project: currentProject,
+          releaseId,
+          releaseVersion: version,
+          kind: "model",
+          logicalId: canonicalModelId,
+          name: "Canonical Building",
+          mimeType: "model/gltf-binary",
+          sha256: automaticCanonical.modelArtifact.sha256,
+        });
+        createdKeys.push(targetKey);
+        releaseAssets.push(copied);
+        frozenModel = {
+          id: canonicalModelId,
+          projectId: currentProject.id,
+          name: "Canonical Building",
+          version,
+          byteSize: copied.manifest.byteSize,
+          sourceFilename:
+            automaticCanonical.manifest.geometryAuthority?.filename ?? "canonical-model.glb",
+          mimeType: copied.manifest.mimeType,
+          releaseAssetId: copied.manifest.id,
+        };
         experience.scenes = experience.scenes.map((scene) =>
-          scene.modelId
-            ? { ...scene, modelId: studioModel.id }
-            : scene,
+          scene.modelId ? { ...scene, modelId: canonicalModelId } : scene,
         );
       }
-      if (!experience.scenes.length) {
-        experience.scenes.push({
-          id: `release_scene_${currentProject.id}`,
-          projectId: currentProject.id,
-          name: "Project Navigation",
-          type: "project-navigation",
-          modelId: studioModel.id,
-          sortOrder: 10,
-          enabled: true,
-          settings: {
-            status: "ready",
-            source: "immutable-studio-release",
-          },
-        });
-      }
+    }
+
+    if (frozenModel && !experience.scenes.length) {
+      experience.scenes.push({
+        id: `release_scene_${currentProject.id}`,
+        projectId: currentProject.id,
+        name: "Project Navigation",
+        type: "project-navigation",
+        modelId: frozenModel.id,
+        sortOrder: 10,
+        enabled: true,
+        settings: {
+          status: "ready",
+          source: automaticCanonical
+            ? "canonical-processing-release"
+            : "immutable-studio-release",
+        },
+      });
+    }
+
+    const sourceEvidence = sourceEvidenceFromDraft(cloudDraft?.draft);
+    const presentationCandidate = cloudDraft?.draft?.scene?.buildingPresentation;
+    let buildingPresentation;
+    if (presentationCandidate !== undefined || automaticCanonical) {
+      if (!frozenModel)
+        throw Error("Building presentation requires an immutable release model.");
+      const frozenModelAsset = releaseAssets
+        .map((asset) => asset.manifest)
+        .find(
+          (asset) =>
+            asset.kind === "model" &&
+            asset.id === frozenModel.releaseAssetId,
+        );
+      if (!validSha256(frozenModelAsset?.sha256))
+        throw Error(
+          "Building presentation requires a SHA-256 pinned immutable release model.",
+        );
+      const candidate = presentationCandidate !== undefined
+        ? presentationCandidate
+        : await buildAutomaticBuildingPresentation({
+            canonical: automaticCanonical,
+            draft: cloudDraft?.draft,
+            sourceEvidence,
+          });
+      buildingPresentation = sanitizeBuildingPresentationForRelease(
+        candidate,
+        {
+          modelSha256: String(frozenModelAsset.sha256).toLowerCase(),
+          sourceEvidence,
+        },
+      );
     }
 
     const manifest = {
@@ -695,12 +786,13 @@ export async function buildAndActivateRelease(
         scenes: experience.scenes,
         ...(experience.camera ? { camera: experience.camera } : {}),
         ...(frozenModel ? { model: frozenModel } : {}),
+        ...(buildingPresentation ? { buildingPresentation } : {}),
         mediaFiles,
       },
       ...(publicStudioProject
         ? { studio: { project: publicStudioProject } }
         : {}),
-      sourceEvidence: sourceEvidenceFromDraft(cloudDraft?.draft),
+      sourceEvidence,
       assets: releaseAssets.map((asset) => asset.manifest),
     };
 
