@@ -174,7 +174,8 @@ test("R6 Geo WebGL runtime is vector, watchdog-protected, and avoids premature r
     assert.doesNotMatch(source, /DEMO_MAP_ID/);
   }
 
-  assert.match(integrated, /configuredMapId \? \{ mapId: configuredMapId \} : \{\}/);
+  assert.match(integrated, /mapId:\s*configuredMapId/);
+  assert.match(integrated, /!apiKey \|\| !configuredMapId \|\| !hostRef\.current/);
   assert.match(integrated, /setMapFailure\(webglTimeoutMessage\(map\)\)/);
   assert.doesNotMatch(integrated, /failIfRaster/);
 

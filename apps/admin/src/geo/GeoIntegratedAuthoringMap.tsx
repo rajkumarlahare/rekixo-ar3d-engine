@@ -38,6 +38,7 @@ type Props = {
 type MapsListener = { remove(): void };
 type LatLngLike = { lat(): number; lng(): number };
 type MapMouseEvent = { latLng?: LatLngLike | null };
+type MapCapabilities = { isWebGLOverlayViewAvailable?: boolean };
 type GoogleMap = {
   addListener(name: "click", listener: (event: MapMouseEvent) => void): MapsListener;
   addListener(name: string, listener: () => void): MapsListener;
@@ -45,6 +46,7 @@ type GoogleMap = {
   setZoom(zoom: number): void;
   moveCamera?(options: Record<string, unknown>): void;
   getRenderingType?(): string;
+  getMapCapabilities?(): MapCapabilities;
 };
 type GoogleMapConstructor = {
   new (node: HTMLElement, options: Record<string, unknown>): GoogleMap;
@@ -64,6 +66,7 @@ type WebGLDrawOptions = {
 };
 type WebGLContextOptions = { gl: WebGLRenderingContext };
 type GoogleWebGLOverlay = {
+  onAdd?: () => void;
   onContextRestored?: (options: WebGLContextOptions) => void;
   onDraw?: (options: WebGLDrawOptions) => void;
   onContextLost?: () => void;
@@ -170,6 +173,9 @@ function renderingTypeLabel(map: GoogleMap) {
 }
 
 function webglTimeoutMessage(map: GoogleMap) {
+  const capabilities = map.getMapCapabilities?.();
+  if (capabilities?.isWebGLOverlayViewAvailable === false)
+    return "Configured Google Maps Map ID WebGLOverlayView support expose nahi kar raha. JavaScript Vector Map ID, billing aur browser hardware acceleration verify karein.";
   const renderingType = renderingTypeLabel(map);
   if (renderingType.includes("RASTER"))
     return "Google Maps raster mode mila after vector startup window. API key aur production JavaScript Vector Map ID same Cloud project me verify karein.";
@@ -302,7 +308,7 @@ export default function GeoIntegratedAuthoringMap({
   }, []);
 
   useEffect(() => {
-    if (!apiKey || !hostRef.current) {
+    if (!apiKey || !configuredMapId || !hostRef.current) {
       setMapReady(false);
       return;
     }
@@ -342,7 +348,7 @@ export default function GeoIntegratedAuthoringMap({
           zoom: initial ? 19 : 5,
           tilt: initial ? 55 : 0,
           heading: 0,
-          ...(configuredMapId ? { mapId: configuredMapId } : {}),
+          mapId: configuredMapId,
           renderingType: google.maps.RenderingType?.VECTOR || "VECTOR",
           tiltInteractionEnabled: true,
           headingInteractionEnabled: false,
@@ -398,6 +404,10 @@ export default function GeoIntegratedAuthoringMap({
 
         overlay = new WebGLOverlayView();
         overlayRef.current = overlay;
+        overlay.onAdd = () => {
+          if (cancelled) return;
+          setMapFailure("");
+        };
         overlay.onContextRestored = ({ gl }) => {
           if (cancelled) return;
           contextRestored = true;
@@ -406,7 +416,7 @@ export default function GeoIntegratedAuthoringMap({
           const renderer = new THREE.WebGLRenderer({
             canvas: gl.canvas as HTMLCanvasElement,
             context: gl,
-            antialias: true,
+            ...(gl.getContextAttributes() || {}),
           });
           renderer.autoClear = false;
           renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -623,16 +633,15 @@ export default function GeoIntegratedAuthoringMap({
 
   const status = mapFailure || modelFailure || (
     !apiKey ? "Google Maps browser key save karein." :
-      !mapReady || !webglReady ? "Integrated 3D map initialize ho rahi hai…" :
-        !coordinate ? "Map par Building ka real WGS84 anchor set karein." :
-          !modelUrl ? "Active immutable Building release select karein." :
-            !modelReady ? `Immutable Building load ho rahi hai: ${modelName}` :
-              !anchor ? "Exact Building-local model anchor select karein." :
-                !placement ? "Geo alignment values valid range me karein." :
-                  !frameReady ? "Current placement map par render ho rahi hai…" :
-                    configuredMapId
-                      ? "Integrated Building preview ready · production vector Map ID"
-                      : "Integrated Building preview ready · direct VECTOR authoring mode; production Map ID save karke verify karein."
+      !configuredMapId ? "Production JavaScript Vector Map ID save karein." :
+        !mapReady || !webglReady ? "Integrated 3D map initialize ho rahi hai…" :
+          !coordinate ? "Map par Building ka real WGS84 anchor set karein." :
+            !modelUrl ? "Active immutable Building release select karein." :
+              !modelReady ? `Immutable Building load ho rahi hai: ${modelName}` :
+                !anchor ? "Exact Building-local model anchor select karein." :
+                  !placement ? "Geo alignment values valid range me karein." :
+                    !frameReady ? "Current placement map par render ho rahi hai…" :
+                      "Integrated Building preview ready · production vector Map ID"
   );
 
   return (
@@ -665,7 +674,7 @@ export default function GeoIntegratedAuthoringMap({
         <small className={mapIdFailure ? "geo-v2-map-id-note geo-v2-map-id-note--error" : "geo-v2-map-id-note"}>
           {mapIdFailure || mapIdMessage || (configuredMapId
             ? "Production Map ID configured. Verify/Publish can use the same vector runtime as Public Geo."
-            : "Authoring requests VECTOR rendering directly. Save your production Vector Map ID before Verify.")}
+            : "Production JavaScript Vector Map ID is required for integrated Building rendering and Verify/Publish.")}
         </small>
       </div>
     </div>
