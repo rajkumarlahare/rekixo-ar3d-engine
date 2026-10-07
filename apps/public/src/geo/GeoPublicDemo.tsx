@@ -72,8 +72,10 @@ type GeoPayload = {
   error?: string;
 };
 
+type MapsListener = { remove(): void };
 type MapCapabilities = { isWebGLOverlayViewAvailable?: boolean };
 type GoogleMap = {
+  addListener(name: string, listener: () => void): MapsListener;
   setCenter(position: { lat: number; lng: number }): void;
   moveCamera?(options: Record<string, unknown>): void;
   getRenderingType?(): string;
@@ -245,6 +247,7 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
     if (!hostRef.current || !data.maps.apiKey || !data.maps.mapId) return;
     let cancelled = false;
     let overlay: GoogleWebGLOverlay | undefined;
+    let mapIdle: MapsListener | undefined;
     let renderer: THREE.WebGLRenderer | undefined;
     let loadedModel: THREE.Object3D | undefined;
     let root: THREE.Group | undefined;
@@ -347,6 +350,7 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
             ...(gl.getContextAttributes() || {}),
           });
           renderer.autoClear = false;
+          renderer.autoClearDepth = false;
           renderer.outputColorSpace = THREE.SRGBColorSpace;
           renderer.toneMapping = THREE.ACESFilmicToneMapping;
           renderer.toneMappingExposure = 0.95;
@@ -361,10 +365,9 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
             altitude: mapAltitude(data),
           });
           camera.projectionMatrix.fromArray(projection);
-          renderer.resetState();
+          gl.disable(gl.SCISSOR_TEST);
           renderer.render(scene, camera);
           renderer.resetState();
-          gl.flush();
         };
         overlay.onContextLost = () => {
           contextRestored = false;
@@ -382,6 +385,9 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
           renderer = undefined;
         };
         overlay.setMap(map);
+        mapIdle = map.addListener("idle", () => {
+          overlay?.requestRedraw();
+        });
         armContextTimer();
         map.moveCamera?.({
           center,
@@ -404,6 +410,7 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
     return () => {
       cancelled = true;
       clearContextTimer();
+      mapIdle?.remove();
       overlay?.setMap(null);
       renderer?.dispose();
       if (loadedModel) disposeObject(loadedModel);
