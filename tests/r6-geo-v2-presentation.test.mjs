@@ -160,7 +160,7 @@ test("R6 Admin Geo V2 uses one same-map WebGL Building preview and fail-closed v
   assert.match(mapper, /Current map placement ko Save Geo V2 Draft/);
 });
 
-test("R6 Geo WebGL authoring and public runtime force vector rendering and fail closed on context stalls", () => {
+test("R6 Geo WebGL runtime is vector, watchdog-protected, and uses explicit Map IDs", () => {
   const integrated = fs.readFileSync("apps/admin/src/geo/GeoIntegratedAuthoringMap.tsx", "utf8");
   const publicGeo = fs.readFileSync("apps/public/src/geo/GeoPublicDemo.tsx", "utf8");
 
@@ -170,8 +170,31 @@ test("R6 Geo WebGL authoring and public runtime force vector rendering and fail 
     assert.match(source, /browserSupportsWebGL/);
     assert.match(source, /renderingTypeLabel/);
     assert.match(source, /renderer\.resetState\(\)/);
-    assert.doesNotMatch(source, /mapId:\s*"DEMO_MAP_ID"/);
   }
+  assert.match(integrated, /Map\.DEMO_MAP_ID/);
+  assert.match(integrated, /mapId:\s*effectiveMapId/);
+  assert.match(integrated, /PRODUCTION VECTOR MAP ID/);
   assert.match(integrated, /setMapFailure\(webglTimeoutMessage\(map\)\)/);
+
+  assert.match(publicGeo, /mapId:\s*data\.maps\.mapId/);
+  assert.match(publicGeo, /Production Google Maps JavaScript Vector Map ID is not configured/);
   assert.match(publicGeo, /setFailure\(webglTimeoutMessage\(map\)\)/);
+  assert.doesNotMatch(publicGeo, /DEMO_MAP_ID/);
+});
+
+test("R6 production Geo verification requires an Engine-owned JavaScript Vector Map ID", () => {
+  const config = fs.readFileSync("workers/geo-maps-config.mjs", "utf8");
+  const entry = fs.readFileSync("workers/admin-entry.mjs", "utf8");
+  const verifier = fs.readFileSync("workers/geo-release-verify.mjs", "utf8");
+  const publicWorker = fs.readFileSync("workers/public.mjs", "utf8");
+
+  assert.match(config, /google_maps_map_id/);
+  assert.match(config, /GOOGLE_MAPS_MAP_ID/);
+  assert.match(config, /engineAdminReadAccess/);
+  assert.match(config, /Same-origin request required/);
+  assert.match(config, /geo\.maps_map_id_updated/);
+  assert.match(entry, /handleGeoMapsConfigRequest/);
+  assert.match(verifier, /Production Google Maps JavaScript Vector Map ID save karein before Geo verification/);
+  assert.match(publicWorker, /mapIdConfigured/);
+  assert.match(publicWorker, /Boolean\(mapsApiKey && mapsMapId\)/);
 });
