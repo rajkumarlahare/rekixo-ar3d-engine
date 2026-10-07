@@ -1,0 +1,63 @@
+.geo3d-v2-shell .geo3d-form-grid select {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid #2b4058;
+  border-radius: 10px;
+  outline: none;
+  background: #07111c;
+  color: #e7eff8;
+  font: inherit;
+}
+
+.geo3d-v2-shell .geo3d-form-grid select:focus {
+  border-color: var(--geo-gold-strong);
+  box-shadow: 0 0 0 3px rgba(244, 185, 66, .09);
+}
+
+.geo-v2-release-list {
+  margin-top: 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.geo-v2-release-list article {
+  min-height: 56px;
+  padding: 9px 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #2b3847;
+  border-radius: 10px;
+  background: #080f17;
+}
+
+.geo-v2-release-list article > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.geo-v2-release-list strong {
+  color: #eef4fb;
+  font-size: 12px;
+}
+
+.geo-v2-release-list small {
+  color: #75889c;
+  overflow-wrap: anywhere;
+}
+
+.geo-v2-release-list button {
+  min-height: 34px;
+  padding: 6px 10px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(244, 185, 66, .35);
+  border-radius: 8px;
+  background: rgba(244, 185, 66, .1);
+  color: #ffe1a0;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+}
