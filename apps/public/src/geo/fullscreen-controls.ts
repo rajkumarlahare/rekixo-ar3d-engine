@@ -165,3 +165,5 @@ const structureObserver = new MutationObserver(scheduleHeaderToolbar);
 structureObserver.observe(document.documentElement, { childList: true, subtree: true });
 
 scheduleHeaderToolbar();
+
+export {};
