@@ -52,7 +52,13 @@ type GeoPayload = {
     qualityTiers?: string[];
     buildingTransform?: string;
   };
-  maps: { apiKey: string | null; configured: boolean };
+  maps: {
+    apiKey: string | null;
+    mapId: string | null;
+    apiKeyConfigured?: boolean;
+    mapIdConfigured?: boolean;
+    configured: boolean;
+  };
   model: {
     id: string;
     name: string;
@@ -231,7 +237,7 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
   const [failure, setFailure] = useState("");
 
   useEffect(() => {
-    if (!hostRef.current || !data.maps.apiKey) return;
+    if (!hostRef.current || !data.maps.apiKey || !data.maps.mapId) return;
     let cancelled = false;
     let overlay: GoogleWebGLOverlay | undefined;
     let renderer: THREE.WebGLRenderer | undefined;
@@ -267,7 +273,10 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
           zoom: 19,
           tilt: 67.5,
           heading: data.placement.headingDeg,
+          mapId: data.maps.mapId,
           renderingType: google.maps.RenderingType?.VECTOR || "VECTOR",
+          tiltInteractionEnabled: true,
+          headingInteractionEnabled: true,
           mapTypeControl: true,
           streetViewControl: false,
           fullscreenControl: true,
@@ -277,7 +286,7 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
 
         const renderingType = renderingTypeLabel(map);
         if (renderingType.includes("RASTER"))
-          throw new Error("Google Maps raster mode mila. Integrated 3D ke liye VECTOR rendering required hai.");
+          throw new Error("Configured Google Maps Map ID raster mode de raha hai. JavaScript Vector Map ID required hai.");
 
         const scene = new THREE.Scene();
         const camera = new THREE.Camera();
@@ -482,6 +491,11 @@ export default function GeoPublicDemo() {
     `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
       `${data.placement.anchor.latitude.toFixed(7)},${data.placement.anchor.longitude.toFixed(7)}`,
     )}`;
+  const mapFallbackReason = !data.maps.apiKey
+    ? "Google Maps browser key is not configured"
+    : !data.maps.mapId
+      ? "Production Google Maps JavaScript Vector Map ID is not configured"
+      : "Integrated Google Maps runtime is not configured";
 
   return (
     <main className="jio-public-shell">
@@ -524,7 +538,7 @@ export default function GeoPublicDemo() {
         </article>
       </section>
 
-      {data.maps.configured ? (
+      {data.maps.configured && data.maps.apiKey && data.maps.mapId ? (
         <IntegratedGeoScene data={data} />
       ) : (
         <section className="geo-integrated-scene geo-integrated-scene--fallback">
@@ -536,7 +550,7 @@ export default function GeoPublicDemo() {
           />
           <div className="geo-quality-badge">
             <span>GEO FALLBACK</span>
-            <strong>Map provider key is not configured</strong>
+            <strong>{mapFallbackReason}</strong>
           </div>
         </section>
       )}
