@@ -5,6 +5,7 @@ import {
 import {
   assertGeoBuildingSource,
   requireGeoDraftReady,
+  requireProductionVectorMapId,
 } from "./geo-release-verify.mjs";
 import { buildGeoPresentationManifestV1 } from "./geo-presentation-policy.mjs";
 
@@ -28,6 +29,7 @@ export async function publishGeoRelease(
   if (project.status === "archived")
     throw Error("Restore the project before publishing Geo.");
 
+  await requireProductionVectorMapId(env);
   const context = await geoContext(env, project);
   await requireGeoDraftReady(env, context);
   if (Number(context.revision) !== Number(expectedDraftRevision))
