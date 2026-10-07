@@ -1,13 +1,14 @@
 import React, { Suspense, lazy, useEffect, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
+import "./source-pack/source-pack-control-center.css";
 import EngineAdminShell from "./layout/EngineAdminShell";
 
 const EngineDashboard = lazy(() => import("./dashboard/EngineDashboard"));
 const SourcePackReview = lazy(() => import("./source-pack/SourcePackReview"));
 const ComponentMapper = lazy(() => import("./source-pack/ComponentMapper"));
 const BuildingWorkspace = lazy(() => import("./building/BuildingWorkspace"));
-const GeoMapper3D = lazy(() => import("./geo/GeoMapper3DV2"));
+const GeoWorkspace = lazy(() => import("./geo/GeoWorkspace"));
 const EngineReleases = lazy(() => import("./releases/EngineReleases"));
 const EngineAdvanced = lazy(() => import("./advanced/EngineAdvanced"));
 const PublishedViewer = lazy(() => import("./studio/PublishedViewer"));
@@ -90,7 +91,7 @@ function AdminRouter() {
   if (path === "/3Dprojects/geo-mapper") {
     return (
       <AdminShellRoute label="Opening 3D Geo Mapper…">
-        <GeoMapper3D />
+        <GeoWorkspace />
       </AdminShellRoute>
     );
   }
