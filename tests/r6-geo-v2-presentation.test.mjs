@@ -181,7 +181,7 @@ test("R6 Geo WebGL runtime is vector, watchdog-protected, and avoids premature r
   assert.match(publicGeo, /mapId:\s*data\.maps\.mapId/);
   assert.match(publicGeo, /Production Google Maps JavaScript Vector Map ID is not configured/);
   assert.match(publicGeo, /setFailure\(webglTimeoutMessage\(map\)\)/);
-  assert.doesNotMatch(publicGeo, /const renderingType = renderingTypeLabel\(map\)/);
+  assert.doesNotMatch(publicGeo, /Configured Google Maps Map ID raster mode de raha hai/);
 });
 
 test("R6 production Geo verify and publish require an Engine-owned JavaScript Vector Map ID", () => {
