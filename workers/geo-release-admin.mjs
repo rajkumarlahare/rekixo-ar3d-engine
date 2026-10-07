@@ -1,5 +1,7 @@
 const GEO_RELEASE_FORMAT = "rekixo-geo-release";
 const GEO_RELEASE_VERSION = 1;
+const GEO_PRESENTATION_FORMAT = "rekixo.geo-presentation";
+const GEO_PRESENTATION_VERSION = 1;
 const encoder = new TextEncoder();
 
 async function digestHex(value) {
@@ -9,26 +11,88 @@ async function digestHex(value) {
   return Array.from(digest, (item) => item.toString(16).padStart(2, "0")).join("");
 }
 
-export async function geoReleaseSchemaReady(env) {
+async function schemaObjects(env, names) {
   try {
+    const placeholders = names.map(() => "?").join(",");
     const rows = await env.DB.prepare(
       `SELECT name FROM sqlite_master
-        WHERE type='table'
-          AND name IN (
-            'geo_draft_verifications_3d',
-            'geo_releases_3d',
-            'geo_experience_active_releases_3d',
-            'geo_release_activations_3d'
-          )`,
+        WHERE type='table' AND name IN (${placeholders})`,
+    ).bind(...names).all();
+    return new Set((rows.results || []).map((row) => row.name));
+  } catch {
+    return new Set();
+  }
+}
+
+export async function geoReleaseSchemaReady(env) {
+  const required = [
+    "geo_draft_verifications_3d",
+    "geo_releases_3d",
+    "geo_experience_active_releases_3d",
+    "geo_release_activations_3d",
+  ];
+  const found = await schemaObjects(env, required);
+  return required.every((name) => found.has(name));
+}
+
+export async function geoV2AlignmentSchemaReady(env) {
+  const required = [
+    "geo_model_anchors_3d",
+    "geo_overlays_3d",
+    "geo_control_points_3d",
+    "geo_calibration_reports_3d",
+    "geo_site_boundaries_3d",
+  ];
+  const found = await schemaObjects(env, required);
+  if (!required.every((name) => found.has(name))) return false;
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT name FROM pragma_table_info('geo_experience_drafts_3d')
+        WHERE name IN (
+          'height_mode','east_offset_m','north_offset_m',
+          'vertical_offset_m','model_anchor_id'
+        )`,
     ).all();
-    return new Set((rows.results || []).map((row) => row.name)).size === 4;
+    return new Set((rows.results || []).map((row) => row.name)).size === 5;
   } catch {
     return false;
   }
 }
 
 async function geoContext(env, project) {
-  return env.DB.prepare(
+  if (await geoV2AlignmentSchemaReady(env)) {
+    return env.DB.prepare(
+      `SELECT e.id AS experienceId,e.lifecycle,
+              d.source_building_release_id AS sourceBuildingReleaseId,
+              d.source_building_release_version AS sourceBuildingReleaseVersion,
+              d.longitude,d.latitude,d.altitude_m AS altitudeM,
+              d.heading_deg AS headingDeg,d.pitch_deg AS pitchDeg,
+              d.roll_deg AS rollDeg,d.scale,d.revision,
+              d.height_mode AS heightMode,
+              d.east_offset_m AS eastOffsetM,
+              d.north_offset_m AS northOffsetM,
+              d.vertical_offset_m AS verticalOffsetM,
+              d.model_anchor_id AS modelAnchorId,
+              a.kind AS modelAnchorKind,a.name AS modelAnchorName,
+              a.x_m AS modelAnchorXM,a.y_m AS modelAnchorYM,a.z_m AS modelAnchorZM,
+              ar.geo_release_id AS activeGeoReleaseId
+         FROM experiences_3d e
+         LEFT JOIN geo_experience_drafts_3d d
+           ON d.experience_id=e.id AND d.project_id=e.project_id
+         LEFT JOIN geo_model_anchors_3d a
+           ON a.id=d.model_anchor_id
+          AND a.experience_id=e.id
+          AND a.project_id=e.project_id
+          AND a.source_building_release_id=d.source_building_release_id
+          AND a.source_building_release_version=d.source_building_release_version
+         LEFT JOIN geo_experience_active_releases_3d ar
+           ON ar.experience_id=e.id AND ar.project_id=e.project_id
+        WHERE e.project_id=? AND e.type='geo'
+        LIMIT 1`,
+    ).bind(project.id).first();
+  }
+
+  const legacy = await env.DB.prepare(
     `SELECT e.id AS experienceId,e.lifecycle,
             d.source_building_release_id AS sourceBuildingReleaseId,
             d.source_building_release_version AS sourceBuildingReleaseVersion,
@@ -44,6 +108,20 @@ async function geoContext(env, project) {
       WHERE e.project_id=? AND e.type='geo'
       LIMIT 1`,
   ).bind(project.id).first();
+  if (!legacy) return legacy;
+  return {
+    ...legacy,
+    heightMode: "ground-relative",
+    eastOffsetM: 0,
+    northOffsetM: 0,
+    verticalOffsetM: Number(legacy.altitudeM || 0),
+    modelAnchorId: null,
+    modelAnchorKind: null,
+    modelAnchorName: null,
+    modelAnchorXM: null,
+    modelAnchorYM: null,
+    modelAnchorZM: null,
+  };
 }
 
 async function buildingRelease(env, projectId, releaseId) {
@@ -100,6 +178,7 @@ export async function listGeoReleases(env, project) {
   if (!context?.experienceId)
     return {
       schemaReady: true,
+      v2AlignmentReady: await geoV2AlignmentSchemaReady(env),
       experienceId: null,
       draftRevision: null,
       previewVerified: false,
@@ -128,6 +207,7 @@ export async function listGeoReleases(env, project) {
 
   return {
     schemaReady: true,
+    v2AlignmentReady: await geoV2AlignmentSchemaReady(env),
     experienceId: context.experienceId,
     draftRevision:
       context.revision === null || context.revision === undefined
@@ -151,9 +231,12 @@ export async function listGeoReleases(env, project) {
 export const geoReleaseInternals = {
   GEO_RELEASE_FORMAT,
   GEO_RELEASE_VERSION,
+  GEO_PRESENTATION_FORMAT,
+  GEO_PRESENTATION_VERSION,
   digestHex,
   geoContext,
   buildingRelease,
   releaseSummary,
   verificationForCurrentDraft,
+  geoV2AlignmentSchemaReady,
 };
