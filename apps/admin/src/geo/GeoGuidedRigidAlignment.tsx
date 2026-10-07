@@ -230,7 +230,6 @@ export default function GeoGuidedRigidAlignment({
         </div>
         <div className="geo-v2-guided-fine-grid">
           <button type="button" onClick={() => onFineAdjust({ northM: moveStep })}>N +{moveStep}m</button>
-          <button type="button" onClick={() => onFineAdjust({ west: undefined } as never)} hidden aria-hidden="true" />
           <button type="button" onClick={() => onFineAdjust({ eastM: -moveStep })}>W −{moveStep}m</button>
           <button type="button" onClick={() => onFineAdjust({ eastM: moveStep })}>E +{moveStep}m</button>
           <button type="button" onClick={() => onFineAdjust({ northM: -moveStep })}>S −{moveStep}m</button>
@@ -238,8 +237,8 @@ export default function GeoGuidedRigidAlignment({
           <button type="button" onClick={() => onFineAdjust({ verticalM: -moveStep })}>Down −{moveStep}m</button>
           <button type="button" onClick={() => onFineAdjust({ headingDeg: -rotateStep })}>Rotate −{rotateStep}°</button>
           <button type="button" onClick={() => onFineAdjust({ headingDeg: rotateStep })}>Rotate +{rotateStep}°</button>
-          <button type="button" onClick={() => onFineAdjust({ scaleMultiplier: 0.999 })}>Scale −0.1%</button>
-          <button type="button" onClick={() => onFineAdjust({ scaleMultiplier: 1.001 })}>Scale +0.1%</button>
+          <button type="button" disabled={!allowScale} onClick={() => onFineAdjust({ scaleMultiplier: 0.999 })}>Scale −0.1%</button>
+          <button type="button" disabled={!allowScale} onClick={() => onFineAdjust({ scaleMultiplier: 1.001 })}>Scale +0.1%</button>
         </div>
       </div>
     </aside>
