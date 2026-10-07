@@ -2,20 +2,24 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-const source = fs.readFileSync("apps/public/src/geo/GeoPublicDemo.tsx", "utf8");
-const css = fs.readFileSync("apps/public/src/geo/geo-public-demo.css", "utf8");
+const helper = fs.readFileSync("apps/public/src/geo/fullscreen-controls.ts", "utf8");
+const css = fs.readFileSync("apps/public/src/geo/fullscreen-controls.css", "utf8");
+const html = fs.readFileSync("apps/public/index.html", "utf8");
 
-test("public Geo owns fullscreen so customer controls remain visible", () => {
-  assert.match(source, /fullscreenControl:\s*false/);
-  assert.match(source, /requestFullscreen/);
-  assert.match(source, /document\.exitFullscreen/);
-  assert.match(source, /fullscreenchange/);
-  assert.match(source, /geo-fullscreen-toggle/);
-  assert.match(source, /ref=\{sceneRef\}/);
+test("public Geo mirrors camera controls into Google native fullscreen", () => {
+  assert.match(helper, /fullscreenchange/);
+  assert.match(helper, /document\.fullscreenElement/);
+  assert.match(helper, /cloneNode\(true\)/);
+  assert.match(helper, /sourceButtons\[index\]\?\.click\(\)/);
+  assert.match(helper, /geo-camera-toolbar--fullscreen-clone/);
 });
 
-test("fullscreen and mobile CSS preserve map and camera controls", () => {
-  assert.match(css, /\.geo-integrated-scene:fullscreen/);
-  assert.match(css, /\.geo-fullscreen-toggle/);
-  assert.match(css, /@media \(max-width: 640px\)[\s\S]*?\.geo-camera-toolbar\s*\{[\s\S]*?top:\s*68px/);
+test("mobile camera strip stays below Google Map\/Satellite controls", () => {
+  assert.match(css, /@media \(max-width: 640px\)[\s\S]*?top:\s*68px\s*!important/);
+  assert.match(css, /z-index:\s*2147483646\s*!important/);
+});
+
+test("fullscreen bridge assets are loaded by the public shell", () => {
+  assert.match(html, /\/src\/geo\/fullscreen-controls\.css/);
+  assert.match(html, /\/src\/geo\/fullscreen-controls\.ts/);
 });
