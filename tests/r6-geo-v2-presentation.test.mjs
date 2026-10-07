@@ -136,7 +136,26 @@ test("R6 admin authoring requires explicit canonical model anchor before verify"
   assert.match(api, /source_building_release_version/);
   assert.match(api, /model_anchor_id/);
   assert.match(api, /Same-origin request required/);
-  assert.match(mapper, /Explicit Building model anchor/);
+  assert.match(mapper, /Exact Building-local model anchor/);
   assert.match(mapper, /Verify Current Preview/);
-  assert.match(mapper, /canonical metres/i);
+  assert.match(mapper, /canonical metre/i);
+});
+
+test("R6 Admin Geo V2 uses one same-map WebGL Building preview and fail-closed verification", () => {
+  const mapper = fs.readFileSync("apps/admin/src/geo/GeoMapper3DV2.tsx", "utf8");
+  const integrated = fs.readFileSync("apps/admin/src/geo/GeoIntegratedAuthoringMap.tsx", "utf8");
+  const publicTransform = fs.readFileSync("apps/public/src/geo/geoRigidTransform.ts", "utf8");
+  const sharedTransform = fs.readFileSync("packages/engine-core/src/geo-rigid-placement.ts", "utf8");
+
+  assert.match(mapper, /GeoIntegratedAuthoringMap/);
+  assert.doesNotMatch(mapper, /GeoModelPreview/);
+  assert.match(integrated, /WebGLOverlayView/);
+  assert.match(integrated, /buildGeoRigidPlacementPlan/);
+  assert.match(publicTransform, /buildGeoRigidPlacementPlan/);
+  assert.match(sharedTransform, /uniform scale/i);
+  assert.match(mapper, /draftMatchesForm/);
+  assert.match(mapper, /previewState !== "ready"/);
+  assert.match(mapper, /verificationBlocker/);
+  assert.match(mapper, /configuredMapsApiKey/);
+  assert.match(mapper, /Current map placement ko Save Geo V2 Draft/);
 });
