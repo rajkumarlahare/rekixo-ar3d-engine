@@ -46,6 +46,10 @@ type GoogleMap = {
   moveCamera?(options: Record<string, unknown>): void;
   getRenderingType?(): string;
 };
+type GoogleMapConstructor = {
+  new (node: HTMLElement, options: Record<string, unknown>): GoogleMap;
+  DEMO_MAP_ID?: string;
+};
 type GoogleMarker = {
   setMap(map: GoogleMap | null): void;
   setPosition(position: { lat: number; lng: number }): void;
@@ -70,7 +74,7 @@ type GoogleWebGLOverlay = {
 };
 type GoogleRoot = {
   maps: {
-    Map: new (node: HTMLElement, options: Record<string, unknown>) => GoogleMap;
+    Map: GoogleMapConstructor;
     Marker: new (options: Record<string, unknown>) => GoogleMarker;
     WebGLOverlayView?: new () => GoogleWebGLOverlay;
     RenderingType?: { VECTOR?: string; RASTER?: string; UNINITIALIZED?: string };
@@ -79,6 +83,11 @@ type GoogleRoot = {
 type GeoWindow = Window & typeof globalThis & {
   google?: GoogleRoot;
   __rekixoEngineGeoV2MapsReady?: () => void;
+};
+type MapIdSettings = {
+  mapId: string | null;
+  configured: boolean;
+  error?: string;
 };
 
 type PlacementNodes = {
@@ -89,6 +98,7 @@ type PlacementNodes = {
 
 const INDIA_FALLBACK = { lat: 20.5937, lng: 78.9629 };
 const WEBGL_CONTEXT_TIMEOUT_MS = 12_000;
+const MAP_ID_CONFIG_URL = "/3Dprojects/api/geo-v2/maps-config";
 let mapsPromise: Promise<GoogleRoot> | null = null;
 let mapsKeyLoaded = "";
 
@@ -118,6 +128,33 @@ function loadGoogleMaps(apiKey: string) {
     document.head.appendChild(script);
   });
   return mapsPromise;
+}
+
+async function readMapIdSettings() {
+  const response = await fetch(MAP_ID_CONFIG_URL, {
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  const body = (await response.json().catch(() => ({}))) as MapIdSettings;
+  if (!response.ok)
+    throw new Error(body.error || `Google Maps Map ID settings load failed (${response.status}).`);
+  return body;
+}
+
+async function writeMapIdSetting(mapId: string) {
+  const response = await fetch(MAP_ID_CONFIG_URL, {
+    method: "PUT",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ mapId }),
+  });
+  const body = (await response.json().catch(() => ({}))) as MapIdSettings;
+  if (!response.ok)
+    throw new Error(body.error || `Google Maps Map ID save failed (${response.status}).`);
+  return body;
 }
 
 function browserSupportsWebGL() {
@@ -235,11 +272,35 @@ export default function GeoIntegratedAuthoringMap({
   const [frameReady, setFrameReady] = useState(false);
   const [mapFailure, setMapFailure] = useState("");
   const [modelFailure, setModelFailure] = useState("");
+  const [mapIdInput, setMapIdInput] = useState("");
+  const [configuredMapId, setConfiguredMapId] = useState("");
+  const [mapIdBusy, setMapIdBusy] = useState(false);
+  const [mapIdMessage, setMapIdMessage] = useState("");
+  const [mapIdFailure, setMapIdFailure] = useState("");
 
   coordinateRef.current = coordinate;
   placementRef.current = placement;
   coordinateChangeRef.current = onCoordinateChange;
   previewStateChangeRef.current = onPreviewStateChange;
+
+  useEffect(() => {
+    let live = true;
+    setMapIdFailure("");
+    void readMapIdSettings()
+      .then((value) => {
+        if (!live) return;
+        const mapId = value.mapId?.trim() || "";
+        setMapIdInput(mapId);
+        setConfiguredMapId(mapId);
+      })
+      .catch((reason) => {
+        if (!live) return;
+        setMapIdFailure(
+          reason instanceof Error ? reason.message : "Production Map ID settings load nahi hui.",
+        );
+      });
+    return () => { live = false; };
+  }, []);
 
   useEffect(() => {
     if (!apiKey || !hostRef.current) {
@@ -278,12 +339,17 @@ export default function GeoIntegratedAuthoringMap({
         const center = initial
           ? { lat: initial.latitude, lng: initial.longitude }
           : INDIA_FALLBACK;
+        const effectiveMapId =
+          configuredMapId || google.maps.Map.DEMO_MAP_ID || "DEMO_MAP_ID";
         const map = new google.maps.Map(hostRef.current, {
           center,
           zoom: initial ? 19 : 5,
           tilt: initial ? 55 : 0,
           heading: 0,
+          mapId: effectiveMapId,
           renderingType: google.maps.RenderingType?.VECTOR || "VECTOR",
+          tiltInteractionEnabled: true,
+          headingInteractionEnabled: false,
           streetViewControl: false,
           mapTypeControl: true,
           fullscreenControl: true,
@@ -429,7 +495,7 @@ export default function GeoIntegratedAuthoringMap({
       nodesRef.current = null;
       if (hostRef.current) hostRef.current.replaceChildren();
     };
-  }, [apiKey, projectKey]);
+  }, [apiKey, projectKey, configuredMapId]);
 
   useEffect(() => {
     if (!mapReady || !sceneRef.current || !modelUrl) {
@@ -546,6 +612,30 @@ export default function GeoIntegratedAuthoringMap({
     mapRef.current?.moveCamera?.({ tilt: 60, heading: 0, zoom: 19 });
   };
 
+  const saveProductionMapId = async () => {
+    const mapId = mapIdInput.trim();
+    if (!/^[A-Za-z0-9_-]{8,80}$/.test(mapId)) {
+      setMapIdFailure("Valid Google Maps JavaScript Vector Map ID enter karein.");
+      return;
+    }
+    setMapIdBusy(true);
+    setMapIdFailure("");
+    setMapIdMessage("");
+    try {
+      const saved = await writeMapIdSetting(mapId);
+      const next = saved.mapId?.trim() || mapId;
+      setMapIdInput(next);
+      setConfiguredMapId(next);
+      setMapIdMessage("Production Vector Map ID saved. Integrated map reload ho rahi hai.");
+    } catch (reason) {
+      setMapIdFailure(
+        reason instanceof Error ? reason.message : "Production Map ID save nahi hua.",
+      );
+    } finally {
+      setMapIdBusy(false);
+    }
+  };
+
   const status = mapFailure || modelFailure || (
     !apiKey ? "Google Maps browser key save karein." :
       !mapReady || !webglReady ? "Integrated 3D map initialize ho rahi hai…" :
@@ -555,20 +645,43 @@ export default function GeoIntegratedAuthoringMap({
               !anchor ? "Exact Building-local model anchor select karein." :
                 !placement ? "Geo alignment values valid range me karein." :
                   !frameReady ? "Current placement map par render ho rahi hai…" :
-                    "Integrated Building preview ready"
+                    configuredMapId
+                      ? "Integrated Building preview ready · production vector Map ID"
+                      : "Integrated Building preview ready · DEMO vector Map ID; production Map ID save karke verify karein."
   );
 
   return (
     <div className="geo-v2-integrated-authoring">
-      <div ref={hostRef} className="geo3d-map geo-v2-integrated-map" aria-label="Integrated 3D Geo authoring map" />
-      <div className="geo-v2-map-tools" aria-label="Geo map view controls">
-        <button type="button" disabled={!mapReady} onClick={recenter}>Recenter</button>
-        <button type="button" disabled={!mapReady} onClick={setTopView}>Top</button>
-        <button type="button" disabled={!mapReady} onClick={setThreeDView}>3D</button>
+      <div className="geo-v2-integrated-map-shell">
+        <div ref={hostRef} className="geo3d-map geo-v2-integrated-map" aria-label="Integrated 3D Geo authoring map" />
+        <div className="geo-v2-map-tools" aria-label="Geo map view controls">
+          <button type="button" disabled={!mapReady} onClick={recenter}>Recenter</button>
+          <button type="button" disabled={!mapReady} onClick={setTopView}>Top</button>
+          <button type="button" disabled={!mapReady} onClick={setThreeDView}>3D</button>
+        </div>
+        <div className={`geo-v2-map-status${mapFailure || modelFailure ? " geo-v2-map-status--error" : ""}`} role="status">
+          <span>AUTHORING PREVIEW</span>
+          <strong>{status}</strong>
+        </div>
       </div>
-      <div className={`geo-v2-map-status${mapFailure || modelFailure ? " geo-v2-map-status--error" : ""}`} role="status">
-        <span>AUTHORING PREVIEW</span>
-        <strong>{status}</strong>
+      <div className="geo-v2-map-id-config">
+        <label>
+          <span>PRODUCTION VECTOR MAP ID</span>
+          <input
+            value={mapIdInput}
+            onChange={(event) => setMapIdInput(event.target.value)}
+            placeholder="Google Maps JavaScript Vector Map ID"
+            autoComplete="off"
+          />
+        </label>
+        <button type="button" disabled={mapIdBusy} onClick={() => void saveProductionMapId()}>
+          {mapIdBusy ? "Saving…" : "Save Map ID"}
+        </button>
+        <small className={mapIdFailure ? "geo-v2-map-id-note geo-v2-map-id-note--error" : "geo-v2-map-id-note"}>
+          {mapIdFailure || mapIdMessage || (configuredMapId
+            ? "Production Map ID configured. Verify/Publish can use the same vector runtime as Public Geo."
+            : "Authoring uses Google DEMO vector Map ID temporarily. Save your production Vector Map ID before Verify.")}
+        </small>
       </div>
     </div>
   );
