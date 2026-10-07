@@ -69,12 +69,14 @@ test("public 3D Geo Experience is fail-closed on active immutable Geo release id
   assert.match(runtime, /Active Geo release manifest checksum mismatch/);
   assert.match(runtime, /Active Geo release Building source integrity mismatch/);
 
-  assert.match(page, /LIVE 3D GEO EXPERIENCE/);
+  assert.match(page, /INTEGRATED 3D GEO EXPERIENCE/);
   assert.match(page, /GEO RELEASE/);
   assert.match(page, /BUILDING SOURCE/);
   assert.match(page, /api\/projects\/\$\{encodeURIComponent\(slug\)\}\/geo-placement/);
+  assert.match(page, /WebGLOverlayView/);
+  assert.match(page, /applyRigidBuildingPlacement/);
   assert.match(page, /Viewer3D/);
-  assert.match(page, /Satellite anchor/);
+  assert.doesNotMatch(page, /jio-public-grid/);
   assert.match(main, /geoRoute/);
   assert.match(main, /GeoPublicDemo/);
 });
