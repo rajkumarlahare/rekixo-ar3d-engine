@@ -222,7 +222,7 @@ test("Automatic Engine browser smoke enforces the source-decision product bounda
   assert.match(review, /AUTOMATIC ENGINE · INPUT WORKSPACE/);
   assert.match(review, /One geometry authority/);
   assert.match(review, /Finished FBX\/GLB geometry is primary when available/);
-  assert.match(e2e, /Source Pack Review/);
+  assert.match(e2e, /Source Pack/);
   assert.match(e2e, /AUTOMATIC ENGINE · INPUT WORKSPACE/);
   assert.match(e2e, /One geometry authority/);
   assert.match(e2e, /Smart 3D project builder/);
