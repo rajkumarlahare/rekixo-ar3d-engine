@@ -48,7 +48,6 @@ type GoogleMap = {
 };
 type GoogleMapConstructor = {
   new (node: HTMLElement, options: Record<string, unknown>): GoogleMap;
-  DEMO_MAP_ID?: string;
 };
 type GoogleMarker = {
   setMap(map: GoogleMap | null): void;
@@ -173,7 +172,7 @@ function renderingTypeLabel(map: GoogleMap) {
 function webglTimeoutMessage(map: GoogleMap) {
   const renderingType = renderingTypeLabel(map);
   if (renderingType.includes("RASTER"))
-    return "Google Maps raster mode mila. Integrated 3D ke liye VECTOR rendering required hai.";
+    return "Google Maps raster mode mila after vector startup window. API key aur production JavaScript Vector Map ID same Cloud project me verify karein.";
   if (!browserSupportsWebGL())
     return "Browser WebGL unavailable hai. Hardware acceleration/WebGL enable karke reload karein.";
   return `Integrated vector WebGL context ${WEBGL_CONTEXT_TIMEOUT_MS / 1000}s me ready nahi hua (${renderingType}). Reload karke retry karein.`;
@@ -311,7 +310,6 @@ export default function GeoIntegratedAuthoringMap({
     let cancelled = false;
     let mapClick: MapsListener | null = null;
     let markerDrag: MapsListener | null = null;
-    let renderingTypeChange: MapsListener | null = null;
     let overlay: GoogleWebGLOverlay | null = null;
     let marker: GoogleMarker | null = null;
     let contextTimer: number | null = null;
@@ -339,14 +337,12 @@ export default function GeoIntegratedAuthoringMap({
         const center = initial
           ? { lat: initial.latitude, lng: initial.longitude }
           : INDIA_FALLBACK;
-        const effectiveMapId =
-          configuredMapId || google.maps.Map.DEMO_MAP_ID || "DEMO_MAP_ID";
         const map = new google.maps.Map(hostRef.current, {
           center,
           zoom: initial ? 19 : 5,
           tilt: initial ? 55 : 0,
           heading: 0,
-          mapId: effectiveMapId,
+          ...(configuredMapId ? { mapId: configuredMapId } : {}),
           renderingType: google.maps.RenderingType?.VECTOR || "VECTOR",
           tiltInteractionEnabled: true,
           headingInteractionEnabled: false,
@@ -357,16 +353,6 @@ export default function GeoIntegratedAuthoringMap({
           clickableIcons: false,
         });
         mapRef.current = map;
-
-        const failIfRaster = () => {
-          const mode = renderingTypeLabel(map);
-          if (!mode.includes("RASTER")) return;
-          setMapFailure("Google Maps raster mode mila. Integrated 3D ke liye VECTOR rendering required hai.");
-          setWebglReady(false);
-          overlay?.setMap(null);
-        };
-        renderingTypeChange = map.addListener("renderingtype_changed", failIfRaster);
-        failIfRaster();
 
         marker = new google.maps.Marker({
           map,
@@ -481,7 +467,6 @@ export default function GeoIntegratedAuthoringMap({
       clearContextTimer();
       mapClick?.remove();
       markerDrag?.remove();
-      renderingTypeChange?.remove();
       marker?.setMap(null);
       overlay?.setMap(null);
       rendererRef.current?.dispose();
@@ -647,7 +632,7 @@ export default function GeoIntegratedAuthoringMap({
                   !frameReady ? "Current placement map par render ho rahi hai…" :
                     configuredMapId
                       ? "Integrated Building preview ready · production vector Map ID"
-                      : "Integrated Building preview ready · DEMO vector Map ID; production Map ID save karke verify karein."
+                      : "Integrated Building preview ready · direct VECTOR authoring mode; production Map ID save karke verify karein."
   );
 
   return (
@@ -680,7 +665,7 @@ export default function GeoIntegratedAuthoringMap({
         <small className={mapIdFailure ? "geo-v2-map-id-note geo-v2-map-id-note--error" : "geo-v2-map-id-note"}>
           {mapIdFailure || mapIdMessage || (configuredMapId
             ? "Production Map ID configured. Verify/Publish can use the same vector runtime as Public Geo."
-            : "Authoring uses Google DEMO vector Map ID temporarily. Save your production Vector Map ID before Verify.")}
+            : "Authoring requests VECTOR rendering directly. Save your production Vector Map ID before Verify.")}
         </small>
       </div>
     </div>
