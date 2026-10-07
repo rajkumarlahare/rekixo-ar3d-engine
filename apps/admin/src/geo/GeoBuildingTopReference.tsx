@@ -1,5 +1,6 @@
 import type { GeoGuidedSourcePoint } from "@rekixo/3d-engine-core";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
@@ -222,7 +223,7 @@ export default function GeoBuildingTopReference({
     });
   }, [points, viewRevision]);
 
-  const capturePoint = (event: React.PointerEvent<HTMLCanvasElement>) => {
+  const capturePoint = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const pointId = activePointRef.current;
     const camera = cameraRef.current;
     const model = modelRef.current;
