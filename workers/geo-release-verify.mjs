@@ -2,15 +2,24 @@ import {
   geoReleaseSchemaReady,
   geoReleaseInternals,
 } from "./geo-release-admin.mjs";
+import {
+  assertGeoV2ContextReady,
+  placementFromGeoContext,
+} from "./geo-presentation-policy.mjs";
 
 const {
   digestHex,
   geoContext,
   buildingRelease,
   verificationForCurrentDraft,
+  geoV2AlignmentSchemaReady,
 } = geoReleaseInternals;
 
-function assertDraftReady(context) {
+function validSha256(value) {
+  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+}
+
+function assertLegacyDraftReady(context) {
   if (!context?.experienceId)
     throw Error("Optional Geo Experience does not exist.");
   if (context.lifecycle !== "active")
@@ -24,6 +33,42 @@ function assertDraftReady(context) {
     throw Error("Geo draft needs a saved location before preview verification.");
   if (!Number.isInteger(Number(context.revision)) || Number(context.revision) < 1)
     throw Error("Geo draft must be saved before preview verification.");
+}
+
+async function assertDraftReady(env, context) {
+  if (await geoV2AlignmentSchemaReady(env)) {
+    assertGeoV2ContextReady(context);
+    // Evaluate the exact rigid placement during verification too, so NaN/range
+    // failures cannot be deferred until immutable publish.
+    placementFromGeoContext(context);
+    return;
+  }
+  assertLegacyDraftReady(context);
+}
+
+function buildingModelFromManifest(manifest, releaseId, releaseVersion) {
+  const model = manifest?.experience?.model;
+  if (!model || model.mimeType !== "model/gltf-binary" ||
+    typeof model.id !== "string" || !model.id ||
+    typeof model.releaseAssetId !== "string" || !model.releaseAssetId)
+    throw Error("Pinned Building release has no immutable GLB model.");
+  const asset = Array.isArray(manifest.assets)
+    ? manifest.assets.find((item) =>
+        item?.id === model.releaseAssetId &&
+        item?.kind === "model" &&
+        item?.logicalId === model.id,
+      )
+    : undefined;
+  if (!asset || !validSha256(asset.sha256))
+    throw Error("Pinned Building release model is not checksum-pinned.");
+  return {
+    id: model.id,
+    name: model.name || "Building",
+    mimeType: "model/gltf-binary",
+    sha256: asset.sha256,
+    variant: "building",
+    url: `/3Dprojects/api/releases/${encodeURIComponent(releaseId)}/models/${encodeURIComponent(model.id)}/model.glb?v=${encodeURIComponent(String(releaseVersion))}`,
+  };
 }
 
 export async function assertGeoBuildingSource(env, project, context) {
@@ -41,11 +86,32 @@ export async function assertGeoBuildingSource(env, project, context) {
   if (actualHash !== String(source.manifestSha256 || "").toLowerCase())
     throw Error("Pinned Building release manifest checksum mismatch.");
 
+  let manifest;
+  try {
+    manifest = JSON.parse(source.manifestJson);
+  } catch {
+    throw Error("Pinned Building release manifest JSON is invalid.");
+  }
+  if (
+    manifest?.format !== "rekixo-release-manifest" ||
+    manifest?.version !== 1 ||
+    manifest?.release?.id !== source.id ||
+    manifest?.release?.projectId !== project.id ||
+    manifest?.release?.projectSlug !== project.slug ||
+    Number(manifest?.release?.version) !== Number(source.version)
+  )
+    throw Error("Pinned Building release manifest identity mismatch.");
+
   return {
     id: source.id,
     version: Number(source.version),
     manifestSha256: actualHash,
     createdAt: source.createdAt,
+    model: buildingModelFromManifest(
+      manifest,
+      source.id,
+      Number(source.version),
+    ),
   };
 }
 
@@ -61,7 +127,7 @@ export async function verifyGeoDraftPreview(
     throw Error("Restore the project before verifying Geo preview.");
 
   const context = await geoContext(env, project);
-  assertDraftReady(context);
+  await assertDraftReady(env, context);
   if (Number(context.revision) !== Number(expectedDraftRevision))
     throw Error("Geo draft changed before preview verification.");
 
@@ -112,6 +178,9 @@ export async function verifyGeoDraftPreview(
         draftRevision: Number(context.revision),
         sourceBuildingReleaseId: source.id,
         sourceBuildingReleaseVersion: source.version,
+        sourceBuildingManifestSha256: source.manifestSha256,
+        modelSha256: source.model.sha256,
+        v2Alignment: await geoV2AlignmentSchemaReady(env),
       }),
       now,
     ),
@@ -127,6 +196,6 @@ export async function verifyGeoDraftPreview(
   };
 }
 
-export function requireGeoDraftReady(context) {
-  assertDraftReady(context);
+export async function requireGeoDraftReady(env, context) {
+  await assertDraftReady(env, context);
 }
