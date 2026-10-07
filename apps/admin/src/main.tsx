@@ -6,7 +6,7 @@ import "./source-pack/dashboard-link.css";
 const EngineDashboard = lazy(() => import("./dashboard/EngineDashboard"));
 const SourcePackReview = lazy(() => import("./source-pack/SourcePackReview"));
 const ComponentMapper = lazy(() => import("./source-pack/ComponentMapper"));
-const GeoMapper3D = lazy(() => import("./geo/GeoMapper3D"));
+const GeoMapper3D = lazy(() => import("./geo/GeoMapper3DV2"));
 const PublishedViewer = lazy(() => import("./studio/PublishedViewer"));
 const CloudLogin = lazy(() => import("./CloudLogin"));
 
@@ -75,7 +75,7 @@ function AdminRouter() {
 
   if (path === "/3Dprojects/geo-mapper") {
     return (
-      <Suspense fallback={<RouteLoading label="Opening 3D Jio Mapper…" />}>
+      <Suspense fallback={<RouteLoading label="Opening 3D Geo Mapper…" />}>
         <GeoMapper3D />
       </Suspense>
     );
