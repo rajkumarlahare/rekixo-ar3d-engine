@@ -39,10 +39,12 @@ type MapsListener = { remove(): void };
 type LatLngLike = { lat(): number; lng(): number };
 type MapMouseEvent = { latLng?: LatLngLike | null };
 type GoogleMap = {
-  addListener(name: string, listener: (event: MapMouseEvent) => void): MapsListener;
+  addListener(name: "click", listener: (event: MapMouseEvent) => void): MapsListener;
+  addListener(name: string, listener: () => void): MapsListener;
   setCenter(position: { lat: number; lng: number }): void;
   setZoom(zoom: number): void;
   moveCamera?(options: Record<string, unknown>): void;
+  getRenderingType?(): string;
 };
 type GoogleMarker = {
   setMap(map: GoogleMap | null): void;
@@ -71,6 +73,7 @@ type GoogleRoot = {
     Map: new (node: HTMLElement, options: Record<string, unknown>) => GoogleMap;
     Marker: new (options: Record<string, unknown>) => GoogleMarker;
     WebGLOverlayView?: new () => GoogleWebGLOverlay;
+    RenderingType?: { VECTOR?: string; RASTER?: string; UNINITIALIZED?: string };
   };
 };
 type GeoWindow = Window & typeof globalThis & {
@@ -85,6 +88,7 @@ type PlacementNodes = {
 };
 
 const INDIA_FALLBACK = { lat: 20.5937, lng: 78.9629 };
+const WEBGL_CONTEXT_TIMEOUT_MS = 12_000;
 let mapsPromise: Promise<GoogleRoot> | null = null;
 let mapsKeyLoaded = "";
 
@@ -114,6 +118,28 @@ function loadGoogleMaps(apiKey: string) {
     document.head.appendChild(script);
   });
   return mapsPromise;
+}
+
+function browserSupportsWebGL() {
+  try {
+    const canvas = document.createElement("canvas");
+    return Boolean(canvas.getContext("webgl2") || canvas.getContext("webgl"));
+  } catch {
+    return false;
+  }
+}
+
+function renderingTypeLabel(map: GoogleMap) {
+  return String(map.getRenderingType?.() || "UNKNOWN").toUpperCase();
+}
+
+function webglTimeoutMessage(map: GoogleMap) {
+  const renderingType = renderingTypeLabel(map);
+  if (renderingType.includes("RASTER"))
+    return "Google Maps raster mode mila. Integrated 3D ke liye VECTOR rendering required hai.";
+  if (!browserSupportsWebGL())
+    return "Browser WebGL unavailable hai. Hardware acceleration/WebGL enable karke reload karein.";
+  return `Integrated vector WebGL context ${WEBGL_CONTEXT_TIMEOUT_MS / 1000}s me ready nahi hua (${renderingType}). Reload karke retry karein.`;
 }
 
 async function loadModel(modelUrl: string, signal: AbortSignal) {
@@ -224,16 +250,26 @@ export default function GeoIntegratedAuthoringMap({
     let cancelled = false;
     let mapClick: MapsListener | null = null;
     let markerDrag: MapsListener | null = null;
+    let renderingTypeChange: MapsListener | null = null;
     let overlay: GoogleWebGLOverlay | null = null;
     let marker: GoogleMarker | null = null;
+    let contextTimer: number | null = null;
+    let contextRestored = false;
     setMapReady(false);
     setWebglReady(false);
     setFrameReady(false);
     setMapFailure("");
 
+    const clearContextTimer = () => {
+      if (contextTimer !== null) window.clearTimeout(contextTimer);
+      contextTimer = null;
+    };
+
     void loadGoogleMaps(apiKey)
       .then((google) => {
         if (cancelled || !hostRef.current) return;
+        if (!browserSupportsWebGL())
+          throw new Error("Browser WebGL unavailable hai. Hardware acceleration/WebGL enable karke reload karein.");
         const WebGLOverlayView = google.maps.WebGLOverlayView;
         if (!WebGLOverlayView)
           throw new Error("This browser/map runtime does not expose WebGLOverlayView.");
@@ -247,7 +283,7 @@ export default function GeoIntegratedAuthoringMap({
           zoom: initial ? 19 : 5,
           tilt: initial ? 55 : 0,
           heading: 0,
-          mapId: "DEMO_MAP_ID",
+          renderingType: google.maps.RenderingType?.VECTOR || "VECTOR",
           streetViewControl: false,
           mapTypeControl: true,
           fullscreenControl: true,
@@ -255,6 +291,16 @@ export default function GeoIntegratedAuthoringMap({
           clickableIcons: false,
         });
         mapRef.current = map;
+
+        const failIfRaster = () => {
+          const mode = renderingTypeLabel(map);
+          if (!mode.includes("RASTER")) return;
+          setMapFailure("Google Maps raster mode mila. Integrated 3D ke liye VECTOR rendering required hai.");
+          setWebglReady(false);
+          overlay?.setMap(null);
+        };
+        renderingTypeChange = map.addListener("renderingtype_changed", failIfRaster);
+        failIfRaster();
 
         marker = new google.maps.Marker({
           map,
@@ -287,10 +333,24 @@ export default function GeoIntegratedAuthoringMap({
         sceneRef.current = scene;
         cameraRef.current = camera;
 
+        const armContextTimer = () => {
+          clearContextTimer();
+          if (contextRestored || cancelled) return;
+          contextTimer = window.setTimeout(() => {
+            if (cancelled || contextRestored) return;
+            setMapFailure(webglTimeoutMessage(map));
+            setWebglReady(false);
+            overlay?.setMap(null);
+          }, WEBGL_CONTEXT_TIMEOUT_MS);
+        };
+
         overlay = new WebGLOverlayView();
         overlayRef.current = overlay;
         overlay.onContextRestored = ({ gl }) => {
           if (cancelled) return;
+          contextRestored = true;
+          clearContextTimer();
+          setMapFailure("");
           const renderer = new THREE.WebGLRenderer({
             canvas: gl.canvas as HTMLCanvasElement,
             context: gl,
@@ -321,32 +381,41 @@ export default function GeoIntegratedAuthoringMap({
           );
           renderer.resetState();
           renderer.render(drawScene, drawCamera);
+          renderer.resetState();
           gl.flush();
           if (nodesRef.current?.root.visible) setFrameReady(true);
         };
         overlay.onContextLost = () => {
+          contextRestored = false;
           rendererRef.current?.dispose();
           rendererRef.current = null;
           setWebglReady(false);
+          armContextTimer();
         };
         overlay.onRemove = () => {
+          contextRestored = false;
+          clearContextTimer();
           rendererRef.current?.dispose();
           rendererRef.current = null;
           setWebglReady(false);
         };
         overlay.setMap(map);
+        armContextTimer();
         setMapReady(true);
       })
       .catch((reason) => {
         if (cancelled) return;
+        clearContextTimer();
         setMapFailure(reason instanceof Error ? reason.message : "Integrated Geo map initialize nahi hui.");
         setMapReady(false);
       });
 
     return () => {
       cancelled = true;
+      clearContextTimer();
       mapClick?.remove();
       markerDrag?.remove();
+      renderingTypeChange?.remove();
       marker?.setMap(null);
       overlay?.setMap(null);
       rendererRef.current?.dispose();

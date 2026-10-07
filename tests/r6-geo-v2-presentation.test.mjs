@@ -159,3 +159,19 @@ test("R6 Admin Geo V2 uses one same-map WebGL Building preview and fail-closed v
   assert.match(mapper, /configuredMapsApiKey/);
   assert.match(mapper, /Current map placement ko Save Geo V2 Draft/);
 });
+
+test("R6 Geo WebGL authoring and public runtime force vector rendering and fail closed on context stalls", () => {
+  const integrated = fs.readFileSync("apps/admin/src/geo/GeoIntegratedAuthoringMap.tsx", "utf8");
+  const publicGeo = fs.readFileSync("apps/public/src/geo/GeoPublicDemo.tsx", "utf8");
+
+  for (const source of [integrated, publicGeo]) {
+    assert.match(source, /RenderingType\?\.VECTOR \|\| "VECTOR"/);
+    assert.match(source, /WEBGL_CONTEXT_TIMEOUT_MS/);
+    assert.match(source, /browserSupportsWebGL/);
+    assert.match(source, /renderingTypeLabel/);
+    assert.match(source, /renderer\.resetState\(\)/);
+    assert.doesNotMatch(source, /mapId:\s*"DEMO_MAP_ID"/);
+  }
+  assert.match(integrated, /setMapFailure\(webglTimeoutMessage\(map\)\)/);
+  assert.match(publicGeo, /setFailure\(webglTimeoutMessage\(map\)\)/);
+});

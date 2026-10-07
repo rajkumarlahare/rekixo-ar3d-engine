@@ -69,6 +69,7 @@ type GeoPayload = {
 type GoogleMap = {
   setCenter(position: { lat: number; lng: number }): void;
   moveCamera?(options: Record<string, unknown>): void;
+  getRenderingType?(): string;
 };
 
 type WebGLTransformer = {
@@ -100,6 +101,7 @@ type GoogleRoot = {
   maps: {
     Map: new (node: HTMLElement, options: Record<string, unknown>) => GoogleMap;
     WebGLOverlayView?: new () => GoogleWebGLOverlay;
+    RenderingType?: { VECTOR?: string; RASTER?: string; UNINITIALIZED?: string };
   };
 };
 
@@ -109,6 +111,7 @@ type GeoWindow = Window &
     __rekixoPublicGeoMapsReady?: () => void;
   };
 
+const WEBGL_CONTEXT_TIMEOUT_MS = 12_000;
 let mapsPromise: Promise<GoogleRoot> | null = null;
 let mapsKeyLoaded = "";
 
@@ -140,6 +143,28 @@ function loadGoogleMaps(apiKey: string) {
     document.head.appendChild(script);
   });
   return mapsPromise;
+}
+
+function browserSupportsWebGL() {
+  try {
+    const canvas = document.createElement("canvas");
+    return Boolean(canvas.getContext("webgl2") || canvas.getContext("webgl"));
+  } catch {
+    return false;
+  }
+}
+
+function renderingTypeLabel(map: GoogleMap) {
+  return String(map.getRenderingType?.() || "UNKNOWN").toUpperCase();
+}
+
+function webglTimeoutMessage(map: GoogleMap) {
+  const renderingType = renderingTypeLabel(map);
+  if (renderingType.includes("RASTER"))
+    return "Google Maps raster mode mila. Integrated 3D ke liye VECTOR rendering required hai.";
+  if (!browserSupportsWebGL())
+    return "Browser WebGL unavailable hai. Hardware acceleration/WebGL enable karke reload karein.";
+  return `Integrated vector WebGL context ${WEBGL_CONTEXT_TIMEOUT_MS / 1000}s me ready nahi hua (${renderingType}).`;
 }
 
 function sha256Hex(bytes: ArrayBuffer) {
@@ -212,6 +237,13 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
     let renderer: THREE.WebGLRenderer | undefined;
     let loadedModel: THREE.Object3D | undefined;
     let root: THREE.Group | undefined;
+    let contextTimer: number | undefined;
+    let contextRestored = false;
+
+    const clearContextTimer = () => {
+      if (contextTimer !== undefined) window.clearTimeout(contextTimer);
+      contextTimer = undefined;
+    };
 
     Promise.all([loadGoogleMaps(data.maps.apiKey), loadVerifiedModel(data.model)])
       .then(([google, model]) => {
@@ -219,6 +251,8 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
           disposeObject(model);
           return;
         }
+        if (!browserSupportsWebGL())
+          throw new Error("Browser WebGL unavailable hai. Hardware acceleration/WebGL enable karke reload karein.");
         const WebGLOverlayView = google.maps.WebGLOverlayView;
         if (!WebGLOverlayView)
           throw new Error("This browser/map runtime does not expose WebGLOverlayView.");
@@ -233,13 +267,17 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
           zoom: 19,
           tilt: 67.5,
           heading: data.placement.headingDeg,
-          mapId: "DEMO_MAP_ID",
+          renderingType: google.maps.RenderingType?.VECTOR || "VECTOR",
           mapTypeControl: true,
           streetViewControl: false,
           fullscreenControl: true,
           gestureHandling: "greedy",
           clickableIcons: false,
         });
+
+        const renderingType = renderingTypeLabel(map);
+        if (renderingType.includes("RASTER"))
+          throw new Error("Google Maps raster mode mila. Integrated 3D ke liye VECTOR rendering required hai.");
 
         const scene = new THREE.Scene();
         const camera = new THREE.Camera();
@@ -271,9 +309,23 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
         sun.position.set(30, -20, 60);
         scene.add(sun);
 
+        const armContextTimer = () => {
+          clearContextTimer();
+          if (contextRestored || cancelled) return;
+          contextTimer = window.setTimeout(() => {
+            if (cancelled || contextRestored) return;
+            setFailure(webglTimeoutMessage(map));
+            setQuality("Fallback Building view");
+            overlay?.setMap(null);
+          }, WEBGL_CONTEXT_TIMEOUT_MS);
+        };
+
         overlay = new WebGLOverlayView();
         overlay.onContextRestored = ({ gl }) => {
           if (cancelled) return;
+          contextRestored = true;
+          clearContextTimer();
+          setFailure("");
           renderer = new THREE.WebGLRenderer({
             canvas: gl.canvas as HTMLCanvasElement,
             context: gl,
@@ -284,6 +336,7 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
           renderer.toneMapping = THREE.ACESFilmicToneMapping;
           renderer.toneMappingExposure = 0.95;
           setQuality("Integrated vector terrain + immutable 3D Building");
+          overlay?.requestRedraw();
         };
         overlay.onDraw = ({ gl, transformer }) => {
           if (cancelled || !renderer) return;
@@ -295,18 +348,26 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
           camera.projectionMatrix.fromArray(projection);
           renderer.resetState();
           renderer.render(scene, camera);
+          renderer.resetState();
           gl.flush();
         };
         overlay.onContextLost = () => {
+          contextRestored = false;
           renderer?.dispose();
           renderer = undefined;
-          if (!cancelled) setQuality("3D map context restoring");
+          if (!cancelled) {
+            setQuality("3D map context restoring");
+            armContextTimer();
+          }
         };
         overlay.onRemove = () => {
+          contextRestored = false;
+          clearContextTimer();
           renderer?.dispose();
           renderer = undefined;
         };
         overlay.setMap(map);
+        armContextTimer();
         map.moveCamera?.({
           center,
           zoom: 19,
@@ -316,6 +377,7 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
       })
       .catch((reason) => {
         if (cancelled) return;
+        clearContextTimer();
         setFailure(
           reason instanceof Error
             ? reason.message
@@ -326,6 +388,7 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
 
     return () => {
       cancelled = true;
+      clearContextTimer();
       overlay?.setMap(null);
       renderer?.dispose();
       if (loadedModel) disposeObject(loadedModel);
