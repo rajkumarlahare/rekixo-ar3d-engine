@@ -19,6 +19,14 @@ type StatusPayload = {
   error?: string;
 };
 
+type MapsIdPayload = {
+  mapId: string | null;
+  configured: boolean;
+  error?: string;
+};
+
+const MAP_ID_CONFIG_URL = "/3Dprojects/api/geo-v2/maps-config";
+
 function selectedProjectSlug() {
   return new URLSearchParams(window.location.search).get("project")?.trim().toLowerCase() || "";
 }
@@ -35,12 +43,35 @@ function formatBytes(value?: number) {
   return `${size.toFixed(index ? 1 : 0)} ${units[index]}`;
 }
 
+async function loadMapId() {
+  const response = await fetch(MAP_ID_CONFIG_URL, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  const body = (await response.json()) as MapsIdPayload;
+  if (!response.ok) throw new Error(body.error || `Map ID config failed (${response.status}).`);
+  return body;
+}
+
+async function saveMapId(mapId: string) {
+  const response = await fetch(MAP_ID_CONFIG_URL, {
+    method: "PUT",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ mapId }),
+  });
+  const body = (await response.json()) as MapsIdPayload;
+  if (!response.ok) throw new Error(body.error || `Map ID save failed (${response.status}).`);
+  return body;
+}
+
 export default function EngineAdvanced() {
   const slug = selectedProjectSlug();
   const [status, setStatus] = useState<StatusPayload>();
   const [projectCount, setProjectCount] = useState(0);
   const [mapsKey, setMapsKey] = useState("");
+  const [mapId, setMapId] = useState("");
   const [mapsConfigured, setMapsConfigured] = useState(false);
+  const [mapIdConfigured, setMapIdConfigured] = useState(false);
   const [deletionJob, setDeletionJob] = useState<CloudDeletionJob | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [busy, setBusy] = useState("");
@@ -49,14 +80,17 @@ export default function EngineAdvanced() {
 
   async function load() {
     setError("");
-    const [projectResult, maps, deletion] = await Promise.all([
+    const [projectResult, maps, mapIdState, deletion] = await Promise.all([
       projects("", "active", 100, 0),
       geoMapsSettings().catch(() => ({ apiKey: null })),
+      loadMapId().catch(() => ({ mapId: null, configured: false })),
       deletionStatus().catch(() => ({ job: null })),
     ]);
     setProjectCount(projectResult.projects.length);
     setMapsKey(maps.apiKey || "");
     setMapsConfigured(Boolean(maps.apiKey));
+    setMapId(mapIdState.mapId || "");
+    setMapIdConfigured(Boolean(mapIdState.configured && mapIdState.mapId));
     setDeletionJob(deletion.job);
 
     if (!slug) {
@@ -78,20 +112,30 @@ export default function EngineAdvanced() {
 
   async function saveMapsProvider() {
     const key = mapsKey.trim();
+    const vectorMapId = mapId.trim();
     if (!key) {
       setError("Google Maps browser key required hai.");
+      return;
+    }
+    if (!/^[A-Za-z0-9_-]{8,80}$/.test(vectorMapId)) {
+      setError("Valid Google Maps JavaScript Vector Map ID required hai.");
       return;
     }
     setBusy("maps");
     setError("");
     setMessage("");
     try {
-      const saved = await saveGeoMapsKey(key);
-      setMapsKey(saved.apiKey);
+      const [savedKey, savedMapId] = await Promise.all([
+        saveGeoMapsKey(key),
+        saveMapId(vectorMapId),
+      ]);
+      setMapsKey(savedKey.apiKey);
       setMapsConfigured(true);
-      setMessage("Google Maps browser key saved. Geo authoring will use the saved key.");
+      setMapId(savedMapId.mapId || vectorMapId);
+      setMapIdConfigured(Boolean(savedMapId.configured));
+      setMessage("Google Maps browser key and production Vector Map ID saved. Geo authoring, verification and public runtime can use the same provider configuration.");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Maps key save nahi hui.");
+      setError(reason instanceof Error ? reason.message : "Maps configuration save nahi hui.");
     } finally {
       setBusy("");
     }
@@ -120,6 +164,7 @@ export default function EngineAdvanced() {
   }
 
   const enabledScenes = status?.scenes?.filter((scene) => scene.enabled).length || 0;
+  const mapsReady = mapsConfigured && mapIdConfigured;
 
   return (
     <div className="engine-advanced-page">
@@ -149,15 +194,23 @@ export default function EngineAdvanced() {
           <header>
             <div>
               <p>MAP PROVIDER</p>
-              <h2>Google Maps browser key</h2>
-              <span>Provider configuration is kept out of normal Geo placement so operators see it only when needed.</span>
+              <h2>Google Maps production configuration</h2>
+              <span>Browser key and JavaScript Vector Map ID are kept out of normal placement. Both are required for production WebGL Geo verification and publish.</span>
             </div>
-            <b className={mapsConfigured ? "engine-advanced-state engine-advanced-state--ready" : "engine-advanced-state"}>{mapsConfigured ? "CONFIGURED" : "REQUIRED"}</b>
+            <b className={mapsReady ? "engine-advanced-state engine-advanced-state--ready" : "engine-advanced-state"}>{mapsReady ? "READY" : "SETUP REQUIRED"}</b>
           </header>
-          <label className="engine-advanced-key">
-            <span>Browser API key</span>
-            <input type="password" value={mapsKey} onChange={(event) => setMapsKey(event.target.value)} placeholder="Google Maps browser API key" />
-          </label>
+          <div className="engine-advanced-map-fields">
+            <label className="engine-advanced-key">
+              <span>Browser API key</span>
+              <input type="password" value={mapsKey} onChange={(event) => setMapsKey(event.target.value)} placeholder="Google Maps browser API key" />
+              <small>{mapsConfigured ? "Saved" : "Required"}</small>
+            </label>
+            <label className="engine-advanced-key">
+              <span>JavaScript Vector Map ID</span>
+              <input value={mapId} onChange={(event) => setMapId(event.target.value)} placeholder="Production Google Maps Map ID" autoComplete="off" />
+              <small>{mapIdConfigured ? "Saved · production vector map" : "Required before Geo verify/publish"}</small>
+            </label>
+          </div>
           <button className="engine-control-button engine-control-button--primary" type="button" disabled={busy === "maps"} onClick={() => void saveMapsProvider()}>
             {busy === "maps" ? "Saving…" : "Save Maps Configuration"}
           </button>
