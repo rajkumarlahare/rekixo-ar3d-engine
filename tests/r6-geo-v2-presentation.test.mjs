@@ -160,7 +160,7 @@ test("R6 Admin Geo V2 uses one same-map WebGL Building preview and fail-closed v
   assert.match(mapper, /Current map placement ko Save Geo V2 Draft/);
 });
 
-test("R6 Geo WebGL runtime is vector, watchdog-protected, and uses explicit Map IDs", () => {
+test("R6 Geo WebGL runtime is vector, watchdog-protected, and avoids premature raster rejection", () => {
   const integrated = fs.readFileSync("apps/admin/src/geo/GeoIntegratedAuthoringMap.tsx", "utf8");
   const publicGeo = fs.readFileSync("apps/public/src/geo/GeoPublicDemo.tsx", "utf8");
 
@@ -170,16 +170,18 @@ test("R6 Geo WebGL runtime is vector, watchdog-protected, and uses explicit Map 
     assert.match(source, /browserSupportsWebGL/);
     assert.match(source, /renderingTypeLabel/);
     assert.match(source, /renderer\.resetState\(\)/);
+    assert.match(source, /webglTimeoutMessage\(map\)/);
+    assert.doesNotMatch(source, /DEMO_MAP_ID/);
   }
-  assert.match(integrated, /Map\.DEMO_MAP_ID/);
-  assert.match(integrated, /mapId:\s*effectiveMapId/);
-  assert.match(integrated, /PRODUCTION VECTOR MAP ID/);
+
+  assert.match(integrated, /configuredMapId \? \{ mapId: configuredMapId \} : \{\}/);
   assert.match(integrated, /setMapFailure\(webglTimeoutMessage\(map\)\)/);
+  assert.doesNotMatch(integrated, /failIfRaster/);
 
   assert.match(publicGeo, /mapId:\s*data\.maps\.mapId/);
   assert.match(publicGeo, /Production Google Maps JavaScript Vector Map ID is not configured/);
   assert.match(publicGeo, /setFailure\(webglTimeoutMessage\(map\)\)/);
-  assert.doesNotMatch(publicGeo, /DEMO_MAP_ID/);
+  assert.doesNotMatch(publicGeo, /const renderingType = renderingTypeLabel\(map\)/);
 });
 
 test("R6 production Geo verify and publish require an Engine-owned JavaScript Vector Map ID", () => {
