@@ -37,6 +37,15 @@ async function productionMapId(env) {
   return validMapId(fallback) ? fallback : "";
 }
 
+export async function requireProductionVectorMapId(env) {
+  const mapId = await productionMapId(env);
+  if (!mapId)
+    throw Error(
+      "Production Google Maps JavaScript Vector Map ID save karein before Geo verification or publish.",
+    );
+  return mapId;
+}
+
 function assertLegacyDraftReady(context) {
   if (!context?.experienceId)
     throw Error("Optional Geo Experience does not exist.");
@@ -147,10 +156,7 @@ export async function verifyGeoDraftPreview(
   const context = await geoContext(env, project);
   const v2Alignment = await geoV2AlignmentSchemaReady(env);
   await assertDraftReady(env, context);
-  if (v2Alignment && !(await productionMapId(env)))
-    throw Error(
-      "Production Google Maps JavaScript Vector Map ID save karein before Geo verification.",
-    );
+  if (v2Alignment) await requireProductionVectorMapId(env);
   if (Number(context.revision) !== Number(expectedDraftRevision))
     throw Error("Geo draft changed before preview verification.");
 
