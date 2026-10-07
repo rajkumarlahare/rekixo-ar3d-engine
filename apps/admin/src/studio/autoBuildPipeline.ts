@@ -63,6 +63,10 @@ import {
   buildUnitHierarchy,
   type UnitHierarchyReport,
 } from "./unitHierarchy";
+import {
+  buildAutomaticProcessingAcceptance,
+  type AutomaticProcessingAcceptance,
+} from "./automaticProcessingAcceptance";
 
 export interface AutoBuildPipelineOptions
   extends LegacyAutoBuildPipelineOptions {
@@ -94,6 +98,7 @@ export interface AutoBuildPipelineResult
   sceneFingerprint: NormalizedSceneFingerprint;
   geometryIntegrity: SceneGeometryIntegrityReport;
   reviewQueue: ActionableReviewQueue;
+  processingAcceptance: AutomaticProcessingAcceptance;
 }
 
 function unique(values: readonly string[]) {
@@ -213,6 +218,14 @@ export async function runAutoBuildPipeline(
     certificationReport,
     geometryIntegrity,
   );
+  const processingAcceptance = buildAutomaticProcessingAcceptance({
+    sourcePlan,
+    certificationReport,
+    geometryIntegrity,
+    circulationHierarchy,
+    unitHierarchy,
+    sceneFingerprint: sceneFingerprint.hash,
+  });
 
   return {
     ...base,
@@ -230,6 +243,7 @@ export async function runAutoBuildPipeline(
     sceneFingerprint,
     geometryIntegrity,
     reviewQueue,
+    processingAcceptance,
     issues,
   };
 }
@@ -277,9 +291,10 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
   const certification = result.certificationReport;
   const certificationText = ` · certification ${certification.checkCoveragePercent}% (${certification.counts.blocked} blocked · ${certification.counts.needsReview} review)`;
   const integrityText = ` · geometry ${result.geometryIntegrity.counts.blocker} blocked · ${result.geometryIntegrity.counts.review} review`;
+  const acceptanceText = ` · R2 acceptance ${result.processingAcceptance.status}`;
   const replayText = ` · scene ${result.sceneFingerprint.hash.slice(0, 12)}…`;
 
-  return `${base}${phase2Text}${structuralText}${structuredText}${intelligenceText}${reconstructionText}${executionText}${hierarchyText}${visualText}${certificationText}${integrityText}${replayText}.`;
+  return `${base}${phase2Text}${structuralText}${structuredText}${intelligenceText}${reconstructionText}${executionText}${hierarchyText}${visualText}${certificationText}${integrityText}${acceptanceText}${replayText}.`;
 }
 
 /**
@@ -310,6 +325,7 @@ export function autoBuildSummaryMessage(result: AutoBuildPipelineResult) {
  * applyBuildingReconstructionPlan · reconstructionExecution · human-reviewed geometry
  * buildCirculationHierarchy · circulationHierarchy · adjacent-floor source-backed stair/lift hierarchy
  * buildUnitHierarchy · unitHierarchy · reviewed-door unit access evidence
+ * buildAutomaticProcessingAcceptance · processingAcceptance · fail-closed R2 acceptance
  * buildVisualFacadeMatchPlan · visualFacadeMatch · visual-non-metric
  * scene.publishModelId · scene.modelId
  */
