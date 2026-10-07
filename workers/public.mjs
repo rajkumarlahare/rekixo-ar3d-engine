@@ -344,7 +344,6 @@ async function serveProjectMedia(env, slug, fileName, request) {
   return served.response;
 }
 
-
 async function publicGeo3DState(env, slug) {
   if (!validProjectSlug(slug)) return { state: "invalid-slug" };
 
@@ -359,12 +358,19 @@ async function publicGeo3DState(env, slug) {
       reason: "Active Geo release has no renderable immutable Building model.",
     };
 
-  const setting = await env.DB.prepare(
-    "SELECT value FROM engine_settings_3d WHERE key='google_maps_browser_key' LIMIT 1",
-  ).first();
+  const settings = await env.DB.prepare(
+    `SELECT key,value FROM engine_settings_3d
+      WHERE key IN ('google_maps_browser_key','google_maps_map_id')`,
+  ).all();
+  const settingsByKey = new Map(
+    (settings.results || []).map((row) => [String(row.key), String(row.value || "").trim()]),
+  );
   const mapsApiKey =
-    String(setting?.value || "").trim() ||
+    settingsByKey.get("google_maps_browser_key") ||
     String(env.GOOGLE_MAPS_BROWSER_KEY || "").trim();
+  const mapsMapId =
+    settingsByKey.get("google_maps_map_id") ||
+    String(env.GOOGLE_MAPS_MAP_ID || "").trim();
 
   return {
     state: "ok",
@@ -372,7 +378,10 @@ async function publicGeo3DState(env, slug) {
       ...experience,
       maps: {
         apiKey: mapsApiKey || null,
-        configured: Boolean(mapsApiKey),
+        mapId: mapsMapId || null,
+        apiKeyConfigured: Boolean(mapsApiKey),
+        mapIdConfigured: Boolean(mapsMapId),
+        configured: Boolean(mapsApiKey && mapsMapId),
       },
     },
   };

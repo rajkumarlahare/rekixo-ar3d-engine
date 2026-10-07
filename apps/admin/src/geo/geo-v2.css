@@ -62,7 +62,7 @@
   font-weight: 850;
 }
 
-/* Phase 1/2 — exact integrated Building authoring inside the Geo map. */
+/* Geo V2 exact integrated Building authoring inside the vector map. */
 .geo-v2-workspace--integrated {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -72,8 +72,15 @@
 }
 
 .geo-v2-integrated-authoring {
-  position: relative;
+  display: grid;
+  gap: 10px;
   flex: 1;
+  min-height: 590px;
+  background: transparent;
+}
+
+.geo-v2-integrated-map-shell {
+  position: relative;
   min-height: 590px;
   border: 1px solid #253950;
   border-radius: 12px;
@@ -132,7 +139,7 @@
   z-index: 5;
   right: 12px;
   bottom: 12px;
-  max-width: min(420px, calc(100% - 24px));
+  max-width: min(480px, calc(100% - 24px));
   padding: 9px 11px;
   display: grid;
   gap: 3px;
@@ -166,6 +173,77 @@
   color: #f2bec5;
 }
 
+.geo-v2-map-id-config {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid #253950;
+  border-radius: 12px;
+  background: #07101b;
+}
+
+.geo-v2-map-id-config label {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.geo-v2-map-id-config label > span {
+  color: #8fa3b8;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .09em;
+}
+
+.geo-v2-map-id-config input {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #2b4058;
+  border-radius: 9px;
+  outline: none;
+  background: #06101a;
+  color: #edf4fb;
+  font: inherit;
+  font-size: 12px;
+}
+
+.geo-v2-map-id-config input:focus {
+  border-color: var(--geo-gold-strong);
+  box-shadow: 0 0 0 3px rgba(244, 185, 66, .09);
+}
+
+.geo-v2-map-id-config button {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid rgba(244, 185, 66, .5);
+  border-radius: 9px;
+  background: var(--geo-gold-strong);
+  color: #151008;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.geo-v2-map-id-config button:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+.geo-v2-map-id-note {
+  grid-column: 1 / -1;
+  color: #8fa3b8;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.geo-v2-map-id-note--error {
+  color: #f2bec5;
+}
+
 .geo-v2-verification-note {
   flex: 1 1 320px;
   min-width: min(320px, 100%);
@@ -185,7 +263,7 @@
 
 @media (max-width: 640px) {
   .geo-v2-integrated-card,
-  .geo-v2-integrated-authoring,
+  .geo-v2-integrated-map-shell,
   .geo-v2-integrated-map {
     min-height: 480px;
   }
@@ -199,5 +277,14 @@
     right: 8px;
     bottom: 8px;
     max-width: calc(100% - 16px);
+  }
+
+  .geo-v2-map-id-config {
+    grid-template-columns: 1fr;
+  }
+
+  .geo-v2-map-id-config button,
+  .geo-v2-map-id-note {
+    grid-column: 1;
   }
 }
