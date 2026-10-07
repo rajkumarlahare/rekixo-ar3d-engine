@@ -1,301 +1,212 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  ADMIN_BASE_PATH,
-  assertAdminProjectsPayload,
-  assertAdminStatusPayload,
-  type Admin3DProjectStatus,
-  type AdminProjectsResponse,
-  type EngineExperienceSummary,
-  type EngineProjectSummary,
-  type Scene3DType,
-} from "@rekixo/3d-contracts";
+import { ADMIN_BASE_PATH, type EngineExperienceSummary } from "@rekixo/3d-contracts";
 import { geoPublicProjectPath, publicProjectPath } from "@rekixo/3d-engine-core";
 import {
-  createGeoExperience,
-  deleteAllProjects,
-  deletionStatus,
   ensureProject,
   experiences,
-  geoDraft,
   geoReleases,
+  projects,
   releases,
-  type CloudDeletionJob,
-  type CloudGeoDraftState,
   type CloudGeoReleaseState,
+  type CloudProjectSummary,
   type CloudReleaseSummary,
 } from "../studio/cloud";
 import { newProject, projectSlug } from "../studio/domain";
 import "./engine-dashboard.css";
 
-interface ApiStatus extends Admin3DProjectStatus {
-  uploadContract?: {
-    recommendedKey: string;
-    format: string;
-    versionedKeysRequired: boolean;
-    maxRecommendedMobileBytes: number;
-  };
-}
-
-const moduleOrder: Array<[Scene3DType, string]> = [
-  ["project-navigation", "Project Navigation"],
-  ["typical-floor", "Typical Floor"],
-  ["amenity", "Amenities"],
-  ["section", "Section View"],
-  ["wing-distance", "Wing Distance"],
-  ["balcony", "Balcony View"],
-];
-
-function formatBytes(value?: number) {
-  if (!value || value <= 0) return "—";
-  const units = ["B", "KB", "MB", "GB"];
-  let size = value;
-  let index = 0;
-  while (size >= 1024 && index < units.length - 1) {
-    size /= 1024;
-    index += 1;
-  }
-  return `${size.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
-}
+type SourcePackState = {
+  latestPack?: {
+    version: number;
+    status: "draft" | "ready" | "superseded" | "failed";
+    readiness?: { ready?: boolean };
+  } | null;
+};
 
 function requestedProjectSlug() {
-  return new URLSearchParams(window.location.search)
-    .get("project")
-    ?.trim()
-    .toLowerCase() || "";
+  return new URLSearchParams(window.location.search).get("project")?.trim().toLowerCase() || "";
 }
 
-function projectUrl(path: "studio" | "geo-mapper", slug: string) {
+function projectHref(path: "source-pack" | "building" | "geo-mapper" | "releases", slug: string) {
   return `/3Dprojects/${path}?project=${encodeURIComponent(slug)}`;
 }
 
+function statusTone(value: "ready" | "warning" | "idle" | "live") {
+  return `engine-overview-status engine-overview-status--${value}`;
+}
+
 export default function EngineDashboard() {
-  const [projects, setProjects] = useState<EngineProjectSummary[]>([]);
-  const [selectedSlug, setSelectedSlug] = useState("");
-  const [status, setStatus] = useState<ApiStatus>();
-  const [experienceItems, setExperienceItems] = useState<EngineExperienceSummary[]>([]);
-  const [releaseItems, setReleaseItems] = useState<CloudReleaseSummary[]>([]);
-  const [geoDraftState, setGeoDraftState] = useState<CloudGeoDraftState>();
-  const [geoReleaseState, setGeoReleaseState] = useState<CloudGeoReleaseState>();
-  const [experienceBusy, setExperienceBusy] = useState(false);
-  const [experienceError, setExperienceError] = useState("");
-  const [error, setError] = useState("");
-  const [refresh, setRefresh] = useState(0);
+  const [projectItems, setProjectItems] = useState<CloudProjectSummary[]>([]);
+  const [selectedSlug, setSelectedSlug] = useState(requestedProjectSlug());
   const [search, setSearch] = useState("");
+  const [buildingReleases, setBuildingReleases] = useState<CloudReleaseSummary[]>([]);
+  const [geoState, setGeoState] = useState<CloudGeoReleaseState>();
+  const [experienceItems, setExperienceItems] = useState<EngineExperienceSummary[]>([]);
+  const [sourcePack, setSourcePack] = useState<SourcePackState["latestPack"]>(null);
+  const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [error, setError] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createLocation, setCreateLocation] = useState("");
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState("");
-  const [projectsLoaded, setProjectsLoaded] = useState(false);
-  const [showDeleteAll, setShowDeleteAll] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState("");
-  const [deleteBusy, setDeleteBusy] = useState(false);
-  const [deleteError, setDeleteError] = useState("");
-  const [deletionJob, setDeletionJob] = useState<CloudDeletionJob | null>(null);
 
-  useEffect(() => {
-    const controller = new AbortController();
+  async function loadProjects() {
+    setLoading(true);
     setError("");
-    void fetch(`${ADMIN_BASE_PATH}/api/projects`, {
-      headers: { Accept: "application/json" },
-      signal: controller.signal,
-      cache: "no-store",
-    })
-      .then(async (response) => {
-        const body = (await response.json()) as AdminProjectsResponse & {
-          error?: string;
-        };
-        if (!response.ok) {
-          if (response.status === 401) {
-            window.location.replace(
-              `/3Dprojects/login?return=${encodeURIComponent(
-                window.location.pathname + window.location.search,
-              )}`,
-            );
-          }
-          throw new Error(body.error ?? `Projects API failed (${response.status}).`);
-        }
-        assertAdminProjectsPayload(body);
-        const items = body.projects ?? [];
-        setProjects(items);
-        setProjectsLoaded(true);
-        const requested = requestedProjectSlug();
-        setSelectedSlug((current) => {
-          if (current && items.some((item) => item.slug === current)) return current;
-          return (
-            items.find((item) => item.slug === requested)?.slug ??
-            items[0]?.slug ??
-            ""
-          );
-        });
-      })
-      .catch((reason: unknown) => {
-        if (controller.signal.aborted) return;
-        setProjectsLoaded(true);
-        setError(
-          reason instanceof Error ? reason.message : "Could not load 3D projects.",
-        );
-      });
-    return () => controller.abort();
-  }, [refresh]);
+    try {
+      const result = await projects("", "active", 100, 0);
+      setProjectItems(result.projects);
+      const requested = requestedProjectSlug();
+      const next = result.projects.find((item) => item.slug === requested)?.slug || result.projects[0]?.slug || "";
+      setSelectedSlug(next);
+      if (!requested && next) {
+        const url = new URL(window.location.href);
+        url.searchParams.set("project", next);
+        window.history.replaceState({}, "", url);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Engine projects load nahi hue.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    let cancelled = false;
-    void deletionStatus()
-      .then((result) => {
-        if (!cancelled) setDeletionJob(result.job);
-      })
-      .catch(() => {
-        if (!cancelled) setDeletionJob(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh]);
+    void loadProjects();
+  }, []);
 
   useEffect(() => {
     if (!selectedSlug) {
-      setStatus(undefined);
+      setBuildingReleases([]);
+      setGeoState(undefined);
+      setExperienceItems([]);
+      setSourcePack(null);
       return;
     }
-    const controller = new AbortController();
+
+    let live = true;
+    setDetailLoading(true);
     setError("");
-    setStatus(undefined);
-    void fetch(
-      `${ADMIN_BASE_PATH}/api/status?slug=${encodeURIComponent(selectedSlug)}`,
-      {
-        headers: { Accept: "application/json" },
-        signal: controller.signal,
-        cache: "no-store",
-      },
+    const sourcePackRequest = fetch(
+      `${ADMIN_BASE_PATH}/api/cloud/projects/${encodeURIComponent(selectedSlug)}/source-pack-review`,
+      { headers: { Accept: "application/json" }, cache: "no-store" },
     )
       .then(async (response) => {
-        const body = (await response.json()) as ApiStatus & { error?: string };
-        if (!response.ok) {
-          if (response.status === 401) {
-            window.location.replace(
-              `/3Dprojects/login?return=${encodeURIComponent(
-                window.location.pathname + window.location.search,
-              )}`,
-            );
-          }
-          throw new Error(body.error ?? `Status API failed (${response.status}).`);
-        }
-        assertAdminStatusPayload(body);
-        setStatus(body);
+        if (!response.ok) return { latestPack: null } as SourcePackState;
+        return (await response.json()) as SourcePackState;
       })
-      .catch((reason: unknown) => {
-        if (controller.signal.aborted) return;
-        setError(
-          reason instanceof Error ? reason.message : "Could not load 3D status.",
-        );
-      });
-    return () => controller.abort();
-  }, [selectedSlug, refresh]);
-
-
-  useEffect(() => {
-    if (!selectedSlug) {
-      setExperienceItems([]);
-      setReleaseItems([]);
-      setGeoDraftState(undefined);
-      setGeoReleaseState(undefined);
-      setExperienceError("");
-      return;
-    }
-
-    let cancelled = false;
-    setExperienceItems([]);
-    setReleaseItems([]);
-    setGeoDraftState(undefined);
-    setGeoReleaseState(undefined);
-    setExperienceError("");
+      .catch(() => ({ latestPack: null } as SourcePackState));
 
     void Promise.all([
-      experiences(selectedSlug),
       releases(selectedSlug),
+      experiences(selectedSlug),
+      geoReleases(selectedSlug).catch(() => ({
+        schemaReady: true,
+        experienceId: null,
+        draftRevision: null,
+        previewVerified: false,
+        previewVerification: null,
+        activeRelease: null,
+        releases: [],
+      } as CloudGeoReleaseState)),
+      sourcePackRequest,
     ])
-      .then(async ([experienceResult, releaseResult]) => {
-        if (cancelled) return;
+      .then(([building, experienceResult, geo, source]) => {
+        if (!live) return;
+        setBuildingReleases(building.releases);
         setExperienceItems(experienceResult.experiences);
-        setReleaseItems(releaseResult.releases);
-
-        const hasGeoExperience = experienceResult.experiences.some(
-          (item) => item.type === "geo",
-        );
-        if (!hasGeoExperience) return;
-
-        const [draftState, immutableGeoState] = await Promise.all([
-          geoDraft(selectedSlug),
-          geoReleases(selectedSlug),
-        ]);
-        if (!cancelled) {
-          setGeoDraftState(draftState);
-          setGeoReleaseState(immutableGeoState);
-        }
+        setGeoState(geo);
+        setSourcePack(source.latestPack || null);
       })
-      .catch((reason: unknown) => {
-        if (cancelled) return;
-        setExperienceError(
-          reason instanceof Error
-            ? reason.message
-            : "Project Experiences load nahi ho sake.",
-        );
+      .catch((reason) => {
+        if (live) setError(reason instanceof Error ? reason.message : "Project state load nahi hua.");
+      })
+      .finally(() => {
+        if (live) setDetailLoading(false);
       });
 
     return () => {
-      cancelled = true;
+      live = false;
     };
-  }, [selectedSlug, refresh]);
+  }, [selectedSlug]);
+
+  const selectedProject = useMemo(
+    () => projectItems.find((project) => project.slug === selectedSlug),
+    [projectItems, selectedSlug],
+  );
+
+  const visibleProjects = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return projectItems;
+    return projectItems.filter((project) =>
+      [project.name, project.slug, project.location]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query)),
+    );
+  }, [projectItems, search]);
+
+  const activeBuilding = buildingReleases.find((release) => release.active);
+  const activeGeo = geoState?.activeRelease || null;
+  const geoExperience = experienceItems.find((item) => item.type === "geo");
+  const sourceReady = sourcePack?.status === "ready" || Boolean(activeBuilding);
+  const buildingLive = Boolean(activeBuilding && selectedProject?.status === "published");
+  const geoLive = Boolean(activeGeo && selectedProject?.status === "published");
+
+  const nextAction = useMemo(() => {
+    if (!selectedProject) {
+      return {
+        label: "Create your first Engine project",
+        help: "Project name and location se start karein.",
+        href: "",
+        action: "create" as const,
+      };
+    }
+    if (!sourceReady) {
+      return {
+        label: "Review Source Pack",
+        help: "Verified originals aur geometry authority approve karke processing unlock karein.",
+        href: projectHref("source-pack", selectedProject.slug),
+        action: "link" as const,
+      };
+    }
+    if (!activeBuilding) {
+      return {
+        label: "Finish Building workflow",
+        help: "Build/review complete karke immutable Building release publish karein.",
+        href: projectHref("building", selectedProject.slug),
+        action: "link" as const,
+      };
+    }
+    if (!geoExperience) {
+      return {
+        label: "Building is ready",
+        help: "Customer ko map-based experience chahiye to Geo add karein; otherwise Building complete hai.",
+        href: projectHref("building", selectedProject.slug),
+        action: "link" as const,
+      };
+    }
+    if (!activeGeo) {
+      return {
+        label: "Finish Geo placement",
+        help: "Real-world placement verify karke immutable Geo release publish karein.",
+        href: projectHref("geo-mapper", selectedProject.slug),
+        action: "link" as const,
+      };
+    }
+    return {
+      label: "Everything is live",
+      help: "Building aur Geo dono active immutable releases par hain.",
+      href: projectHref("releases", selectedProject.slug),
+      action: "link" as const,
+    };
+  }, [selectedProject, sourceReady, activeBuilding, geoExperience, activeGeo]);
 
   function selectProject(slug: string) {
     setSelectedSlug(slug);
-    setStatus(undefined);
     const url = new URL(window.location.href);
     url.searchParams.set("project", slug);
     window.history.replaceState({}, "", url);
-  }
-
-  async function deleteEveryProject() {
-    if (deleteConfirm !== "DELETE ALL PROJECTS") {
-      setDeleteError("DELETE ALL PROJECTS exactly type karein.");
-      return;
-    }
-
-    setDeleteBusy(true);
-    setDeleteError("");
-    try {
-      const result = await deleteAllProjects(
-        deletionJob?.expectedProjectCount ?? projects.length,
-        deleteConfirm,
-      );
-      if (result.remainingProjects !== 0)
-        throw new Error("Project registry empty nahi hua.");
-
-      setDeletionJob(null);
-      setProjects([]);
-      setSelectedSlug("");
-      setStatus(undefined);
-      setSearch("");
-      setDeleteConfirm("");
-      setShowDeleteAll(false);
-      setProjectsLoaded(true);
-
-      const url = new URL(window.location.href);
-      url.searchParams.delete("project");
-      window.history.replaceState({}, "", url);
-    } catch (reason) {
-      setDeleteError(
-        reason instanceof Error
-          ? reason.message
-          : "Projects permanently delete nahi ho sake.",
-      );
-      void deletionStatus()
-        .then((result) => setDeletionJob(result.job))
-        .catch(() => {});
-    } finally {
-      setDeleteBusy(false);
-    }
   }
 
   async function createProject() {
@@ -304,786 +215,207 @@ export default function EngineDashboard() {
       setCreateError("Project name required hai.");
       return;
     }
-
     setCreateBusy(true);
     setCreateError("");
     try {
-      const project = newProject(name);
-      project.location = createLocation.trim();
-      const slug = projectSlug(project);
-      project.slug = slug;
-      const result = await ensureProject(project);
-      window.location.assign(
-        projectUrl("studio", result.project.slug),
-      );
+      const draft = newProject(name);
+      draft.location = createLocation.trim();
+      draft.slug = projectSlug(draft);
+      const result = await ensureProject(draft);
+      window.location.assign(projectHref("source-pack", result.project.slug));
     } catch (reason) {
-      setCreateError(
-        reason instanceof Error
-          ? reason.message
-          : "Project create nahi ho saka.",
-      );
+      setCreateError(reason instanceof Error ? reason.message : "Project create nahi ho saka.");
     } finally {
       setCreateBusy(false);
     }
   }
 
-
-  async function addGeoExperience() {
-    const activeRelease = releaseItems.find((release) => release.active);
-    if (!selectedSlug || !activeRelease) {
-      setExperienceError(
-        "3D Geo Experience add karne se pehle Building ko immutable release ke roop me publish karein.",
-      );
-      return;
-    }
-
-    setExperienceBusy(true);
-    setExperienceError("");
-    try {
-      const result = await createGeoExperience(selectedSlug, activeRelease.id);
-      setExperienceItems((current) => {
-        const withoutGeo = current.filter((item) => item.type !== "geo");
-        return [...withoutGeo, result.experience];
-      });
-      window.location.assign(projectUrl("geo-mapper", selectedSlug));
-    } catch (reason) {
-      setExperienceError(
-        reason instanceof Error
-          ? reason.message
-          : "3D Geo Experience create nahi ho saka.",
-      );
-    } finally {
-      setExperienceBusy(false);
-    }
-  }
-
-  const selectedProject = projects.find((item) => item.slug === selectedSlug);
-  const visibleProjects = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return projects;
-    return projects.filter((project) =>
-      [project.name, project.slug, project.location]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query)),
-    );
-  }, [projects, search]);
-
-  const model = status?.activeModel;
-  const scenes = useMemo(
-    () => new Map(status?.scenes.map((scene) => [scene.type, scene]) ?? []),
-    [status],
-  );
-  const enabledCount = status?.scenes.filter((scene) => scene.enabled).length ?? 0;
-  const activeBuildingRelease = releaseItems.find((release) => release.active);
-  const buildingExperience = experienceItems.find((item) => item.type === "building");
-  const geoExperience = experienceItems.find((item) => item.type === "geo");
-  const buildingLive = Boolean(
-    status?.project.status === "published" && activeBuildingRelease,
-  );
-  const buildingUrl = status
-    ? `https://ar3dstudio.in${publicProjectPath(status.project.slug)}`
-    : "";
-  const geoUrl = status
-    ? `https://ar3dstudio.in${geoPublicProjectPath(status.project.slug)}`
-    : "";
-  const activeImmutableGeoRelease = geoReleaseState?.activeRelease;
-  const geoLive = Boolean(
-    geoExperience &&
-      activeImmutableGeoRelease &&
-      status?.project.status === "published",
-  );
-  const geoDraftSourceId =
-    geoDraftState?.draft?.sourceBuildingReleaseId ??
-    geoExperience?.sourceBuildingReleaseId;
-  const geoDraftSourceVersion =
-    geoDraftState?.draft?.sourceBuildingReleaseVersion ??
-    geoExperience?.sourceBuildingReleaseVersion;
-  const geoNeedsSourceUpgrade = Boolean(
-    geoExperience &&
-      activeBuildingRelease &&
-      geoDraftSourceId &&
-      geoDraftSourceId !== activeBuildingRelease.id,
-  );
-  const assetPrefix = status
-    ? `projects/${status.project.slug}`
-    : "projects/{slug}";
-
   return (
-    <main className="engine-home">
-      <header className="engine-home__topbar">
-        <a className="engine-home__brand" href="/3Dprojects">
-          <span>R</span>
-          <div>
-            <small>REKIXO</small>
-            <strong>AR3D Engine</strong>
-          </div>
-        </a>
-
-        <nav className="engine-home__nav" aria-label="3D Engine navigation">
-          <a className="active" href="/3Dprojects">Projects</a>
-          <a
-            href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}
-          >
-            Design Studio
-          </a>
-          <a href={selectedSlug ? "#experiences" : "/3Dprojects"}>
-            Experiences
-          </a>
-        </nav>
-
-        <div className="engine-home__top-actions">
-          <button
-            className="engine-button engine-button--primary"
-            type="button"
-            onClick={() => setShowCreate(true)}
-          >
-            + Create 3D Project
-          </button>
-          <button
-            className="engine-button"
-            type="button"
-            onClick={() => setRefresh((value) => value + 1)}
-          >
-            Refresh
-          </button>
-        </div>
-      </header>
-
-      <section className="engine-home__intro">
-        <div className="engine-home__intro-copy">
-          <p className="engine-kicker">BUILDING-FIRST WORKFLOW</p>
-          <h1>Create → Design → Publish → Building Live</h1>
-          <p>
-            Har Engine project ka primary deliverable standalone 3D Building Website hai.
-            3D Geo Experience optional add-on hai aur sirf customer requirement par baad me
-            existing immutable Building release ko reference karke add hota hai.
-          </p>
-          <button
-            className="engine-button engine-button--primary engine-button--hero"
-            type="button"
-            onClick={() => setShowCreate(true)}
-          >
-            + Create New 3D Project
-          </button>
-        </div>
-        <div>
-          <div className="engine-home__steps" aria-label="Building project workflow">
-            <button type="button" onClick={() => setShowCreate(true)}>
-              <span>01</span><strong>Create Project</strong><small>Name + location se start karein</small>
-            </button>
-            <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
-              <span>02</span><strong>Design Building</strong><small>Model, rooms, material, walkthrough</small>
-            </a>
-            <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
-              <span>03</span><strong>Publish Building</strong><small>Immutable Building release create karein</small>
-            </a>
-            {buildingLive ? (
-              <a href={buildingUrl} target="_blank" rel="noreferrer">
-                <span>04</span><strong>Building Live</strong><small>Standalone customer-facing website</small>
-              </a>
-            ) : (
-              <div>
-                <span>04</span><strong>Building Live</strong><small>Publish ke baad customer website live hogi</small>
-              </div>
-            )}
-          </div>
-          <p className="engine-home__optional-note">
-            Map requirement baad me aaye to selected project ke Experiences section se
-            <strong> + Add 3D Geo Experience</strong> karein. Building Website uske bina bhi complete hai.
-          </p>
-        </div>
-      </section>
-
+    <div className="engine-overview">
       {error ? (
-        <section className="engine-home__alert">
+        <div className="engine-overview-alert">
           <strong>Engine data unavailable</strong>
           <span>{error}</span>
-        </section>
+        </div>
       ) : null}
 
-      <section className="engine-home__layout">
-        <aside className="engine-projects">
-          <div className="engine-section-title">
+      <section className="engine-overview-layout">
+        <aside className="engine-overview-projects engine-control-card">
+          <div className="engine-overview-projects__head">
             <div>
-              <p className="engine-kicker">YOUR PROJECTS</p>
-              <h2>{projects.length} Engine project{projects.length === 1 ? "" : "s"}</h2>
-              <small>Select karke Building workspace, releases aur optional Experiences manage karein.</small>
+              <p>YOUR PROJECTS</p>
+              <h2>{projectItems.length} project{projectItems.length === 1 ? "" : "s"}</h2>
             </div>
+            <button className="engine-overview-add" type="button" onClick={() => setShowCreate(true)}>+</button>
           </div>
 
-          <button
-            className="engine-create-callout"
-            type="button"
-            onClick={() => setShowCreate(true)}
-          >
-            <b>＋ Create New Project</b>
-            <span>Naya project banane ke liye yahin click karein</span>
-          </button>
-
-          <label className="engine-project-search">
+          <label className="engine-overview-search">
             <span>Search project</span>
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Name / slug / location"
-            />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name / location" />
           </label>
 
-          <div className="engine-project-list">
+          <div className="engine-overview-project-list">
             {visibleProjects.map((project) => (
               <button
-                type="button"
                 key={project.id}
-                className={
-                  project.slug === selectedSlug
-                    ? "engine-project-row engine-project-row--active"
-                    : "engine-project-row"
-                }
+                type="button"
+                className={project.slug === selectedSlug ? "engine-overview-project engine-overview-project--active" : "engine-overview-project"}
                 onClick={() => selectProject(project.slug)}
               >
-                <span className="engine-project-row__status" data-status={project.status} />
+                <span className="engine-overview-project__dot" data-status={project.status} />
                 <span>
-                  <strong>{project.name}</strong>
+                  <b>{project.name}</b>
                   <small>{project.location || project.slug}</small>
                 </span>
-                <b>{project.status === "published" ? "LIVE" : "DRAFT"}</b>
+                <em>{project.status === "published" ? "LIVE" : "DRAFT"}</em>
               </button>
             ))}
-            {!visibleProjects.length ? (
-              <div className="engine-project-empty">
-                <strong>No matching project</strong>
-                <small>Search clear karein ya naya project banayein.</small>
-              </div>
+            {!visibleProjects.length && !loading ? (
+              <div className="engine-overview-empty-list">No matching project</div>
             ) : null}
           </div>
 
-          {projects.length > 0 || deletionJob ? (
-            <button
-              className="engine-delete-all"
-              type="button"
-              onClick={() => {
-                setDeleteError("");
-                setDeleteConfirm("");
-                setShowDeleteAll(true);
-              }}
-            >
-              {deletionJob ? "Finish project cleanup" : "Delete all projects"}
-            </button>
-          ) : null}
+          <button className="engine-control-button engine-control-button--primary engine-overview-create-wide" type="button" onClick={() => setShowCreate(true)}>
+            + Create New Project
+          </button>
         </aside>
 
-        <div className="engine-workspace">
-          {projectsLoaded && projects.length === 0 ? (
-            <section className="engine-empty-workspace">
-              <div className="engine-empty-workspace__icon">R</div>
-              <p className="engine-kicker">
-                {deletionJob ? "CLEANUP PENDING" : "CLEAN ENGINE"}
-              </p>
-              <h2>
-                {deletionJob ? "Permanent cleanup needs one more pass" : "No 3D projects yet"}
-              </h2>
-              <p>
-                {deletionJob
-                  ? "Project records safe state me hain. Pending storage/database cleanup ko finish karke hi naya project create hoga."
-                  : "Engine registry ab empty hai. Naya project create karne par Design Studio, Building release aur standalone Building Website workflow start hoga."}
-              </p>
-              {deletionJob ? (
-                <button
-                  className="engine-button engine-button--primary"
-                  type="button"
-                  onClick={() => {
-                    setDeleteError("");
-                    setDeleteConfirm("");
-                    setShowDeleteAll(true);
-                  }}
-                >
-                  Finish permanent cleanup
-                </button>
-              ) : (
-                <button
-                  className="engine-button engine-button--primary"
-                  type="button"
-                  onClick={() => setShowCreate(true)}
-                >
-                  + Create First 3D Project
-                </button>
-              )}
+        <div className="engine-overview-workspace">
+          {!selectedProject ? (
+            <section className="engine-overview-empty engine-control-card">
+              <span className="engine-overview-empty__mark">R</span>
+              <p>CLEAN ENGINE</p>
+              <h2>No project selected</h2>
+              <span>Create a project to start the Source → Building → Geo workflow.</span>
+              <button className="engine-control-button engine-control-button--primary" type="button" onClick={() => setShowCreate(true)}>
+                + Create First Project
+              </button>
             </section>
           ) : (
             <>
-          <section className="engine-project-hero">
-            <div>
-              <p className="engine-kicker">PROJECT WORKSPACE</p>
-              <span className={`engine-status engine-status--${status?.project.status ?? "loading"}`}>
-                {status?.project.status ?? (selectedSlug ? "Loading" : "No project")}
-              </span>
-              <h2>{status?.project.name ?? selectedProject?.name ?? "Project select karein"}</h2>
-              <p>
-                {status?.project.location ??
-                  selectedProject?.location ??
-                  "Project select karke Building design, release aur customer Experiences manage karein."}
-              </p>
-              <small>{selectedSlug || "No project selected"}</small>
-            </div>
-
-            <div className="engine-project-hero__actions">
-              <a
-                className="engine-action engine-action--primary"
-                href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}
-                aria-disabled={!selectedSlug}
-              >
-                <span>01 · DESIGN</span>
-                <strong>Open Design Studio</strong>
-                <small>Model, rooms, materials, walkthrough aur Building publish</small>
-              </a>
-
-              {buildingLive ? (
-                <a
-                  className="engine-action"
-                  href={buildingUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <span>02 · BUILDING SITE</span>
-                  <strong>Open Building Website</strong>
-                  <small>Standalone customer-facing 3D Building Experience</small>
-                </a>
-              ) : (
-                <a
-                  className="engine-action engine-action--disabled"
-                  href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}
-                  aria-disabled={!selectedSlug}
-                >
-                  <span>02 · BUILDING SITE</span>
-                  <strong>Publish Building first</strong>
-                  <small>Immutable Building release ke baad website live hogi</small>
-                </a>
-              )}
-
-              <a
-                className="engine-action engine-action--geo"
-                href={selectedSlug ? "#experiences" : "/3Dprojects"}
-              >
-                <span>03 · EXPERIENCES</span>
-                <strong>Manage deliverables</strong>
-                <small>Building primary hai; Geo sirf optional customer add-on</small>
-              </a>
-            </div>
-          </section>
-
-          <section className="engine-health-grid">
-            <article>
-              <span>MODEL</span>
-              <strong>{model?.available ? "Ready" : "Upload needed"}</strong>
-              <small>
-                {model
-                  ? `${model.name} · ${formatBytes(model.byteSize)}`
-                  : "Open Design Studio to add the project GLB."}
-              </small>
-            </article>
-            <article>
-              <span>STORAGE</span>
-              <strong>{status ? "Connected" : "Checking…"}</strong>
-              <small>{status?.storage.bucket ?? "rekixo-3d-assets"}</small>
-            </article>
-            <article>
-              <span>MODULES</span>
-              <strong>{enabledCount}/6</strong>
-              <small>Published project modules enabled</small>
-            </article>
-            <article>
-              <span>RELEASE</span>
-              <strong>{status?.project.status === "published" ? "Published" : "Draft"}</strong>
-              <small>{status?.project.slug || selectedSlug || "Select a project"}</small>
-            </article>
-          </section>
-
-          <section className="engine-home__panel engine-experiences" id="experiences">
-            <div className="engine-section-title">
-              <div>
-                <p className="engine-kicker">CUSTOMER DELIVERABLES</p>
-                <h3>Experiences</h3>
-                <small>
-                  Building Website primary product hai. Geo sirf optional add-on hai aur
-                  selected immutable Building release ko reference karta hai.
-                </small>
-              </div>
-            </div>
-
-            {experienceError ? (
-              <div className="engine-experience-alert" role="alert">
-                <strong>Experience state unavailable</strong>
-                <span>{experienceError}</span>
-              </div>
-            ) : null}
-
-            <div className="engine-experience-grid">
-              <article className="engine-experience-card engine-experience-card--building">
-                <div className="engine-experience-card__head">
-                  <span>PRIMARY PRODUCT</span>
-                  <b>{buildingLive ? "LIVE" : activeBuildingRelease ? "READY" : "DRAFT"}</b>
-                </div>
+              <section className="engine-overview-hero engine-control-card">
                 <div>
-                  <h4>3D Building Website</h4>
-                  <p>
-                    Standalone customer site. Building explore, floors, rooms, amenities,
-                    walkthrough aur approved project content isi Experience me live hota hai.
-                  </p>
+                  <p>PROJECT WORKSPACE</p>
+                  <div className="engine-overview-title-row">
+                    <h2>{selectedProject.name}</h2>
+                    <span className={statusTone(selectedProject.status === "published" ? "live" : "idle")}>
+                      {selectedProject.status.toUpperCase()}
+                    </span>
+                  </div>
+                  <span>{selectedProject.location || selectedProject.slug}</span>
                 </div>
-                <dl>
-                  <div>
-                    <dt>Building release</dt>
-                    <dd>
-                      {activeBuildingRelease
-                        ? `v${activeBuildingRelease.version} · immutable`
-                        : "Publish required"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Canonical URL</dt>
-                    <dd>{buildingUrl || "ar3dstudio.in/3Dprojects/{project-slug}"}</dd>
-                  </div>
-                  <div>
-                    <dt>Identity</dt>
-                    <dd>{buildingExperience ? "Building Experience ready" : "Loading…"}</dd>
-                  </div>
-                </dl>
-                <div className="engine-experience-actions">
-                  <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
-                    Design &amp; releases
-                  </a>
+                <div className="engine-overview-live-actions">
                   {buildingLive ? (
-                    <a href={buildingUrl} target="_blank" rel="noreferrer">
-                      Open Building Live
-                    </a>
-                  ) : (
-                    <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
-                      Publish Building
-                    </a>
-                  )}
+                    <a href={publicProjectPath(selectedProject.slug)} target="_blank" rel="noreferrer">Open Building Live</a>
+                  ) : null}
+                  {geoLive ? (
+                    <a href={geoPublicProjectPath(selectedProject.slug)} target="_blank" rel="noreferrer">Open Geo Live</a>
+                  ) : null}
                 </div>
-              </article>
+              </section>
 
-              <article className="engine-experience-card engine-experience-card--geo">
-                <div className="engine-experience-card__head">
-                  <span>OPTIONAL ADD-ON</span>
-                  <b>
-                    {geoExperience
-                      ? geoLive
-                        ? "LIVE"
-                        : activeImmutableGeoRelease
-                          ? `GEO v${activeImmutableGeoRelease.version}`
-                          : geoNeedsSourceUpgrade
-                            ? "UPDATE AVAILABLE"
-                            : geoDraftState?.draft?.longitude !== null &&
-                                geoDraftState?.draft?.longitude !== undefined
-                              ? "DRAFT READY"
-                              : "SETUP"
-                      : "NOT ADDED"}
-                  </b>
+              <section className="engine-next-action engine-control-card">
+                <div className="engine-next-action__index">NEXT</div>
+                <div>
+                  <p>RECOMMENDED ACTION</p>
+                  <h3>{detailLoading ? "Checking project state…" : nextAction.label}</h3>
+                  <span>{detailLoading ? "Current source, releases and experiences are loading." : nextAction.help}</span>
                 </div>
-
-                {geoExperience ? (
-                  <>
-                    <div>
-                      <h4>3D Geo Experience</h4>
-                      <p>
-                        Building ko real-world geographic context me place karta hai.
-                        Building project copy nahi hota; source immutable release reference hota hai.
-                      </p>
-                    </div>
-                    <dl>
-                      <div>
-                        <dt>Geo draft source</dt>
-                        <dd>
-                          {geoDraftSourceVersion
-                            ? `Release v${geoDraftSourceVersion}`
-                            : geoDraftSourceId || "Pinned release"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Canonical URL</dt>
-                        <dd>{geoUrl || "ar3dstudio.in/3Dprojects/{project-slug}/geo"}</dd>
-                      </div>
-                      <div>
-                        <dt>Source status</dt>
-                        <dd>
-                          {geoNeedsSourceUpgrade
-                            ? `New Building v${activeBuildingRelease?.version} available — preview before draft upgrade`
-                            : "Draft source pinned"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Active immutable Geo release</dt>
-                        <dd>
-                          {activeImmutableGeoRelease
-                            ? `Geo v${activeImmutableGeoRelease.version} · Building v${activeImmutableGeoRelease.sourceBuildingReleaseVersion}`
-                            : "Not published yet"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Customer Geo website</dt>
-                        <dd>
-                          {geoLive
-                            ? `LIVE · Geo v${activeImmutableGeoRelease?.version}`
-                            : "Not published"}
-                        </dd>
-                      </div>
-                    </dl>
-                    <div className="engine-experience-actions">
-                      <a
-                        href={
-                          selectedSlug
-                            ? projectUrl("geo-mapper", selectedSlug)
-                            : "/3Dprojects/geo-mapper"
-                        }
-                      >
-                        Manage Geo Experience
-                      </a>
-                      {geoLive ? (
-                        <a href={geoUrl} target="_blank" rel="noreferrer">
-                          Open Geo Live
-                        </a>
-                      ) : null}
-                    </div>
-                  </>
+                {nextAction.action === "create" ? (
+                  <button className="engine-control-button engine-control-button--primary" type="button" onClick={() => setShowCreate(true)}>Create Project</button>
                 ) : (
-                  <>
-                    <div>
-                      <h4>+ Add 3D Geo Experience</h4>
-                      <p>
-                        Customer ko map-based 3D site chahiye tabhi add karein. Existing
-                        Building release source rahega; Building Website independent live rahegi.
-                      </p>
-                    </div>
-                    <div className="engine-experience-requirement">
-                      <strong>
-                        {activeBuildingRelease
-                          ? `Ready to use Building Release v${activeBuildingRelease.version}`
-                          : "Building release required"}
-                      </strong>
-                      <span>
-                        {activeBuildingRelease
-                          ? "Geo add-on create karke Mapper me location aur alignment set karein."
-                          : "Pehle Design Studio se immutable Building release publish karein."}
-                      </span>
-                    </div>
-                    <div className="engine-experience-actions">
-                      {activeBuildingRelease ? (
-                        <button
-                          type="button"
-                          onClick={() => void addGeoExperience()}
-                          disabled={experienceBusy || !selectedSlug}
-                        >
-                          {experienceBusy ? "Adding…" : "+ Add 3D Geo Experience"}
-                        </button>
-                      ) : (
-                        <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
-                          Publish Building first
-                        </a>
-                      )}
-                    </div>
-                  </>
+                  <a className="engine-control-link engine-control-link--primary" href={nextAction.href}>Open</a>
                 )}
-              </article>
-            </div>
-          </section>
+              </section>
 
-          <section className="engine-home__panel">
-            <div className="engine-section-title">
-              <div>
-                <p className="engine-kicker">PROJECT READINESS</p>
-                <h3>Configured modules</h3>
-              </div>
-              <a href={selectedSlug ? projectUrl("studio", selectedSlug) : "/3Dprojects/studio"}>
-                Edit in Studio
-              </a>
-            </div>
+              <section className="engine-overview-status-grid" aria-label="Project readiness">
+                <article className="engine-control-card">
+                  <div className="engine-overview-card-head">
+                    <span>SOURCE PACK</span>
+                    <i className={statusTone(sourceReady ? "ready" : sourcePack ? "warning" : "idle")}>{sourceReady ? "READY" : sourcePack ? sourcePack.status.toUpperCase() : "NOT STARTED"}</i>
+                  </div>
+                  <h3>{sourcePack ? `Source Pack v${sourcePack.version}` : "Verified originals"}</h3>
+                  <p>Files, geometry authority, scale, component review and durable processing.</p>
+                  <a href={projectHref("source-pack", selectedProject.slug)}>Open Source Pack</a>
+                </article>
 
-            <div className="engine-module-grid">
-              {moduleOrder.map(([type, label], index) => {
-                const scene = scenes.get(type);
-                const ready = Boolean(scene?.enabled);
-                const settings = (scene?.settings ?? {}) as { reason?: string };
-                return (
-                  <article
-                    className={
-                      ready
-                        ? "engine-module engine-module--ready"
-                        : "engine-module"
-                    }
-                    key={type}
-                  >
-                    <span>{String(index + 1).padStart(2, "0")}</span>
-                    <strong>{label}</strong>
-                    <small>
-                      {ready ? "Ready" : settings.reason ?? "Not configured"}
-                    </small>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
+                <article className="engine-control-card">
+                  <div className="engine-overview-card-head">
+                    <span>BUILDING</span>
+                    <i className={statusTone(buildingLive ? "live" : activeBuilding ? "ready" : "warning")}>{buildingLive ? "LIVE" : activeBuilding ? "RELEASE READY" : "IN PROGRESS"}</i>
+                  </div>
+                  <h3>{activeBuilding ? `Building v${activeBuilding.version}` : "3D Building"}</h3>
+                  <p>Build, review, presentation and immutable Building publish workflow.</p>
+                  <a href={projectHref("building", selectedProject.slug)}>Open Building</a>
+                </article>
 
-          <section className="engine-home__panel engine-home__panel--compact">
-            <div>
-              <p className="engine-kicker">ASSET PIPELINE</p>
-              <h3>Project storage details</h3>
-              <p>
-                Raw source files local/source archive me rahenge. Web-ready GLB aur
-                release assets Engine ke isolated R2 storage me versioned keys ke saath rahenge.
-              </p>
-            </div>
-            <dl>
-              <div><dt>Format</dt><dd>{status?.uploadContract?.format ?? "GLB 2.0"}</dd></div>
-              <div><dt>Model key</dt><dd>{status?.uploadContract?.recommendedKey ?? `${assetPrefix}/models/exterior-v1.glb`}</dd></div>
-              <div><dt>Media</dt><dd>{assetPrefix}/media/</dd></div>
-            </dl>
-          </section>
+                <article className="engine-control-card">
+                  <div className="engine-overview-card-head">
+                    <span>GEO</span>
+                    <i className={statusTone(geoLive ? "live" : geoExperience ? "warning" : "idle")}>{geoLive ? "LIVE" : geoExperience ? "SETUP" : "OPTIONAL"}</i>
+                  </div>
+                  <h3>{activeGeo ? `Geo v${activeGeo.version}` : "3D Geo Experience"}</h3>
+                  <p>Exact real-world Building placement. Optional unless the customer needs map context.</p>
+                  <a href={projectHref("geo-mapper", selectedProject.slug)}>Open Geo</a>
+                </article>
+
+                <article className="engine-control-card">
+                  <div className="engine-overview-card-head">
+                    <span>LATEST RELEASE</span>
+                    <i className={statusTone(activeBuilding || activeGeo ? "ready" : "idle")}>{activeGeo ? "GEO" : activeBuilding ? "BUILDING" : "NONE"}</i>
+                  </div>
+                  <h3>{activeGeo ? `Geo v${activeGeo.version}` : activeBuilding ? `Building v${activeBuilding.version}` : "No immutable release"}</h3>
+                  <p>Building and Geo release history, activation and live status in one place.</p>
+                  <a href={projectHref("releases", selectedProject.slug)}>Open Releases</a>
+                </article>
+              </section>
+
+              <section className="engine-overview-flow engine-control-card">
+                <div>
+                  <p>ENGINE WORKFLOW</p>
+                  <h3>One clear path from source to live experience</h3>
+                </div>
+                <div className="engine-overview-flow__steps">
+                  <a href={projectHref("source-pack", selectedProject.slug)}><span>01</span><b>Source</b><small>Verify inputs</small></a>
+                  <a href={projectHref("building", selectedProject.slug)}><span>02</span><b>Building</b><small>Build and publish</small></a>
+                  <a href={projectHref("geo-mapper", selectedProject.slug)}><span>03</span><b>Geo</b><small>Optional real-world placement</small></a>
+                  <a href={projectHref("releases", selectedProject.slug)}><span>04</span><b>Release</b><small>Activate and go live</small></a>
+                </div>
+              </section>
             </>
           )}
         </div>
       </section>
 
-      {showDeleteAll ? (
-        <div className="engine-modal-backdrop" role="presentation">
-          <section
-            className="engine-create-modal engine-delete-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="engine-delete-all-title"
-          >
-            <div className="engine-create-modal__head">
-              <div>
-                <p className="engine-kicker">PERMANENT DELETE</p>
-                <h2 id="engine-delete-all-title">
-                  {deletionJob
-                    ? `Finish cleanup for ${deletionJob.expectedProjectCount} projects?`
-                    : `Delete all ${projects.length} projects?`}
-                </h2>
-                <p>
-                  {deletionJob
-                    ? "Previous permanent deletion safely paused hui thi. Retry existing cleanup job ko resume karega; naya delete operation start nahi hoga."
-                    : "Projects pehle safely archive/freeze honge, phir project-owned R2 assets cleanup honge, aur uske baad D1 records permanently delete honge."}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowDeleteAll(false)}
-                aria-label="Close delete all projects"
-                disabled={deleteBusy}
-              >
-                ×
-              </button>
-            </div>
-
-            <label>
-              <span>Confirmation</span>
-              <input
-                autoFocus
-                value={deleteConfirm}
-                onChange={(event) => setDeleteConfirm(event.target.value)}
-                placeholder="DELETE ALL PROJECTS"
-                autoComplete="off"
-              />
-            </label>
-
-            <div className="engine-delete-warning">
-              <strong>Ye undo nahi hoga.</strong>
-              <span>
-                {deletionJob
-                  ? `Cleanup status: ${deletionJob.status} · R2 deleted: ${deletionJob.deletedR2Objects}`
-                  : "Existing public 3D URLs archive/freeze step ke baad unavailable ho jayenge."}
-              </span>
-            </div>
-
-            {deleteError ? <p className="engine-create-error">{deleteError}</p> : null}
-
-            <div className="engine-create-modal__actions">
-              <button
-                type="button"
-                onClick={() => setShowDeleteAll(false)}
-                disabled={deleteBusy}
-              >
-                Cancel
-              </button>
-              <button
-                className="engine-delete-confirm"
-                type="button"
-                onClick={() => void deleteEveryProject()}
-                disabled={deleteBusy || deleteConfirm !== "DELETE ALL PROJECTS"}
-              >
-                {deleteBusy ? "Deleting everything…" : "Permanently delete all projects"}
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
-
       {showCreate ? (
-        <div className="engine-modal-backdrop" role="presentation">
-          <section className="engine-create-modal" role="dialog" aria-modal="true" aria-labelledby="engine-create-title">
-            <div className="engine-create-modal__head">
+        <div className="engine-overview-modal-backdrop" role="presentation">
+          <section className="engine-overview-modal" role="dialog" aria-modal="true" aria-labelledby="engine-create-project-title">
+            <div className="engine-overview-modal__head">
               <div>
-                <p className="engine-kicker">NEW ENGINE PROJECT</p>
-                <h2 id="engine-create-title">Create 3D project</h2>
-                <p>Naya isolated Engine project banega; existing projects change nahi honge.</p>
+                <p>NEW ENGINE PROJECT</p>
+                <h2 id="engine-create-project-title">Create 3D Project</h2>
+                <span>Project create hote hi Source Pack workflow open hoga.</span>
               </div>
-              <button type="button" onClick={() => setShowCreate(false)} aria-label="Close create project">×</button>
+              <button type="button" onClick={() => setShowCreate(false)} aria-label="Close">×</button>
             </div>
-
             <label>
               <span>Project name</span>
-              <input
-                autoFocus
-                value={createName}
-                onChange={(event) => setCreateName(event.target.value)}
-                placeholder="e.g. Sunrise Residency"
-              />
+              <input value={createName} onChange={(event) => setCreateName(event.target.value)} autoFocus placeholder="Jyoti Paradise" />
             </label>
             <label>
               <span>Location</span>
-              <input
-                value={createLocation}
-                onChange={(event) => setCreateLocation(event.target.value)}
-                placeholder="City / project location"
-              />
+              <input value={createLocation} onChange={(event) => setCreateLocation(event.target.value)} placeholder="City / site" />
             </label>
-
-            <div className="engine-create-next">
-              <strong>Project create hone ke baad:</strong>
-              <span>1. Design Studio open hoga</span>
-              <span>2. Building design karke immutable release Publish karein</span>
-              <span>3. Building Website live hogi; Geo baad me optional add-on ke roop me add karein</span>
-            </div>
-
-            {createError ? <p className="engine-create-error">{createError}</p> : null}
-
-            <div className="engine-create-modal__actions">
-              <button
-                type="button"
-                onClick={() => setShowCreate(false)}
-                disabled={createBusy}
-              >
-                Cancel
-              </button>
-              <button
-                className="engine-button engine-button--primary"
-                type="button"
-                onClick={() => void createProject()}
-                disabled={createBusy}
-              >
-                {createBusy ? "Creating…" : "Create & open Studio"}
+            {createError ? <div className="engine-overview-create-error">{createError}</div> : null}
+            <div className="engine-overview-modal__actions">
+              <button className="engine-control-button" type="button" disabled={createBusy} onClick={() => setShowCreate(false)}>Cancel</button>
+              <button className="engine-control-button engine-control-button--primary" type="button" disabled={createBusy} onClick={() => void createProject()}>
+                {createBusy ? "Creating…" : "Create & Open Source Pack"}
               </button>
             </div>
           </section>
         </div>
       ) : null}
-
-      <footer className="engine-home__footer">
-        <span>Rekixo AR3D Engine · D1 + R2 isolated project runtime</span>
-        <span>{selectedSlug ? `Selected: ${selectedSlug}` : ADMIN_BASE_PATH}</span>
-      </footer>
-    </main>
+    </div>
   );
 }
