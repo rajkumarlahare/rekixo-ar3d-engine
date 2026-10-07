@@ -16,6 +16,13 @@ export type GeoIntegratedPreviewState =
   | "ready"
   | "error";
 
+export type GeoAlignmentMapTarget = {
+  id: string;
+  label: string;
+  latitude: number;
+  longitude: number;
+};
+
 type Coordinate = { latitude: number; longitude: number };
 
 type AuthoringPlacement = GeoRigidPlacement & {
@@ -31,7 +38,10 @@ type Props = {
   coordinate: Coordinate | null;
   anchor: GeoV2Anchor | null;
   placement: AuthoringPlacement | null;
+  alignmentCaptureId: string | null;
+  alignmentTargets: GeoAlignmentMapTarget[];
   onCoordinateChange(latitude: number, longitude: number): void;
+  onAlignmentTargetCapture(pointId: string, latitude: number, longitude: number): void;
   onPreviewStateChange(state: GeoIntegratedPreviewState): void;
 };
 
@@ -54,6 +64,7 @@ type GoogleMapConstructor = {
 type GoogleMarker = {
   setMap(map: GoogleMap | null): void;
   setPosition(position: { lat: number; lng: number }): void;
+  setDraggable(value: boolean): void;
   addListener(name: string, listener: () => void): MapsListener;
   getPosition(): LatLngLike | null;
 };
@@ -256,7 +267,10 @@ export default function GeoIntegratedAuthoringMap({
   coordinate,
   anchor,
   placement,
+  alignmentCaptureId,
+  alignmentTargets,
   onCoordinateChange,
+  onAlignmentTargetCapture,
   onPreviewStateChange,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -267,9 +281,12 @@ export default function GeoIntegratedAuthoringMap({
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.Camera | null>(null);
   const nodesRef = useRef<PlacementNodes | null>(null);
+  const alignmentMarkersRef = useRef<Map<string, GoogleMarker>>(new Map());
   const coordinateRef = useRef<Coordinate | null>(coordinate);
   const placementRef = useRef<AuthoringPlacement | null>(placement);
+  const alignmentCaptureIdRef = useRef<string | null>(alignmentCaptureId);
   const coordinateChangeRef = useRef(onCoordinateChange);
+  const alignmentTargetCaptureRef = useRef(onAlignmentTargetCapture);
   const previewStateChangeRef = useRef(onPreviewStateChange);
   const [mapReady, setMapReady] = useState(false);
   const [webglReady, setWebglReady] = useState(false);
@@ -285,7 +302,9 @@ export default function GeoIntegratedAuthoringMap({
 
   coordinateRef.current = coordinate;
   placementRef.current = placement;
+  alignmentCaptureIdRef.current = alignmentCaptureId;
   coordinateChangeRef.current = onCoordinateChange;
+  alignmentTargetCaptureRef.current = onAlignmentTargetCapture;
   previewStateChangeRef.current = onPreviewStateChange;
 
   useEffect(() => {
@@ -375,10 +394,16 @@ export default function GeoIntegratedAuthoringMap({
         mapClick = map.addListener("click", (event) => {
           if (!event.latLng) return;
           const next = { lat: event.latLng.lat(), lng: event.latLng.lng() };
+          const captureId = alignmentCaptureIdRef.current;
+          if (captureId) {
+            alignmentTargetCaptureRef.current(captureId, next.lat, next.lng);
+            return;
+          }
           marker?.setPosition(next);
           setCoordinate(next.lat, next.lng);
         });
         markerDrag = marker.addListener("dragend", () => {
+          if (alignmentCaptureIdRef.current) return;
           const next = marker?.getPosition();
           if (next) setCoordinate(next.lat(), next.lng());
         });
@@ -483,6 +508,8 @@ export default function GeoIntegratedAuthoringMap({
       mapIdle?.remove();
       markerDrag?.remove();
       marker?.setMap(null);
+      for (const controlMarker of alignmentMarkersRef.current.values()) controlMarker.setMap(null);
+      alignmentMarkersRef.current.clear();
       overlay?.setMap(null);
       rendererRef.current?.dispose();
       rendererRef.current = null;
@@ -496,6 +523,41 @@ export default function GeoIntegratedAuthoringMap({
       if (hostRef.current) hostRef.current.replaceChildren();
     };
   }, [apiKey, projectKey, configuredMapId]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const google = (window as GeoWindow).google;
+    for (const marker of alignmentMarkersRef.current.values()) marker.setMap(null);
+    alignmentMarkersRef.current.clear();
+    if (!mapReady || !map || !google?.maps?.Marker) return;
+    for (const target of alignmentTargets) {
+      const marker = new google.maps.Marker({
+        map,
+        position: { lat: target.latitude, lng: target.longitude },
+        title: `${target.label} real-site control point`,
+        label: {
+          text: target.label,
+          color: "#111111",
+          fontSize: "11px",
+          fontWeight: "800",
+        },
+        clickable: false,
+        optimized: true,
+        zIndex: 20,
+      });
+      alignmentMarkersRef.current.set(target.id, marker);
+    }
+    return () => {
+      for (const marker of alignmentMarkersRef.current.values()) marker.setMap(null);
+      alignmentMarkersRef.current.clear();
+    };
+  }, [mapReady, alignmentTargets]);
+
+  useEffect(() => {
+    markerRef.current?.setDraggable(!alignmentCaptureId);
+    if (!alignmentCaptureId) return;
+    mapRef.current?.moveCamera?.({ tilt: 0, heading: 0, zoom: 20 });
+  }, [alignmentCaptureId]);
 
   useEffect(() => {
     if (!mapReady || !sceneRef.current || !modelUrl) {
@@ -640,24 +702,30 @@ export default function GeoIntegratedAuthoringMap({
     !apiKey ? "Google Maps browser key save karein." :
       !configuredMapId ? "Production JavaScript Vector Map ID save karein." :
         !mapReady || !webglReady ? "Integrated 3D map initialize ho rahi hai…" :
-          !coordinate ? "Map par Building ka real WGS84 anchor set karein." :
-            !modelUrl ? "Active immutable Building release select karein." :
-              !modelReady ? `Immutable Building load ho rahi hai: ${modelName}` :
-                !anchor ? "Exact Building-local model anchor select karein." :
-                  !placement ? "Geo alignment values valid range me karein." :
-                    !frameReady ? "Current placement map par render ho rahi hai…" :
-                      "Integrated Building preview ready · production vector Map ID"
+          alignmentCaptureId ? `Capturing ${alignmentCaptureId} real-site point · click the exact ground corner` :
+            !coordinate ? "Map par Building ka real WGS84 anchor set karein." :
+              !modelUrl ? "Active immutable Building release select karein." :
+                !modelReady ? `Immutable Building load ho rahi hai: ${modelName}` :
+                  !anchor ? "Exact Building-local model anchor select karein." :
+                    !placement ? "Geo alignment values valid range me karein." :
+                      !frameReady ? "Current placement map par render ho rahi hai…" :
+                        "Integrated Building preview ready · production vector Map ID"
   );
 
   return (
     <div className="geo-v2-integrated-authoring">
-      <div className="geo-v2-integrated-map-shell">
+      <div className={`geo-v2-integrated-map-shell${alignmentCaptureId ? " geo-v2-integrated-map-shell--capture" : ""}`}>
         <div ref={hostRef} className="geo3d-map geo-v2-integrated-map" aria-label="Integrated 3D Geo authoring map" />
         <div className="geo-v2-map-tools" aria-label="Geo map view controls">
           <button type="button" disabled={!mapReady} onClick={recenter}>Recenter</button>
           <button type="button" disabled={!mapReady} onClick={setTopView}>Top</button>
           <button type="button" disabled={!mapReady} onClick={setThreeDView}>3D</button>
         </div>
+        {alignmentCaptureId && (
+          <div className="geo-v2-map-capture-banner" role="status">
+            Click exact <strong>{alignmentCaptureId}</strong> ground corner · WGS84 anchor is locked while capture is active
+          </div>
+        )}
         <div className={`geo-v2-map-status${mapFailure || modelFailure ? " geo-v2-map-status--error" : ""}`} role="status">
           <span>AUTHORING PREVIEW</span>
           <strong>{status}</strong>
