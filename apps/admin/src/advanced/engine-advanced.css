@@ -111,10 +111,21 @@
   color: #39dc93;
 }
 
+.engine-advanced-map-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 18px;
+}
+
 .engine-advanced-key,
 .engine-advanced-danger > label {
   display: block;
   margin-top: 18px;
+}
+
+.engine-advanced-map-fields .engine-advanced-key {
+  margin-top: 0;
 }
 
 .engine-advanced-key > span,
@@ -142,6 +153,13 @@
 .engine-advanced-danger input:focus {
   border-color: #2bc981;
   box-shadow: 0 0 0 3px rgba(43, 201, 129, 0.1);
+}
+
+.engine-advanced-key small {
+  display: block;
+  margin-top: 6px;
+  color: #687994;
+  font-size: 9px;
 }
 
 .engine-advanced-panel > .engine-control-button {
