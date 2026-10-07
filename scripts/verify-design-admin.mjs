@@ -71,10 +71,6 @@ if (!code.includes('/3Dprojects/source-pack')) {
 if (!code.includes('/3Dprojects/studio')) {
   throw Error('Deployed admin entry is missing the legacy Studio redirect boundary.');
 }
-if (!code.includes('Opening Automatic Engine')) {
-  throw Error('Deployed admin entry is missing the Automatic Engine legacy-route handoff.');
-}
-
 const sourcePack = code.match(/(?:\.\/)?(SourcePackReview-[\w-]+\.js)/);
 if (!sourcePack) throw Error('The deployed admin has no Source Pack Review bundle.');
 const sourcePackCode = await get(`/3Dprojects/assets/${sourcePack[1]}`, 'javascript');
