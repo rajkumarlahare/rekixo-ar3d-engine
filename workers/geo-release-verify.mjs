@@ -19,6 +19,24 @@ function validSha256(value) {
   return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 }
 
+function validMapId(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{8,80}$/.test(value);
+}
+
+async function productionMapId(env) {
+  try {
+    const row = await env.DB.prepare(
+      "SELECT value FROM engine_settings_3d WHERE key='google_maps_map_id' LIMIT 1",
+    ).first();
+    const stored = String(row?.value || "").trim();
+    if (validMapId(stored)) return stored;
+  } catch {
+    // Environment fallback is supported for managed production deployments.
+  }
+  const fallback = String(env.GOOGLE_MAPS_MAP_ID || "").trim();
+  return validMapId(fallback) ? fallback : "";
+}
+
 function assertLegacyDraftReady(context) {
   if (!context?.experienceId)
     throw Error("Optional Geo Experience does not exist.");
@@ -127,7 +145,12 @@ export async function verifyGeoDraftPreview(
     throw Error("Restore the project before verifying Geo preview.");
 
   const context = await geoContext(env, project);
+  const v2Alignment = await geoV2AlignmentSchemaReady(env);
   await assertDraftReady(env, context);
+  if (v2Alignment && !(await productionMapId(env)))
+    throw Error(
+      "Production Google Maps JavaScript Vector Map ID save karein before Geo verification.",
+    );
   if (Number(context.revision) !== Number(expectedDraftRevision))
     throw Error("Geo draft changed before preview verification.");
 
@@ -180,7 +203,7 @@ export async function verifyGeoDraftPreview(
         sourceBuildingReleaseVersion: source.version,
         sourceBuildingManifestSha256: source.manifestSha256,
         modelSha256: source.model.sha256,
-        v2Alignment: await geoV2AlignmentSchemaReady(env),
+        v2Alignment,
       }),
       now,
     ),
