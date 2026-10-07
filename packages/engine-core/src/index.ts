@@ -59,3 +59,4 @@ export function recommendedExteriorModelKey(slug: string, version = 1) {
 
 export * from "./editor";
 export * from "./geo-rigid-placement";
+export * from "./geo-guided-rigid-alignment";
