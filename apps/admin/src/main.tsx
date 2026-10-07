@@ -39,7 +39,7 @@ function LegacyStudioRedirect() {
     window.location.replace(`/3Dprojects/source-pack${window.location.search}`);
   }, []);
 
-  return <RouteLoading label="Opening Automatic Engine…" />;
+  return <RouteLoading label="Opening Review Source Pack…" />;
 }
 
 function AdminRouter() {
