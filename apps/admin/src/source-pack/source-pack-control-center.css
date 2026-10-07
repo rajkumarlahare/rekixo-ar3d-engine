@@ -1,0 +1,229 @@
+.source-review__workflow-nav,
+.source-review__processing-stage,
+.source-review__ready-stage,
+.source-review__review-workspace {
+  width: min(1180px, calc(100% - 40px));
+  margin-inline: auto;
+}
+
+.source-review__workflow-nav {
+  position: sticky;
+  top: 112px;
+  z-index: 12;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid #263753;
+  border-radius: 14px;
+  background: rgba(8, 18, 33, 0.94);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.2);
+}
+
+.source-review__workflow-nav a {
+  min-height: 58px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #dfe7f4;
+  padding: 8px 10px;
+  text-decoration: none;
+}
+
+.source-review__workflow-nav a:hover {
+  border-color: #31513f;
+  background: #10241f;
+}
+
+.source-review__workflow-nav span {
+  color: #31d18a;
+  font-size: 8px;
+  font-weight: 950;
+}
+
+.source-review__workflow-nav b {
+  font-size: 11px;
+}
+
+.source-review__workflow-nav small {
+  color: #71819b;
+  font-size: 8px;
+}
+
+.source-review__review-workspace {
+  scroll-margin-top: 190px;
+}
+
+.source-review__start-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.source-review__processing-stage {
+  margin-top: 24px;
+  scroll-margin-top: 190px;
+}
+
+.source-review__stage-label {
+  margin-bottom: 10px;
+  padding: 0 2px;
+}
+
+.source-review__stage-label p,
+.source-review__ready-stage p {
+  margin: 0;
+  color: #2fd087;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.16em;
+}
+
+.source-review__stage-label h2,
+.source-review__ready-stage h2 {
+  margin: 5px 0 0;
+  font-size: 20px;
+}
+
+.source-review__stage-label span,
+.source-review__ready-stage > div > span {
+  display: block;
+  margin-top: 6px;
+  color: #7f8fa8;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.source-review__processing-stage > .processing-spine,
+.source-review__processing-stage > .model-scale-review {
+  width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.source-review__ready-stage {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #2b4f40;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(20, 72, 55, 0.32), #0b111d 58%);
+  padding: 20px;
+  scroll-margin-top: 190px;
+}
+
+.source-review__ready-stage > div:last-child {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.source-review__ready-stage a {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #2d3d58;
+  border-radius: 10px;
+  background: #101e35;
+  color: #dce5f5;
+  padding: 0 12px;
+  text-decoration: none;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.source-review__ready-stage .source-review__ready-primary {
+  border-color: #21bd77;
+  background: #18b969;
+  color: #fff;
+}
+
+.source-review__ready-stage .source-review__ready-disabled {
+  opacity: 0.5;
+}
+
+.engine-admin-content .source-review {
+  min-height: 0;
+  background: transparent;
+  padding-bottom: 20px;
+}
+
+.engine-admin-content .source-review__hero,
+.engine-admin-content .source-review__summary,
+.engine-admin-content .source-review__files,
+.engine-admin-content .source-review__actions,
+.engine-admin-content .source-review__start,
+.engine-admin-content .source-review__suggestion,
+.engine-admin-content .source-review__alert,
+.engine-admin-content .source-review__workflow-nav,
+.engine-admin-content .source-review__processing-stage,
+.engine-admin-content .source-review__ready-stage,
+.engine-admin-content .source-review__review-workspace {
+  width: 100%;
+}
+
+.engine-admin-content .source-review__hero {
+  padding-top: 8px;
+}
+
+.engine-admin-content .source-review__hero h1 {
+  font-size: clamp(28px, 4vw, 40px);
+}
+
+.engine-admin-content .source-review__workflow-nav {
+  top: 126px;
+}
+
+.engine-admin-content .source-review__actions {
+  bottom: 14px;
+}
+
+@media (max-width: 980px) {
+  .source-review__workflow-nav {
+    top: 94px;
+    grid-template-columns: repeat(5, minmax(110px, 1fr));
+    overflow-x: auto;
+  }
+
+  .engine-admin-content .source-review__workflow-nav {
+    top: 108px;
+  }
+}
+
+@media (max-width: 760px) {
+  .source-review__workflow-nav,
+  .source-review__processing-stage,
+  .source-review__ready-stage,
+  .source-review__review-workspace {
+    width: min(100% - 24px, 1180px);
+  }
+
+  .engine-admin-content .source-review__workflow-nav,
+  .engine-admin-content .source-review__processing-stage,
+  .engine-admin-content .source-review__ready-stage,
+  .engine-admin-content .source-review__review-workspace {
+    width: 100%;
+  }
+
+  .source-review__ready-stage,
+  .source-review__start {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .source-review__ready-stage > div:last-child,
+  .source-review__start-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .source-review__ready-stage a,
+  .source-review__start-actions button {
+    width: 100%;
+  }
+}
