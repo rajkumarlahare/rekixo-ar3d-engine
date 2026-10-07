@@ -315,6 +315,7 @@ export default function GeoIntegratedAuthoringMap({
 
     let cancelled = false;
     let mapClick: MapsListener | null = null;
+    let mapIdle: MapsListener | null = null;
     let markerDrag: MapsListener | null = null;
     let overlay: GoogleWebGLOverlay | null = null;
     let marker: GoogleMarker | null = null;
@@ -381,6 +382,9 @@ export default function GeoIntegratedAuthoringMap({
           const next = marker?.getPosition();
           if (next) setCoordinate(next.lat(), next.lng());
         });
+        mapIdle = map.addListener("idle", () => {
+          overlay?.requestRedraw();
+        });
 
         const scene = new THREE.Scene();
         const camera = new THREE.Camera();
@@ -419,6 +423,7 @@ export default function GeoIntegratedAuthoringMap({
             ...(gl.getContextAttributes() || {}),
           });
           renderer.autoClear = false;
+          renderer.autoClearDepth = false;
           renderer.outputColorSpace = THREE.SRGBColorSpace;
           renderer.toneMapping = THREE.ACESFilmicToneMapping;
           renderer.toneMappingExposure = 0.95;
@@ -441,10 +446,9 @@ export default function GeoIntegratedAuthoringMap({
               altitude: projectionAltitude(placementRef.current),
             }),
           );
-          renderer.resetState();
+          gl.disable(gl.SCISSOR_TEST);
           renderer.render(drawScene, drawCamera);
           renderer.resetState();
-          gl.flush();
           if (nodesRef.current?.root.visible) setFrameReady(true);
         };
         overlay.onContextLost = () => {
@@ -476,6 +480,7 @@ export default function GeoIntegratedAuthoringMap({
       cancelled = true;
       clearContextTimer();
       mapClick?.remove();
+      mapIdle?.remove();
       markerDrag?.remove();
       marker?.setMap(null);
       overlay?.setMap(null);
