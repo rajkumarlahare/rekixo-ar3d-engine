@@ -158,6 +158,64 @@
   background: #07131f;
 }
 
+.geo-camera-toolbar {
+  position: absolute;
+  z-index: 8;
+  top: 14px;
+  left: 50%;
+  max-width: calc(100% - 360px);
+  padding: 5px;
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+  transform: translateX(-50%);
+  border: 1px solid rgba(92, 127, 151, .38);
+  border-radius: 16px;
+  background: rgba(8, 22, 32, .88);
+  box-shadow: 0 12px 28px rgba(1, 9, 15, .34);
+  backdrop-filter: blur(14px);
+  pointer-events: auto;
+}
+
+.geo-camera-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.geo-camera-toolbar button {
+  min-height: 40px;
+  padding: 8px 15px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(105, 132, 150, .42);
+  border-radius: 13px;
+  background: linear-gradient(180deg, rgba(35, 50, 59, .98), rgba(26, 39, 48, .98));
+  color: #f2f6f8;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .045);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: .005em;
+  cursor: pointer;
+  transition: transform .16s ease, border-color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+
+.geo-camera-toolbar button:hover,
+.geo-camera-toolbar button:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(89, 222, 181, .62);
+  outline: none;
+}
+
+.geo-camera-toolbar button.is-active {
+  border-color: rgba(81, 235, 190, .9);
+  background: linear-gradient(180deg, #17664f, #0f523f);
+  box-shadow:
+    0 7px 18px rgba(4, 50, 37, .28),
+    inset 0 1px 0 rgba(255, 255, 255, .09);
+  color: #f5fff9;
+}
+
 .geo-integrated-fallback > .viewer3d,
 .geo-integrated-fallback > section,
 .geo-integrated-scene--fallback > .viewer3d,
@@ -232,6 +290,13 @@
   margin: 0;
 }
 
+@media (max-width: 1100px) {
+  .geo-camera-toolbar {
+    top: 62px;
+    max-width: calc(100% - 28px);
+  }
+}
+
 @media (max-width: 900px) {
   .jio-public-header {
     min-height: 126px;
@@ -285,6 +350,21 @@
     min-width: 0;
     min-height: 43px;
     padding-inline: 10px;
+  }
+
+  .geo-camera-toolbar {
+    top: 60px;
+    left: 8px;
+    right: 8px;
+    max-width: none;
+    transform: none;
+    border-radius: 14px;
+  }
+
+  .geo-camera-toolbar button {
+    min-height: 38px;
+    padding: 7px 13px;
+    font-size: 12px;
   }
 
   .geo-integrated-scene,
