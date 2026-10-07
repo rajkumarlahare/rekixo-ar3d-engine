@@ -30,7 +30,9 @@ test("active Geo manifest is checksum and identity validated before customer dat
   assert.match(runtime, /manifest\.release\.experienceId !== row\.experience_id/);
   assert.match(runtime, /manifest\.release\.projectId !== row\.project_id/);
   assert.match(runtime, /manifest\.release\.projectSlug !== row\.slug/);
-  assert.match(runtime, /validPlacement\(manifest\.placement\)/);
+  assert.match(runtime, /assertGeoPresentationManifestV1\(manifest\)/);
+  assert.match(runtime, /validLegacyPlacement\(manifest\.placement\)/);
+  assert.match(runtime, /manifest\?\.format === "rekixo\.geo-presentation"/);
 });
 
 test("Geo public runtime loads its pinned Building release by immutable ID instead of current Building pointer", () => {
