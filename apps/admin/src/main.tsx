@@ -17,6 +17,7 @@ const CloudLogin = lazy(() => import("./CloudLogin"));
 function RouteLoading({ label }: { label: string }) {
   return (
     <div className="route-loading">
+      <small>AUTOMATIC ENGINE</small>
       <p className="eyebrow">REKIXO AR3D ENGINE</p>
       <h1>{label}</h1>
     </div>
@@ -35,10 +36,10 @@ function AdminShellRoute({ label, children }: { label: string; children: ReactNo
 
 function LegacyStudioRedirect() {
   useEffect(() => {
-    window.location.replace(`/3Dprojects/building${window.location.search}`);
+    window.location.replace(`/3Dprojects/source-pack${window.location.search}`);
   }, []);
 
-  return <RouteLoading label="Opening Building workspace…" />;
+  return <RouteLoading label="Opening Automatic Engine…" />;
 }
 
 function AdminRouter() {
