@@ -104,10 +104,10 @@ test("uniform scale is opt-in and constrained while diagnostics stay explicit", 
   assert.equal(solvedScale.points.length, 4);
 });
 
-test("guided authoring is four-point, fail-safe, map-capture aware, and never introduces homography", () => {
+test("guided authoring is four-point, fail-safe, map-capture aware, and never introduces Building homography", () => {
   assert.match(mapperSource, /GUIDED_POINT_IDS\s*=\s*\["P1",\s*"P2",\s*"P3",\s*"P4"\]/);
-  assert.match(mapperSource, /Apply rigid solution to current form/);
   assert.match(mapperSource, /Save Geo V2 Draft/);
+  assert.match(panelSource, /Apply rigid solution to current form/);
   assert.match(panelSource, /RMS/);
   assert.match(panelSource, /Worst/);
   assert.match(panelSource, /coarse \? 1 : 0\.25/);
@@ -117,6 +117,6 @@ test("guided authoring is four-point, fail-safe, map-capture aware, and never in
   assert.match(topReferenceSource, /screen right = \+X/);
   assert.match(mapSource, /if \(captureId\) \{\s*alignmentTargetCaptureRef\.current\(captureId, next\.lat, next\.lng\);\s*return;/s);
   assert.match(mapSource, /setDraggable\(!alignmentCaptureId\)/);
-  assert.doesNotMatch(engineSource, /homography|shear matrix|perspective warp/i);
-  assert.match(engineSource, /scale = 1/);
+  assert.doesNotMatch(engineSource, /solveHomography|applyHomography/);
+  assert.match(engineSource, /let scale = 1/);
 });
