@@ -1,10 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { Viewer3D } from "../viewer/Viewer3D";
+import { applyRigidBuildingPlacement } from "./geoRigidTransform";
 import "./geo-public-demo.css";
+
+type GeoCoordinate = {
+  longitude: number;
+  latitude: number;
+  altitudeM?: number;
+};
 
 type GeoPayload = {
   project: { id: string; slug: string; name: string; location?: string };
-  release: { id: string; version: number };
   buildingRelease: {
     id: string;
     version: number;
@@ -14,17 +23,34 @@ type GeoPayload = {
     id: string;
     version: number;
     manifestSha256: string;
+    manifestFormat?: string;
     sourceDraftRevision: number;
     createdAt?: string;
   };
   placement: {
-    longitude: number;
-    latitude: number;
-    altitudeM: number;
+    coordinateReferenceSystem: "WGS84";
+    localFrame: "ENU";
+    units: "m";
+    anchor: GeoCoordinate;
+    heightMode: "ground-clamped" | "ground-relative" | "absolute";
+    eastOffsetM: number;
+    northOffsetM: number;
+    verticalOffsetM: number;
     headingDeg: number;
     pitchDeg: number;
     rollDeg: number;
     scale: number;
+  };
+  modelAnchor: {
+    id: string;
+    name: string;
+    kind: string;
+    localPositionM: { x: number; y: number; z: number };
+  };
+  runtime?: {
+    integratedScene?: boolean;
+    qualityTiers?: string[];
+    buildingTransform?: string;
   };
   maps: { apiKey: string | null; configured: boolean };
   model: {
@@ -35,28 +61,52 @@ type GeoPayload = {
     url: string;
     variant?: string;
     sha256?: string;
+    sourceSha256?: string;
   };
   error?: string;
 };
 
-type LatLngLike = { lat(): number; lng(): number };
 type GoogleMap = {
   setCenter(position: { lat: number; lng: number }): void;
+  moveCamera?(options: Record<string, unknown>): void;
 };
-type GoogleMarker = { setMap(map: GoogleMap | null): void };
-type GooglePolyline = { setMap(map: GoogleMap | null): void };
+
+type WebGLTransformer = {
+  fromLatLngAltitude(input: {
+    lat: number;
+    lng: number;
+    altitude: number;
+  }): number[];
+};
+
+type WebGLDrawOptions = {
+  gl: WebGLRenderingContext;
+  transformer: WebGLTransformer;
+};
+
+type WebGLContextOptions = { gl: WebGLRenderingContext };
+
+type GoogleWebGLOverlay = {
+  onAdd?: () => void;
+  onContextRestored?: (options: WebGLContextOptions) => void;
+  onDraw?: (options: WebGLDrawOptions) => void;
+  onContextLost?: () => void;
+  onRemove?: () => void;
+  setMap(map: GoogleMap | null): void;
+  requestRedraw(): void;
+};
+
 type GoogleRoot = {
   maps: {
     Map: new (node: HTMLElement, options: Record<string, unknown>) => GoogleMap;
-    Marker: new (options: Record<string, unknown>) => GoogleMarker;
-    Polyline: new (options: Record<string, unknown>) => GooglePolyline;
+    WebGLOverlayView?: new () => GoogleWebGLOverlay;
   };
 };
 
 type GeoWindow = Window &
   typeof globalThis & {
     google?: GoogleRoot;
-    __rekixoPublicJioMapsReady?: () => void;
+    __rekixoPublicGeoMapsReady?: () => void;
   };
 
 let mapsPromise: Promise<GoogleRoot> | null = null;
@@ -70,15 +120,15 @@ function loadGoogleMaps(apiKey: string) {
 
   mapsKeyLoaded = apiKey;
   mapsPromise = new Promise<GoogleRoot>((resolve, reject) => {
-    const callback = "__rekixoPublicJioMapsReady";
+    const callback = "__rekixoPublicGeoMapsReady";
     geoWindow[callback] = () => {
       if (geoWindow.google?.maps?.Map) resolve(geoWindow.google);
       else reject(new Error("Google Maps initialize nahi hui."));
     };
-    const existing = document.getElementById("rekixo-public-jio-maps-js");
+    const existing = document.getElementById("rekixo-public-geo-maps-js");
     if (existing) existing.remove();
     const script = document.createElement("script");
-    script.id = "rekixo-public-jio-maps-js";
+    script.id = "rekixo-public-geo-maps-js";
     script.async = true;
     script.defer = true;
     script.src =
@@ -92,15 +142,220 @@ function loadGoogleMaps(apiKey: string) {
   return mapsPromise;
 }
 
-function headingEnd(latitude: number, longitude: number, headingDeg: number) {
-  const heading = (headingDeg * Math.PI) / 180;
-  const distanceM = 24;
-  const northM = Math.cos(heading) * distanceM;
-  const eastM = Math.sin(heading) * distanceM;
-  const lat = latitude + northM / 111_320;
-  const cosLat = Math.max(0.2, Math.cos((latitude * Math.PI) / 180));
-  const lng = longitude + eastM / (111_320 * cosLat);
-  return { lat, lng };
+function sha256Hex(bytes: ArrayBuffer) {
+  return crypto.subtle.digest("SHA-256", bytes).then((digest) =>
+    Array.from(new Uint8Array(digest), (value) =>
+      value.toString(16).padStart(2, "0"),
+    ).join(""),
+  );
+}
+
+async function loadVerifiedModel(model: GeoPayload["model"]) {
+  const response = await fetch(model.url, {
+    headers: { Accept: "model/gltf-binary,application/octet-stream" },
+    cache: "force-cache",
+  });
+  if (!response.ok)
+    throw new Error(`Immutable Geo model load failed (${response.status}).`);
+  const bytes = await response.arrayBuffer();
+  if (model.byteSize !== undefined && bytes.byteLength !== model.byteSize)
+    throw new Error("Immutable Geo model byte-size verification failed.");
+  if (model.sha256 && (await sha256Hex(bytes)) !== model.sha256.toLowerCase())
+    throw new Error("Immutable Geo model checksum verification failed.");
+  const loader = new GLTFLoader();
+  loader.setMeshoptDecoder(MeshoptDecoder);
+  return new Promise<THREE.Object3D>((resolve, reject) => {
+    loader.parse(
+      bytes,
+      "",
+      (gltf) => resolve(gltf.scene),
+      (reason) =>
+        reject(
+          reason instanceof Error
+            ? reason
+            : new Error("Immutable Geo GLB parse failed."),
+        ),
+    );
+  });
+}
+
+function disposeObject(root: THREE.Object3D) {
+  root.traverse((node) => {
+    if (!(node instanceof THREE.Mesh)) return;
+    node.geometry?.dispose();
+    for (const material of Array.isArray(node.material)
+      ? node.material
+      : [node.material]) {
+      for (const value of Object.values(material)) {
+        if (value instanceof THREE.Texture) value.dispose();
+      }
+      material.dispose();
+    }
+  });
+}
+
+function mapAltitude(data: GeoPayload) {
+  return data.placement.heightMode === "absolute"
+    ? Number(data.placement.anchor.altitudeM || 0)
+    : 0;
+}
+
+function IntegratedGeoScene({ data }: { data: GeoPayload }) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const [quality, setQuality] = useState("Preparing integrated 3D map");
+  const [failure, setFailure] = useState("");
+
+  useEffect(() => {
+    if (!hostRef.current || !data.maps.apiKey) return;
+    let cancelled = false;
+    let overlay: GoogleWebGLOverlay | undefined;
+    let renderer: THREE.WebGLRenderer | undefined;
+    let loadedModel: THREE.Object3D | undefined;
+    let root: THREE.Group | undefined;
+
+    Promise.all([loadGoogleMaps(data.maps.apiKey), loadVerifiedModel(data.model)])
+      .then(([google, model]) => {
+        if (cancelled || !hostRef.current) {
+          disposeObject(model);
+          return;
+        }
+        const WebGLOverlayView = google.maps.WebGLOverlayView;
+        if (!WebGLOverlayView)
+          throw new Error("This browser/map runtime does not expose WebGLOverlayView.");
+
+        loadedModel = model;
+        const center = {
+          lat: data.placement.anchor.latitude,
+          lng: data.placement.anchor.longitude,
+        };
+        const map = new google.maps.Map(hostRef.current, {
+          center,
+          zoom: 19,
+          tilt: 67.5,
+          heading: data.placement.headingDeg,
+          mapId: "DEMO_MAP_ID",
+          mapTypeControl: true,
+          streetViewControl: false,
+          fullscreenControl: true,
+          gestureHandling: "greedy",
+          clickableIcons: false,
+        });
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.Camera();
+        root = new THREE.Group();
+        root.name = "rekixo-rigid-geo-building";
+        applyRigidBuildingPlacement(
+          root,
+          model,
+          data.modelAnchor.localPositionM,
+          {
+            eastOffsetM: data.placement.eastOffsetM,
+            northOffsetM: data.placement.northOffsetM,
+            verticalOffsetM: data.placement.verticalOffsetM,
+            headingDeg: data.placement.headingDeg,
+            pitchDeg: data.placement.pitchDeg,
+            rollDeg: data.placement.rollDeg,
+            scale: data.placement.scale,
+          },
+        );
+        model.traverse((node) => {
+          if (!(node instanceof THREE.Mesh)) return;
+          node.frustumCulled = true;
+          node.castShadow = false;
+          node.receiveShadow = false;
+        });
+        scene.add(root);
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x66717b, 1.35));
+        const sun = new THREE.DirectionalLight(0xffffff, 2.0);
+        sun.position.set(30, -20, 60);
+        scene.add(sun);
+
+        overlay = new WebGLOverlayView();
+        overlay.onContextRestored = ({ gl }) => {
+          if (cancelled) return;
+          renderer = new THREE.WebGLRenderer({
+            canvas: gl.canvas as HTMLCanvasElement,
+            context: gl,
+            antialias: true,
+          });
+          renderer.autoClear = false;
+          renderer.outputColorSpace = THREE.SRGBColorSpace;
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          renderer.toneMappingExposure = 0.95;
+          setQuality("Integrated vector terrain + immutable 3D Building");
+        };
+        overlay.onDraw = ({ gl, transformer }) => {
+          if (cancelled || !renderer) return;
+          const projection = transformer.fromLatLngAltitude({
+            lat: data.placement.anchor.latitude,
+            lng: data.placement.anchor.longitude,
+            altitude: mapAltitude(data),
+          });
+          camera.projectionMatrix.fromArray(projection);
+          renderer.resetState();
+          renderer.render(scene, camera);
+          gl.flush();
+        };
+        overlay.onContextLost = () => {
+          renderer?.dispose();
+          renderer = undefined;
+          if (!cancelled) setQuality("3D map context restoring");
+        };
+        overlay.onRemove = () => {
+          renderer?.dispose();
+          renderer = undefined;
+        };
+        overlay.setMap(map);
+        map.moveCamera?.({
+          center,
+          zoom: 19,
+          tilt: 67.5,
+          heading: data.placement.headingDeg,
+        });
+      })
+      .catch((reason) => {
+        if (cancelled) return;
+        setFailure(
+          reason instanceof Error
+            ? reason.message
+            : "Integrated 3D Geo scene initialize nahi hui.",
+        );
+        setQuality("Fallback Building view");
+      });
+
+    return () => {
+      cancelled = true;
+      overlay?.setMap(null);
+      renderer?.dispose();
+      if (loadedModel) disposeObject(loadedModel);
+      if (hostRef.current) hostRef.current.replaceChildren();
+    };
+  }, [data]);
+
+  return (
+    <div className="geo-integrated-scene">
+      <div ref={hostRef} className="geo-integrated-map" aria-label={`${data.project.name} integrated 3D geographic scene`} />
+      {failure && (
+        <div className="geo-integrated-fallback">
+          <Viewer3D
+            modelUrl={data.model.url}
+            modelLabel={data.model.name}
+            compactUi
+            presentationView="building"
+          />
+          <div className="geo-fallback-note">
+            <strong>Geospatial WebGL fallback</strong>
+            <span>{failure}</span>
+          </div>
+        </div>
+      )}
+      <div className="geo-quality-badge" role="status">
+        <span>GEO RUNTIME</span>
+        <strong>{quality}</strong>
+      </div>
+    </div>
+  );
 }
 
 export function slugFromGeoPathname(pathname: string) {
@@ -114,7 +369,6 @@ export default function GeoPublicDemo() {
   const slug = useMemo(() => slugFromGeoPathname(window.location.pathname), []);
   const [data, setData] = useState<GeoPayload>();
   const [error, setError] = useState("");
-  const mapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!slug) {
@@ -130,7 +384,7 @@ export default function GeoPublicDemo() {
       .then(async (response) => {
         const body = (await response.json()) as GeoPayload;
         if (!response.ok)
-          throw new Error(body.error || `3D Geo demo load failed (${response.status}).`);
+          throw new Error(body.error || `3D Geo load failed (${response.status}).`);
         return body;
       })
       .then((body) => {
@@ -139,73 +393,16 @@ export default function GeoPublicDemo() {
       })
       .catch((reason) => {
         if (controller.signal.aborted) return;
-        setError(reason instanceof Error ? reason.message : "3D Geo demo load nahi hua.");
+        setError(reason instanceof Error ? reason.message : "3D Geo load nahi hua.");
       });
     return () => controller.abort();
   }, [slug]);
-
-  useEffect(() => {
-    if (!data?.maps.apiKey || !mapRef.current) return;
-    let cancelled = false;
-    let marker: GoogleMarker | null = null;
-    let heading: GooglePolyline | null = null;
-
-    void loadGoogleMaps(data.maps.apiKey)
-      .then((google) => {
-        if (cancelled || !mapRef.current) return;
-        const center = {
-          lat: data.placement.latitude,
-          lng: data.placement.longitude,
-        };
-        const map = new google.maps.Map(mapRef.current, {
-          center,
-          zoom: 20,
-          mapTypeId: "hybrid",
-          streetViewControl: false,
-          mapTypeControl: true,
-          fullscreenControl: true,
-          gestureHandling: "greedy",
-          tilt: 0,
-          heading: 0,
-        });
-        marker = new google.maps.Marker({
-          map,
-          position: center,
-          title: data.project.name,
-        });
-        heading = new google.maps.Polyline({
-          map,
-          path: [
-            center,
-            headingEnd(
-              data.placement.latitude,
-              data.placement.longitude,
-              data.placement.headingDeg,
-            ),
-          ],
-          strokeColor: "#21d395",
-          strokeOpacity: 1,
-          strokeWeight: 4,
-        });
-      })
-      .catch((reason) => {
-        if (!cancelled)
-          setError(reason instanceof Error ? reason.message : "Google Maps load nahi hui.");
-      });
-
-    return () => {
-      cancelled = true;
-      marker?.setMap(null);
-      heading?.setMap(null);
-      mapRef.current?.replaceChildren();
-    };
-  }, [data]);
 
   if (error)
     return (
       <main className="jio-public-state">
         <p className="eyebrow">REKIXO AR3D ENGINE</p>
-        <h1>3D Geo demo unavailable</h1>
+        <h1>3D Geo unavailable</h1>
         <p>{error}</p>
       </main>
     );
@@ -214,22 +411,22 @@ export default function GeoPublicDemo() {
     return (
       <main className="jio-public-state">
         <p className="eyebrow">REKIXO AR3D ENGINE</p>
-        <h1>Loading 3D Geo demo…</h1>
+        <h1>Loading integrated 3D Geo…</h1>
       </main>
     );
 
   const mapsUrl =
     `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-      `${data.placement.latitude.toFixed(7)},${data.placement.longitude.toFixed(7)}`,
+      `${data.placement.anchor.latitude.toFixed(7)},${data.placement.anchor.longitude.toFixed(7)}`,
     )}`;
 
   return (
     <main className="jio-public-shell">
       <header className="jio-public-header">
         <div>
-          <p className="eyebrow">LIVE 3D GEO EXPERIENCE</p>
+          <p className="eyebrow">INTEGRATED 3D GEO EXPERIENCE</p>
           <h1>{data.project.name}</h1>
-          <p>{data.project.location || "Rekixo AR3D Engine placement"}</p>
+          <p>{data.project.location || "Rekixo AR3D Engine"}</p>
         </div>
         <div className="jio-public-header-actions">
           <a href={`/3Dprojects/${encodeURIComponent(data.project.slug)}`}>
@@ -245,51 +442,46 @@ export default function GeoPublicDemo() {
         <article>
           <span>GEO RELEASE</span>
           <strong>v{data.geoRelease.version}</strong>
-          <small>{data.geoRelease.id}</small>
+          <small>{data.geoRelease.manifestFormat || "legacy-compatible"}</small>
         </article>
         <article>
           <span>BUILDING SOURCE</span>
           <strong>v{data.buildingRelease.version}</strong>
           <small>{data.buildingRelease.id}</small>
         </article>
-        <article><span>MODEL</span><strong>{data.model.name}</strong><small>{data.model.variant || "source"}</small></article>
-        <article><span>ANCHOR</span><strong>{data.placement.latitude.toFixed(7)}</strong><small>{data.placement.longitude.toFixed(7)}</small></article>
-        <article><span>ALIGNMENT</span><strong>{data.placement.headingDeg.toFixed(1)}°</strong><small>Scale {data.placement.scale.toFixed(3)} · Ground {data.placement.altitudeM.toFixed(2)}m</small></article>
+        <article>
+          <span>RIGID ALIGNMENT</span>
+          <strong>{data.placement.headingDeg.toFixed(1)}° heading</strong>
+          <small>WGS84 · ENU · scale {data.placement.scale.toFixed(3)}</small>
+        </article>
+        <article>
+          <span>MODEL ANCHOR</span>
+          <strong>{data.modelAnchor.name}</strong>
+          <small>{data.modelAnchor.kind} · {data.placement.heightMode}</small>
+        </article>
       </section>
 
-      <section className="jio-public-grid">
-        <article className="jio-public-card">
-          <div className="jio-public-card-head">
-            <div><p className="eyebrow">GEO LOCATION</p><h2>Satellite anchor</h2></div>
-          </div>
-          {data.maps.configured ? (
-            <div ref={mapRef} className="jio-public-map" aria-label={`${data.project.name} satellite location`} />
-          ) : (
-            <div className="jio-public-placeholder">
-              <strong>Satellite map configuration pending</strong>
-              <span>Building preview remains available.</span>
-            </div>
-          )}
-          <p className="jio-public-note">
-            Green line building heading dikhati hai. Location aur alignment active immutable Geo Release ke saath pinned hain.
-          </p>
-        </article>
-
-        <article className="jio-public-card jio-public-model">
-          <div className="jio-public-card-head">
-            <div><p className="eyebrow">3D BUILDING</p><h2>Live model preview</h2></div>
-          </div>
+      {data.maps.configured ? (
+        <IntegratedGeoScene data={data} />
+      ) : (
+        <section className="geo-integrated-scene geo-integrated-scene--fallback">
           <Viewer3D
             modelUrl={data.model.url}
             modelLabel={data.model.name}
             compactUi
             presentationView="building"
           />
-          <p className="jio-public-note">
-            Drag = rotate · wheel/pinch = zoom. Public Geo Experience read-only hai; edit/publish sirf Engine Studio se hota hai.
-          </p>
-        </article>
-      </section>
+          <div className="geo-quality-badge">
+            <span>GEO FALLBACK</span>
+            <strong>Map provider key is not configured</strong>
+          </div>
+        </section>
+      )}
+
+      <footer className="geo-runtime-note">
+        Building geometry remains immutable and rigid. Masterplan calibration, when present,
+        applies only to the 2D overlay and never warps the Building model.
+      </footer>
     </main>
   );
 }
