@@ -182,10 +182,11 @@ test("R6 Geo WebGL runtime is vector, watchdog-protected, and uses explicit Map 
   assert.doesNotMatch(publicGeo, /DEMO_MAP_ID/);
 });
 
-test("R6 production Geo verification requires an Engine-owned JavaScript Vector Map ID", () => {
+test("R6 production Geo verify and publish require an Engine-owned JavaScript Vector Map ID", () => {
   const config = fs.readFileSync("workers/geo-maps-config.mjs", "utf8");
   const entry = fs.readFileSync("workers/admin-entry.mjs", "utf8");
   const verifier = fs.readFileSync("workers/geo-release-verify.mjs", "utf8");
+  const publisher = fs.readFileSync("workers/geo-release-publish.mjs", "utf8");
   const publicWorker = fs.readFileSync("workers/public.mjs", "utf8");
 
   assert.match(config, /google_maps_map_id/);
@@ -194,7 +195,9 @@ test("R6 production Geo verification requires an Engine-owned JavaScript Vector 
   assert.match(config, /Same-origin request required/);
   assert.match(config, /geo\.maps_map_id_updated/);
   assert.match(entry, /handleGeoMapsConfigRequest/);
-  assert.match(verifier, /Production Google Maps JavaScript Vector Map ID save karein before Geo verification/);
+  assert.match(verifier, /requireProductionVectorMapId/);
+  assert.match(verifier, /Production Google Maps JavaScript Vector Map ID save karein before Geo verification or publish/);
+  assert.match(publisher, /requireProductionVectorMapId/);
   assert.match(publicWorker, /mapIdConfigured/);
   assert.match(publicWorker, /Boolean\(mapsApiKey && mapsMapId\)/);
 });
