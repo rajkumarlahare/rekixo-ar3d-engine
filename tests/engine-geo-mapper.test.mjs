@@ -34,19 +34,22 @@ test("Engine Admin owns editable Geo drafts while legacy placement remains isola
   assert.match(worker, /Geo draft changed elsewhere/);
 });
 
-test("3D Jio Mapper is an Engine route, not a Platform dependency", () => {
+test("3D Geo Mapper remains an Engine-owned route and the V2 workflow preserves release-gated Geo authoring", () => {
   const main = read("apps/admin/src/main.tsx");
-  const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
-  const mapper = read("apps/admin/src/geo/GeoMapper3D.tsx");
-  assert.match(dashboard, /\+ Add 3D Geo Experience/);
-  assert.match(dashboard, /Manage Geo Experience/);
-  assert.match(main, /\/3Dprojects\/geo-mapper/);
-  assert.match(mapper, /<h1>3D Geo Mapper<\/h1>/);
-  assert.match(mapper, /Optional Geo Experience/);
-  assert.match(mapper, /saveGeoDraft/);
-  assert.match(mapper, /resetGeoDraft/);
-  assert.match(mapper, /saveGeoMapsKey/);
-  assert.match(mapper, /sourceUpdateAvailable/);
+  const workspace = read("apps/admin/src/geo/GeoWorkspace.tsx");
+  const mapper = read("apps/admin/src/geo/GeoMapper3DV2.tsx");
+
+  assert.match(main, /path === "\/3Dprojects\/geo-mapper"/);
+  assert.match(main, /<GeoWorkspace \/>/);
+  assert.match(workspace, /GeoMapper3DV2/);
+  assert.match(workspace, /Source → Place → Align → Fine Tune → Publish/);
+  assert.match(mapper, /Enable 3D Geo for this project/);
+  assert.match(mapper, /Publish one Building release before enabling Geo/);
+  assert.match(mapper, /createGeoExperience\(selectedSlug, source\.id\)/);
+  assert.match(mapper, /sourceReleaseId !== state\.project\.activeBuildingReleaseId/);
+  assert.match(mapper, /Save Geo V2 Draft/);
+  assert.match(mapper, /Verify Current Preview/);
+  assert.match(mapper, /Publish Immutable Geo Release/);
   assert.doesNotMatch(mapper, /saveGeoPlacement|removeGeoPlacement/);
   assert.doesNotMatch(mapper, /Public 3D Jio demo|type="checkbox"/);
   assert.doesNotMatch(mapper, /tiyansh-production|rekixo-ar3d-platform|geo_3d_placements/);
