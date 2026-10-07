@@ -440,7 +440,7 @@ export default function GeoIntegratedAuthoringMap({
       }
     }
     overlayRef.current?.requestRedraw();
-  }, [coordinate, anchor, placement]);
+  }, [coordinate, anchor, placement, modelReady]);
 
   useEffect(() => {
     let next: GeoIntegratedPreviewState;
