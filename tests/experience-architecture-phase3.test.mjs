@@ -4,75 +4,87 @@ import test from "node:test";
 
 const read = (path) => fs.readFileSync(path, "utf8");
 
-test("Phase 3 dashboard is Building-first and Geo is optional", () => {
+test("Phase 3 overview remains Building-first and keeps Geo optional", () => {
   const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
 
-  assert.match(dashboard, /Create → Design → Publish → Building Live/);
-  assert.match(dashboard, /3D Building Website/);
-  assert.match(dashboard, /PRIMARY PRODUCT/);
-  assert.match(dashboard, /OPTIONAL ADD-ON/);
-  assert.match(dashboard, /\+ Add 3D Geo Experience/);
-  assert.match(dashboard, /Building Website uske bina bhi complete hai/);
+  assert.match(dashboard, /SOURCE PACK/);
+  assert.match(dashboard, /<span>BUILDING<\/span>/);
+  assert.match(dashboard, /<span>GEO<\/span>/);
+  assert.match(dashboard, /\{geoLive \? "LIVE" : geoExperience \? "SETUP" : "OPTIONAL"\}/);
+  assert.match(dashboard, /Exact real-world Building placement\. Optional unless the customer needs map context/);
+  assert.match(dashboard, /Customer ko map-based experience chahiye to Geo add karein; otherwise Building complete hai/);
   assert.doesNotMatch(dashboard, /Create → Edit → Map → Live/);
 });
 
-test("Geo Experience creation requires an active immutable Building release", () => {
-  const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
+test("Geo Experience creation still requires an active immutable Building release", () => {
+  const mapper = read("apps/admin/src/geo/GeoMapper3DV2.tsx");
 
-  assert.match(dashboard, /releaseItems\.find\(\(release\) => release\.active\)/);
-  assert.match(dashboard, /createGeoExperience\(selectedSlug, activeRelease\.id\)/);
-  assert.match(dashboard, /Building release required/);
-  assert.match(dashboard, /Publish Building first/);
-  assert.match(
-    dashboard,
-    /3D Geo Experience add karne se pehle Building ko immutable release ke roop me publish karein/,
-  );
+  assert.match(mapper, /releaseItems\.find\(\(item\) => item\.active\)/);
+  assert.match(mapper, /if \(!source\) throw new Error\("Publish one Building release before enabling Geo\."\)/);
+  assert.match(mapper, /await createGeoExperience\(selectedSlug, source\.id\)/);
+  assert.match(mapper, /disabled=\{busy \|\| !activeRelease\}/);
+  assert.match(mapper, /PINNED BUILDING SOURCE/);
+  assert.match(mapper, /Immutable Building Release/);
 });
 
 test("Building and Geo expose independent canonical customer URLs", () => {
   const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
 
-  assert.match(dashboard, /publicProjectPath\(status\.project\.slug\)/);
-  assert.match(dashboard, /geoPublicProjectPath\(status\.project\.slug\)/);
+  assert.match(dashboard, /publicProjectPath\(selectedProject\.slug\)/);
+  assert.match(dashboard, /geoPublicProjectPath\(selectedProject\.slug\)/);
   assert.match(dashboard, /Open Building Live/);
   assert.match(dashboard, /Open Geo Live/);
 });
 
-test("Geo source upgrades are visible but never automatic from the dashboard", () => {
-  const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
+test("Geo source changes remain explicit and verification never silently upgrades the pinned Building source", () => {
+  const mapper = read("apps/admin/src/geo/GeoMapper3DV2.tsx");
 
-  assert.match(dashboard, /geoNeedsSourceUpgrade/);
-  assert.match(dashboard, /New Building v\$\{activeBuildingRelease\?\.version\} available — preview before draft upgrade/);
-  assert.doesNotMatch(dashboard, /createGeoExperience\(selectedSlug, activeBuildingRelease\.id\)/);
+  assert.match(mapper, /sourceReleaseId !== state\.project\.activeBuildingReleaseId/);
+  assert.match(mapper, /Historical Building release/);
+  assert.match(mapper, /setSourceReleaseId\(event\.target\.value\)/);
+  assert.match(mapper, /sourceBuildingReleaseId: sourceReleaseId/);
+  assert.match(mapper, /Verification deliberately requires the active immutable Building release/);
+  assert.doesNotMatch(mapper, /setSourceReleaseId\(activeRelease\.id\)/);
 });
 
-test("dashboard loads Experience, Building release, Geo draft and immutable Geo live state through Engine-owned APIs", () => {
+test("control-center surfaces load Experience, Building release, editable Geo V2 draft and immutable Geo live state through Engine-owned APIs", () => {
   const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
+  const mapper = read("apps/admin/src/geo/GeoMapper3DV2.tsx");
+  const geoApi = read("apps/admin/src/geo/geoV2Api.ts");
   const cloud = read("apps/admin/src/studio/cloud.ts");
 
   assert.match(dashboard, /experiences\(selectedSlug\)/);
   assert.match(dashboard, /releases\(selectedSlug\)/);
   assert.match(dashboard, /geoReleases\(selectedSlug\)/);
-  assert.match(dashboard, /geoDraft\(selectedSlug\)/);
+  assert.match(mapper, /loadGeoV2\(slug\)/);
+  assert.match(mapper, /geoReleases\(slug\)/);
+  assert.match(geoApi, /const CLOUD_BASE = "\/3Dprojects\/api\/cloud\/projects"/);
+  assert.match(geoApi, /\/geo-v2/);
   assert.match(cloud, /\/experiences/);
-  assert.match(cloud, /\/geo-draft/);
   assert.match(cloud, /\/geo-releases/);
-  assert.doesNotMatch(dashboard, /rekixo-ar3d-platform|tiyansh-production|tiyansh-gallery-production/);
+  assert.doesNotMatch(dashboard + mapper + geoApi, /rekixo-ar3d-platform|tiyansh-production|tiyansh-gallery-production/);
 });
 
-test("Phase 3 UI styles preserve responsive two-card and one-card Experience layouts", () => {
+test("Phase 3 responsive coverage follows the new Overview control-center layouts", () => {
   const css = read("apps/admin/src/dashboard/engine-dashboard.css");
 
-  assert.match(css, /\.engine-experience-grid/);
+  assert.match(css, /\.engine-overview-status-grid/);
   assert.match(css, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(css, /@media \(max-width: 820px\)/);
-  assert.match(css, /\.engine-experience-grid \{\s*grid-template-columns: 1fr/);
+  assert.match(css, /@media \(max-width: 1120px\)/);
+  assert.match(css, /\.engine-overview-status-grid \{\s*grid-template-columns: 1fr/);
+  assert.match(css, /@media \(max-width: 860px\)/);
+  assert.match(css, /\.engine-overview-layout \{\s*grid-template-columns: 1fr/);
+  assert.match(css, /@media \(max-width: 620px\)/);
+  assert.match(css, /\.engine-overview-flow__steps \{\s*grid-template-columns: 1fr/);
 });
 
-test("project creation modal explains Geo as a later optional add-on", () => {
+test("project creation starts Source Pack and presents Geo only as a later optional stage", () => {
   const dashboard = read("apps/admin/src/dashboard/EngineDashboard.tsx");
 
-  assert.match(dashboard, /Building design karke immutable release Publish karein/);
-  assert.match(dashboard, /Geo baad me optional add-on ke roop me add karein/);
+  assert.match(dashboard, /Project create hote hi Source Pack workflow open hoga/);
+  assert.match(dashboard, /Create & Open Source Pack/);
+  assert.match(dashboard, /Finish Building workflow/);
+  assert.match(dashboard, /Customer ko map-based experience chahiye to Geo add karein; otherwise Building complete hai/);
+  assert.match(dashboard, /OPTIONAL/);
   assert.doesNotMatch(dashboard, /3D Jio Mapper me real location set karein/);
 });
