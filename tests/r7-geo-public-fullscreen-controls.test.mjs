@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 const helper = fs.readFileSync("apps/public/src/geo/fullscreen-controls.ts", "utf8");
+const loader = fs.readFileSync("apps/public/src/geo/fullscreen-controls-loader.ts", "utf8");
 const css = fs.readFileSync("apps/public/src/geo/fullscreen-controls.css", "utf8");
 const html = fs.readFileSync("apps/public/index.html", "utf8");
 
@@ -14,12 +15,34 @@ test("public Geo mirrors camera controls into Google native fullscreen", () => {
   assert.match(helper, /geo-camera-toolbar--fullscreen-clone/);
 });
 
-test("mobile camera strip stays below Google Map\/Satellite controls", () => {
-  assert.match(css, /@media \(max-width: 640px\)[\s\S]*?top:\s*68px\s*!important/);
-  assert.match(css, /z-index:\s*2147483646\s*!important/);
+test("normal customer page mirrors the live camera controls into the header", () => {
+  assert.match(helper, /jio-public-header-camera-slot/);
+  assert.match(helper, /geo-camera-toolbar--header-clone/);
+  assert.match(helper, /insertAdjacentElement\("afterend", slot\)/);
+  assert.match(helper, /MutationObserver/);
+  assert.match(css, /grid-template-areas:[\s\S]*?"copy actions"[\s\S]*?"copy cameras"/);
+  assert.match(css, /geo-integrated-scene > \.geo-camera-toolbar/);
+  assert.match(css, /visibility:\s*hidden\s*!important/);
 });
 
-test("fullscreen bridge assets are loaded by the public shell", () => {
+test("mobile puts all five presets directly below the header actions", () => {
+  assert.match(css, /@media \(max-width: 640px\)[\s\S]*?"copy"[\s\S]*?"actions"[\s\S]*?"cameras"/);
+  assert.match(css, /grid-template-columns:\s*repeat\(5, minmax\(0, 1fr\)\)/);
+  assert.match(css, /geo-camera-toolbar--fullscreen-clone[\s\S]*?top:\s*68px\s*!important/);
+});
+
+test("customer camera controls use transparent glass styling", () => {
+  assert.match(css, /geo-camera-toolbar--header-clone[\s\S]*?background:\s*transparent\s*!important/);
+  assert.match(css, /background:\s*rgba\(8, 22, 32, \.38\)\s*!important/);
+  assert.match(css, /backdrop-filter:\s*blur\(9px\)/);
+});
+
+test("camera bridge is lazy-loaded only for public Geo routes", () => {
+  assert.match(loader, /parts\.length === 3/);
+  assert.match(loader, /parts\[0\] === "3Dprojects"/);
+  assert.match(loader, /parts\[2\] === "geo"/);
+  assert.match(loader, /import\("\.\/fullscreen-controls"\)/);
   assert.match(html, /\/src\/geo\/fullscreen-controls\.css/);
-  assert.match(html, /\/src\/geo\/fullscreen-controls\.ts/);
+  assert.match(html, /\/src\/geo\/fullscreen-controls-loader\.ts/);
+  assert.doesNotMatch(html, /src="\/src\/geo\/fullscreen-controls\.ts"/);
 });
