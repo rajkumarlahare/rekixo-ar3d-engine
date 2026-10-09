@@ -35,10 +35,10 @@ test("Geo map toolbar orders all camera views before the Building website link",
 
   assert.ok(toolbar.indexOf("{GEO_CAMERA_VIEWS.map") < toolbar.indexOf('className="geo-building-link"'));
   assert.match(toolbar, /Building <span aria-hidden="true">↗<\/span>/);
-  assert.match(toolbar, /href=\{\`\/3Dprojects\/\$\{encodeURIComponent\(data\.project\.slug\)\}\`\}/);
+  assert.ok(toolbar.includes('href={`/3Dprojects/${encodeURIComponent(data.project.slug)}`}'));
   assert.match(toolbar, /target="_blank"/);
   assert.match(toolbar, /rel="noopener noreferrer"/);
-  assert.match(toolbar, /aria-label=\{\`Open \$\{data\.project\.name\} building website in a new tab\`\}/);
+  assert.ok(toolbar.includes('aria-label={`Open ${data.project.name} building website in a new tab`}'));
   assert.doesNotMatch(toolbar, /Open location|Google Maps/);
 });
 
