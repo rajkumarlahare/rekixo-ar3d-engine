@@ -17,7 +17,7 @@ test("customer Building page keeps only its compact brand header and primary 3D 
   assert.doesNotMatch(projectNavigation, /project-overview|BuildingDetails|Project gallery|PROJECT OVERVIEW/);
   assert.match(publicApp, /client-showcase--viewer-only/);
   assert.match(publicApp, /project-header--viewer-only/);
-  assert.match(publicApp, /<nav hidden className="module-nav"/);
+  assert.doesNotMatch(publicApp, /<nav[^>]*className="module-nav"/);
   assert.doesNotMatch(publicApp, /<footer>/);
 });
 
