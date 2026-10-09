@@ -206,39 +206,6 @@ executeJson(
      'image/webp','ci@rekixo.com')`,
 );
 executeJson(
-  `INSERT INTO project_branding_3d
-    (project_id,draft_logo_version,published_logo_version,updated_by)
-   VALUES ('${fixtureProjectId}','brand-ci-logo-version-001','brand-ci-logo-version-001','ci@rekixo.com')`,
-);
-executeJson(
-  `INSERT INTO project_branding_logo_versions_3d
-    (project_id,version,logo_key,favicon_key,created_by,published_at)
-   VALUES ('${fixtureProjectId}','brand-ci-logo-version-001',
-     'projects/${fixtureProjectSlug}/branding/logos/logo.webp',
-     'projects/${fixtureProjectSlug}/branding/favicons/logo.png',
-     'ci@rekixo.com',datetime('now'))`,
-);
-executeJson(
-  `INSERT INTO project_branding_shares_3d
-    (project_id,experience_type,draft_title,draft_description,draft_card_version,
-     draft_card_key,draft_source_key,published_version,updated_by)
-   VALUES ('${fixtureProjectId}','building','CI Share Title',
-     'A valid CI share description for test data','brand-ci-share-version-001',
-     'projects/${fixtureProjectSlug}/branding/share/building/cards/card.webp',
-     'projects/${fixtureProjectSlug}/branding/share/building/sources/source.png',
-     'brand-ci-share-version-001','ci@rekixo.com')`,
-);
-executeJson(
-  `INSERT INTO project_branding_share_versions_3d
-    (project_id,experience_type,version,share_title,share_description,card_key,
-     source_key,mime_type,created_by)
-   VALUES ('${fixtureProjectId}','building','brand-ci-share-version-001',
-     'CI Share Title','A valid CI share description for test data',
-     'projects/${fixtureProjectSlug}/branding/share/building/cards/card.webp',
-     'projects/${fixtureProjectSlug}/branding/share/building/sources/source.png',
-     'image/webp','ci@rekixo.com')`,
-);
-executeJson(
   `INSERT INTO source_files_3d
     (id,project_id,filename,media_type,byte_size,sha256,r2_key,upload_state,created_by)
    VALUES
