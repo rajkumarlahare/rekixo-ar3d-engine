@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS project_branding_logo_versions_3d (
   version TEXT NOT NULL,
   logo_key TEXT NOT NULL,
   favicon_key TEXT NOT NULL,
+  source_key TEXT NOT NULL,
+  source_mime_type TEXT NOT NULL CHECK (source_mime_type IN ('image/jpeg','image/png','image/webp')),
   logo_mime_type TEXT NOT NULL DEFAULT 'image/webp'
     CHECK (logo_mime_type IN ('image/webp')),
   favicon_mime_type TEXT NOT NULL DEFAULT 'image/png'
