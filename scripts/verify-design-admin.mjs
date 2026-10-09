@@ -58,6 +58,21 @@ async function getFreshAdminEntry() {
   );
 }
 
+const adminNavigationRoutes = [
+  { path: "/3Dprojects?project=route-smoke", label: "overview with project query" },
+  { path: "/3Dprojects/building?project=route-smoke", label: "Building deep link" },
+  { path: "/3Dprojects/geo-mapper?project=route-smoke", label: "Geo deep link" },
+  { path: "/3Dprojects/releases?project=route-smoke", label: "Releases deep link" },
+  { path: "/3Dprojects/advanced?project=route-smoke", label: "Advanced deep link" },
+];
+
+for (const route of adminNavigationRoutes) {
+  const html = await get(route.path, "text/html");
+  if (!html.includes("<title>Rekixo 3D Projects</title>")) {
+    throw Error(`Admin ${route.label} did not return the SPA document shell.`);
+  }
+}
+
 const { html, entry, code } = await getFreshAdminEntry();
 
 if (!html.includes('href="/3Dprojects/favicon.svg"')) throw Error('Missing 3D Engine Admin favicon link.');

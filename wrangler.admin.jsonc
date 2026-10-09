@@ -6,7 +6,7 @@
   "workers_dev": false,
   "routes": [
     {
-      "pattern": "admin.rekixo.com/3Dprojects",
+      "pattern": "admin.rekixo.com/3Dprojects*",
       "zone_name": "rekixo.com"
     },
     {
