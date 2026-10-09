@@ -1116,9 +1116,9 @@ footer { padding-top: 24px; display: flex; justify-content: space-between; gap: 
 
 .client-showcase--viewer-only .viewer-shell {
   width: 100%;
-  height: min(76vh, 820px);
-  min-height: min(360px, calc(100dvh - 78px));
-  max-height: 820px;
+  height: min(calc(100dvh - 70px), 1000px);
+  min-height: min(360px, calc(100dvh - 70px));
+  max-height: 1000px;
   border-radius: 20px;
 }
 
@@ -1240,8 +1240,8 @@ footer { padding-top: 24px; display: flex; justify-content: space-between; gap: 
   }
 
   .client-showcase--viewer-only .viewer-shell {
-    height: min(74vh, 760px);
-    min-height: min(340px, calc(100dvh - 54px));
+    height: calc(100dvh - 58px);
+    min-height: min(320px, calc(100dvh - 58px));
     border-radius: 15px;
   }
 
