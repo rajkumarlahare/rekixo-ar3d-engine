@@ -85,7 +85,7 @@ jobs:
           fi
           CHANGED="$(git diff --name-only "$BEFORE" "$GITHUB_SHA")"
           printf '%s\n' "$CHANGED"
-          if printf '%s\n' "$CHANGED" | grep -Eq '^(apps/public/|workers/(public|release-runtime|geo-release-runtime|http-range|storage-boundary)\.mjs$|packages/(contracts|engine-core|model-profiles)/|shared/|scripts/build-geo-model-derivative\.mjs$|project-profiles/|package(-lock)?\.json$|wrangler\.public\.jsonc$|database/migrations/0028_clean_room_project_reset_v1\.sql$|\.github/workflows/deploy-cloudflare\.yml$)'; then
+          if printf '%s\n' "$CHANGED" | grep -Eq '^(apps/public/|workers/(public|release-runtime|geo-release-runtime|http-range|storage-boundary|project-branding)\.mjs$|packages/(contracts|engine-core|model-profiles)/|shared/|scripts/build-geo-model-derivative\.mjs$|project-profiles/|package(-lock)?\.json$|wrangler\.public\.jsonc$|database/migrations/0028_clean_room_project_reset_v1\.sql$|\.github/workflows/deploy-cloudflare\.yml$)'; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"

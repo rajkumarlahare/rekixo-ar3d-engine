@@ -12,6 +12,10 @@ import {
   activeGeoReleaseState,
   publicGeoExperienceFromState,
 } from "./geo-release-runtime.mjs";
+import {
+  injectPublicBrandingMetadata,
+  servePublicBrandingRoute,
+} from "./project-branding.mjs";
 const BASE_PATH = "/3Dprojects";
 const MODEL_ROUTE_PREFIX = `${BASE_PATH}/api/models/`;
 const PROJECT_ROUTE_PREFIX = `${BASE_PATH}/api/projects/`;
@@ -413,6 +417,12 @@ export default {
       const slug = parts[0]?.trim();
       if (!slug) return json({ error: "Project slug is required." }, { status: 400 });
 
+      if (parts[1] === "branding") {
+        return addSecurityHeaders(
+          await servePublicBrandingRoute(request, env, slug, parts.slice(2), url),
+        );
+      }
+
       if (parts[1] === "media" && parts[2]) {
         return serveProjectMedia(env, slug, parts[2], request);
       }
@@ -471,6 +481,13 @@ export default {
       return json(experience);
     }
 
-    return addSecurityHeaders(await env.ASSETS.fetch(toAssetRequest(request)));
+    const assetResponse = await env.ASSETS.fetch(toAssetRequest(request));
+    const brandedResponse = await injectPublicBrandingMetadata(
+      request,
+      env,
+      assetResponse,
+      url,
+    );
+    return addSecurityHeaders(brandedResponse);
   },
 };

@@ -80,6 +80,12 @@ const requiredObjects = new Set([
   "releases_3d",
   "experiences_3d",
   "geo_releases_3d",
+  "project_branding_3d",
+  "project_branding_logo_versions_3d",
+  "project_branding_shares_3d",
+  "project_branding_share_versions_3d",
+  "trg_project_branding_logo_versions_immutable",
+  "trg_project_branding_share_versions_immutable",
   "geo_model_anchors_3d",
   "geo_overlays_3d",
   "geo_control_points_3d",
@@ -106,6 +112,12 @@ const objectRows = executeJson(
         'releases_3d',
         'experiences_3d',
         'geo_releases_3d',
+        'project_branding_3d',
+        'project_branding_logo_versions_3d',
+        'project_branding_shares_3d',
+        'project_branding_share_versions_3d',
+        'trg_project_branding_logo_versions_immutable',
+        'trg_project_branding_share_versions_immutable',
         'geo_model_anchors_3d',
         'geo_overlays_3d',
         'geo_control_points_3d',
@@ -159,6 +171,40 @@ const fixtureSnapshot = JSON.stringify([
 executeJson(
   `INSERT INTO projects_3d (id,slug,name,status)
    VALUES ('${fixtureProjectId}','${fixtureProjectSlug}','CI Source Delete','draft')`,
+);
+executeJson(
+  `INSERT INTO project_branding_3d
+    (project_id,draft_logo_version,published_logo_version,updated_by)
+   VALUES ('${fixtureProjectId}','brand-ci-logo-version-001','brand-ci-logo-version-001','ci@rekixo.com')`,
+);
+executeJson(
+  `INSERT INTO project_branding_logo_versions_3d
+    (project_id,version,logo_key,favicon_key,source_key,source_mime_type,created_by,published_at)
+   VALUES ('${fixtureProjectId}','brand-ci-logo-version-001',
+     'projects/${fixtureProjectSlug}/branding/logos/logo.webp',
+     'projects/${fixtureProjectSlug}/branding/favicons/logo.png',
+     'projects/${fixtureProjectSlug}/branding/logo-sources/logo.png','image/png',
+     'ci@rekixo.com',datetime('now'))`,
+);
+executeJson(
+  `INSERT INTO project_branding_shares_3d
+    (project_id,experience_type,draft_title,draft_description,draft_card_version,
+     draft_card_key,draft_source_key,published_version,updated_by)
+   VALUES ('${fixtureProjectId}','building','CI Share Title',
+     'A valid CI share description for test data','brand-ci-share-version-001',
+     'projects/${fixtureProjectSlug}/branding/share/building/cards/card.webp',
+     'projects/${fixtureProjectSlug}/branding/share/building/sources/source.png',
+     'brand-ci-share-version-001','ci@rekixo.com')`,
+);
+executeJson(
+  `INSERT INTO project_branding_share_versions_3d
+    (project_id,experience_type,version,share_title,share_description,card_key,
+     source_key,mime_type,created_by)
+   VALUES ('${fixtureProjectId}','building','brand-ci-share-version-001',
+     'CI Share Title','A valid CI share description for test data',
+     'projects/${fixtureProjectSlug}/branding/share/building/cards/card.webp',
+     'projects/${fixtureProjectSlug}/branding/share/building/sources/source.png',
+     'image/webp','ci@rekixo.com')`,
 );
 executeJson(
   `INSERT INTO source_files_3d
@@ -258,7 +304,11 @@ const cascadeRows = executeJson(
      (SELECT COUNT(*) FROM source_upload_sessions_3d WHERE project_id='${fixtureProjectId}') +
      (SELECT COUNT(*) FROM source_upload_parts_3d WHERE session_id='${fixtureSessionId}') +
      (SELECT COUNT(*) FROM processing_jobs_3d WHERE project_id='${fixtureProjectId}') +
-     (SELECT COUNT(*) FROM processing_artifacts_3d WHERE project_id='${fixtureProjectId}') AS total`,
+     (SELECT COUNT(*) FROM processing_artifacts_3d WHERE project_id='${fixtureProjectId}') +
+     (SELECT COUNT(*) FROM project_branding_3d WHERE project_id='${fixtureProjectId}') +
+     (SELECT COUNT(*) FROM project_branding_logo_versions_3d WHERE project_id='${fixtureProjectId}') +
+     (SELECT COUNT(*) FROM project_branding_shares_3d WHERE project_id='${fixtureProjectId}') +
+     (SELECT COUNT(*) FROM project_branding_share_versions_3d WHERE project_id='${fixtureProjectId}') AS total`,
 );
 if (Number(cascadeRows[0]?.total ?? -1) !== 0)
   throw new Error("Sealed Source Pack V2 / processing project cascade left project-owned rows behind.");
@@ -294,7 +344,11 @@ const projectOwnedCounts = executeJson(
      (SELECT COUNT(*) FROM source_upload_parts_3d) +
      (SELECT COUNT(*) FROM processing_jobs_3d) +
      (SELECT COUNT(*) FROM processing_artifacts_3d) +
-     (SELECT COUNT(*) FROM engine_deletion_jobs_3d) AS total`,
+     (SELECT COUNT(*) FROM engine_deletion_jobs_3d) +
+     (SELECT COUNT(*) FROM project_branding_3d) +
+     (SELECT COUNT(*) FROM project_branding_logo_versions_3d) +
+     (SELECT COUNT(*) FROM project_branding_shares_3d) +
+     (SELECT COUNT(*) FROM project_branding_share_versions_3d) AS total`,
 );
 if (Number(projectOwnedCounts[0]?.total ?? -1) !== 0)
   throw new Error("Fresh migration chain left project-owned rows behind.");
