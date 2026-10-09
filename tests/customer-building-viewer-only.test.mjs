@@ -14,7 +14,7 @@ test("customer Building page keeps only its compact brand header and primary 3D 
 
   assert.match(projectNavigation, /<Viewer3D/);
   assert.match(projectNavigation, /projectLocation=\{project\.location\}/);
-  assert.doesNotMatch(projectNavigation, /project-overview|BuildingDetails|Project gallery|PROJECT OVERVIEW/);
+  assert.doesNotMatch(projectNavigation, /project-overview|BuildingDetails|Project gallery|PROJECT OVERVIEW|client-hero-overlay|EXPLORE THE BUILDING/);
   assert.match(publicApp, /client-showcase--viewer-only/);
   assert.match(publicApp, /project-header--viewer-only/);
   assert.doesNotMatch(publicApp, /<nav[^>]*className="module-nav"/);
@@ -43,7 +43,7 @@ test("viewer-only Building page fits its complete header and 3D controls inside 
   assert.match(styles, /\.client-showcase--viewer-only \.viewer-section\s*\{[\s\S]*flex:\s*1 1 auto;[\s\S]*min-height:\s*0/);
   assert.match(styles, /\.client-showcase--viewer-only \.viewer-shell:not\(:fullscreen\)\s*\{[\s\S]*height:\s*100%;[\s\S]*min-height:\s*0/);
   assert.match(styles, /\.project-header--viewer-only/);
-  assert.match(styles, /\.client-hero-overlay/);
+  assert.doesNotMatch(styles, /\.client-hero-overlay|\.client-hero-kicker/);
   assert.match(styles, /\.client-camera-location/);
   assert.match(styles, /@media \(max-width: 700px\)/);
   assert.match(styles, /@media \(max-height: 520px\)/);
