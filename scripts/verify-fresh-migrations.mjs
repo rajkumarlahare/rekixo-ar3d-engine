@@ -179,10 +179,11 @@ executeJson(
 );
 executeJson(
   `INSERT INTO project_branding_logo_versions_3d
-    (project_id,version,logo_key,favicon_key,created_by,published_at)
+    (project_id,version,logo_key,favicon_key,source_key,source_mime_type,created_by,published_at)
    VALUES ('${fixtureProjectId}','brand-ci-logo-version-001',
      'projects/${fixtureProjectSlug}/branding/logos/logo.webp',
      'projects/${fixtureProjectSlug}/branding/favicons/logo.png',
+     'projects/${fixtureProjectSlug}/branding/logo-sources/logo.png','image/png',
      'ci@rekixo.com',datetime('now'))`,
 );
 executeJson(
