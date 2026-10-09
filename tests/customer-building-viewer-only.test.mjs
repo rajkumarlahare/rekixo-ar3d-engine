@@ -27,8 +27,9 @@ test("the viewer exposes the configured project location beside its existing cam
   assert.match(viewer, /className="client-camera-location"/);
   assert.match(viewer, /<span>Location<\/span>/);
   assert.match(viewer, /Open \$\{projectLocation\} in Google Maps/);
-  for (const label of ["Overview", "Front", "Corner", "Entry view", "Aerial"]) {
-    assert.ok(viewer.includes(label), `Expected camera preset ${label}`);
+  assert.match(viewer, /\["hero", "front", "corner", "entrance", "aerial"\] as ExteriorView\[\]/);
+  for (const label of ["Overview", "Entry view", "Location"]) {
+    assert.ok(viewer.includes(label), `Expected camera control label ${label}`);
   }
 });
 
