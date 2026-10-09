@@ -545,6 +545,15 @@ footer { padding-top: 24px; display: flex; justify-content: space-between; gap: 
   background: linear-gradient(180deg, #0b1624c7 0%, #0b162472 62%, transparent 100%);
   pointer-events: none;
 }
+.twin-project-logo {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  object-fit: contain;
+  border: 1px solid #2c6e55;
+  border-radius: 50%;
+  background: #07140f;
+}
 .twin-brand {
   display: flex;
   align-items: center;
