@@ -29,6 +29,16 @@ function versionToken() {
   return crypto.randomUUID().replace(/-/g, "");
 }
 
+function sameOrigin(request) {
+  const origin = request.headers.get("origin");
+  if (!origin) return false;
+  try {
+    return new URL(origin).origin === new URL(request.url).origin;
+  } catch {
+    return false;
+  }
+}
+
 function validExperience(value) {
   return EXPERIENCE_TYPES.has(String(value || ""));
 }
@@ -246,6 +256,7 @@ async function adminBrandingState(env, project, slug) {
     experienceReadiness(env, project, slug, "geo"),
   ]);
 
+  const origin = "https://ar3dstudio.in";
   const logoDraftVersion = branding?.draftLogoVersion || "";
   const logoPublishedVersion = branding?.publishedLogoVersion || "";
   const logoPreviewVersion = logoDraftVersion || logoPublishedVersion;
@@ -307,8 +318,7 @@ async function adminBrandingState(env, project, slug) {
   });
 }
 
-async function uploadLogo(request, env, actor, project, slug) {
-  const form = await request.formData();
+async function uploadLogo(form, env, actor, project, slug) {
   const logoFile = form.get("logoFile");
   const faviconFile = form.get("faviconFile");
   const logoMime = await detectImageMime(logoFile);
@@ -355,8 +365,7 @@ async function uploadLogo(request, env, actor, project, slug) {
   return json({ ok: true, version });
 }
 
-async function uploadShareCard(request, env, actor, project, slug) {
-  const form = await request.formData();
+async function uploadShareCard(form, env, actor, project, slug) {
   const experience = String(form.get("experience") || "");
   const cardFile = form.get("cardFile");
   const sourceFile = form.get("sourceFile");
@@ -583,8 +592,8 @@ export async function handleProjectBrandingAdmin(request, env, actor, project, s
   if (contentType.includes("multipart/form-data")) {
     const form = await request.formData();
     const action = String(form.get("action") || "");
-    if (action === "upload-logo") return uploadLogo(new Request(request.url, request), env, actor, project, slug);
-    if (action === "upload-share-card") return uploadShareCard(new Request(request.url, request), env, actor, project, slug);
+    if (action === "upload-logo") return uploadLogo(form, env, actor, project, slug);
+    if (action === "upload-share-card") return uploadShareCard(form, env, actor, project, slug);
     return json({ error: "Unsupported branding upload action." }, { status: 400 });
   }
 
@@ -627,21 +636,23 @@ export async function servePublicBrandingRoute(request, env, slug, parts, url = 
   if (!["logo", "favicon", "share-card"].includes(kind) || parts.length !== 1)
     return new Response("Not found", { status: 404 });
   const version = url.searchParams.get("v") || "";
-  const snapshot = await publicBrandingSnapshot(
-    env, slug, experience, kind === "share-card" ? version : "", kind === "share-card" && Boolean(version),
-  );
-  if (!snapshot) return new Response("Not found", { status: 404 });
+  if (!version || !validVersion(version))
+    return new Response("Not found", { status: 404 });
 
   let key = "";
   let mimeType = "";
   let cacheKeyVersion = "";
   if (kind === "logo" || kind === "favicon") {
-    if (!version || version !== snapshot.logoVersion)
-      return new Response("Not found", { status: 404 });
-    key = kind === "logo" ? snapshot.logoKey : snapshot.faviconKey;
-    mimeType = kind === "logo" ? "image/webp" : "image/png";
-    cacheKeyVersion = snapshot.logoVersion;
+    const project = await projectPublicContext(env, slug, experience);
+    if (!project) return new Response("Not found", { status: 404 });
+    const logo = await readLogoVersion(env, project.id, version);
+    if (!logo?.publishedAt) return new Response("Not found", { status: 404 });
+    key = kind === "logo" ? logo.logoKey : logo.faviconKey;
+    mimeType = kind === "logo" ? logo.logoMimeType : logo.faviconMimeType;
+    cacheKeyVersion = logo.version;
   } else {
+    const snapshot = await publicBrandingSnapshot(env, slug, experience, version, true);
+    if (!snapshot) return new Response("Not found", { status: 404 });
     key = snapshot.cardKey;
     mimeType = snapshot.cardMimeType;
     cacheKeyVersion = snapshot.shareVersion;
