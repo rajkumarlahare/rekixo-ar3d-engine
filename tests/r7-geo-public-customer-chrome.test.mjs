@@ -22,11 +22,12 @@ test("public Geo customer chrome hides authoring metadata and keeps map-level cu
   assert.match(publicGeoSource, /Building <span aria-hidden="true">↗<\/span>/);
 });
 
-test("public Geo header remains responsive and premium without exposing internals", () => {
-  assert.match(publicGeoCss, /\.jio-public-header\s*\{[\s\S]*border-radius:\s*20px;/);
-  assert.match(publicGeoCss, /\.jio-public-header::before/);
+test("public Geo header stays compact and borderless while map controls remain responsive", () => {
+  assert.match(publicGeoCss, /\.jio-public-header\s*\{[\s\S]*border:\s*0;[\s\S]*background:\s*transparent;[\s\S]*box-shadow:\s*none;/);
+  assert.match(publicGeoCss, /\.jio-public-header::before,\s*\.jio-public-header::after\s*\{\s*display:\s*none;/);
+  assert.match(publicGeoCss, /\.jio-public-project-logo\s*\{[\s\S]*width:\s*36px;[\s\S]*height:\s*36px;/);
   assert.match(publicGeoCss, /\.geo-building-link:hover/);
-  assert.match(publicGeoCss, /\.geo-camera-toolbar\s*\{[\s\S]*right:\s*14px;/);
+  assert.match(publicGeoCss, /\.geo-camera-toolbar\s*\{[\s\S]*top:\s*12px;[\s\S]*right:\s*54px;/);
   assert.match(publicGeoCss, /backdrop-filter:\s*blur\(14px\)/);
   assert.match(publicGeoCss, /@media \(max-width:\s*640px\)/);
 });
