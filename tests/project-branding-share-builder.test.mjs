@@ -65,9 +65,9 @@ test("branding uploads are authenticated, format checked, and stored in project-
   assert.ok(worker.includes("MAX_FAVICON_BYTES = 128 * 1024"));
   assert.ok(worker.includes("MAX_SOURCE_CARD_BYTES = 8 * 1024 * 1024"));
   assert.ok(worker.includes("MAX_PUBLIC_CARD_BYTES = 550 * 1024"));
-  assert.ok(worker.includes(`projects/${slug}/branding/logos/${version}.webp`));
-  assert.ok(worker.includes(`projects/${slug}/branding/favicons/${version}.png`));
-  assert.ok(worker.includes(`projects/${slug}/branding/share/${experience}/cards/${version}`));
+  assert.ok(worker.includes("projects/${slug}/branding/logos/${version}.webp"));
+  assert.ok(worker.includes("projects/${slug}/branding/favicons/${version}.png"));
+  assert.ok(worker.includes("projects/${slug}/branding/share/${experience}/cards/${version}"));
   assert.ok(worker.includes("key.startsWith(prefix)"));
 });
 
@@ -81,7 +81,7 @@ test("Building and Geo share snapshots publish independently and require live re
   assert.ok(worker.includes("shareUrl"));
   assert.ok(builder.includes('setActiveExperience("building")'));
   assert.ok(builder.includes('setActiveExperience("geo")'));
-  assert.ok(builder.includes("Publish Share"));
+  assert.ok(builder.includes("publishProjectShare(slug, activeExperience)"));
   assert.ok(builder.includes("Copy published link"));
 });
 
@@ -104,7 +104,7 @@ test("Admin route and public Building/Geo viewers use one project logo without r
   assert.ok(cloudClient.includes("uploadProjectShareCard"));
   assert.ok(builder.includes("Publish Logo & Favicon"));
   assert.ok(builder.includes("AR3D footer added"));
-  assert.ok(publicApp.includes("loadPublicBranding(slug, \"building\""));
+  assert.ok(publicApp.includes('loadPublicBranding(slug, "building"'));
   assert.ok(publicApp.includes("brand-project-logo"));
   assert.ok(geoApp.includes('loadPublicBranding(slug, "geo"'));
   assert.ok(geoApp.includes("jio-public-project-logo"));
