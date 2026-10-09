@@ -33,13 +33,16 @@ test("mobile camera buttons fit six columns with transparent controls and no out
   assert.match(publicCss, /\.jio-public-project-logo\s*\{\s*width:\s*25px;\s*height:\s*25px;/);
 });
 
-test("fullscreen camera controls have no pill or outer panel and fit six columns", () => {
-  const transparentFullscreen = css.slice(css.indexOf("/* Fullscreen camera presets use the same transparent, compact treatment. */"));
-  assert.match(transparentFullscreen, /grid-template-columns:\s*repeat\(6, minmax\(0, 1fr\)\)/);
-  assert.match(transparentFullscreen, /border:\s*0 !important/);
-  assert.match(transparentFullscreen, /border-radius:\s*0 !important/);
-  assert.match(transparentFullscreen, /background:\s*transparent !important/);
-  assert.match(transparentFullscreen, /box-shadow:\s*none !important/);
+test("fullscreen camera controls remain visible as high-contrast buttons in one row", () => {
+  const fullscreenStyles = css.slice(css.indexOf("/* Fullscreen controls intentionally retain the original high-contrast button"));
+  assert.match(fullscreenStyles, /\.geo-camera-toolbar--fullscreen-clone\s*\{[\s\S]*display:\s*flex\s*!important/);
+  assert.match(fullscreenStyles, /flex-flow:\s*row nowrap\s*!important/);
+  assert.match(fullscreenStyles, /visibility:\s*visible\s*!important/);
+  assert.match(fullscreenStyles, /opacity:\s*1\s*!important/);
+  assert.match(fullscreenStyles, /background:\s*rgba\(5, 18, 27, \.76\)\s*!important/);
+  assert.match(fullscreenStyles, /\.geo-camera-toolbar--fullscreen-clone button,[\s\S]*border:\s*1px solid/);
+  assert.match(fullscreenStyles, /\.geo-camera-toolbar--fullscreen-clone button,[\s\S]*background:\s*rgba\(8, 22, 32, \.88\)\s*!important/);
+  assert.match(fullscreenStyles, /@media \(max-width: 640px\)[\s\S]*\.geo-camera-toolbar--fullscreen-clone button,[\s\S]*flex:\s*1 1 0\s*!important/);
 });
 
 test("fullscreen bridge is lazy-loaded only for public Geo routes", () => {
