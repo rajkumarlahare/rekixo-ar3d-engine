@@ -37,7 +37,7 @@ test("public exterior client flow works on desktop and mobile without pending/ad
   await expect(page.locator(".viewer-notice")).toHaveCount(0);
   await expect(page.getByText(/Source pending|Media unavailable|MODEL STATUS|Production/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^(Walk|Explode|Section)$/ })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "View locality in Maps" })).toHaveAttribute("href", /query=Configured%20locality/);
+  await expect(page.getByRole("link", { name: "Open Configured locality in Google Maps" })).toHaveAttribute("href", /query=Configured%20locality/);
   const day = await page.locator(".viewer-canvas").screenshot();
   await page.getByRole("button", { name: "Night", exact: true }).click();
   await expect(page.getByRole("button", { name: "Day", exact: true })).toBeVisible();
