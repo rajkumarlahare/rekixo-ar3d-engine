@@ -26,6 +26,7 @@
 }
 .jio-public-header {
   position: relative;
+  z-index: 12;
   isolation: isolate;
   width: min(1500px, 100%);
   min-height: 86px;
@@ -109,6 +110,7 @@
 
 .geo-integrated-scene {
   position: relative;
+  isolation: isolate;
   width: min(1500px, 100%);
   min-height: min(74vh, 840px);
   margin: 0 auto;
@@ -303,8 +305,12 @@
 
 @media (max-width: 900px) {
   .jio-public-header {
-    min-height: 126px;
-    padding: 19px 20px;
+    min-height: 0;
+    padding: 2px 4px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .geo-integrated-scene,
@@ -323,12 +329,15 @@
 
   .jio-public-header {
     min-height: 0;
-    margin-bottom: 9px;
-    padding: 10px 12px;
+    margin-bottom: 6px;
+    padding: 0 2px;
     align-items: center;
     flex-direction: row;
-    gap: 10px;
-    border-radius: 14px;
+    gap: 8px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .jio-public-branding {
@@ -340,8 +349,9 @@
     height: 36px;
   }
 
-  .jio-public-header::before {
-    right: -72px;
+  .jio-public-header::before,
+  .jio-public-header::after {
+    content: none;
   }
 
   .jio-public-header h1 {
@@ -354,7 +364,7 @@
   }
 
   .geo-camera-toolbar {
-    top: 56px;
+    top: 12px;
     right: 8px;
     left: auto;
     max-width: calc(100% - 16px);
