@@ -11,19 +11,22 @@ const publicGeoCss = fs.readFileSync(
   "utf8",
 );
 
-test("public Geo customer chrome hides authoring metadata and technical footer", () => {
+test("public Geo customer chrome hides authoring metadata and keeps map-level customer actions", () => {
   assert.match(
     publicGeoCss,
     /\.jio-public-meta,\s*\.geo-runtime-note\s*\{\s*display:\s*none\s*!important;/s,
   );
-  assert.match(publicGeoSource, /INTEGRATED 3D GEO EXPERIENCE/);
-  assert.match(publicGeoSource, /Enter building/);
-  assert.match(publicGeoSource, /Open location/);
+  assert.doesNotMatch(publicGeoSource, /INTEGRATED 3D GEO EXPERIENCE|Enter building|Open location/);
+  assert.match(publicGeoSource, /className="geo-camera-toolbar"/);
+  assert.match(publicGeoSource, /className="geo-building-link"/);
+  assert.match(publicGeoSource, /Building <span aria-hidden="true">↗<\/span>/);
 });
 
 test("public Geo header remains responsive and premium without exposing internals", () => {
   assert.match(publicGeoCss, /\.jio-public-header\s*\{[\s\S]*border-radius:\s*20px;/);
   assert.match(publicGeoCss, /\.jio-public-header::before/);
-  assert.match(publicGeoCss, /\.jio-public-header-actions a:hover/);
+  assert.match(publicGeoCss, /\.geo-building-link:hover/);
+  assert.match(publicGeoCss, /\.geo-camera-toolbar\s*\{[\s\S]*right:\s*14px;/);
+  assert.match(publicGeoCss, /backdrop-filter:\s*blur\(14px\)/);
   assert.match(publicGeoCss, /@media \(max-width:\s*640px\)/);
 });
