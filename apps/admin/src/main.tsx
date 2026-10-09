@@ -10,6 +10,7 @@ const ComponentMapper = lazy(() => import("./source-pack/ComponentMapper"));
 const BuildingWorkspace = lazy(() => import("./building/BuildingWorkspace"));
 const GeoWorkspace = lazy(() => import("./geo/GeoWorkspace"));
 const EngineReleases = lazy(() => import("./releases/EngineReleases"));
+const ProjectShareBuilder = lazy(() => import("./branding/ProjectShareBuilder"));
 const EngineAdvanced = lazy(() => import("./advanced/EngineAdvanced"));
 const PublishedViewer = lazy(() => import("./studio/PublishedViewer"));
 const CloudLogin = lazy(() => import("./CloudLogin"));
@@ -101,6 +102,14 @@ function AdminRouter() {
     return (
       <AdminShellRoute label="Opening immutable releases…">
         <EngineReleases />
+      </AdminShellRoute>
+    );
+  }
+
+  if (path === "/3Dprojects/share") {
+    return (
+      <AdminShellRoute label="Opening Share & Branding…">
+        <ProjectShareBuilder />
       </AdminShellRoute>
     );
   }
