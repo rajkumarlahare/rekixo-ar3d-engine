@@ -321,7 +321,7 @@ async function uploadLogo(form, env, actor, project, slug) {
   const logoKey = `projects/${slug}/branding/logos/${version}.webp`;
   const faviconKey = `projects/${slug}/branding/favicons/${version}.png`;
   try {
-    await Promise.all([
+    const uploadResults = await Promise.allSettled([
     env.MODEL_ASSETS.put(logoKey, await logoFile.arrayBuffer(), {
       httpMetadata: { contentType: logoMime },
       customMetadata: { projectId: project.id, projectSlug: slug, kind: "project-branding-logo", version },
@@ -331,6 +331,8 @@ async function uploadLogo(form, env, actor, project, slug) {
       customMetadata: { projectId: project.id, projectSlug: slug, kind: "project-branding-favicon", version },
     }),
   ]);
+    const failedUpload = uploadResults.find((result) => result.status === "rejected");
+    if (failedUpload?.status === "rejected") throw failedUpload.reason;
   } catch (error) {
     await cleanupR2Objects(env, [logoKey, faviconKey]);
     throw error;
@@ -383,7 +385,7 @@ async function uploadShareCard(form, env, actor, project, slug) {
   const cardKey = `projects/${slug}/branding/share/${experience}/cards/${version}.${cardExtension}`;
   const sourceKey = `projects/${slug}/branding/share/${experience}/sources/${version}.${sourceExtension}`;
   try {
-    await Promise.all([
+    const uploadResults = await Promise.allSettled([
     env.MODEL_ASSETS.put(cardKey, await cardFile.arrayBuffer(), {
       httpMetadata: { contentType: cardMime },
       customMetadata: { projectId: project.id, projectSlug: slug, kind: "project-share-card", experience, version },
@@ -393,6 +395,8 @@ async function uploadShareCard(form, env, actor, project, slug) {
       customMetadata: { projectId: project.id, projectSlug: slug, kind: "project-share-source", experience, version },
     }),
   ]);
+    const failedUpload = uploadResults.find((result) => result.status === "rejected");
+    if (failedUpload?.status === "rejected") throw failedUpload.reason;
   } catch (error) {
     await cleanupR2Objects(env, [cardKey, sourceKey]);
     throw error;
