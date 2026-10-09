@@ -43,7 +43,7 @@ test("Geo map toolbar orders all camera views before the Building website link",
 });
 
 test("Geo controls stay visible in a normal viewport, compact and anchored top-right", () => {
-  const toolbarRule = geoStyles.match(/\\.geo-camera-toolbar \\{([\\s\\S]*?)\\n\\}/)?.[1] ?? "";
+  const toolbarRule = geoStyles.match(/\.geo-camera-toolbar \{([\s\S]*?)\n\}/)?.[1] ?? "";
   assert.match(toolbarRule, /top: 12px/);
   assert.match(toolbarRule, /right: 12px/);
   assert.match(toolbarRule, /z-index: 10000 !important/);
@@ -51,13 +51,13 @@ test("Geo controls stay visible in a normal viewport, compact and anchored top-r
   assert.match(toolbarRule, /visibility: visible !important/);
   assert.match(toolbarRule, /left: auto/);
   assert.match(toolbarRule, /flex-wrap: nowrap/);
-  assert.match(toolbarRule, /backdrop-filter: blur\\(14px\\)/);
-  assert.match(toolbarRule, /background: rgba\\(8, 22, 32, \\.82\\)/);
-  assert.match(geoStyles, /\\.jio-public-header\\s*\\{[\\s\\S]*border:\\s*0;[\\s\\S]*background:\\s*transparent;/);
-  assert.match(geoStyles, /\\.jio-public-header::before,\\s*\\.jio-public-header::after\\s*\\{\\s*display:\\s*none !important;/);
-  assert.match(geoStyles, /\\.geo-integrated-scene\\s*\\{[\\s\\S]*isolation:\\s*isolate;/);
-  assert.match(geoStyles, /@media \\(max-width:\\s*1100px\\)[\\s\\S]*?\\.geo-camera-toolbar\\s*\\{\\s*top:\\s*12px;/);
-  assert.match(geoStyles, /@media \\(max-width:\\s*640px\\)[\\s\\S]*?\\.geo-camera-toolbar\\s*\\{[\\s\\S]*?top:\\s*12px;[\\s\\S]*?left:\\s*auto;/);
-  assert.match(geoStyles, /\\.geo-camera-toolbar button,\\s*\\.geo-building-link/);
+  assert.match(toolbarRule, /backdrop-filter: blur\(14px\)/);
+  assert.match(toolbarRule, /background: rgba\(8, 22, 32, \.82\)/);
+  assert.match(geoStyles, /\.jio-public-header\s*\{[\s\S]*border:\s*0;[\s\S]*background:\s*transparent;/);
+  assert.match(geoStyles, /\.jio-public-header::before,\s*\.jio-public-header::after\s*\{\s*display:\s*none !important;/);
+  assert.match(geoStyles, /\.geo-integrated-scene\s*\{[\s\S]*isolation:\s*isolate;/);
+  assert.match(geoStyles, /@media \(max-width:\s*1100px\)[\s\S]*?\.geo-camera-toolbar\s*\{\s*top:\s*12px;/);
+  assert.match(geoStyles, /@media \(max-width:\s*640px\)[\s\S]*?\.geo-camera-toolbar\s*\{[\s\S]*?top:\s*12px;[\s\S]*?left:\s*auto;/);
+  assert.match(geoStyles, /\.geo-camera-toolbar button,\s*\.geo-building-link/);
   assert.match(geoStyles, /min-height: 30px/);
 });
