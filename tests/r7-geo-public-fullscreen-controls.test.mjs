@@ -5,39 +5,34 @@ import test from "node:test";
 const helper = fs.readFileSync("apps/public/src/geo/fullscreen-controls.ts", "utf8");
 const loader = fs.readFileSync("apps/public/src/geo/fullscreen-controls-loader.ts", "utf8");
 const css = fs.readFileSync("apps/public/src/geo/fullscreen-controls.css", "utf8");
+const publicCss = fs.readFileSync("apps/public/src/geo/geo-public-demo.css", "utf8");
+const publicSource = fs.readFileSync("apps/public/src/geo/GeoPublicDemo.tsx", "utf8");
 const html = fs.readFileSync("apps/public/index.html", "utf8");
 
-test("public Geo mirrors camera controls into Google native fullscreen", () => {
+test("public Geo mirrors camera controls into native fullscreen", () => {
   assert.match(helper, /fullscreenchange/);
   assert.match(helper, /document\.fullscreenElement/);
   assert.match(helper, /cloneNode\(true\)/);
-  assert.match(helper, /sourceButtons\[index\]\?\.click\(\)/);
+  assert.match(helper, /originals\[index\]\?\.click\(\)/);
   assert.match(helper, /geo-camera-toolbar--fullscreen-clone/);
 });
 
-test("normal customer page mirrors the live camera controls into the header", () => {
-  assert.match(helper, /jio-public-header-camera-slot/);
-  assert.match(helper, /geo-camera-toolbar--header-clone/);
-  assert.match(helper, /insertAdjacentElement\("afterend", slot\)/);
-  assert.match(helper, /MutationObserver/);
-  assert.match(css, /grid-template-areas:[\s\S]*?"copy actions"[\s\S]*?"copy cameras"/);
-  assert.match(css, /geo-integrated-scene > \.geo-camera-toolbar/);
-  assert.match(css, /visibility:\s*hidden\s*!important/);
+test("normal Geo customer view renders the live toolbar in a row below the map", () => {
+  assert.match(publicSource, /createPortal\([\s\S]*geo-camera-toolbar--normal-row/);
+  assert.match(publicSource, /className="geo-public-toolbar-slot"/);
+  assert.match(publicCss, /geo-public-map-layout[\s\S]*geo-public-toolbar-slot/);
+  assert.match(css, /visibility:\s*visible\s*!important/);
+  assert.doesNotMatch(css, /visibility:\s*hidden\s*!important/);
 });
 
-test("mobile puts all five presets directly below the header actions", () => {
-  assert.match(css, /@media \(max-width: 640px\)[\s\S]*?"copy"[\s\S]*?"actions"[\s\S]*?"cameras"/);
-  assert.match(css, /grid-template-columns:\s*repeat\(5, minmax\(0, 1fr\)\)/);
-  assert.match(css, /geo-camera-toolbar--fullscreen-clone[\s\S]*?top:\s*68px\s*!important/);
+test("mobile camera buttons remain compact and horizontally scrollable on a single row", () => {
+  assert.match(publicCss, /@media \(max-width:640px\)[\s\S]*geo-public-toolbar-slot/);
+  assert.match(publicCss, /flex-wrap:\s*nowrap/);
+  assert.match(publicCss, /overflow-x:\s*auto/);
+  assert.match(publicCss, /\.jio-public-project-logo\s*\{\s*width:\s*25px;\s*height:\s*25px;/);
 });
 
-test("customer camera controls use transparent glass styling", () => {
-  assert.match(css, /geo-camera-toolbar--header-clone[\s\S]*?background:\s*transparent\s*!important/);
-  assert.match(css, /background:\s*rgba\(8, 22, 32, \.38\)\s*!important/);
-  assert.match(css, /backdrop-filter:\s*blur\(9px\)/);
-});
-
-test("camera bridge is lazy-loaded only for public Geo routes", () => {
+test("fullscreen bridge is lazy-loaded only for public Geo routes", () => {
   assert.match(loader, /parts\.length === 3/);
   assert.match(loader, /parts\[0\] === "3Dprojects"/);
   assert.match(loader, /parts\[2\] === "geo"/);
