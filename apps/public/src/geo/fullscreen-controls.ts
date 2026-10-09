@@ -36,7 +36,8 @@ function mountFullscreenClone() {
       return Boolean(map && (map.contains(fullscreenElement) || fullscreenElement.contains(map)));
     });
   if (!scene) return;
-  const original = scene.querySelector<HTMLElement>(".geo-camera-toolbar:not(.geo-camera-toolbar--fullscreen-clone)");
+  const original = document.querySelector<HTMLElement>(".geo-public-toolbar-slot .geo-camera-toolbar:not(.geo-camera-toolbar--fullscreen-clone)") ||
+    scene.querySelector<HTMLElement>(".geo-camera-toolbar:not(.geo-camera-toolbar--fullscreen-clone)");
   if (!original || fullscreenElement.contains(original)) return;
 
   const clone = original.cloneNode(true) as HTMLElement;
