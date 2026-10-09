@@ -23,7 +23,7 @@ test("public Geo customer chrome hides authoring metadata and keeps map-level cu
 });
 
 test("public Geo header remains responsive and premium without exposing internals", () => {
-  assert.match(publicGeoCss, /\.jio-public-header\s*\{[\s\S]*border-radius:\s*20px;/);
+  assert.match(publicGeoCss, /\.jio-public-header\s*\{[\s\S]*border:\s*0;[\s\S]*background:\s*transparent;[\s\S]*box-shadow:\s*none;/);
   assert.match(publicGeoCss, /\.jio-public-header::before/);
   assert.match(publicGeoCss, /\.geo-building-link:hover/);
   assert.match(publicGeoCss, /\.geo-camera-toolbar\s*\{[\s\S]*right:\s*14px;/);
