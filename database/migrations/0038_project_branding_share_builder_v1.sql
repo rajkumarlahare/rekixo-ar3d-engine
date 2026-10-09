@@ -70,8 +70,8 @@ CREATE INDEX IF NOT EXISTS idx_project_branding_share_versions_public
 
 -- History rows are write-once. New branding is represented by a new version.
 CREATE TRIGGER IF NOT EXISTS trg_project_branding_logo_versions_immutable
-BEFORE UPDATE OF project_id,version,logo_key,favicon_key,logo_mime_type,
-  favicon_mime_type,created_by,created_at
+BEFORE UPDATE OF project_id,version,logo_key,favicon_key,source_key,source_mime_type,
+  logo_mime_type,favicon_mime_type,created_by,created_at
 ON project_branding_logo_versions_3d
 BEGIN
   SELECT RAISE(ABORT, 'Project branding logo version identity is immutable');
