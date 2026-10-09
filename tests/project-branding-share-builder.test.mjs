@@ -57,6 +57,8 @@ test("branding schema is additive, project scoped, and keeps immutable history",
   assert.match(migration, /experience_type IN \('building','geo'\)/);
   assert.ok(migration.includes("PRIMARY KEY (project_id, experience_type, version)"));
   assert.ok(migration.includes("Project branding share versions are immutable"));
+  assert.ok(migration.includes("source_key TEXT NOT NULL"));
+  assert.ok(migration.includes("source_mime_type TEXT NOT NULL"));
   assert.ok(migration.includes("ON DELETE CASCADE"));
   assert.doesNotMatch(migration, /DROP TABLE|DELETE FROM projects_3d/i);
 });
@@ -67,6 +69,9 @@ test("branding uploads are authenticated, format checked, and stored in project-
   assert.ok(worker.includes("detectImageMime"));
   assert.ok(worker.includes("MAX_LOGO_BYTES = 512 * 1024"));
   assert.ok(worker.includes("MAX_FAVICON_BYTES = 128 * 1024"));
+  assert.ok(worker.includes("Original logo must be JPG, PNG or WebP under 8 MB."));
+  assert.ok(worker.includes("projects/${slug}/branding/logo-sources/${version}.${sourceExtension}"));
+  assert.ok(worker.includes("parts[0] === \"source\""));
   assert.ok(worker.includes("MAX_SOURCE_CARD_BYTES = 8 * 1024 * 1024"));
   assert.ok(worker.includes("MAX_PUBLIC_CARD_BYTES = 550 * 1024"));
   assert.ok(worker.includes("projects/${slug}/branding/logos/${version}.webp"));
@@ -113,6 +118,8 @@ test("Admin route and public Building/Geo viewers use one project logo without r
   assert.ok(adminRouter.includes('path === "/3Dprojects/share"'));
   assert.ok(adminShell.includes('label: "Share & Branding"'));
   assert.ok(cloudClient.includes("uploadProjectLogo"));
+  assert.ok(cloudClient.includes("sourceUrl: string"));
+  assert.ok(builder.includes("Download original logo"));
   assert.ok(cloudClient.includes("uploadProjectShareCard"));
   assert.ok(builder.includes("Publish Logo & Favicon"));
   assert.ok(builder.includes("AR3D footer added"));
