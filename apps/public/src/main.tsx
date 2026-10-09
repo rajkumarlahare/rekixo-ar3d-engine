@@ -401,7 +401,13 @@ const twinModes: Array<{ id: TwinMode; label: string; short: string }> = [
   { id: "context", label: "Distance & Context", short: "Context" },
 ];
 
-function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) {
+function PremiumDigitalTwin({
+  experience,
+  branding,
+}: {
+  experience: Public3DExperience;
+  branding?: PublicProjectBranding | null;
+}) {
   const projectSettings = settingsOf<ProjectSettings>(sceneOf(experience, "project-navigation"));
   const floorSettings = settingsOf<FloorSettings>(sceneOf(experience, "typical-floor"));
   const amenitySettings = settingsOf<AmenitySettings>(sceneOf(experience, "amenity"));
@@ -467,9 +473,9 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
 
         <header className="twin-topbar">
           <div className="twin-brand">
-            <span>AR</span>
+            {branding?.logoUrl ? <img className="twin-project-logo" src={branding.logoUrl} alt="" /> : <span>AR</span>}
             <div>
-              <small>AR3D DIGITAL TWIN</small>
+              <small>{branding?.logoUrl ? "PROJECT DIGITAL TWIN" : "AR3D DIGITAL TWIN"}</small>
               <strong>{experience.project.name}</strong>
             </div>
           </div>
@@ -771,7 +777,7 @@ function App() {
   if (!experience) return <LoadingPage />;
   const presentation = settingsOf<ProjectSettings>(sceneOf(experience, "project-navigation")).presentation;
   if (presentation?.style === "premium-real-estate-digital-twin") {
-    return <PremiumDigitalTwin experience={experience} />;
+    return <PremiumDigitalTwin experience={experience} branding={branding} />;
   }
 
   const sceneMap = new Map((experience.scenes ?? []).map((scene) => [scene.type, scene]));
