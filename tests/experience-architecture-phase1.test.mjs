@@ -13,8 +13,9 @@ test("canonical Building and optional Geo routes stay under /3Dprojects", () => 
   assert.match(core, /function buildingPublicProjectPath\(slug: string\)/);
   assert.match(
     core,
-    /return `\$\{PUBLIC_BASE_PATH\}\/\$\{encodeURIComponent\(normalized\)\}`/,
+    /return `\$\{PUBLIC_PROJECT_ORIGIN\}\$\{PUBLIC_BASE_PATH\}\/\$\{encodeURIComponent\(normalized\)\}`/,
   );
+  assert.match(core, /PUBLIC_PROJECT_ORIGIN = "https:\/\/ar3dstudio\.in"/);
   assert.match(
     core,
     /function publicProjectPath\(slug: string\)[\s\S]*return buildingPublicProjectPath\(slug\)/,

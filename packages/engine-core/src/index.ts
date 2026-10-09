@@ -25,10 +25,16 @@ export function projectSlugFromPathname(pathname: string) {
 export const BUILDING_EXPERIENCE_TYPE = "building" as const;
 export const GEO_EXPERIENCE_TYPE = "geo" as const;
 
+/**
+ * Public customer-facing origin. Admin and Public apps use the same route
+ * prefix on different hostnames, so relative paths would reopen the Admin app.
+ */
+export const PUBLIC_PROJECT_ORIGIN = "https://ar3dstudio.in";
+
 export function buildingPublicProjectPath(slug: string) {
   const normalized = normalizeProjectSlug(slug);
   if (!validProjectSlug(normalized)) throw new Error("Invalid 3D project slug.");
-  return `${PUBLIC_BASE_PATH}/${encodeURIComponent(normalized)}`;
+  return `${PUBLIC_PROJECT_ORIGIN}${PUBLIC_BASE_PATH}/${encodeURIComponent(normalized)}`;
 }
 
 /**
