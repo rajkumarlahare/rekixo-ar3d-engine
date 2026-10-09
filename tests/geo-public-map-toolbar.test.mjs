@@ -20,7 +20,7 @@ test("Geo customer header keeps only the project logo, name, and subtitle", () =
 });
 
 test("Geo map toolbar orders all camera views before the Building website link", () => {
-  const toolbarStart = geoApp.indexOf('<nav className="geo-camera-toolbar"');
+  const toolbarStart = geoApp.indexOf('<nav className="geo-camera-toolbar geo-camera-toolbar--normal-row"');
   const toolbarEnd = geoApp.indexOf("</nav>", toolbarStart);
   assert.ok(toolbarStart >= 0 && toolbarEnd > toolbarStart, "Geo map toolbar must exist");
   const toolbar = geoApp.slice(toolbarStart, toolbarEnd);
@@ -35,7 +35,7 @@ test("Geo map toolbar orders all camera views before the Building website link",
 
   assert.ok(toolbar.indexOf("{GEO_CAMERA_VIEWS.map") < toolbar.indexOf('className="geo-building-link"'));
   assert.match(toolbar, /Building <span aria-hidden="true">↗<\/span>/);
-  assert.doesNotMatch(geoApp.slice(geoApp.indexOf('<nav className="geo-camera-toolbar"') - 35, geoApp.indexOf('<nav className="geo-camera-toolbar"')), /!failure/);
+  assert.doesNotMatch(geoApp.slice(geoApp.indexOf('{toolbarContainer ? createPortal(<nav className="geo-camera-toolbar') - 35, geoApp.indexOf('{toolbarContainer ? createPortal(<nav className="geo-camera-toolbar')), /!failure/);
   assert.ok(toolbar.includes('href={`/3Dprojects/${encodeURIComponent(data.project.slug)}`}'));
   assert.match(toolbar, /target="_blank"/);
   assert.match(toolbar, /rel="noopener noreferrer"/);
