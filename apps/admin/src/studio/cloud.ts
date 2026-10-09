@@ -549,6 +549,7 @@ export interface CloudBrandingExperienceState {
   draftTitle: string;
   draftDescription: string;
   draftCardVersion: string;
+  useBuildingPoster: boolean;
   draftCardPreviewUrl: string;
   publishedVersion: string;
   publishedTitle: string;
@@ -624,13 +625,14 @@ export async function saveProjectShareDetails(
   experience: BrandingExperience,
   title: string,
   description: string,
+  useBuildingPoster = false,
 ) {
   return api<{ ok: true; experience: BrandingExperience; title: string; description: string }>(
     brandingPath(slug),
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "save-share", experience, title, description }),
+      body: JSON.stringify({ action: "save-share", experience, title, description, useBuildingPoster }),
     },
   );
 }
