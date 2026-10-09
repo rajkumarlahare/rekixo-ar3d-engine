@@ -25,7 +25,7 @@ const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 const MAX_FINAL_CARD_BYTES = 550 * 1024;
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-type PreparedLogo = { logoFile: File; faviconFile: File };
+type PreparedLogo = { sourceFile: File; logoFile: File; faviconFile: File };
 type PreparedCard = { sourceFile: File; cardFile: File };
 type ShareDraft = { title: string; description: string };
 type BusyAction = "load" | "logo" | "share" | "details" | "publish-logo" | "publish-share" | "";
@@ -79,6 +79,7 @@ async function prepareLogo(file: File): Promise<PreparedLogo> {
   if (logo.size > 512 * 1024) throw new Error("Optimized circular logo 512 KB se chhota rakhein.");
   if (favicon.size > 128 * 1024) throw new Error("Favicon 128 KB se chhota rakhein.");
   return {
+    sourceFile: file,
     logoFile: fileFromBlob(logo, "project-logo.webp", "image/webp"),
     faviconFile: fileFromBlob(favicon, "project-favicon.png", "image/png"),
   };
@@ -289,7 +290,7 @@ export default function ProjectShareBuilder() {
     setBusy("logo");
     setError("");
     try {
-      await uploadProjectLogo(slug, logoFiles.logoFile, logoFiles.faviconFile);
+      await uploadProjectLogo(slug, logoFiles.logoFile, logoFiles.faviconFile, logoFiles.sourceFile);
       setLogoFiles(undefined);
       setMessage("Logo aur favicon draft upload ho gaye. Live site par aane ke liye Publish Logo karein.");
       await loadState();
@@ -493,6 +494,7 @@ export default function ProjectShareBuilder() {
               {busy === "publish-logo" ? "Publishing…" : "Publish Logo & Favicon"}
             </button>
             {state?.logo.publishedLogoUrl ? <a className="engine-branding-small-link" href={state.logo.publishedLogoUrl} target="_blank" rel="noreferrer"><BrandingIcon name="external" size={14} /> Open published logo</a> : null}
+            {state?.logo.sourceUrl ? <a className="engine-branding-small-link" href={state.logo.sourceUrl} target="_blank" rel="noreferrer" download><BrandingIcon name="external" size={14} /> Download original logo</a> : null}
           </div>
         </div>
       </section>
