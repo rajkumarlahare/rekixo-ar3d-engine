@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS project_branding_shares_3d (
   draft_card_version TEXT,
   draft_card_key TEXT,
   draft_source_key TEXT,
+  draft_use_building_card INTEGER NOT NULL DEFAULT 0 CHECK (draft_use_building_card IN (0,1)),
   published_version TEXT,
   updated_by TEXT,
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
