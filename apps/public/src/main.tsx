@@ -764,7 +764,7 @@ function App() {
 
       <div className="module-stage">
         <ProjectNavigation experience={experience} />
-      </div>>
+      </div>
 
     </main>
   );
