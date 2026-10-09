@@ -23,6 +23,9 @@ test("customer Building page keeps only its compact brand header and primary 3D 
 
 test("the viewer exposes the configured project location beside its existing camera presets", () => {
   assert.match(viewer, /projectLocation\?: string/);
+  assert.match(viewer, /allowWalkControls && !clientPresentation/);
+  assert.match(viewer, /allowInteriorControls && !clientPresentation/);
+  assert.match(viewer, /allowInteriorControls && !clientPresentation && <div className="viewer-floor-controls"/);
   assert.match(viewer, /className="client-camera-views"/);
   assert.match(viewer, /className="client-camera-location"/);
   assert.match(viewer, /<span>Location<\/span>/);
@@ -34,6 +37,8 @@ test("the viewer exposes the configured project location beside its existing cam
 });
 
 test("viewer-only page layout stays compact and responsive", () => {
+  assert.match(styles, /height: min\\(calc\\(100dvh - 70px\\), 1000px\\)/);
+  assert.match(styles, /height: calc\\(100dvh - 58px\\)/);
   assert.match(styles, /\.client-showcase--viewer-only/);
   assert.match(styles, /\.project-header--viewer-only/);
   assert.match(styles, /\.client-hero-overlay/);
