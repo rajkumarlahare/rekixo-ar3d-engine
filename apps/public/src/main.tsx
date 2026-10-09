@@ -10,7 +10,7 @@ import { loadPublicExperience, type ClientExperience } from "./api";
 import { loadPublicBranding, type PublicProjectBranding } from "./branding";
 import { Viewer3D } from "./viewer/Viewer3D";
 import "./styles.css";
-import { availableClientModules, clientViewerCapabilities } from "./clientPresentation";
+import { clientViewerCapabilities } from "./clientPresentation";
 import "./viewer/walkthrough-ui.css";
 
 const GeoPublicDemo = lazy(() => import("./geo/GeoPublicDemo"));
@@ -78,15 +78,6 @@ type PendingSettings = {
   status?: string;
   reason?: string;
 };
-
-const moduleOrder: Array<[Scene3DType, string]> = [
-  ["project-navigation", "3D Building"],
-  ["wing-distance", "Location Map"],
-  ["typical-floor", "Floor Explorer"],
-  ["amenity", "Amenities"],
-  ["section", "Section Cut"],
-  ["balcony", "Facade Detail"],
-];
 
 function sceneOf(experience: Public3DExperience, type: Scene3DType) {
   return experience.scenes?.find((scene) => scene.type === type);
@@ -725,8 +716,6 @@ function App() {
   const [branding, setBranding] = useState<PublicProjectBranding | null>(null);
   const [error, setError] = useState<string>();
   const [attempt, setAttempt] = useState(0);
-  const [activeType, setActiveType] = useState<Scene3DType>("project-navigation");
-  const [walkRequestFloor, setWalkRequestFloor] = useState<number>();
 
   useEffect(() => {
     if (!slug) return;
@@ -760,11 +749,6 @@ function App() {
     return <PremiumDigitalTwin experience={experience} branding={branding} />;
   }
 
-  const sceneMap = new Map((experience.scenes ?? []).map((scene) => [scene.type, scene]));
-  const visibleModules = moduleOrder.filter(([type]) => availableClientModules(experience, [type]).length > 0);
-  const selectedType: Scene3DType = "project-navigation";
-  const activeScene = selectedType ? sceneMap.get(selectedType) : undefined;
-  const activeReady = Boolean(activeScene?.enabled);
 
   return (
     <main className="experience client-showcase client-showcase--viewer-only">
@@ -778,26 +762,9 @@ function App() {
         </a>
       </header>
 
-      <div className="module-stage" key={selectedType}>
-        {selectedType === "project-navigation" && <ProjectNavigation experience={experience} walkFloor={walkRequestFloor} />}
-        {selectedType === "wing-distance" && <LocationMap experience={experience} />}
-        {selectedType === "typical-floor" && (
-          <TypicalFloor
-            experience={experience}
-            onEnterFloor={(floor) => {
-              setWalkRequestFloor(floor);
-              setActiveType("project-navigation");
-            }}
-          />
-        )}
-        {selectedType === "amenity" && <Amenities experience={experience} />}
-        {selectedType === "section" && activeReady && (
-          <ModelModule experience={experience} type="section" title="Interactive Section Cut" interactionMode="section" />
-        )}
-        {selectedType === "balcony" && activeReady && (
-          <ModelModule experience={experience} type="balcony" title="Facade & Balcony Detail" interactionMode="detail" />
-        )}
-      </div>
+      <div className="module-stage">
+        <ProjectNavigation experience={experience} />
+      </div>>
 
     </main>
   );
