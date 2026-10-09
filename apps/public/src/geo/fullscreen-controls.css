@@ -1,11 +1,13 @@
-/* The React-owned toolbar remains the single source of camera actions/state.
-   On the normal customer page it is visually hidden and mirrored into the
-   header by fullscreen-controls.ts. Native Google Maps fullscreen gets its own
-   proxy clone inside the fullscreen subtree so controls never disappear. */
+/* The toolbar is visible in normal mode and synchronized into native fullscreen. */
 .geo-integrated-scene > .geo-camera-toolbar:not(.geo-camera-toolbar--fullscreen-clone) {
-  visibility: hidden !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+.geo-public-toolbar-slot .geo-camera-toolbar {
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
 }
 
 .jio-public-header {
