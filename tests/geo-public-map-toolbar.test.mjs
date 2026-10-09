@@ -65,3 +65,15 @@ test("Geo controls stay visible in a normal viewport, compact and anchored top-r
   assert.match(geoStyles, /\.geo-camera-toolbar button,\s*\.geo-building-link/);
   assert.match(geoStyles, /min-height: 30px/);
 });
+
+
+test("normal camera row spans available width without a panel or button pills", () => {
+  const transparentRow = geoStyles.slice(geoStyles.indexOf("/* Transparent, full-width camera controls:"));
+  assert.match(transparentRow, /grid-template-columns:\s*repeat\(6, minmax\(0, 1fr\)\)/);
+  assert.match(transparentRow, /width:\s*100% !important/);
+  assert.match(transparentRow, /border:\s*0 !important/);
+  assert.match(transparentRow, /border-radius:\s*0 !important/);
+  assert.match(transparentRow, /background:\s*transparent !important/);
+  assert.match(transparentRow, /box-shadow:\s*none !important/);
+  assert.match(transparentRow, /button\.is-active::after/);
+});

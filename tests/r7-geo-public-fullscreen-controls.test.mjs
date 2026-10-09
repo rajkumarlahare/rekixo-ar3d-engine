@@ -25,11 +25,21 @@ test("normal Geo customer view renders the live toolbar in a row below the map",
   assert.doesNotMatch(css, /visibility:\s*hidden\s*!important/);
 });
 
-test("mobile camera buttons remain compact and horizontally scrollable on a single row", () => {
-  assert.match(publicCss, /@media \(max-width:640px\)[\s\S]*geo-public-toolbar-slot/);
-  assert.match(publicCss, /flex-wrap:\s*nowrap/);
-  assert.match(publicCss, /overflow-x:\s*auto/);
+test("mobile camera buttons fit six columns with transparent controls and no outer panel", () => {
+  assert.match(publicCss, /@media \(max-width: 640px\)[\s\S]*geo-public-toolbar-slot/);
+  assert.match(publicCss, /grid-template-columns:\s*repeat\(6, minmax\(0, 1fr\)\)/);
+  assert.match(publicCss, /border:\s*0 !important;[\s\S]*background:\s*transparent !important;[\s\S]*box-shadow:\s*none !important;/);
+  assert.match(publicCss, /button\.is-active::after/);
   assert.match(publicCss, /\.jio-public-project-logo\s*\{\s*width:\s*25px;\s*height:\s*25px;/);
+});
+
+test("fullscreen camera controls have no pill or outer panel and fit six columns", () => {
+  const transparentFullscreen = css.slice(css.indexOf("/* Fullscreen camera presets use the same transparent, compact treatment. */"));
+  assert.match(transparentFullscreen, /grid-template-columns:\s*repeat\(6, minmax\(0, 1fr\)\)/);
+  assert.match(transparentFullscreen, /border:\s*0 !important/);
+  assert.match(transparentFullscreen, /border-radius:\s*0 !important/);
+  assert.match(transparentFullscreen, /background:\s*transparent !important/);
+  assert.match(transparentFullscreen, /box-shadow:\s*none !important/);
 });
 
 test("fullscreen bridge is lazy-loaded only for public Geo routes", () => {
