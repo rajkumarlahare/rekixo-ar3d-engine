@@ -59,6 +59,7 @@ test("branding schema is additive, project scoped, and keeps immutable history",
   assert.ok(migration.includes("Project branding share versions are immutable"));
   assert.ok(migration.includes("source_key TEXT NOT NULL"));
   assert.ok(migration.includes("source_mime_type TEXT NOT NULL"));
+  assert.ok(migration.includes("source_key,source_mime_type"));
   assert.ok(migration.includes("ON DELETE CASCADE"));
   assert.doesNotMatch(migration, /DROP TABLE|DELETE FROM projects_3d/i);
 });
