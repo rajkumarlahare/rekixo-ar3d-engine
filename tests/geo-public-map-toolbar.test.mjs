@@ -44,7 +44,7 @@ test("Geo map toolbar orders all camera views before the Building website link",
 });
 
 test("Geo controls stay visible in a normal viewport, compact and anchored top-right", () => {
-  const toolbarRule = geoStyles.match(/\.geo-camera-toolbar \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const toolbarRule = geoStyles.match(/^\\.geo-camera-toolbar\\s*\\{([\\s\\S]*?)\\n\\}/m)?.[1] ?? "";
   assert.match(toolbarRule, /top: 12px/);
   assert.match(toolbarRule, /right: 12px/);
   assert.match(toolbarRule, /z-index: 10000 !important/);
