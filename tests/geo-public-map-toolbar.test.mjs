@@ -44,7 +44,7 @@ test("Geo map toolbar orders all camera views before the Building website link",
 
 test("Geo controls are compact, translucent, top-right aligned, and responsive", () => {
   const toolbarRule = geoStyles.match(/\.geo-camera-toolbar \{([\s\S]*?)\n\}/)?.[1] ?? "";
-  assert.match(toolbarRule, /top: 56px/);
+  assert.match(toolbarRule, /top: 12px/);
   assert.match(toolbarRule, /right: 14px/);
   assert.match(toolbarRule, /left: auto/);
   assert.match(toolbarRule, /flex-wrap: nowrap/);
@@ -52,5 +52,6 @@ test("Geo controls are compact, translucent, top-right aligned, and responsive",
   assert.match(toolbarRule, /background: rgba\(8, 22, 32, \.74\)/);
   assert.match(geoStyles, /\.geo-camera-toolbar button,\s*\.geo-building-link/);
   assert.match(geoStyles, /@media \(max-width: 640px\)/);
+  assert.match(geoStyles, /\.geo-camera-toolbar \{[\s\S]*?top: 56px/);
   assert.match(geoStyles, /min-height: 32px/);
 });
