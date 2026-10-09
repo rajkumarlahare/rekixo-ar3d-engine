@@ -233,6 +233,7 @@ async function adminBrandingState(env, project, slug) {
     env.DB.prepare(
       `SELECT experience_type AS experienceType,draft_title AS draftTitle,
               draft_description AS draftDescription,draft_card_version AS draftCardVersion,
+              draft_use_building_card AS draftUseBuildingCard,
               published_version AS publishedVersion,updated_at AS updatedAt
          FROM project_branding_shares_3d WHERE project_id=?`,
     ).bind(project.id).all(),
@@ -264,6 +265,7 @@ async function adminBrandingState(env, project, slug) {
       draftTitle: row.draftTitle || published?.title || `${project.name}${type === "geo" ? " — Geo Experience" : " — 3D Experience"}`,
       draftDescription: row.draftDescription || published?.description || `Explore ${project.name} in the interactive AR3D ${type === "geo" ? "Geo" : "Building"} experience.`,
       draftCardVersion: row.draftCardVersion || "",
+      useBuildingPoster: Boolean(row.draftUseBuildingCard),
       draftCardPreviewUrl: cardVersion
         ? `${CLOUD_PATH}/projects/${encodeURIComponent(slug)}/branding/assets/share-card?experience=${type}&v=${encodeURIComponent(cardVersion)}`
         : "",
@@ -401,14 +403,15 @@ async function uploadShareCard(form, env, actor, project, slug) {
     await env.DB.batch([
       env.DB.prepare(
         `INSERT INTO project_branding_shares_3d
-          (project_id,experience_type,draft_card_version,draft_card_key,draft_source_key,updated_by,updated_at)
-         VALUES (?,?,?,?,?,?,?)
+          (project_id,experience_type,draft_card_version,draft_card_key,draft_source_key,draft_use_building_card,updated_by,updated_at)
+         VALUES (?,?,?,?,?,?,?,?)
          ON CONFLICT(project_id,experience_type) DO UPDATE SET
            draft_card_version=excluded.draft_card_version,
            draft_card_key=excluded.draft_card_key,
            draft_source_key=excluded.draft_source_key,
+           draft_use_building_card=0,
            updated_by=excluded.updated_by,updated_at=excluded.updated_at`,
-      ).bind(project.id, experience, version, cardKey, sourceKey, actor.email, now),
+      ).bind(project.id, experience, version, cardKey, sourceKey, 0, actor.email, now),
       env.DB.prepare(
         `INSERT INTO engine_admin_audit
           (id,actor_email,action,project_id,target_id,details_json,created_at)
@@ -432,6 +435,7 @@ async function saveShareDetails(request, env, actor, project) {
   const experience = String(body.experience || "");
   const title = String(body.title || "").trim();
   const description = String(body.description || "").trim();
+  const useBuildingPoster = experience === "geo" && body.useBuildingPoster === true;
   if (!validExperience(experience))
     return json({ error: "Choose Building or Geo for this share settings." }, { status: 400 });
   if (title.length < 3 || title.length > 120 || /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(title))
@@ -442,12 +446,13 @@ async function saveShareDetails(request, env, actor, project) {
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO project_branding_shares_3d
-        (project_id,experience_type,draft_title,draft_description,updated_by,updated_at)
-       VALUES (?,?,?,?,?,?)
+        (project_id,experience_type,draft_title,draft_description,draft_use_building_card,updated_by,updated_at)
+       VALUES (?,?,?,?,?,?,?)
        ON CONFLICT(project_id,experience_type) DO UPDATE SET
          draft_title=excluded.draft_title,draft_description=excluded.draft_description,
+         draft_use_building_card=excluded.draft_use_building_card,
          updated_by=excluded.updated_by,updated_at=excluded.updated_at`,
-    ).bind(project.id, experience, title, description, actor.email, now),
+    ).bind(project.id, experience, title, description, useBuildingPoster ? 1 : 0, actor.email, now),
     env.DB.prepare(
       `INSERT INTO engine_admin_audit
         (id,actor_email,action,project_id,target_id,details_json,created_at)
@@ -499,6 +504,7 @@ async function publishShare(request, env, actor, project, slug) {
   const draft = await env.DB.prepare(
     `SELECT draft_title AS title,draft_description AS description,
             draft_card_key AS cardKey,draft_source_key AS sourceKey,
+            draft_use_building_card AS useBuildingCard,
             published_version AS publishedVersion
        FROM project_branding_shares_3d
       WHERE project_id=? AND experience_type=? LIMIT 1`,
@@ -510,13 +516,26 @@ async function publishShare(request, env, actor, project, slug) {
     return json({ error: "Save a valid share title and description before publishing." }, { status: 409 });
 
   let previous = null;
-  if (!draft.cardKey && draft.publishedVersion)
+  const reuseBuildingPoster = experience === "geo" && Number(draft.useBuildingCard) === 1;
+  if (reuseBuildingPoster) {
+    const buildingRow = await env.DB.prepare(
+      "SELECT published_version AS publishedVersion FROM project_branding_shares_3d WHERE project_id=? AND experience_type='building' LIMIT 1",
+    ).bind(project.id).first();
+    if (!buildingRow?.publishedVersion)
+      return json({ error: "Publish a Building share poster before reusing it for Geo." }, { status: 409 });
+    previous = await readShareVersion(env, project.id, "building", buildingRow.publishedVersion);
+    if (!previous?.cardKey || !previous?.sourceKey)
+      return json({ error: "The published Building share poster is unavailable." }, { status: 409 });
+  } else if (!draft.cardKey && draft.publishedVersion) {
     previous = await readShareVersion(env, project.id, experience, draft.publishedVersion);
-  const cardKey = draft.cardKey || previous?.cardKey || "";
-  const sourceKey = draft.sourceKey || previous?.sourceKey || "";
-  const mimeType = draft.cardKey
-    ? (draft.cardKey.endsWith(".jpg") ? "image/jpeg" : "image/webp")
-    : previous?.mimeType || "";
+  }
+  const cardKey = reuseBuildingPoster ? (previous?.cardKey || "") : (draft.cardKey || previous?.cardKey || "");
+  const sourceKey = reuseBuildingPoster ? (previous?.sourceKey || "") : (draft.sourceKey || previous?.sourceKey || "");
+  const mimeType = reuseBuildingPoster
+    ? previous?.mimeType || ""
+    : draft.cardKey
+      ? (draft.cardKey.endsWith(".jpg") ? "image/jpeg" : "image/webp")
+      : previous?.mimeType || "";
   if (!cardKey || !sourceKey || !mimeType)
     return json({ error: "Upload a final share poster before publishing this experience." }, { status: 409 });
 
