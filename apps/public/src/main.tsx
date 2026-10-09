@@ -159,11 +159,6 @@ function ProjectNavigation({ experience, walkFloor }: { experience: ClientExperi
         allowInteriorControls={floorReady}
         allowWalkControls={capabilities.walk}
       />
-      <div className="client-hero-overlay" aria-hidden="true">
-        <span className="client-hero-kicker">EXPLORE THE BUILDING</span>
-        <strong>{project.name}</strong>
-        {project.location && <small>{project.location}</small>}
-      </div>
     </section>
   );
 }
