@@ -368,3 +368,42 @@
   .engine-branding-tabs button { flex: 1; }
   .engine-branding-card { padding: 14px; }
 }
+
+.engine-branding-reuse-poster {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid #29425b;
+  border-radius: 11px;
+  background: #0a1727;
+  color: #dbe8f8;
+  cursor: pointer;
+}
+.engine-branding-reuse-poster input {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+  accent-color: #37d18b;
+}
+.engine-branding-reuse-poster span,
+.engine-branding-reuse-poster b,
+.engine-branding-reuse-poster small {
+  display: block;
+}
+.engine-branding-reuse-poster b {
+  font-size: 11px;
+  line-height: 1.45;
+}
+.engine-branding-reuse-poster small {
+  margin-top: 4px;
+  color: #8295af;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.engine-branding-reuse-poster:has(input:disabled) {
+  opacity: .52;
+  cursor: not-allowed;
+}
