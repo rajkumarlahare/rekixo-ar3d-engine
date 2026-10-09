@@ -350,7 +350,8 @@ async function uploadLogo(form, env, actor, project, slug) {
     throw error;
   }
   const now = new Date().toISOString();
-  await env.DB.batch([
+  try {
+    await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO project_branding_logo_versions_3d
         (project_id,version,logo_key,favicon_key,logo_mime_type,favicon_mime_type,created_by,created_at)
@@ -369,7 +370,11 @@ async function uploadLogo(form, env, actor, project, slug) {
         (id,actor_email,action,project_id,target_id,details_json,created_at)
        VALUES (?,?,?,?,?,?,?)`,
     ).bind(crypto.randomUUID(), actor.email, "branding.logo_uploaded", project.id, project.id, JSON.stringify({ version, logoBytes: logoFile.size, faviconBytes: faviconFile.size }), now),
-  ]);
+    ]);
+  } catch (error) {
+    await cleanupR2Objects(env, [logoKey, faviconKey]);
+    throw error;
+  }
   return json({ ok: true, version });
 }
 
@@ -408,7 +413,8 @@ async function uploadShareCard(form, env, actor, project, slug) {
   }
 
   const now = new Date().toISOString();
-  await env.DB.prepare(
+  try {
+    await env.DB.prepare(
     `INSERT INTO project_branding_shares_3d
       (project_id,experience_type,draft_card_version,draft_card_key,draft_source_key,updated_by,updated_at)
      VALUES (?,?,?,?,?,?,?)
@@ -418,6 +424,10 @@ async function uploadShareCard(form, env, actor, project, slug) {
        draft_source_key=excluded.draft_source_key,
        updated_by=excluded.updated_by,updated_at=excluded.updated_at`,
   ).bind(project.id, experience, version, cardKey, sourceKey, actor.email, now).run();
+  } catch (error) {
+    await cleanupR2Objects(env, [cardKey, sourceKey]);
+    throw error;
+  }
   await auditBranding(env, actor, project, "branding.share_card_uploaded", { experience, version, cardBytes: cardFile.size, sourceBytes: sourceFile.size });
   return json({ ok: true, experience, version });
 }
@@ -603,6 +613,9 @@ export async function handleProjectBrandingAdmin(request, env, actor, project, s
 
   const contentType = request.headers.get("content-type") || "";
   if (contentType.includes("multipart/form-data")) {
+    const declaredLength = Number(request.headers.get("content-length") || 0);
+    if (declaredLength > MAX_SOURCE_CARD_BYTES + MAX_PUBLIC_CARD_BYTES + 1024 * 1024)
+      return json({ error: "Branding upload request exceeds the maximum supported size." }, { status: 413 });
     const form = await request.formData();
     const action = String(form.get("action") || "");
     if (action === "upload-logo") return uploadLogo(form, env, actor, project, slug);
