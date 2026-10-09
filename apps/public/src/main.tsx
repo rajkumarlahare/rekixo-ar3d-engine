@@ -7,6 +7,7 @@ import {
 } from "@rekixo/3d-contracts";
 import { projectSlugFromPathname } from "@rekixo/3d-engine-core";
 import { loadPublicExperience, type ClientExperience } from "./api";
+import { loadPublicBranding, type PublicProjectBranding } from "./branding";
 import { Viewer3D } from "./viewer/Viewer3D";
 import "./styles.css";
 import { BuildingDetails } from "./BuildingDetails";
@@ -735,6 +736,7 @@ function PremiumDigitalTwin({ experience }: { experience: Public3DExperience }) 
 function App() {
   const slug = useMemo(() => projectSlugFromPathname(window.location.pathname), []);
   const [experience, setExperience] = useState<ClientExperience>();
+  const [branding, setBranding] = useState<PublicProjectBranding | null>(null);
   const [error, setError] = useState<string>();
   const [attempt, setAttempt] = useState(0);
   const [activeType, setActiveType] = useState<Scene3DType>("project-navigation");
@@ -743,6 +745,8 @@ function App() {
   useEffect(() => {
     if (!slug) return;
     const controller = new AbortController();
+    setBranding(null);
+    void loadPublicBranding(slug, "building", controller.signal).then(setBranding);
     setError(undefined);
     void loadPublicExperience(slug, controller.signal)
       .then(setExperience)
@@ -779,9 +783,12 @@ function App() {
   return (
     <main className="experience client-showcase">
       <header className="project-header">
-        <a className="brand" href="https://ar3dstudio.in" aria-label="AR3D Studio home">
-          <span>AR</span>
-          <div><strong>AR3D STUDIO</strong><small>Interactive Real Estate</small></div>
+        <a className="brand" href="https://ar3dstudio.in" aria-label={branding?.logoUrl ? experience.project.name : "AR3D Studio home"}>
+          {branding?.logoUrl ? <img className="brand-project-logo" src={branding.logoUrl} alt="" /> : <span>AR</span>}
+          <div>
+            <strong>{branding?.logoUrl ? experience.project.name : "AR3D STUDIO"}</strong>
+            <small>{branding?.logoUrl ? "Interactive 3D Experience" : "Interactive Real Estate"}</small>
+          </div>
         </a>
         <div className="project-heading">
           <p className="eyebrow">3D PROJECT EXPERIENCE</p>
