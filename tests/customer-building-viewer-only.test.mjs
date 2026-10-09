@@ -36,12 +36,15 @@ test("the viewer exposes the configured project location beside its existing cam
   }
 });
 
-test("viewer-only page layout stays compact and responsive", () => {
-  assert.ok(styles.includes("height: min(calc(100dvh - 70px), 1000px)"));
-  assert.ok(styles.includes("height: calc(100dvh - 58px)"));
-  assert.match(styles, /\.client-showcase--viewer-only/);
+test("viewer-only Building page fits its complete header and 3D controls inside the viewport", () => {
+  assert.match(styles, /html:has\(main\.client-showcase--viewer-only\)[\s\S]*body:has\(main\.client-showcase--viewer-only\)\s*\{[\s\S]*overflow:\s*hidden/);
+  assert.match(styles, /\.client-showcase--viewer-only\s*\{[\s\S]*height:\s*100dvh;[\s\S]*min-height:\s*0 !important;[\s\S]*overflow:\s*hidden/);
+  assert.match(styles, /\.client-showcase--viewer-only \.module-stage\s*\{[\s\S]*flex:\s*1 1 auto;[\s\S]*min-height:\s*0/);
+  assert.match(styles, /\.client-showcase--viewer-only \.viewer-section\s*\{[\s\S]*flex:\s*1 1 auto;[\s\S]*min-height:\s*0/);
+  assert.match(styles, /\.client-showcase--viewer-only \.viewer-shell:not\(:fullscreen\)\s*\{[\s\S]*height:\s*100%;[\s\S]*min-height:\s*0/);
   assert.match(styles, /\.project-header--viewer-only/);
   assert.match(styles, /\.client-hero-overlay/);
   assert.match(styles, /\.client-camera-location/);
   assert.match(styles, /@media \(max-width: 700px\)/);
+  assert.match(styles, /@media \(max-height: 520px\)/);
 });
