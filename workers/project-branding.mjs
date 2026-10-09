@@ -641,7 +641,6 @@ export async function servePublicBrandingRoute(request, env, slug, parts, url = 
 
   let key = "";
   let mimeType = "";
-  let cacheKeyVersion = "";
   if (kind === "logo" || kind === "favicon") {
     const project = await projectPublicContext(env, slug, experience);
     if (!project) return new Response("Not found", { status: 404 });
@@ -649,13 +648,11 @@ export async function servePublicBrandingRoute(request, env, slug, parts, url = 
     if (!logo?.publishedAt) return new Response("Not found", { status: 404 });
     key = kind === "logo" ? logo.logoKey : logo.faviconKey;
     mimeType = kind === "logo" ? logo.logoMimeType : logo.faviconMimeType;
-    cacheKeyVersion = logo.version;
   } else {
     const snapshot = await publicBrandingSnapshot(env, slug, experience, version, true);
     if (!snapshot) return new Response("Not found", { status: 404 });
     key = snapshot.cardKey;
     mimeType = snapshot.cardMimeType;
-    cacheKeyVersion = snapshot.shareVersion;
   }
   if (!key) return new Response("Not found", { status: 404 });
   const prefix = `projects/${slug}/branding/`;
