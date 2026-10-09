@@ -4,6 +4,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { Viewer3D } from "../viewer/Viewer3D";
 import { applyRigidBuildingPlacement } from "./geoRigidTransform";
+import { loadPublicBranding, type PublicProjectBranding } from "../branding";
 import "./geo-public-demo.css";
 
 type GeoCoordinate = {
@@ -554,6 +555,7 @@ export function slugFromGeoPathname(pathname: string) {
 export default function GeoPublicDemo() {
   const slug = useMemo(() => slugFromGeoPathname(window.location.pathname), []);
   const [data, setData] = useState<GeoPayload>();
+  const [branding, setBranding] = useState<PublicProjectBranding | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -562,6 +564,8 @@ export default function GeoPublicDemo() {
       return;
     }
     const controller = new AbortController();
+    setBranding(null);
+    void loadPublicBranding(slug, "geo", controller.signal).then(setBranding);
     fetch(`/3Dprojects/api/projects/${encodeURIComponent(slug)}/geo-placement`, {
       headers: { Accept: "application/json" },
       cache: "no-store",
@@ -614,10 +618,13 @@ export default function GeoPublicDemo() {
   return (
     <main className="jio-public-shell">
       <header className="jio-public-header">
-        <div>
-          <p className="eyebrow">INTEGRATED 3D GEO EXPERIENCE</p>
-          <h1>{data.project.name}</h1>
-          <p>{data.project.location || "Rekixo AR3D Engine"}</p>
+        <div className="jio-public-branding">
+          {branding?.logoUrl ? <img className="jio-public-project-logo" src={branding.logoUrl} alt="" /> : null}
+          <div>
+            <p className="eyebrow">INTEGRATED 3D GEO EXPERIENCE</p>
+            <h1>{data.project.name}</h1>
+            <p>{data.project.location || "Rekixo AR3D Engine"}</p>
+          </div>
         </div>
         <div className="jio-public-header-actions">
           <a href={`/3Dprojects/${encodeURIComponent(data.project.slug)}`}>
