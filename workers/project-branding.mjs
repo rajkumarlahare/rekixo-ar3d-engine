@@ -318,6 +318,9 @@ async function adminBrandingState(env, project, slug) {
   });
 }
 
+async function cleanupR2Objects(env, keys) {
+  await Promise.allSettled(keys.map((key) => env.MODEL_ASSETS.delete(key)));
+}
 async function uploadLogo(form, env, actor, project, slug) {
   const logoFile = form.get("logoFile");
   const faviconFile = form.get("faviconFile");
@@ -331,7 +334,8 @@ async function uploadLogo(form, env, actor, project, slug) {
   const version = versionToken();
   const logoKey = `projects/${slug}/branding/logos/${version}.webp`;
   const faviconKey = `projects/${slug}/branding/favicons/${version}.png`;
-  await Promise.all([
+  try {
+    await Promise.all([
     env.MODEL_ASSETS.put(logoKey, await logoFile.arrayBuffer(), {
       httpMetadata: { contentType: logoMime },
       customMetadata: { projectId: project.id, projectSlug: slug, kind: "project-branding-logo", version },
@@ -341,6 +345,10 @@ async function uploadLogo(form, env, actor, project, slug) {
       customMetadata: { projectId: project.id, projectSlug: slug, kind: "project-branding-favicon", version },
     }),
   ]);
+  } catch (error) {
+    await cleanupR2Objects(env, [logoKey, faviconKey]);
+    throw error;
+  }
   const now = new Date().toISOString();
   await env.DB.batch([
     env.DB.prepare(
@@ -383,7 +391,8 @@ async function uploadShareCard(form, env, actor, project, slug) {
   const sourceExtension = sourceMime === "image/jpeg" ? "jpg" : sourceMime === "image/png" ? "png" : "webp";
   const cardKey = `projects/${slug}/branding/share/${experience}/cards/${version}.${cardExtension}`;
   const sourceKey = `projects/${slug}/branding/share/${experience}/sources/${version}.${sourceExtension}`;
-  await Promise.all([
+  try {
+    await Promise.all([
     env.MODEL_ASSETS.put(cardKey, await cardFile.arrayBuffer(), {
       httpMetadata: { contentType: cardMime },
       customMetadata: { projectId: project.id, projectSlug: slug, kind: "project-share-card", experience, version },
@@ -393,6 +402,10 @@ async function uploadShareCard(form, env, actor, project, slug) {
       customMetadata: { projectId: project.id, projectSlug: slug, kind: "project-share-source", experience, version },
     }),
   ]);
+  } catch (error) {
+    await cleanupR2Objects(env, [cardKey, sourceKey]);
+    throw error;
+  }
 
   const now = new Date().toISOString();
   await env.DB.prepare(
