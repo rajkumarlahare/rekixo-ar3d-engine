@@ -50,6 +50,7 @@ test("Geo controls stay visible in a normal viewport, compact and anchored top-r
   assert.match(toolbarRule, /z-index: 10000 !important/);
   assert.match(toolbarRule, /display: flex !important/);
   assert.match(toolbarRule, /visibility: visible !important/);
+  assert.match(geoStyles, /\.geo-integrated-scene > \.geo-camera-toolbar\s*\{[\s\S]*z-index:\s*2147483000 !important/);
   assert.match(toolbarRule, /left: auto/);
   assert.match(toolbarRule, /flex-wrap: nowrap/);
   assert.match(toolbarRule, /backdrop-filter: blur\(14px\)/);
