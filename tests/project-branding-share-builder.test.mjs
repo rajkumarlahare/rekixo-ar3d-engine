@@ -91,6 +91,8 @@ test("public Worker returns project-scoped immutable assets and crawler-readable
   assert.ok(worker.includes('og:title'));
   assert.ok(worker.includes('og:description'));
   assert.ok(worker.includes('og:image'));
+  assert.ok(worker.includes('property="og:url"'));
+  assert.ok(worker.includes('headers.delete("ETag")'));
   assert.ok(worker.includes('twitter:card'));
   assert.ok(worker.includes('rel="icon"'));
   assert.ok(worker.includes('shareVersion'));
