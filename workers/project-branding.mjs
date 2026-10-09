@@ -126,6 +126,7 @@ async function readLogoVersion(env, projectId, version) {
   if (!validVersion(version)) return null;
   return env.DB.prepare(
     `SELECT version,logo_key AS logoKey,favicon_key AS faviconKey,
+            source_key AS sourceKey,source_mime_type AS sourceMimeType,
             logo_mime_type AS logoMimeType,favicon_mime_type AS faviconMimeType,
             published_at AS publishedAt
        FROM project_branding_logo_versions_3d
@@ -289,6 +290,9 @@ async function adminBrandingState(env, project, slug) {
       previewUrl: logoPreviewVersion
         ? `${CLOUD_PATH}/projects/${encodeURIComponent(slug)}/branding/assets/logo?v=${encodeURIComponent(logoPreviewVersion)}`
         : "",
+      sourceUrl: logoPreviewVersion
+        ? `${CLOUD_PATH}/projects/${encodeURIComponent(slug)}/branding/assets/source?v=${encodeURIComponent(logoPreviewVersion)}`
+        : "",
       faviconPreviewUrl: logoPreviewVersion
         ? `${CLOUD_PATH}/projects/${encodeURIComponent(slug)}/branding/assets/favicon?v=${encodeURIComponent(logoPreviewVersion)}`
         : "",
@@ -310,31 +314,41 @@ async function cleanupR2Objects(env, keys) {
 async function uploadLogo(form, env, actor, project, slug) {
   const logoFile = form.get("logoFile");
   const faviconFile = form.get("faviconFile");
+  const sourceFile = form.get("sourceFile");
   const logoMime = await detectImageMime(logoFile);
   const faviconMime = await detectImageMime(faviconFile);
+  const sourceMime = await detectImageMime(sourceFile);
   if (logoMime !== "image/webp" || !(logoFile instanceof File) || logoFile.size < 1 || logoFile.size > MAX_LOGO_BYTES)
     return json({ error: "Logo must be an optimized WebP image under 512 KB." }, { status: 400 });
   if (faviconMime !== "image/png" || !(faviconFile instanceof File) || faviconFile.size < 1 || faviconFile.size > MAX_FAVICON_BYTES)
     return json({ error: "Circular favicon must be a PNG image under 128 KB." }, { status: 400 });
+  if (!["image/jpeg", "image/png", "image/webp"].includes(sourceMime) || !(sourceFile instanceof File) || sourceFile.size < 1 || sourceFile.size > MAX_SOURCE_CARD_BYTES)
+    return json({ error: "Original logo must be JPG, PNG or WebP under 8 MB." }, { status: 400 });
 
   const version = versionToken();
   const logoKey = `projects/${slug}/branding/logos/${version}.webp`;
   const faviconKey = `projects/${slug}/branding/favicons/${version}.png`;
+  const sourceExtension = sourceMime === "image/jpeg" ? "jpg" : sourceMime === "image/png" ? "png" : "webp";
+  const sourceKey = `projects/${slug}/branding/logo-sources/${version}.${sourceExtension}`;
   try {
     const uploadResults = await Promise.allSettled([
-    env.MODEL_ASSETS.put(logoKey, await logoFile.arrayBuffer(), {
-      httpMetadata: { contentType: logoMime },
-      customMetadata: { projectId: project.id, projectSlug: slug, kind: "project-branding-logo", version },
-    }),
-    env.MODEL_ASSETS.put(faviconKey, await faviconFile.arrayBuffer(), {
-      httpMetadata: { contentType: faviconMime },
-      customMetadata: { projectId: project.id, projectSlug: slug, kind: "project-branding-favicon", version },
-    }),
-  ]);
+      env.MODEL_ASSETS.put(logoKey, await logoFile.arrayBuffer(), {
+        httpMetadata: { contentType: logoMime },
+        customMetadata: { projectId: project.id, projectSlug: slug, kind: "project-branding-logo", version },
+      }),
+      env.MODEL_ASSETS.put(faviconKey, await faviconFile.arrayBuffer(), {
+        httpMetadata: { contentType: faviconMime },
+        customMetadata: { projectId: project.id, projectSlug: slug, kind: "project-branding-favicon", version },
+      }),
+      env.MODEL_ASSETS.put(sourceKey, await sourceFile.arrayBuffer(), {
+        httpMetadata: { contentType: sourceMime },
+        customMetadata: { projectId: project.id, projectSlug: slug, kind: "project-branding-logo-source", version },
+      }),
+    ]);
     const failedUpload = uploadResults.find((result) => result.status === "rejected");
     if (failedUpload?.status === "rejected") throw failedUpload.reason;
   } catch (error) {
-    await cleanupR2Objects(env, [logoKey, faviconKey]);
+    await cleanupR2Objects(env, [logoKey, faviconKey, sourceKey]);
     throw error;
   }
   const now = new Date().toISOString();
@@ -342,9 +356,10 @@ async function uploadLogo(form, env, actor, project, slug) {
     await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO project_branding_logo_versions_3d
-        (project_id,version,logo_key,favicon_key,logo_mime_type,favicon_mime_type,created_by,created_at)
-       VALUES (?,?,?,?,?,?,?,?)`,
-    ).bind(project.id, version, logoKey, faviconKey, logoMime, faviconMime, actor.email, now),
+        (project_id,version,logo_key,favicon_key,source_key,source_mime_type,
+         logo_mime_type,favicon_mime_type,created_by,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    ).bind(project.id, version, logoKey, faviconKey, sourceKey, sourceMime, logoMime, faviconMime, actor.email, now),
     env.DB.prepare(
       `INSERT INTO project_branding_3d
         (project_id,draft_logo_version,updated_by,updated_at)
@@ -357,10 +372,10 @@ async function uploadLogo(form, env, actor, project, slug) {
       `INSERT INTO engine_admin_audit
         (id,actor_email,action,project_id,target_id,details_json,created_at)
        VALUES (?,?,?,?,?,?,?)`,
-    ).bind(crypto.randomUUID(), actor.email, "branding.logo_uploaded", project.id, project.id, JSON.stringify({ version, logoBytes: logoFile.size, faviconBytes: faviconFile.size }), now),
+    ).bind(crypto.randomUUID(), actor.email, "branding.logo_uploaded", project.id, project.id, JSON.stringify({ version, logoBytes: logoFile.size, faviconBytes: faviconFile.size, sourceBytes: sourceFile.size }), now),
     ]);
   } catch (error) {
-    await cleanupR2Objects(env, [logoKey, faviconKey]);
+    await cleanupR2Objects(env, [logoKey, faviconKey, sourceKey]);
     throw error;
   }
   return json({ ok: true, version });
@@ -575,11 +590,11 @@ async function adminBrandingAsset(request, env, project, slug, parts) {
   let key = "";
   let mimeType = "application/octet-stream";
 
-  if (parts[0] === "logo" || parts[0] === "favicon") {
+  if (parts[0] === "logo" || parts[0] === "favicon" || parts[0] === "source") {
     const logo = await readLogoVersion(env, project.id, version);
     if (!logo) return new Response("Not found", { status: 404 });
-    key = parts[0] === "logo" ? logo.logoKey : logo.faviconKey;
-    mimeType = parts[0] === "logo" ? logo.logoMimeType : logo.faviconMimeType;
+    key = parts[0] === "logo" ? logo.logoKey : parts[0] === "favicon" ? logo.faviconKey : logo.sourceKey;
+    mimeType = parts[0] === "logo" ? logo.logoMimeType : parts[0] === "favicon" ? logo.faviconMimeType : logo.sourceMimeType;
   } else if (parts[0] === "share-card") {
     const experience = url.searchParams.get("experience") || "";
     if (!validExperience(experience)) return json({ error: "Valid experience required." }, { status: 400 });
