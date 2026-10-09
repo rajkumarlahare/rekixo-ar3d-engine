@@ -104,6 +104,7 @@ test("public Worker returns project-scoped immutable assets and crawler-readable
   assert.ok(worker.includes('headers.delete("ETag")'));
   assert.ok(worker.includes('twitter:card'));
   assert.ok(worker.includes('rel="icon"'));
+  assert.ok(worker.includes("if (faviconUrl) html = html.replace"));
   assert.ok(worker.includes('shareVersion'));
   assert.ok(worker.includes("public, max-age=31536000, immutable"));
 });
