@@ -98,22 +98,6 @@ async function detectImageMime(file) {
   return "";
 }
 
-async function auditBranding(env, actor, project, action, details) {
-  await env.DB.prepare(
-    `INSERT INTO engine_admin_audit
-      (id,actor_email,action,project_id,target_id,details_json,created_at)
-     VALUES (?,?,?,?,?,?,?)`,
-  ).bind(
-    crypto.randomUUID(),
-    actor.email,
-    action,
-    project.id,
-    project.id,
-    JSON.stringify(details || {}),
-    new Date().toISOString(),
-  ).run();
-}
-
 async function experienceReadiness(env, project, slug, experience) {
   if (project.status !== "published") return false;
   try {
@@ -440,7 +424,6 @@ async function uploadShareCard(form, env, actor, project, slug) {
     await cleanupR2Objects(env, [cardKey, sourceKey]);
     throw error;
   }
-  await auditBranding(env, actor, project, "branding.share_card_uploaded", { experience, version, cardBytes: cardFile.size, sourceBytes: sourceFile.size });
   return json({ ok: true, experience, version });
 }
 
@@ -492,6 +475,7 @@ async function publishLogo(request, env, actor, project) {
         (project_id,published_logo_version,updated_by,updated_at,published_at)
        VALUES (?,?,?,?,?)
        ON CONFLICT(project_id) DO UPDATE SET
+         draft_logo_version=NULL,
          published_logo_version=excluded.published_logo_version,
          updated_by=excluded.updated_by,updated_at=excluded.updated_at,published_at=excluded.published_at`,
     ).bind(project.id, requested, actor.email, now, now),
