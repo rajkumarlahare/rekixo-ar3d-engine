@@ -15,8 +15,8 @@
   gap: 14px;
 }
 .jio-public-project-logo {
-  width: 54px;
-  height: 54px;
+  width: 44px;
+  height: 44px;
   flex: 0 0 auto;
   display: block;
   object-fit: contain;
@@ -28,13 +28,13 @@
   position: relative;
   isolation: isolate;
   width: min(1500px, 100%);
-  min-height: 138px;
-  margin: 0 auto 14px;
-  padding: 22px 24px;
+  min-height: 86px;
+  margin: 0 auto 10px;
+  padding: 12px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: 16px;
   overflow: hidden;
   border: 1px solid rgba(70, 111, 143, .48);
   border-radius: 20px;
@@ -82,60 +82,20 @@
 }
 
 .jio-public-header h1 {
-  margin: 7px 0 0;
+  margin: 0;
   max-width: 820px;
   color: #f5fbff;
-  font-size: clamp(27px, 3.2vw, 42px);
+  font-size: clamp(24px, 2.7vw, 34px);
   line-height: 1.05;
   letter-spacing: -.025em;
   text-wrap: balance;
 }
 
-.jio-public-header > div:first-child > p:last-child {
-  margin: 9px 0 0;
+.jio-public-branding h1 + p {
+  margin: 4px 0 0;
   color: #93a9bb;
-  font-size: 14px;
-  line-height: 1.45;
-}
-
-.jio-public-header-actions {
-  flex: 0 0 auto;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.jio-public-header-actions a {
-  min-height: 44px;
-  padding: 10px 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(75, 224, 170, .42);
-  border-radius: 12px;
-  background: linear-gradient(180deg, #16704f, #10563f);
-  box-shadow:
-    0 9px 22px rgba(4, 31, 24, .3),
-    inset 0 1px 0 rgba(255, 255, 255, .08);
-  color: #f1fff9;
   font-size: 12px;
-  font-weight: 900;
-  letter-spacing: .015em;
-  text-decoration: none;
-  transition: transform .16s ease, border-color .16s ease, filter .16s ease;
-}
-
-.jio-public-header-actions a:hover,
-.jio-public-header-actions a:focus-visible {
-  transform: translateY(-1px);
-  border-color: rgba(116, 245, 197, .78);
-  filter: brightness(1.07);
-}
-
-.jio-public-header-actions a:last-child {
-  border-color: rgba(92, 160, 222, .48);
-  background: linear-gradient(180deg, #174c76, #123b5f);
+  line-height: 1.35;
 }
 
 /* Customer-facing Geo pages never expose release IDs, rigid-transform internals,
@@ -177,20 +137,24 @@
 .geo-camera-toolbar {
   position: absolute;
   z-index: 8;
-  top: 14px;
-  left: 50%;
-  max-width: calc(100% - 360px);
-  padding: 5px;
+  top: 56px;
+  right: 14px;
+  left: auto;
+  width: max-content;
+  max-width: calc(100% - 28px);
+  padding: 4px;
   display: flex;
-  gap: 7px;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
   scrollbar-width: none;
-  transform: translateX(-50%);
   border: 1px solid rgba(92, 127, 151, .38);
-  border-radius: 16px;
-  background: rgba(8, 22, 32, .88);
-  box-shadow: 0 12px 28px rgba(1, 9, 15, .34);
+  border-radius: 12px;
+  background: rgba(8, 22, 32, .74);
+  box-shadow: 0 12px 28px rgba(1, 9, 15, .3);
   backdrop-filter: blur(14px);
   pointer-events: auto;
 }
@@ -199,25 +163,36 @@
   display: none;
 }
 
-.geo-camera-toolbar button {
-  min-height: 40px;
-  padding: 8px 15px;
+.geo-camera-toolbar button,
+.geo-building-link {
+  min-height: 34px;
+  padding: 6px 10px;
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   border: 1px solid rgba(105, 132, 150, .42);
-  border-radius: 13px;
-  background: linear-gradient(180deg, rgba(35, 50, 59, .98), rgba(26, 39, 48, .98));
-  color: #f2f6f8;
+  border-radius: 9px;
+  background: rgba(20, 37, 49, .7);
+  color: #e6edf4;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .045);
   font: inherit;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 850;
   letter-spacing: .005em;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
+  backdrop-filter: blur(10px);
   transition: transform .16s ease, border-color .16s ease, background .16s ease, box-shadow .16s ease;
 }
 
 .geo-camera-toolbar button:hover,
-.geo-camera-toolbar button:focus-visible {
+.geo-camera-toolbar button:focus-visible,
+.geo-building-link:hover,
+.geo-building-link:focus-visible {
   transform: translateY(-1px);
   border-color: rgba(89, 222, 181, .62);
   outline: none;
@@ -225,11 +200,23 @@
 
 .geo-camera-toolbar button.is-active {
   border-color: rgba(81, 235, 190, .9);
-  background: linear-gradient(180deg, #17664f, #0f523f);
+  background: rgba(14, 92, 67, .88);
   box-shadow:
-    0 7px 18px rgba(4, 50, 37, .28),
+    0 7px 18px rgba(4, 50, 37, .22),
     inset 0 1px 0 rgba(255, 255, 255, .09);
   color: #f5fff9;
+}
+
+.geo-building-link {
+  border-color: rgba(88, 190, 155, .52);
+  background: rgba(13, 61, 50, .82);
+  color: #eafff6;
+}
+
+.geo-building-link > span {
+  color: #7cf0be;
+  font-size: 13px;
+  line-height: 1;
 }
 
 .geo-integrated-fallback > .viewer3d,
@@ -308,8 +295,9 @@
 
 @media (max-width: 1100px) {
   .geo-camera-toolbar {
-    top: 62px;
-    max-width: calc(100% - 28px);
+    top: 56px;
+    right: 10px;
+    max-width: calc(100% - 20px);
   }
 }
 
@@ -336,11 +324,20 @@
   .jio-public-header {
     min-height: 0;
     margin-bottom: 9px;
-    padding: 18px 16px 16px;
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 17px;
-    border-radius: 16px;
+    padding: 10px 12px;
+    align-items: center;
+    flex-direction: row;
+    gap: 10px;
+    border-radius: 14px;
+  }
+
+  .jio-public-branding {
+    gap: 9px;
+  }
+
+  .jio-public-project-logo {
+    width: 36px;
+    height: 36px;
   }
 
   .jio-public-header::before {
@@ -348,39 +345,30 @@
   }
 
   .jio-public-header h1 {
-    font-size: clamp(27px, 9vw, 36px);
+    font-size: clamp(20px, 6vw, 26px);
   }
 
-  .jio-public-header > div:first-child > p:last-child {
-    margin-top: 7px;
-    font-size: 13px;
-  }
-
-  .jio-public-header-actions {
-    width: 100%;
-    justify-content: stretch;
-  }
-
-  .jio-public-header-actions a {
-    flex: 1 1 0;
-    min-width: 0;
-    min-height: 43px;
-    padding-inline: 10px;
+  .jio-public-branding h1 + p {
+    margin-top: 3px;
+    font-size: 11px;
   }
 
   .geo-camera-toolbar {
-    top: 60px;
-    left: 8px;
+    top: 56px;
     right: 8px;
-    max-width: none;
-    transform: none;
-    border-radius: 14px;
+    left: auto;
+    max-width: calc(100% - 16px);
+    padding: 3px;
+    gap: 3px;
+    border-radius: 12px;
   }
 
-  .geo-camera-toolbar button {
-    min-height: 38px;
-    padding: 7px 13px;
-    font-size: 12px;
+  .geo-camera-toolbar button,
+  .geo-building-link {
+    min-height: 32px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    font-size: 10px;
   }
 
   .geo-integrated-scene,
