@@ -1,18 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  BadgeCheck,
-  Building2,
-  CheckCircle2,
-  Copy,
-  ExternalLink,
-  ImagePlus,
-  LoaderCircle,
-  MapPinned,
-  Save,
-  Share2,
-  ShieldCheck,
-  Upload,
-} from "lucide-react";
+type BrandingIconName = "badge" | "building" | "check" | "copy" | "external" | "image" | "loader" | "map" | "save" | "share" | "shield" | "upload";
+
+function BrandingIcon({ name, size = 17, className }: { name: BrandingIconName; size?: number; className?: string }) {
+  const symbols: Record<BrandingIconName, string> = {
+    badge: "✓", building: "▥", check: "✓", copy: "▣", external: "↗",
+    image: "▧", loader: "◌", map: "⌖", save: "▣", share: "↗",
+    shield: "⬡", upload: "↑",
+  };
+  return <span aria-hidden="true" className={className} style={{ width: size, height: size, display: "inline-flex", flex: "0 0 auto", alignItems: "center", justifyContent: "center", fontSize: Math.max(12, size), lineHeight: 1 }}>{symbols[name]}</span>;
+}
 import {
   getProjectBranding,
   publishProjectLogo,
@@ -408,7 +404,7 @@ export default function ProjectShareBuilder() {
   if (!slug) {
     return (
       <section className="engine-branding-empty engine-control-card">
-        <ShieldCheck size={30} />
+        <BrandingIcon name="shield" size={30} />
         <h2>Select a project</h2>
         <p>Overview se project create karein ya project select karke Share & Branding workspace kholein.</p>
         <a className="engine-control-link" href="/3Dprojects">Open Project Overview</a>
@@ -419,19 +415,19 @@ export default function ProjectShareBuilder() {
   return (
     <div className="engine-branding">
       <section className="engine-branding-hero engine-control-card">
-        <div className="engine-branding-hero__mark"><Share2 size={22} /></div>
+        <div className="engine-branding-hero__mark"><BrandingIcon name="share" size={22} /></div>
         <div>
           <p className="eyebrow">PROJECT BRANDING</p>
           <h2>{state?.project.name || slug}</h2>
           <p>One logo and favicon for Building + Geo, with independent share previews for each live experience.</p>
         </div>
         <button type="button" className="engine-control-button" onClick={() => void loadState()} disabled={busyNow}>
-          {busy === "load" ? <LoaderCircle className="engine-branding-spin" /> : "Refresh"}
+          {busy === "load" ? <BrandingIcon name="loader" size={17} className="engine-branding-spin" /> : "Refresh"}
         </button>
       </section>
 
       {error ? <div className="engine-branding-alert engine-branding-alert--error" role="alert">{error}</div> : null}
-      {message ? <div className="engine-branding-alert engine-branding-alert--ok" role="status"><CheckCircle2 size={17} />{message}</div> : null}
+      {message ? <div className="engine-branding-alert engine-branding-alert--ok" role="status"><BrandingIcon name="check" size={17} />{message}</div> : null}
 
       <section className="engine-branding-card engine-control-card">
         <div className="engine-branding-section-head">
@@ -461,7 +457,7 @@ export default function ProjectShareBuilder() {
           </div>
           <div className="engine-branding-logo-controls">
             <label className="engine-branding-file">
-              <Upload size={17} />
+              <BrandingIcon name="upload" size={17} />
               {busy === "logo" ? "Preparing logo…" : "Choose / replace circular logo"}
               <input type="file" accept="image/png,image/jpeg,image/webp" disabled={busyNow} onChange={(event) => {
                 const file = event.currentTarget.files?.[0];
@@ -478,7 +474,7 @@ export default function ProjectShareBuilder() {
             <button className="engine-control-button engine-control-button--primary" type="button" onClick={() => void publishLogo()} disabled={busyNow || !state?.logo.draftVersion}>
               {busy === "publish-logo" ? "Publishing…" : "Publish Logo & Favicon"}
             </button>
-            {state?.logo.publishedLogoUrl ? <a className="engine-branding-small-link" href={state.logo.publishedLogoUrl} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Open published logo</a> : null}
+            {state?.logo.publishedLogoUrl ? <a className="engine-branding-small-link" href={state.logo.publishedLogoUrl} target="_blank" rel="noreferrer"><BrandingIcon name="external" size={14} /> Open published logo</a> : null}
           </div>
         </div>
       </section>
@@ -492,8 +488,8 @@ export default function ProjectShareBuilder() {
           </div>
         </div>
         <div className="engine-branding-tabs" role="tablist" aria-label="Experience share">
-          <button type="button" role="tab" aria-selected={activeExperience === "building"} className={activeExperience === "building" ? "active" : ""} onClick={() => setActiveExperience("building")}><Building2 size={17} />Building</button>
-          <button type="button" role="tab" aria-selected={activeExperience === "geo"} className={activeExperience === "geo" ? "active" : ""} onClick={() => setActiveExperience("geo")}><MapPinned size={17} />Geo</button>
+          <button type="button" role="tab" aria-selected={activeExperience === "building"} className={activeExperience === "building" ? "active" : ""} onClick={() => setActiveExperience("building")}><BrandingIcon name="building" size={17} />Building</button>
+          <button type="button" role="tab" aria-selected={activeExperience === "geo"} className={activeExperience === "geo" ? "active" : ""} onClick={() => setActiveExperience("geo")}><BrandingIcon name="map" size={17} />Geo</button>
         </div>
 
         <div className="engine-branding-share-grid">
@@ -514,11 +510,11 @@ export default function ProjectShareBuilder() {
               <small>{currentDraft.description.length}/280</small>
             </label>
             <button className="engine-control-button" type="button" onClick={() => void saveDetails()} disabled={busyNow || !titleValid || !descriptionValid}>
-              <Save size={16} />{busy === "details" ? "Saving details…" : "Save title & description"}
+              <BrandingIcon name="save" size={16} />{busy === "details" ? "Saving details…" : "Save title & description"}
             </button>
 
             <label className="engine-branding-file engine-branding-card-file">
-              <ImagePlus size={18} />
+              <BrandingIcon name="image" size={18} />
               <span>{brandBusy ? "Preparing branded poster…" : shareFiles[activeExperience]?.sourceFile.name || (currentShare?.draftCardVersion ? "Choose a new poster to replace the draft" : "Choose share image / WhatsApp poster")}</span>
               <small>Original ≤8 MB · output ≤550 KB · no crop · AR3D footer added</small>
               <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busyNow} onChange={(event) => {
@@ -529,15 +525,15 @@ export default function ProjectShareBuilder() {
             </label>
             {shareFiles[activeExperience] ? (
               <button className="engine-control-button engine-control-button--primary" type="button" onClick={() => void uploadShareDraft()} disabled={busyNow}>
-                <Upload size={16} />{busy === "share" ? "Uploading poster…" : "Upload share poster draft"}
+                <BrandingIcon name="upload" size={16} />{busy === "share" ? "Uploading poster…" : "Upload share poster draft"}
               </button>
             ) : null}
             <button className="engine-control-button engine-control-button--primary" type="button" onClick={() => void publishShare()} disabled={busyNow || !currentShare?.live || !titleValid || !descriptionValid || (!currentShare?.draftCardVersion && !currentShare?.publishedVersion)}>
-              <Share2 size={16} />{busy === "publish-share" ? "Publishing share…" : `Publish ${activeExperience === "geo" ? "Geo" : "Building"} Share`}
+              <BrandingIcon name="share" size={16} />{busy === "publish-share" ? "Publishing share…" : `Publish ${activeExperience === "geo" ? "Geo" : "Building"} Share`}
             </button>
             <div className="engine-branding-share-actions">
-              <button type="button" className="engine-control-button" disabled={!currentShare?.shareUrl} onClick={() => void copyLink()}><Copy size={15} />Copy published link</button>
-              {currentShare?.shareUrl ? <a className="engine-control-link" href={currentShare.shareUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} />Open shared link</a> : null}
+              <button type="button" className="engine-control-button" disabled={!currentShare?.shareUrl} onClick={() => void copyLink()}><BrandingIcon name="copy" size={15} />Copy published link</button>
+              {currentShare?.shareUrl ? <a className="engine-control-link" href={currentShare.shareUrl} target="_blank" rel="noreferrer"><BrandingIcon name="external" size={15} />Open shared link</a> : null}
             </div>
             <div className="engine-branding-url-box">
               <span>VERSIONED SHARE LINK</span>
@@ -549,7 +545,7 @@ export default function ProjectShareBuilder() {
             <div className="engine-branding-preview-head"><span>LINK PREVIEW</span><span>{activeExperience.toUpperCase()}</span></div>
             <div className="engine-branding-social-card">
               <div className="engine-branding-image">
-                {cardUrl ? <img src={cardUrl} alt="Final share card preview" /> : <div><ImagePlus size={30} /><b>Share poster preview</b><small>Choose the image customers will see on social links.</small></div>}
+                {cardUrl ? <img src={cardUrl} alt="Final share card preview" /> : <div><BrandingIcon name="image" size={30} /><b>Share poster preview</b><small>Choose the image customers will see on social links.</small></div>}
               </div>
               <div className="engine-branding-social-copy">
                 {state?.project.location ? <small>{state.project.location}</small> : null}
@@ -559,11 +555,11 @@ export default function ProjectShareBuilder() {
               </div>
             </div>
             <div className="engine-branding-preview-note">
-              <CheckCircle2 size={16} />
+              <BrandingIcon name="check" size={16} />
               <p>Share metadata and poster publish as an immutable version. Changing a poster will not change an older versioned share URL.</p>
             </div>
             <div className="engine-branding-status-line">
-              {currentShare?.shareReady ? <><BadgeCheck size={16} /> Published share preview is ready</> : <><Share2 size={16} /> {currentShare?.live ? "Upload a poster and publish this share preview" : "Publish the 3D experience first"}</>}
+              {currentShare?.shareReady ? <><BrandingIcon name="badge" size={16} /> Published share preview is ready</> : <><BrandingIcon name="share" size={16} /> {currentShare?.live ? "Upload a poster and publish this share preview" : "Publish the 3D experience first"}</>}
             </div>
           </aside>
         </div>
