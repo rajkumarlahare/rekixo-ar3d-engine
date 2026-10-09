@@ -35,6 +35,7 @@ test("Geo map toolbar orders all camera views before the Building website link",
 
   assert.ok(toolbar.indexOf("{GEO_CAMERA_VIEWS.map") < toolbar.indexOf('className="geo-building-link"'));
   assert.match(toolbar, /Building <span aria-hidden="true">↗<\/span>/);
+  assert.doesNotMatch(geoApp.slice(geoApp.indexOf('<nav className="geo-camera-toolbar"') - 35, geoApp.indexOf('<nav className="geo-camera-toolbar"')), /!failure/);
   assert.ok(toolbar.includes('href={`/3Dprojects/${encodeURIComponent(data.project.slug)}`}'));
   assert.match(toolbar, /target="_blank"/);
   assert.match(toolbar, /rel="noopener noreferrer"/);
@@ -43,17 +44,20 @@ test("Geo map toolbar orders all camera views before the Building website link",
 });
 
 test("Geo controls stay visible in a normal viewport, compact and anchored top-right", () => {
-  const toolbarRule = geoStyles.match(/\.geo-camera-toolbar \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const toolbarRule = geoStyles.match(/^\.geo-camera-toolbar\s*\{([\s\S]*?)\n\}/m)?.[1] ?? "";
   assert.match(toolbarRule, /top: 12px/);
   assert.match(toolbarRule, /right: 12px/);
   assert.match(toolbarRule, /z-index: 10000 !important/);
   assert.match(toolbarRule, /display: flex !important/);
   assert.match(toolbarRule, /visibility: visible !important/);
+  assert.match(geoStyles, /\.geo-integrated-scene > \.geo-camera-toolbar\s*\{[\s\S]*z-index:\s*2147483000 !important/);
   assert.match(toolbarRule, /left: auto/);
   assert.match(toolbarRule, /flex-wrap: nowrap/);
   assert.match(toolbarRule, /backdrop-filter: blur\(14px\)/);
   assert.match(toolbarRule, /background: rgba\(8, 22, 32, \.82\)/);
-  assert.match(geoStyles, /\.jio-public-header\s*\{[\s\S]*border:\s*0;[\s\S]*background:\s*transparent;/);
+  assert.match(geoStyles, /\.geo-integrated-scene > \.geo-camera-toolbar\s*\{[\s\S]*z-index:\s*2147483000 !important/);
+  assert.match(geoStyles, /\.geo-integrated-map\s*\{\s*z-index:\s*0;[\s\S]*isolation:\s*isolate;/);
+  assert.match(geoStyles, /\.jio-public-header\s*\{[\s\S]*border:\s*0 !important;[\s\S]*background:\s*transparent !important;/);
   assert.match(geoStyles, /\.jio-public-header::before,\s*\.jio-public-header::after\s*\{\s*display:\s*none !important;/);
   assert.match(geoStyles, /\.geo-integrated-scene\s*\{[\s\S]*isolation:\s*isolate;/);
   assert.match(geoStyles, /@media \(max-width:\s*1100px\)[\s\S]*?\.geo-camera-toolbar\s*\{\s*top:\s*12px;/);

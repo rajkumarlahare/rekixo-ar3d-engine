@@ -503,8 +503,7 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
   return (
     <div className="geo-integrated-scene">
       <div ref={hostRef} className="geo-integrated-map" aria-label={`${data.project.name} integrated 3D geographic scene`} />
-      {!failure && (
-        <nav className="geo-camera-toolbar" aria-label="Geo map navigation">
+      <nav className="geo-camera-toolbar" aria-label="Geo map navigation">
           {GEO_CAMERA_VIEWS.map((view) => (
             <button
               key={view.id}
@@ -531,8 +530,7 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
           >
             Building <span aria-hidden="true">↗</span>
           </a>
-        </nav>
-      )}
+      </nav>
       {failure && (
         <div className="geo-integrated-fallback">
           <Viewer3D
