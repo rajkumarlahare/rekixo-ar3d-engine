@@ -34,6 +34,10 @@ const adminShell = await readFile(
   new URL("../apps/admin/src/layout/EngineAdminShell.tsx", import.meta.url),
   "utf8",
 );
+const builderStyles = await readFile(
+  new URL("../apps/admin/src/branding/project-share-builder.css", import.meta.url),
+  "utf8",
+);
 const publicApp = await readFile(
   new URL("../apps/public/src/main.tsx", import.meta.url),
   "utf8",
@@ -78,11 +82,16 @@ test("Building and Geo share snapshots publish independently and require live re
   assert.ok(worker.includes("activeReleaseState(env, slug)"));
   assert.ok(worker.includes("project_branding_share_versions_3d"));
   assert.ok(worker.includes("published_version"));
+  assert.ok(worker.includes("draft_use_building_card"));
+  assert.ok(worker.includes("Publish a Building share poster before reusing it for Geo."));
   assert.ok(worker.includes("shareUrl"));
   assert.ok(builder.includes('setActiveExperience("building")'));
   assert.ok(builder.includes('setActiveExperience("geo")'));
   assert.ok(builder.includes("publishProjectShare(slug, activeExperience)"));
   assert.ok(builder.includes("Copy published link"));
+  assert.ok(builder.includes("Use the published Building poster for Geo"));
+  assert.ok(builder.includes("next.experiences.geo.useBuildingPoster"));
+  assert.ok(builderStyles.includes(".engine-branding-reuse-poster"));
 });
 
 test("public Worker returns project-scoped immutable assets and crawler-readable Building/Geo metadata", () => {
