@@ -389,3 +389,35 @@
     bottom: 54px;
   }
 }
+
+/* Camera presets occupy their own compact row immediately below the map. */
+.geo-public-map-layout { width: min(1500px, 100%); margin: 0 auto; }
+.geo-public-map-layout > .geo-integrated-scene { width: 100%; margin: 0; }
+.geo-public-toolbar-slot {
+  width: 100%; min-width: 0; display: flex; justify-content: center; margin: 8px auto 0;
+}
+.geo-public-toolbar-slot > .geo-camera-toolbar--normal-row {
+  position: static !important; width: 100% !important; max-width: 100% !important;
+  min-height: 42px; justify-content: center !important; flex-wrap: nowrap; overflow-x: auto;
+  padding: 4px; border: 1px solid rgba(92,127,151,.38); border-radius: 12px;
+  background: rgba(8,22,32,.82); box-shadow: 0 8px 24px rgba(1,9,15,.18);
+}
+.geo-public-toolbar-slot .geo-camera-toolbar--normal-row button,
+.geo-public-toolbar-slot .geo-camera-toolbar--normal-row .geo-building-link {
+  min-height: 32px; padding: 6px clamp(7px,1.1vw,12px); font-size: clamp(9px,.85vw,11px);
+}
+.jio-public-project-logo { width: 28px; height: 28px; }
+.jio-public-header { margin-bottom: 8px; }
+.jio-public-header h1 { font-size: clamp(19px,2vw,26px); }
+@media (max-width:640px) {
+  .geo-public-toolbar-slot { margin-top: 6px; }
+  .geo-public-toolbar-slot > .geo-camera-toolbar--normal-row {
+    justify-content: flex-start !important; min-height: 38px; gap: 3px; padding: 3px;
+  }
+  .geo-public-toolbar-slot .geo-camera-toolbar--normal-row button,
+  .geo-public-toolbar-slot .geo-camera-toolbar--normal-row .geo-building-link {
+    min-height: 30px; padding: 5px 6px; font-size: 9px;
+  }
+  .jio-public-project-logo { width: 25px; height: 25px; }
+  .jio-public-header h1 { font-size: clamp(18px,5vw,22px); }
+}
