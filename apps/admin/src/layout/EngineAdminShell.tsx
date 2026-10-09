@@ -10,7 +10,7 @@ import {
 } from "../studio/cloud";
 import "./engine-admin-shell.css";
 
-type ShellSection = "overview" | "source" | "building" | "geo" | "releases" | "advanced";
+type ShellSection = "overview" | "source" | "building" | "geo" | "releases" | "branding" | "advanced";
 
 type NavItem = {
   id: ShellSection;
@@ -57,6 +57,13 @@ const navItems: NavItem[] = [
     description: "Immutable Building and Geo history",
   },
   {
+    id: "branding",
+    label: "Share & Branding",
+    short: "BR",
+    href: (slug) => `/3Dprojects/share${slug ? `?project=${encodeURIComponent(slug)}` : ""}`,
+    description: "Project logo, favicon and Building/Geo share previews",
+  },
+  {
     id: "advanced",
     label: "Advanced",
     short: "AD",
@@ -73,6 +80,7 @@ function currentSection(pathname: string): ShellSection {
   if (pathname.includes("/component-mapper") || pathname.includes("/source-pack")) return "source";
   if (pathname.includes("/geo-mapper")) return "geo";
   if (pathname.includes("/releases")) return "releases";
+  if (pathname.includes("/share") || pathname.includes("/branding")) return "branding";
   if (pathname.includes("/advanced")) return "advanced";
   if (pathname.includes("/building") || pathname.includes("/studio")) return "building";
   return "overview";
@@ -103,6 +111,11 @@ const sectionMeta: Record<ShellSection, { eyebrow: string; title: string; help: 
     eyebrow: "IMMUTABLE HISTORY",
     title: "Releases",
     help: "See active Building and Geo releases, history and safe activation controls.",
+  },
+  branding: {
+    eyebrow: "CUSTOMER-FACING BRANDING",
+    title: "Share & Branding",
+    help: "Manage one project logo/favicon and separate immutable Building and Geo share previews.",
   },
   advanced: {
     eyebrow: "ENGINE ADMINISTRATION",
