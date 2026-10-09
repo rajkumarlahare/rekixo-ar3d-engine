@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
@@ -280,7 +281,7 @@ function cameraPreset(view: GeoCameraView, buildingHeading: number) {
   }
 }
 
-function IntegratedGeoScene({ data }: { data: GeoPayload }) {
+function IntegratedGeoScene({ data, toolbarContainer }: { data: GeoPayload; toolbarContainer?: HTMLElement | null }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const cameraActionRef = useRef<((view: GeoCameraView) => void) | null>(null);
   const [cameraView, setCameraView] = useState<GeoCameraView>("overview");
@@ -503,7 +504,7 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
   return (
     <div className="geo-integrated-scene">
       <div ref={hostRef} className="geo-integrated-map" aria-label={`${data.project.name} integrated 3D geographic scene`} />
-      <nav className="geo-camera-toolbar" aria-label="Geo map navigation">
+      {createPortal(<nav className="geo-camera-toolbar geo-camera-toolbar--normal-row" aria-label="Geo map navigation">
           {GEO_CAMERA_VIEWS.map((view) => (
             <button
               key={view.id}
@@ -530,7 +531,7 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
           >
             Building <span aria-hidden="true">↗</span>
           </a>
-      </nav>
+      </nav>, toolbarContainer || document.body)}
       {failure && (
         <div className="geo-integrated-fallback">
           <Viewer3D
@@ -564,6 +565,7 @@ export default function GeoPublicDemo() {
   const slug = useMemo(() => slugFromGeoPathname(window.location.pathname), []);
   const [data, setData] = useState<GeoPayload>();
   const [branding, setBranding] = useState<PublicProjectBranding | null>(null);
+  const [toolbarContainer, setToolbarContainer] = useState<HTMLDivElement | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -655,7 +657,10 @@ export default function GeoPublicDemo() {
       </section>
 
       {data.maps.configured && data.maps.apiKey && data.maps.mapId ? (
-        <IntegratedGeoScene data={data} />
+        <div className="geo-public-map-layout">
+          <IntegratedGeoScene data={data} toolbarContainer={toolbarContainer} />
+          <div ref={setToolbarContainer} className="geo-public-toolbar-slot" aria-label="Map camera controls" />
+        </div>
       ) : (
         <section className="geo-integrated-scene geo-integrated-scene--fallback">
           <Viewer3D
