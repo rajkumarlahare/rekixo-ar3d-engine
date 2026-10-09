@@ -37,8 +37,8 @@ test("the viewer exposes the configured project location beside its existing cam
 });
 
 test("viewer-only page layout stays compact and responsive", () => {
-  assert.match(styles, /height: min\\(calc\\(100dvh - 70px\\), 1000px\\)/);
-  assert.match(styles, /height: calc\\(100dvh - 58px\\)/);
+  assert.ok(styles.includes("height: min(calc(100dvh - 70px), 1000px)"));
+  assert.ok(styles.includes("height: calc(100dvh - 58px)"));
   assert.match(styles, /\.client-showcase--viewer-only/);
   assert.match(styles, /\.project-header--viewer-only/);
   assert.match(styles, /\.client-hero-overlay/);
