@@ -762,7 +762,7 @@ function App() {
 
   const sceneMap = new Map((experience.scenes ?? []).map((scene) => [scene.type, scene]));
   const visibleModules = moduleOrder.filter(([type]) => availableClientModules(experience, [type]).length > 0);
-  const selectedType = visibleModules.some(([type]) => type === "project-navigation") ? "project-navigation" : visibleModules[0]?.[0];
+  const selectedType: Scene3DType = "project-navigation";
   const activeScene = selectedType ? sceneMap.get(selectedType) : undefined;
   const activeReady = Boolean(activeScene?.enabled);
 
@@ -777,26 +777,6 @@ function App() {
           </div>
         </a>
       </header>
-
-      {visibleModules.length > 1 && <nav hidden className="module-nav" aria-label="3D project modules">
-        {visibleModules.map(([type, label], index) => {
-          return (
-            <button
-              type="button"
-              className={activeType === type ? "module module--active" : "module"}
-              onClick={() => {
-                if (type !== "project-navigation") setWalkRequestFloor(undefined);
-                setActiveType(type);
-              }}
-              key={type}
-            >
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              <strong>{label}</strong>
-
-            </button>
-          );
-        })}
-      </nav>}
 
       <div className="module-stage" key={selectedType}>
         {selectedType === "project-navigation" && <ProjectNavigation experience={experience} walkFloor={walkRequestFloor} />}
