@@ -12,60 +12,37 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
 }
 .jio-public-project-logo {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   flex: 0 0 auto;
   display: block;
   object-fit: contain;
-  border: 1px solid #2c6e55;
+  border: 0;
   border-radius: 50%;
-  background: #07140f;
+  background: transparent;
 }
 .jio-public-header {
-  position: relative;
-  isolation: isolate;
   width: min(1500px, 100%);
-  min-height: 86px;
-  margin: 0 auto 10px;
-  padding: 12px 20px;
+  min-height: 0;
+  margin: 0 auto 8px;
+  padding: 0 2px 4px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  overflow: hidden;
-  border: 1px solid rgba(70, 111, 143, .48);
-  border-radius: 20px;
-  background:
-    linear-gradient(118deg, rgba(9, 29, 43, .98), rgba(8, 22, 35, .94) 58%, rgba(10, 39, 45, .9)),
-    #081622;
-  box-shadow:
-    0 18px 48px rgba(0, 0, 0, .24),
-    inset 0 1px 0 rgba(255, 255, 255, .035);
+  justify-content: flex-start;
+  gap: 10px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-.jio-public-header::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  top: -88px;
-  right: 14%;
-  width: 280px;
-  height: 280px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(46, 221, 169, .15), rgba(46, 221, 169, 0) 68%);
-  pointer-events: none;
-}
-
+.jio-public-header::before,
 .jio-public-header::after {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  background: linear-gradient(90deg, rgba(42, 226, 170, .42), transparent 18%) top left / 190px 2px no-repeat;
-  pointer-events: none;
+  display: none;
 }
 
 .jio-public-header > div:first-child {
@@ -137,11 +114,11 @@
 .geo-camera-toolbar {
   position: absolute;
   z-index: 8;
-  top: 56px;
-  right: 14px;
+  top: 12px;
+  right: 54px;
   left: auto;
   width: max-content;
-  max-width: calc(100% - 28px);
+  max-width: calc(100% - 210px);
   padding: 4px;
   display: flex;
   flex-wrap: nowrap;
@@ -295,9 +272,9 @@
 
 @media (max-width: 1100px) {
   .geo-camera-toolbar {
-    top: 56px;
-    right: 10px;
-    max-width: calc(100% - 20px);
+    top: 12px;
+    right: 50px;
+    max-width: calc(100% - 210px);
   }
 }
 
@@ -323,21 +300,21 @@
 
   .jio-public-header {
     min-height: 0;
-    margin-bottom: 9px;
-    padding: 10px 12px;
+    margin-bottom: 8px;
+    padding: 0 2px 4px;
     align-items: center;
     flex-direction: row;
-    gap: 10px;
-    border-radius: 14px;
+    gap: 8px;
+    border-radius: 0;
   }
 
   .jio-public-branding {
-    gap: 9px;
+    gap: 8px;
   }
 
   .jio-public-project-logo {
-    width: 36px;
-    height: 36px;
+    width: 30px;
+    height: 30px;
   }
 
   .jio-public-header::before {
@@ -356,8 +333,10 @@
   .geo-camera-toolbar {
     top: 56px;
     right: 8px;
-    left: auto;
-    max-width: calc(100% - 16px);
+    left: 8px;
+    width: auto;
+    max-width: none;
+    justify-content: flex-start;
     padding: 3px;
     gap: 3px;
     border-radius: 12px;
@@ -365,10 +344,10 @@
 
   .geo-camera-toolbar button,
   .geo-building-link {
-    min-height: 32px;
-    padding: 6px 8px;
+    min-height: 30px;
+    padding: 5px 7px;
     border-radius: 8px;
-    font-size: 10px;
+    font-size: 9px;
   }
 
   .geo-integrated-scene,
