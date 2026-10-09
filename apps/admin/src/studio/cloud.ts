@@ -540,6 +540,126 @@ export async function syncProject(project: Project, files: Asset[]) {
 }
 
 
+
+export type BrandingExperience = "building" | "geo";
+
+export interface CloudBrandingExperienceState {
+  experience: BrandingExperience;
+  live: boolean;
+  draftTitle: string;
+  draftDescription: string;
+  draftCardVersion: string;
+  draftCardPreviewUrl: string;
+  publishedVersion: string;
+  publishedTitle: string;
+  publishedDescription: string;
+  publishedCardUrl: string;
+  shareUrl: string;
+  shareReady: boolean;
+  updatedAt: string;
+}
+
+export interface CloudProjectBrandingState {
+  project: {
+    id: string;
+    slug: string;
+    name: string;
+    location?: string;
+    status: "draft" | "published" | "archived";
+  };
+  logo: {
+    draftVersion: string;
+    publishedVersion: string;
+    previewUrl: string;
+    faviconPreviewUrl: string;
+    publishedLogoUrl: string;
+    publishedFaviconUrl: string;
+    publishedAt: string;
+  };
+  experiences: Record<BrandingExperience, CloudBrandingExperienceState>;
+}
+
+function brandingPath(slug: string) {
+  return `${CLOUD_BASE}/projects/${encodeURIComponent(slug)}/branding`;
+}
+
+export async function getProjectBranding(slug: string) {
+  return api<CloudProjectBrandingState>(brandingPath(slug));
+}
+
+export async function uploadProjectLogo(
+  slug: string,
+  logoFile: File,
+  faviconFile: File,
+) {
+  const form = new FormData();
+  form.set("action", "upload-logo");
+  form.set("logoFile", logoFile);
+  form.set("faviconFile", faviconFile);
+  return api<{ ok: true; version: string }>(brandingPath(slug), {
+    method: "POST",
+    body: form,
+  });
+}
+
+export async function uploadProjectShareCard(
+  slug: string,
+  experience: BrandingExperience,
+  cardFile: File,
+  sourceFile: File,
+) {
+  const form = new FormData();
+  form.set("action", "upload-share-card");
+  form.set("experience", experience);
+  form.set("cardFile", cardFile);
+  form.set("sourceFile", sourceFile);
+  return api<{ ok: true; experience: BrandingExperience; version: string }>(
+    brandingPath(slug),
+    { method: "POST", body: form },
+  );
+}
+
+export async function saveProjectShareDetails(
+  slug: string,
+  experience: BrandingExperience,
+  title: string,
+  description: string,
+) {
+  return api<{ ok: true; experience: BrandingExperience; title: string; description: string }>(
+    brandingPath(slug),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "save-share", experience, title, description }),
+    },
+  );
+}
+
+export async function publishProjectLogo(slug: string, version: string) {
+  return api<{ ok: true; version: string; publishedAt: string }>(
+    brandingPath(slug),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "publish-logo", version }),
+    },
+  );
+}
+
+export async function publishProjectShare(
+  slug: string,
+  experience: BrandingExperience,
+) {
+  return api<{ ok: true; experience: BrandingExperience; version: string; publishedAt: string }>(
+    brandingPath(slug),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "publish-share", experience }),
+    },
+  );
+}
+
 export async function releases(slug: string) {
   return api<{ releases: CloudReleaseSummary[] }>(
     `${CLOUD_BASE}/projects/${encodeURIComponent(slug)}/releases`,
