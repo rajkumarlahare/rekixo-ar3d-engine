@@ -1110,6 +1110,7 @@ footer { padding-top: 24px; display: flex; justify-content: space-between; gap: 
 }
 
 .client-showcase--viewer-only .viewer-section {
+  position: relative;
   margin: 0;
 }
 
