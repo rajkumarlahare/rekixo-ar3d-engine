@@ -52,7 +52,7 @@ test("branding schema is additive, project scoped, and keeps immutable history",
   ]) assert.ok(migration.includes(`CREATE TABLE IF NOT EXISTS ${table}`));
   assert.match(migration, /experience_type IN \('building','geo'\)/);
   assert.ok(migration.includes("PRIMARY KEY (project_id, experience_type, version)"));
-  assert.ok(migration.includes("project branding share versions are immutable"));
+  assert.ok(migration.includes("Project branding share versions are immutable"));
   assert.ok(migration.includes("ON DELETE CASCADE"));
   assert.doesNotMatch(migration, /DROP TABLE|DELETE FROM projects_3d/i);
 });
