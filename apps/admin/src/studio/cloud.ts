@@ -572,6 +572,7 @@ export interface CloudProjectBrandingState {
     draftVersion: string;
     publishedVersion: string;
     previewUrl: string;
+    sourceUrl: string;
     faviconPreviewUrl: string;
     publishedLogoUrl: string;
     publishedFaviconUrl: string;
@@ -592,11 +593,13 @@ export async function uploadProjectLogo(
   slug: string,
   logoFile: File,
   faviconFile: File,
+  sourceFile: File,
 ) {
   const form = new FormData();
   form.set("action", "upload-logo");
   form.set("logoFile", logoFile);
   form.set("faviconFile", faviconFile);
+  form.set("sourceFile", sourceFile);
   return api<{ ok: true; version: string }>(brandingPath(slug), {
     method: "POST",
     body: form,
