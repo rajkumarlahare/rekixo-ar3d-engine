@@ -208,6 +208,7 @@ export default function ProjectShareBuilder() {
     building: { title: "", description: "" },
     geo: { title: "", description: "" },
   });
+  const [reuseBuildingPoster, setReuseBuildingPoster] = useState(false);
   const [logoFiles, setLogoFiles] = useState<PreparedLogo>();
   const [shareFiles, setShareFiles] = useState<Partial<Record<BrandingExperience, PreparedCard>>>({});
   const [logoPreviewUrl, setLogoPreviewUrl] = useState("");
@@ -234,6 +235,7 @@ export default function ProjectShareBuilder() {
           description: next.experiences.geo.draftDescription,
         },
       });
+      setReuseBuildingPoster(Boolean(next.experiences.geo.useBuildingPoster));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Project branding load nahi hui.");
     } finally {
@@ -305,6 +307,7 @@ export default function ProjectShareBuilder() {
     setError("");
     try {
       const prepared = await prepareShareCard(file);
+      if (activeExperience === "geo") setReuseBuildingPoster(false);
       setShareFiles((current) => ({ ...current, [activeExperience]: prepared }));
       setMessage("Share poster ka preview ready hai; original image unchanged rahegi aur AR3D footer alag hai.");
     } catch (reason) {
@@ -339,8 +342,14 @@ export default function ProjectShareBuilder() {
     setError("");
     setMessage("");
     try {
-      await saveProjectShareDetails(slug, activeExperience, draft.title, draft.description);
-      setMessage("Share title aur description save ho gaye. Public preview Publish Share ke baad badlega.");
+      await saveProjectShareDetails(
+        slug,
+        activeExperience,
+        draft.title,
+        draft.description,
+        activeExperience === "geo" && reuseBuildingPoster,
+      );
+      setMessage("Share settings save ho gayi. Public preview Publish Share ke baad badlega.");
       await loadState();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Share details save nahi hue.");
@@ -372,7 +381,13 @@ export default function ProjectShareBuilder() {
     try {
       const draft = drafts[activeExperience];
       // Keep the publish API authoritative, but save the latest edited text first.
-      await saveProjectShareDetails(slug, activeExperience, draft.title, draft.description);
+      await saveProjectShareDetails(
+        slug,
+        activeExperience,
+        draft.title,
+        draft.description,
+        activeExperience === "geo" && reuseBuildingPoster,
+      );
       await publishProjectShare(slug, activeExperience);
       setMessage(`${activeExperience === "geo" ? "Geo" : "Building"} share preview version publish ho gaya.`);
       await loadState();
@@ -396,7 +411,10 @@ export default function ProjectShareBuilder() {
 
   const currentShare = state?.experiences[activeExperience];
   const currentDraft = drafts[activeExperience];
-  const cardUrl = cardPreviewUrl || currentShare?.draftCardPreviewUrl || "";
+  const cardUrl =
+    activeExperience === "geo" && reuseBuildingPoster
+      ? state?.experiences.building.publishedCardUrl || ""
+      : cardPreviewUrl || currentShare?.draftCardPreviewUrl || "";
   const busyNow = Boolean(busy || brandBusy);
   const titleValid = currentDraft.title.trim().length >= 3 && currentDraft.title.trim().length <= 120;
   const descriptionValid = currentDraft.description.trim().length >= 10 && currentDraft.description.trim().length <= 280;
@@ -510,7 +528,7 @@ export default function ProjectShareBuilder() {
               <small>{currentDraft.description.length}/280</small>
             </label>
             <button className="engine-control-button" type="button" onClick={() => void saveDetails()} disabled={busyNow || !titleValid || !descriptionValid}>
-              <BrandingIcon name="save" size={16} />{busy === "details" ? "Saving details…" : "Save title & description"}
+              <BrandingIcon name="save" size={16} />{busy === "details" ? "Saving settings…" : "Save share settings"}
             </button>
 
             <label className="engine-branding-file engine-branding-card-file">
@@ -523,12 +541,26 @@ export default function ProjectShareBuilder() {
                 void chooseShareCard(file);
               }} />
             </label>
+            {activeExperience === "geo" ? (
+              <label className="engine-branding-reuse-poster">
+                <input
+                  type="checkbox"
+                  checked={reuseBuildingPoster}
+                  disabled={busyNow || !state?.experiences.building.publishedCardUrl}
+                  onChange={(event) => setReuseBuildingPoster(event.currentTarget.checked)}
+                />
+                <span>
+                  <b>Use the published Building poster for Geo</b>
+                  <small>Geo keeps its own title, description, URL and metadata; only the share image is reused.</small>
+                </span>
+              </label>
+            ) : null}
             {shareFiles[activeExperience] ? (
               <button className="engine-control-button engine-control-button--primary" type="button" onClick={() => void uploadShareDraft()} disabled={busyNow}>
                 <BrandingIcon name="upload" size={16} />{busy === "share" ? "Uploading poster…" : "Upload share poster draft"}
               </button>
             ) : null}
-            <button className="engine-control-button engine-control-button--primary" type="button" onClick={() => void publishShare()} disabled={busyNow || !currentShare?.live || !titleValid || !descriptionValid || (!currentShare?.draftCardVersion && !currentShare?.publishedVersion)}>
+            <button className="engine-control-button engine-control-button--primary" type="button" onClick={() => void publishShare()} disabled={busyNow || !currentShare?.live || !titleValid || !descriptionValid || (!currentShare?.draftCardVersion && !currentShare?.publishedVersion && !(activeExperience === "geo" && reuseBuildingPoster && state?.experiences.building.publishedCardUrl))}>
               <BrandingIcon name="share" size={16} />{busy === "publish-share" ? "Publishing share…" : `Publish ${activeExperience === "geo" ? "Geo" : "Building"} Share`}
             </button>
             <div className="engine-branding-share-actions">
