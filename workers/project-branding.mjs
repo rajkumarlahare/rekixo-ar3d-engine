@@ -749,7 +749,7 @@ export async function injectPublicBrandingMetadata(request, env, response, url =
   html = html.replace(/<meta\s+name=(["'])description\1[^>]*>/i, "");
   html = html.replace(/<meta\s+property=(["'])og:[^>]+>/gi, "");
   html = html.replace(/<meta\s+name=(["'])twitter:[^>]+>/gi, "");
-  html = html.replace(/<link\b[^>]*\brel=(["'])[^"']*icon[^"']*\1[^>]*>/gi, "");
+  if (faviconUrl) html = html.replace(/<link\b[^>]*\brel=(["'])[^"']*icon[^"']*\1[^>]*>/gi, "");
   const tags = [
     `<meta name="description" content="${description}">`,
     `<meta property="og:type" content="website">`,
