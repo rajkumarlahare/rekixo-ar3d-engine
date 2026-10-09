@@ -10,8 +10,7 @@ import { loadPublicExperience, type ClientExperience } from "./api";
 import { loadPublicBranding, type PublicProjectBranding } from "./branding";
 import { Viewer3D } from "./viewer/Viewer3D";
 import "./styles.css";
-import { BuildingDetails } from "./BuildingDetails";
-import { availableClientModules, buildingPresentation, clientViewerCapabilities } from "./clientPresentation";
+import { clientViewerCapabilities } from "./clientPresentation";
 import "./viewer/walkthrough-ui.css";
 
 const GeoPublicDemo = lazy(() => import("./geo/GeoPublicDemo"));
@@ -80,15 +79,6 @@ type PendingSettings = {
   reason?: string;
 };
 
-const moduleOrder: Array<[Scene3DType, string]> = [
-  ["project-navigation", "3D Building"],
-  ["wing-distance", "Location Map"],
-  ["typical-floor", "Floor Explorer"],
-  ["amenity", "Amenities"],
-  ["section", "Section Cut"],
-  ["balcony", "Facade Detail"],
-];
-
 function sceneOf(experience: Public3DExperience, type: Scene3DType) {
   return experience.scenes?.find((scene) => scene.type === type);
 }
@@ -146,54 +136,35 @@ function NotFound({ message }: { message?: string }) {
 
 function ProjectNavigation({ experience, walkFloor }: { experience: ClientExperience; walkFloor?: number }) {
   const { model, camera, project } = experience;
-  const settings = settingsOf<ProjectSettings>(sceneOf(experience, "project-navigation"));
   const floorSettings = settingsOf<FloorSettings>(sceneOf(experience, "typical-floor"));
   const capabilities = clientViewerCapabilities(experience);
   const floorReady = capabilities.floors;
   const availableFloors = floorReady ? floorIdsOf(floorSettings) : [];
-  const presentation = buildingPresentation(experience);
-  const render = mediaUrl(experience, settings.exteriorRenderKey);
 
   return (
-    <>
-      <section className="viewer-section">
-        <Viewer3D
-          modelUrl={model?.available ? model.url : undefined}
-          cameraPreset={camera}
-          modelLabel={model?.name}
-          initialWalk={walkFloor !== undefined}
-          initialWalkFloor={walkFloor ?? null}
-          availableFloors={availableFloors}
-          floorGeometry={floorSettings.floorLevels ?? []}
-          walkthrough={experience.walkthrough}
-          clientPresentation
-          sourcePresentation={experience.sourcePresentation}
-          buildingPresentation={experience.buildingPresentation}
-          allowInteriorControls={floorReady}
-          allowWalkControls={capabilities.walk}
-        />
-        <div className="client-hero-overlay" aria-hidden="true">
-          <span className="client-hero-kicker">EXPLORE THE BUILDING</span>
-          <strong>{project.name}</strong>
-          {project.location && <small>{project.location}</small>}
-        </div>
-      </section>
-
-      <section className="project-overview client-showcase-overview">
-        <div className="overview-copy">
-          <p className="eyebrow">PROJECT OVERVIEW</p>
-          <h2>{settings.headline ?? project.name}</h2>
-          <p>{presentation.description || "Explore the exterior from every angle. Choose a view, rotate the building and discover its architecture in daylight or after dark."}</p>
-          <div className="fact-row">
-            {settings.brochurePrice && <div><span>Project offer</span><strong>{settings.brochurePrice}</strong></div>}
-            {project.location && <div><span>Location</span><strong>{project.location}</strong></div>}
-          </div>
-        </div>
-        <MediaImage src={render} alt={`${project.name} exterior reference`} className="exterior-reference" />
-      </section>
-
-      <BuildingDetails experience={experience} />
-    </>
+    <section className="viewer-section">
+      <Viewer3D
+        modelUrl={model?.available ? model.url : undefined}
+        cameraPreset={camera}
+        modelLabel={model?.name}
+        initialWalk={walkFloor !== undefined}
+        initialWalkFloor={walkFloor ?? null}
+        availableFloors={availableFloors}
+        floorGeometry={floorSettings.floorLevels ?? []}
+        walkthrough={experience.walkthrough}
+        clientPresentation
+        projectLocation={project.location}
+        sourcePresentation={experience.sourcePresentation}
+        buildingPresentation={experience.buildingPresentation}
+        allowInteriorControls={floorReady}
+        allowWalkControls={capabilities.walk}
+      />
+      <div className="client-hero-overlay" aria-hidden="true">
+        <span className="client-hero-kicker">EXPLORE THE BUILDING</span>
+        <strong>{project.name}</strong>
+        {project.location && <small>{project.location}</small>}
+      </div>
+    </section>
   );
 }
 
@@ -745,8 +716,6 @@ function App() {
   const [branding, setBranding] = useState<PublicProjectBranding | null>(null);
   const [error, setError] = useState<string>();
   const [attempt, setAttempt] = useState(0);
-  const [activeType, setActiveType] = useState<Scene3DType>("project-navigation");
-  const [walkRequestFloor, setWalkRequestFloor] = useState<number>();
 
   useEffect(() => {
     if (!slug) return;
@@ -780,15 +749,10 @@ function App() {
     return <PremiumDigitalTwin experience={experience} branding={branding} />;
   }
 
-  const sceneMap = new Map((experience.scenes ?? []).map((scene) => [scene.type, scene]));
-  const visibleModules = moduleOrder.filter(([type]) => availableClientModules(experience, [type]).length > 0);
-  const selectedType = visibleModules.some(([type]) => type === activeType) ? activeType : visibleModules[0]?.[0];
-  const activeScene = selectedType ? sceneMap.get(selectedType) : undefined;
-  const activeReady = Boolean(activeScene?.enabled);
 
   return (
-    <main className="experience client-showcase">
-      <header className="project-header">
+    <main className="experience client-showcase client-showcase--viewer-only">
+      <header className="project-header project-header--viewer-only">
         <a className="brand" href="https://ar3dstudio.in" aria-label={branding?.logoUrl ? experience.project.name : "AR3D Studio home"}>
           {branding?.logoUrl ? <img className="brand-project-logo" src={branding.logoUrl} alt="" /> : <span>AR</span>}
           <div>
@@ -796,58 +760,12 @@ function App() {
             <small>{branding?.logoUrl ? "Interactive 3D Experience" : "Interactive Real Estate"}</small>
           </div>
         </a>
-        <div className="project-heading">
-          <p className="eyebrow">3D PROJECT EXPERIENCE</p>
-          <h1>{experience.project.name}</h1>
-          <p className="location">{experience.project.location}</p>
-        </div>
-
       </header>
 
-      {visibleModules.length > 1 && <nav className="module-nav" aria-label="3D project modules">
-        {visibleModules.map(([type, label], index) => {
-          return (
-            <button
-              type="button"
-              className={activeType === type ? "module module--active" : "module"}
-              onClick={() => {
-                if (type !== "project-navigation") setWalkRequestFloor(undefined);
-                setActiveType(type);
-              }}
-              key={type}
-            >
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              <strong>{label}</strong>
-
-            </button>
-          );
-        })}
-      </nav>}
-
-      <div className="module-stage" key={selectedType}>
-        {selectedType === "project-navigation" && <ProjectNavigation experience={experience} walkFloor={walkRequestFloor} />}
-        {selectedType === "wing-distance" && <LocationMap experience={experience} />}
-        {selectedType === "typical-floor" && (
-          <TypicalFloor
-            experience={experience}
-            onEnterFloor={(floor) => {
-              setWalkRequestFloor(floor);
-              setActiveType("project-navigation");
-            }}
-          />
-        )}
-        {selectedType === "amenity" && <Amenities experience={experience} />}
-        {selectedType === "section" && activeReady && (
-          <ModelModule experience={experience} type="section" title="Interactive Section Cut" interactionMode="section" />
-        )}
-        {selectedType === "balcony" && activeReady && (
-          <ModelModule experience={experience} type="balcony" title="Facade & Balcony Detail" interactionMode="detail" />
-        )}
+      <div className="module-stage">
+        <ProjectNavigation experience={experience} />
       </div>
 
-      <footer>
-        <span>AR3D Studio · Interactive Real Estate</span>
-      </footer>
     </main>
   );
 }

@@ -1071,3 +1071,212 @@ footer { padding-top: 24px; display: flex; justify-content: space-between; gap: 
   padding-top: 9px;
   border-top: 1px solid rgba(255, 213, 138, 0.16);
 }
+
+
+/* Customer Building pages are intentionally viewer-only: keep the brand and 3D view. */
+.client-showcase--viewer-only {
+  width: min(1440px, calc(100% - 20px));
+  padding: 8px 0 10px;
+}
+
+.project-header--viewer-only {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
+  margin-bottom: 8px;
+  border-bottom: 0;
+}
+
+.project-header--viewer-only .brand {
+  gap: 9px;
+}
+
+.project-header--viewer-only .brand > span,
+.project-header--viewer-only .brand-project-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+}
+
+.project-header--viewer-only .brand strong {
+  font-size: 12px;
+  letter-spacing: .05em;
+}
+
+.project-header--viewer-only .brand small {
+  font-size: 9px;
+}
+
+.client-showcase--viewer-only .viewer-section {
+  position: relative;
+  margin: 0;
+}
+
+.client-showcase--viewer-only .viewer-shell {
+  width: 100%;
+  height: min(calc(100dvh - 70px), 1000px);
+  min-height: min(360px, calc(100dvh - 70px));
+  max-height: 1000px;
+  border-radius: 20px;
+}
+
+.client-hero-overlay {
+  position: absolute;
+  z-index: 7;
+  left: 14px;
+  bottom: 14px;
+  width: min(360px, calc(100% - 28px));
+  padding: 12px 14px;
+  display: grid;
+  gap: 4px;
+  border: 1px solid #ffffff25;
+  border-radius: 13px;
+  background: #06111dcf;
+  color: #f5f8fc;
+  box-shadow: 0 12px 32px #0007;
+  backdrop-filter: blur(14px);
+  pointer-events: none;
+}
+
+.client-hero-kicker {
+  color: #65edb4;
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: .17em;
+}
+
+.client-hero-overlay > strong {
+  font-size: clamp(18px, 2vw, 25px);
+  line-height: 1.1;
+  letter-spacing: -.025em;
+}
+
+.client-hero-overlay > small {
+  color: #91a4b9;
+  font-size: 10px;
+}
+
+.client-camera-views {
+  position: absolute;
+  z-index: 8;
+  right: 14px;
+  bottom: 14px;
+  max-width: min(720px, calc(100% - 390px));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.client-camera-views > button,
+.client-camera-location {
+  min-height: 32px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #2a4057;
+  border-radius: 9px;
+  background: #06111de8;
+  color: #d9e5f1;
+  backdrop-filter: blur(12px);
+  font-size: 9px;
+  font-weight: 850;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.client-camera-views > button:hover,
+.client-camera-views > button:focus-visible,
+.client-camera-views > button[aria-pressed="true"],
+.client-camera-location:hover,
+.client-camera-location:focus-visible {
+  border-color: #347c5c;
+  background: #0b281e;
+  color: #7af0bd;
+  outline: none;
+}
+
+.client-camera-location {
+  gap: 6px;
+  color: #e3edf7;
+  text-decoration: none;
+}
+
+.client-camera-location > span {
+  color: #6de9b4;
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.client-camera-location > strong {
+  max-width: 190px;
+  overflow: hidden;
+  color: inherit;
+  font-size: 9px;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 700px) {
+  .client-showcase--viewer-only {
+    width: calc(100% - 12px);
+    padding: 6px 0;
+  }
+
+  .project-header--viewer-only {
+    min-height: 38px;
+    margin-bottom: 6px;
+  }
+
+  .project-header--viewer-only .brand > span,
+  .project-header--viewer-only .brand-project-logo {
+    width: 30px;
+    height: 30px;
+  }
+
+  .client-showcase--viewer-only .viewer-shell {
+    height: calc(100dvh - 58px);
+    min-height: min(320px, calc(100dvh - 58px));
+    border-radius: 15px;
+  }
+
+  .client-hero-overlay {
+    left: 9px;
+    bottom: 82px;
+    width: min(270px, calc(100% - 18px));
+    padding: 9px 11px;
+  }
+
+  .client-hero-overlay > strong {
+    font-size: 18px;
+  }
+
+  .client-camera-views {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    max-width: none;
+    gap: 4px;
+    justify-content: center;
+  }
+
+  .client-camera-views > button,
+  .client-camera-location {
+    min-height: 30px;
+    padding: 0 8px;
+    font-size: 8px;
+  }
+
+  .client-camera-location {
+    max-width: 100%;
+  }
+
+  .client-camera-location > strong {
+    max-width: min(150px, 35vw);
+  }
+}
