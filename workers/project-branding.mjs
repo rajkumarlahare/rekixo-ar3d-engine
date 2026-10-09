@@ -720,6 +720,7 @@ export async function injectPublicBrandingMetadata(request, env, response, url =
   const logoUrl = htmlEscape(absolute(snapshot.logoUrl));
   const faviconUrl = htmlEscape(absolute(snapshot.faviconUrl));
   const imageUrl = htmlEscape(absolute(snapshot.shareImageUrl));
+  const pageUrl = htmlEscape(url.toString());
   let html = await response.text();
   html = html.replace(/<title[^>]*>[\s\S]*?<\/title>/i, `<title>${title}</title>`);
   html = html.replace(/<meta\s+name=(["'])description\1[^>]*>/i, "");
@@ -730,6 +731,7 @@ export async function injectPublicBrandingMetadata(request, env, response, url =
     `<meta name="description" content="${description}">`,
     `<meta property="og:type" content="website">`,
     `<meta property="og:site_name" content="AR3D Studio">`,
+    `<meta property="og:url" content="${pageUrl}">`,
     `<meta property="og:title" content="${title}">`,
     `<meta property="og:description" content="${description}">`,
     imageUrl ? `<meta property="og:image" content="${imageUrl}">` : "",
@@ -738,7 +740,7 @@ export async function injectPublicBrandingMetadata(request, env, response, url =
     `<meta name="twitter:title" content="${title}">`,
     `<meta name="twitter:description" content="${description}">`,
     imageUrl ? `<meta name="twitter:image" content="${imageUrl}">` : "",
-    logoUrl ? `<link rel="apple-touch-icon" href="${logoUrl}">` : "",
+    faviconUrl ? `<link rel="apple-touch-icon" href="${faviconUrl}">` : "",
     faviconUrl ? `<link rel="icon" type="image/png" href="${faviconUrl}">` : "",
     faviconUrl ? `<link rel="shortcut icon" type="image/png" href="${faviconUrl}">` : "",
   ].filter(Boolean).join("\n    ");
@@ -749,6 +751,10 @@ export async function injectPublicBrandingMetadata(request, env, response, url =
   headers.set("Content-Type", "text/html; charset=utf-8");
   headers.set("Cache-Control", "public, max-age=0, must-revalidate");
   headers.delete("Content-Length");
+  headers.delete("Content-Encoding");
+  headers.delete("Content-Range");
+  headers.delete("ETag");
+  headers.delete("Last-Modified");
   headers.set("X-Content-Type-Options", "nosniff");
   return new Response(html, { status: response.status, statusText: response.statusText, headers });
 }
