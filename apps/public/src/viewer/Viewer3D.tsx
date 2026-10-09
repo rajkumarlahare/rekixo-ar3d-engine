@@ -1442,7 +1442,7 @@ export function Viewer3D({
           >
             {nightMode ? "Day" : "Night"}
           </button>
-          {allowWalkControls && <button
+          {allowWalkControls && !clientPresentation && <button
             type="button"
             className={walkMode ? "viewer-action viewer-action--active" : "viewer-action"}
             onClick={() => {
@@ -1459,7 +1459,7 @@ export function Viewer3D({
           >
             {walkMode ? "Orbit" : "Walk"}
           </button>}
-          {allowInteriorControls && <>
+          {allowInteriorControls && !clientPresentation && <>
           <button
             type="button"
             className={exploded ? "viewer-action viewer-action--active" : "viewer-action"}
@@ -1494,7 +1494,7 @@ export function Viewer3D({
         </div>
       </div>}
 
-      {!compactUi && allowInteriorControls && <div className="viewer-floor-controls" aria-label="Building floor selector">
+      {!compactUi && allowInteriorControls && !clientPresentation && <div className="viewer-floor-controls" aria-label="Building floor selector">
         <button
           type="button"
           className={selectedFloor === null ? "viewer-floor viewer-floor--active" : "viewer-floor"}
