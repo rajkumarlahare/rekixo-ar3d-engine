@@ -414,16 +414,28 @@ async function uploadShareCard(form, env, actor, project, slug) {
 
   const now = new Date().toISOString();
   try {
-    await env.DB.prepare(
-    `INSERT INTO project_branding_shares_3d
-      (project_id,experience_type,draft_card_version,draft_card_key,draft_source_key,updated_by,updated_at)
-     VALUES (?,?,?,?,?,?,?)
-     ON CONFLICT(project_id,experience_type) DO UPDATE SET
-       draft_card_version=excluded.draft_card_version,
-       draft_card_key=excluded.draft_card_key,
-       draft_source_key=excluded.draft_source_key,
-       updated_by=excluded.updated_by,updated_at=excluded.updated_at`,
-  ).bind(project.id, experience, version, cardKey, sourceKey, actor.email, now).run();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO project_branding_shares_3d
+          (project_id,experience_type,draft_card_version,draft_card_key,draft_source_key,updated_by,updated_at)
+         VALUES (?,?,?,?,?,?,?)
+         ON CONFLICT(project_id,experience_type) DO UPDATE SET
+           draft_card_version=excluded.draft_card_version,
+           draft_card_key=excluded.draft_card_key,
+           draft_source_key=excluded.draft_source_key,
+           updated_by=excluded.updated_by,updated_at=excluded.updated_at`,
+      ).bind(project.id, experience, version, cardKey, sourceKey, actor.email, now),
+      env.DB.prepare(
+        `INSERT INTO engine_admin_audit
+          (id,actor_email,action,project_id,target_id,details_json,created_at)
+         VALUES (?,?,?,?,?,?,?)`,
+      ).bind(
+        crypto.randomUUID(), actor.email, "branding.share_card_uploaded",
+        project.id, project.id,
+        JSON.stringify({ experience, version, cardBytes: cardFile.size, sourceBytes: sourceFile.size }),
+        now,
+      ),
+    ]);
   } catch (error) {
     await cleanupR2Objects(env, [cardKey, sourceKey]);
     throw error;
