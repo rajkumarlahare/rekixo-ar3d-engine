@@ -35,11 +35,11 @@ test("mobile camera buttons fit six columns with transparent controls and no out
 
 test("fullscreen camera controls have no pill or outer panel and fit six columns", () => {
   const transparentFullscreen = css.slice(css.indexOf("/* Fullscreen camera presets use the same transparent, compact treatment. */"));
-  assert.match(transparentFullscreen, /grid-template-columns:\\s*repeat\\(6, minmax\\(0, 1fr\\)\\)/);
-  assert.match(transparentFullscreen, /border:\\s*0 !important/);
-  assert.match(transparentFullscreen, /border-radius:\\s*0 !important/);
-  assert.match(transparentFullscreen, /background:\\s*transparent !important/);
-  assert.match(transparentFullscreen, /box-shadow:\\s*none !important/);
+  assert.match(transparentFullscreen, /grid-template-columns:\s*repeat\(6, minmax\(0, 1fr\)\)/);
+  assert.match(transparentFullscreen, /border:\s*0 !important/);
+  assert.match(transparentFullscreen, /border-radius:\s*0 !important/);
+  assert.match(transparentFullscreen, /background:\s*transparent !important/);
+  assert.match(transparentFullscreen, /box-shadow:\s*none !important/);
 });
 
 test("fullscreen bridge is lazy-loaded only for public Geo routes", () => {
