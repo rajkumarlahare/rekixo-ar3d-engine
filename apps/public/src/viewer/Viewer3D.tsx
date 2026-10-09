@@ -58,6 +58,7 @@ interface Viewer3DProps {
   sourcePresentation?: SourcePresentation;
   buildingPresentation?: BuildingPresentationManifestV1;
   clientPresentation?: boolean;
+  projectLocation?: string;
   allowInteriorControls?: boolean;
   allowWalkControls?: boolean;
   modelUrl?: string;
@@ -89,6 +90,7 @@ export function Viewer3D({
   sourcePresentation,
   buildingPresentation,
   clientPresentation = false,
+  projectLocation,
   allowInteriorControls = true,
   allowWalkControls = allowInteriorControls,
   modelUrl,
@@ -1531,6 +1533,16 @@ export function Viewer3D({
           type="button" key={view} aria-pressed={exteriorView === view}
           onClick={() => { selectedExteriorRef.current = view; setExteriorView(view); exteriorViewRef.current?.(view); }}
         >{view === "hero" ? "Overview" : view === "entrance" ? "Entry view" : view.charAt(0).toUpperCase() + view.slice(1)}</button>)}
+        {projectLocation && <a
+          className="client-camera-location"
+          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(projectLocation)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Open ${projectLocation} in Google Maps`}
+        >
+          <span>Location</span>
+          <strong>{projectLocation}</strong>
+        </a>}
       </nav>}
       {walkMode && (
         <div className="viewer-walk-controls" aria-label="Walkthrough movement controls">
