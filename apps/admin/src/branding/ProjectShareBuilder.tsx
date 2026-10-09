@@ -160,29 +160,35 @@ async function prepareShareCard(file: File): Promise<PreparedCard> {
     context.fillRect(0, height, width, 1);
 
     const scaleFactor = width / 1200;
-    const markRadius = Math.max(14, Math.round(21 * scaleFactor));
     const centerX = Math.round(width / 2);
     const centerY = Math.round(height + footerHeight / 2);
-    const markX = centerX - Math.round(112 * scaleFactor);
-    context.beginPath();
-    context.arc(markX, centerY, markRadius, 0, Math.PI * 2);
-    context.fillStyle = "#0e3b30";
-    context.fill();
-    context.strokeStyle = "#51e5ac";
-    context.lineWidth = Math.max(1, 1.5 * scaleFactor);
-    context.stroke();
-    context.fillStyle = "#75f1bc";
-    context.font = `900 ${Math.max(15, Math.round(22 * scaleFactor))}px Arial, sans-serif`;
     context.textAlign = "center";
     context.textBaseline = "middle";
-    context.fillText("R", markX, centerY + 0.5);
-    context.textAlign = "left";
-    context.fillStyle = "#ffffff";
-    context.font = `900 ${Math.max(13, Math.round(21 * scaleFactor))}px Arial, sans-serif`;
-    context.fillText("AR3D STUDIO", centerX - Math.round(78 * scaleFactor), centerY - Math.round(3 * scaleFactor));
-    context.fillStyle = "rgba(255,255,255,0.72)";
-    context.font = `700 ${Math.max(8, Math.round(10 * scaleFactor))}px Arial, sans-serif`;
-    context.fillText("INTERACTIVE 3D EXPERIENCE", centerX - Math.round(78 * scaleFactor), centerY + Math.round(16 * scaleFactor));
+    if (width < 560) {
+      context.fillStyle = "#ffffff";
+      context.font = `900 ${Math.max(13, Math.round(18 * scaleFactor))}px Arial, sans-serif`;
+      context.fillText("AR3D STUDIO", centerX, centerY);
+    } else {
+      const markRadius = Math.max(14, Math.round(21 * scaleFactor));
+      const markX = centerX - Math.round(112 * scaleFactor);
+      context.beginPath();
+      context.arc(markX, centerY, markRadius, 0, Math.PI * 2);
+      context.fillStyle = "#0e3b30";
+      context.fill();
+      context.strokeStyle = "#51e5ac";
+      context.lineWidth = Math.max(1, 1.5 * scaleFactor);
+      context.stroke();
+      context.fillStyle = "#75f1bc";
+      context.font = `900 ${Math.max(15, Math.round(22 * scaleFactor))}px Arial, sans-serif`;
+      context.fillText("R", markX, centerY + 0.5);
+      context.textAlign = "left";
+      context.fillStyle = "#ffffff";
+      context.font = `900 ${Math.max(13, Math.round(21 * scaleFactor))}px Arial, sans-serif`;
+      context.fillText("AR3D STUDIO", centerX - Math.round(78 * scaleFactor), centerY - Math.round(3 * scaleFactor));
+      context.fillStyle = "rgba(255,255,255,0.72)";
+      context.font = `700 ${Math.max(8, Math.round(10 * scaleFactor))}px Arial, sans-serif`;
+      context.fillText("INTERACTIVE 3D EXPERIENCE", centerX - Math.round(78 * scaleFactor), centerY + Math.round(16 * scaleFactor));
+    }
 
     const cardFile = await encodeShareCard(canvas);
     return { sourceFile: file, cardFile };
