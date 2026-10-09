@@ -504,7 +504,7 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
     <div className="geo-integrated-scene">
       <div ref={hostRef} className="geo-integrated-map" aria-label={`${data.project.name} integrated 3D geographic scene`} />
       {!failure && (
-        <div className="geo-camera-toolbar" aria-label="3D Geo camera views">
+        <nav className="geo-camera-toolbar" aria-label="Geo map navigation">
           {GEO_CAMERA_VIEWS.map((view) => (
             <button
               key={view.id}
@@ -521,7 +521,17 @@ function IntegratedGeoScene({ data }: { data: GeoPayload }) {
               {view.label}
             </button>
           ))}
-        </div>
+          <a
+            className="geo-building-link"
+            href={`/3Dprojects/${encodeURIComponent(data.project.slug)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open ${data.project.name} building website in a new tab`}
+            title={`Open ${data.project.name} building website`}
+          >
+            Building <span aria-hidden="true">↗</span>
+          </a>
+        </nav>
       )}
       {failure && (
         <div className="geo-integrated-fallback">
@@ -605,10 +615,6 @@ export default function GeoPublicDemo() {
       </main>
     );
 
-  const mapsUrl =
-    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-      `${data.placement.anchor.latitude.toFixed(7)},${data.placement.anchor.longitude.toFixed(7)}`,
-    )}`;
   const mapFallbackReason = !data.maps.apiKey
     ? "Google Maps browser key is not configured"
     : !data.maps.mapId
@@ -621,18 +627,9 @@ export default function GeoPublicDemo() {
         <div className="jio-public-branding">
           {branding?.logoUrl ? <img className="jio-public-project-logo" src={branding.logoUrl} alt="" /> : null}
           <div>
-            <p className="eyebrow">INTEGRATED 3D GEO EXPERIENCE</p>
             <h1>{data.project.name}</h1>
             <p>{data.project.location || "Rekixo AR3D Engine"}</p>
           </div>
-        </div>
-        <div className="jio-public-header-actions">
-          <a href={`/3Dprojects/${encodeURIComponent(data.project.slug)}`}>
-            Enter building
-          </a>
-          <a href={mapsUrl} target="_blank" rel="noreferrer">
-            Open location
-          </a>
         </div>
       </header>
 
