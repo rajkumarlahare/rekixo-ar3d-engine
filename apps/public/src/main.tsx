@@ -10,8 +10,7 @@ import { loadPublicExperience, type ClientExperience } from "./api";
 import { loadPublicBranding, type PublicProjectBranding } from "./branding";
 import { Viewer3D } from "./viewer/Viewer3D";
 import "./styles.css";
-import { BuildingDetails } from "./BuildingDetails";
-import { availableClientModules, buildingPresentation, clientViewerCapabilities } from "./clientPresentation";
+import { availableClientModules, clientViewerCapabilities } from "./clientPresentation";
 import "./viewer/walkthrough-ui.css";
 
 const GeoPublicDemo = lazy(() => import("./geo/GeoPublicDemo"));
@@ -146,54 +145,35 @@ function NotFound({ message }: { message?: string }) {
 
 function ProjectNavigation({ experience, walkFloor }: { experience: ClientExperience; walkFloor?: number }) {
   const { model, camera, project } = experience;
-  const settings = settingsOf<ProjectSettings>(sceneOf(experience, "project-navigation"));
   const floorSettings = settingsOf<FloorSettings>(sceneOf(experience, "typical-floor"));
   const capabilities = clientViewerCapabilities(experience);
   const floorReady = capabilities.floors;
   const availableFloors = floorReady ? floorIdsOf(floorSettings) : [];
-  const presentation = buildingPresentation(experience);
-  const render = mediaUrl(experience, settings.exteriorRenderKey);
 
   return (
-    <>
-      <section className="viewer-section">
-        <Viewer3D
-          modelUrl={model?.available ? model.url : undefined}
-          cameraPreset={camera}
-          modelLabel={model?.name}
-          initialWalk={walkFloor !== undefined}
-          initialWalkFloor={walkFloor ?? null}
-          availableFloors={availableFloors}
-          floorGeometry={floorSettings.floorLevels ?? []}
-          walkthrough={experience.walkthrough}
-          clientPresentation
-          sourcePresentation={experience.sourcePresentation}
-          buildingPresentation={experience.buildingPresentation}
-          allowInteriorControls={floorReady}
-          allowWalkControls={capabilities.walk}
-        />
-        <div className="client-hero-overlay" aria-hidden="true">
-          <span className="client-hero-kicker">EXPLORE THE BUILDING</span>
-          <strong>{project.name}</strong>
-          {project.location && <small>{project.location}</small>}
-        </div>
-      </section>
-
-      <section className="project-overview client-showcase-overview">
-        <div className="overview-copy">
-          <p className="eyebrow">PROJECT OVERVIEW</p>
-          <h2>{settings.headline ?? project.name}</h2>
-          <p>{presentation.description || "Explore the exterior from every angle. Choose a view, rotate the building and discover its architecture in daylight or after dark."}</p>
-          <div className="fact-row">
-            {settings.brochurePrice && <div><span>Project offer</span><strong>{settings.brochurePrice}</strong></div>}
-            {project.location && <div><span>Location</span><strong>{project.location}</strong></div>}
-          </div>
-        </div>
-        <MediaImage src={render} alt={`${project.name} exterior reference`} className="exterior-reference" />
-      </section>
-
-      <BuildingDetails experience={experience} />
-    </>
+    <section className="viewer-section">
+      <Viewer3D
+        modelUrl={model?.available ? model.url : undefined}
+        cameraPreset={camera}
+        modelLabel={model?.name}
+        initialWalk={walkFloor !== undefined}
+        initialWalkFloor={walkFloor ?? null}
+        availableFloors={availableFloors}
+        floorGeometry={floorSettings.floorLevels ?? []}
+        walkthrough={experience.walkthrough}
+        clientPresentation
+        projectLocation={project.location}
+        sourcePresentation={experience.sourcePresentation}
+        buildingPresentation={experience.buildingPresentation}
+        allowInteriorControls={floorReady}
+        allowWalkControls={capabilities.walk}
+      />
+      <div className="client-hero-overlay" aria-hidden="true">
+        <span className="client-hero-kicker">EXPLORE THE BUILDING</span>
+        <strong>{project.name}</strong>
+        {project.location && <small>{project.location}</small>}
+      </div>
+    </section>
   );
 }
 
@@ -782,13 +762,13 @@ function App() {
 
   const sceneMap = new Map((experience.scenes ?? []).map((scene) => [scene.type, scene]));
   const visibleModules = moduleOrder.filter(([type]) => availableClientModules(experience, [type]).length > 0);
-  const selectedType = visibleModules.some(([type]) => type === activeType) ? activeType : visibleModules[0]?.[0];
+  const selectedType = visibleModules.some(([type]) => type === "project-navigation") ? "project-navigation" : visibleModules[0]?.[0];
   const activeScene = selectedType ? sceneMap.get(selectedType) : undefined;
   const activeReady = Boolean(activeScene?.enabled);
 
   return (
-    <main className="experience client-showcase">
-      <header className="project-header">
+    <main className="experience client-showcase client-showcase--viewer-only">
+      <header className="project-header project-header--viewer-only">
         <a className="brand" href="https://ar3dstudio.in" aria-label={branding?.logoUrl ? experience.project.name : "AR3D Studio home"}>
           {branding?.logoUrl ? <img className="brand-project-logo" src={branding.logoUrl} alt="" /> : <span>AR</span>}
           <div>
@@ -796,15 +776,9 @@ function App() {
             <small>{branding?.logoUrl ? "Interactive 3D Experience" : "Interactive Real Estate"}</small>
           </div>
         </a>
-        <div className="project-heading">
-          <p className="eyebrow">3D PROJECT EXPERIENCE</p>
-          <h1>{experience.project.name}</h1>
-          <p className="location">{experience.project.location}</p>
-        </div>
-
       </header>
 
-      {visibleModules.length > 1 && <nav className="module-nav" aria-label="3D project modules">
+      {visibleModules.length > 1 && <nav hidden className="module-nav" aria-label="3D project modules">
         {visibleModules.map(([type, label], index) => {
           return (
             <button
@@ -845,9 +819,6 @@ function App() {
         )}
       </div>
 
-      <footer>
-        <span>AR3D Studio · Interactive Real Estate</span>
-      </footer>
     </main>
   );
 }
