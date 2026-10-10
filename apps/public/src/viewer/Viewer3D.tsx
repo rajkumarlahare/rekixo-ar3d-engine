@@ -1538,10 +1538,9 @@ export function Viewer3D({
           href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(projectLocation)}`}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label={`Open ${projectLocation} in Google Maps`}
+          aria-label="Open project location in Google Maps"
         >
           <span>Location</span>
-          <strong>{projectLocation}</strong>
         </a>}
       </nav>}
       {walkMode && (
