@@ -1578,7 +1578,7 @@ export function Viewer3D({
         </div>
       )}
 
-      {!compactUi && <div className="viewer-help" aria-hidden="true">
+      {!compactUi && !clientPresentation && <div className="viewer-help" aria-hidden="true">
 {walkMode ? "Walk: drag to look · WASD/arrow keys or on-screen arrows to move" : "Drag to rotate · Two-finger/secondary drag to pan · Pinch or wheel to zoom"}
       </div>}
     </div>
