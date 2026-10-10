@@ -71,25 +71,13 @@ test("explicit scene elevations override a profile and preserve sparse IDs", () 
   assert.ok(geometry.every((item) => item.source === "scene"));
 });
 
-test("generic fallback divides the actual model bounds by configured floor order", () => {
+test("missing source elevations fail closed instead of dividing the model into equal bands", () => {
   const geometry = resolveFloorGeometry({
     floorIds: [-3, 4, 20],
     minY: -9,
     maxY: 12,
   });
-  assert.deepEqual(
-    geometry.map((item) => [
-      item.floor,
-      item.elevationM,
-      item.topElevationM,
-      item.source,
-    ]),
-    [
-      [-3, -9, -2, "inferred"],
-      [4, -2, 5, "inferred"],
-      [20, 5, 12, "inferred"],
-    ],
-  );
+  assert.deepEqual(geometry, []);
 });
 
 test("floor lookup uses physical elevation rather than floor array index", () => {
