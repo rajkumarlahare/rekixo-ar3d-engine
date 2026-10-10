@@ -158,6 +158,7 @@ function ProjectNavigation({ experience, walkFloor }: { experience: ClientExperi
         buildingPresentation={experience.buildingPresentation}
         allowInteriorControls={floorReady}
         allowWalkControls={capabilities.walk}
+        showClientFloorControls={floorReady && availableFloors.length > 0}
       />
     </section>
   );

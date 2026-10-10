@@ -70,6 +70,38 @@ test("Building customer top action buttons center their labels consistently on m
 });
 
 
+test("customer Building viewer exposes floor isolation only when floor metadata is configured", () => {
+  assert.match(publicApp, /showClientFloorControls=\{floorReady && availableFloors\.length > 0\}/);
+  assert.match(viewer, /showClientFloorControls\?: boolean/);
+  assert.match(viewer, /clientPresentation && showClientFloorControls && mode === "model" && availableFloors\.length > 0/);
+  assert.match(viewer, /aria-label="Select building floor"/);
+  assert.match(viewer, /Show Ground Floor only/);
+  assert.ok(viewer.includes("Show Floor ${floor} only"));
+  assert.match(viewer, /clientFloorViewRef\.current\?\.\(floor\)/);
+});
+
+test("floor selection clips to configured level geometry and frames it from above", () => {
+  assert.match(viewer, /renderer\.clippingPlanes = \[/);
+  assert.match(viewer, /floorGeometryFor\(resolvedFloorGeometry, selection\)/);
+  assert.match(viewer, /floorFocusElevation\(level\)/);
+  assert.match(viewer, /const fov = 34/);
+  assert.match(viewer, /duration: 750/);
+  assert.match(viewer, /clientFloorViewRef\.current = \(selection\)/);
+  assert.match(viewer, /title="Top-down view of the complete model; roof is not isolated as a separate floor"/);
+});
+
+test("customer exterior camera and reset controls always exit floor isolation", () => {
+  assert.match(viewer, /floorRef\.current\?\.\(null\);[\s\S]*setSelectedFloor\(null\);[\s\S]*setClientFloorSelection\(null\);[\s\S]*exteriorViewRef\.current\?\.\(view\)/);
+  assert.match(viewer, /if \(clientPresentation && exteriorViewRef\.current\) \{[\s\S]*applyFloor\(null\);[\s\S]*setClientFloorSelection\(null\)/);
+});
+
+test("customer floor strip stays usable on desktop, mobile and short viewports", () => {
+  assert.match(styles, /\.client-floor-controls\s*\{[\s\S]*position:\s*absolute;[\s\S]*right:\s*10px/);
+  assert.match(styles, /\.client-floor-controls\s*\{[\s\S]*overflow-x:\s*auto/);
+  assert.match(styles, /@media \(max-width: 700px\)\s*\{[\s\S]*\.client-floor-controls\s*\{[\s\S]*top:\s*51px/);
+  assert.match(styles, /@media \(max-height: 520px\)\s*\{[\s\S]*\.client-floor-controls\s*\{[\s\S]*top:\s*46px/);
+});
+
 test("customer-facing Building viewer does not show instructional gesture footer", () => {
   assert.match(viewer, /!compactUi && !clientPresentation && <div className="viewer-help"/);
   assert.match(viewer, /Drag to rotate · Two-finger\/secondary drag to pan · Pinch or wheel to zoom/);

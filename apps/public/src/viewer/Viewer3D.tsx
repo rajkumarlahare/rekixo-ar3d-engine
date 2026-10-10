@@ -58,6 +58,8 @@ interface Viewer3DProps {
   sourcePresentation?: SourcePresentation;
   buildingPresentation?: BuildingPresentationManifestV1;
   clientPresentation?: boolean;
+  /** Show the floor-isolation strip on a customer-facing Building viewer. */
+  showClientFloorControls?: boolean;
   projectLocation?: string;
   allowInteriorControls?: boolean;
   allowWalkControls?: boolean;
@@ -90,6 +92,7 @@ export function Viewer3D({
   sourcePresentation,
   buildingPresentation,
   clientPresentation = false,
+  showClientFloorControls = false,
   projectLocation,
   allowInteriorControls = true,
   allowWalkControls = allowInteriorControls,
@@ -125,6 +128,7 @@ export function Viewer3D({
   const [exteriorView, setExteriorView] = useState<ExteriorView>("hero");
   const resetRef = useRef<(() => void) | null>(null);
   const floorRef = useRef<((floor: number | null) => void) | null>(null);
+  const clientFloorViewRef = useRef<((selection: number | "top" | null) => void) | null>(null);
   const sectionRef = useRef<((enabled: boolean) => void) | null>(null);
   const lightingRef = useRef<((night: boolean) => void) | null>(null);
   const explodeRef = useRef<((enabled: boolean) => void) | null>(null);
@@ -142,6 +146,7 @@ export function Viewer3D({
   const [errorMessage, setErrorMessage] = useState<string>();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedFloor, setSelectedFloor] = useState<number | null>(initialFloor);
+  const [clientFloorSelection, setClientFloorSelection] = useState<number | "top" | null>(null);
   const [sectionEnabled, setSectionEnabled] = useState(interactionMode === "section");
   const [nightMode, setNightMode] = useState(false);
   const [exploded, setExploded] = useState(initialExploded);
@@ -302,6 +307,9 @@ export function Viewer3D({
     const resetCamera = () => {
       cameraTween = undefined;
       if (clientPresentation && exteriorViewRef.current) {
+        applyFloor(null);
+        setSelectedFloor(null);
+        setClientFloorSelection(null);
         selectedExteriorRef.current = "hero";
         setExteriorView("hero");
         exteriorViewRef.current("hero");
@@ -1012,6 +1020,83 @@ export function Viewer3D({
           cameraTween = { start: performance.now(), duration: 850, fromPosition: camera.position.clone(), toPosition: next.position, fromTarget: controls.target.clone(), toTarget: next.target, fromFov: camera.fov, toFov: next.fov };
         }
       };
+      clientFloorViewRef.current = (selection) => {
+        if (!modelBounds || walkActive || currentExperienceMode !== "site") return;
+        cameraTween = undefined;
+
+        if (selection === null) {
+          applyFloor(null);
+          setSelectedFloor(null);
+          setClientFloorSelection(null);
+          const returnView = selectedExteriorRef.current;
+          setExteriorView(returnView);
+          exteriorViewRef.current?.(returnView);
+          return;
+        }
+
+        if (selection === "top") {
+          applyFloor(null);
+          setSelectedFloor(null);
+          setClientFloorSelection("top");
+          setView("top");
+          return;
+        }
+
+        const level = floorGeometryFor(resolvedFloorGeometry, selection);
+        if (!level) return;
+
+        applyFloor(selection);
+        setSelectedFloor(selection);
+        setClientFloorSelection(selection);
+
+        // Frame the selected floor in a near-vertical plan view using the actual
+        // published model bounds and this project's configured floor elevations.
+        const bounds = modelBounds;
+        const size = bounds.getSize(new THREE.Vector3());
+        const center = bounds.getCenter(new THREE.Vector3());
+        const fov = 34;
+        const verticalTangent = Math.tan(THREE.MathUtils.degToRad(fov / 2));
+        const horizontalTangent = verticalTangent * Math.max(camera.aspect, 0.25);
+        const floorHeight = Math.max(level.topElevationM - level.elevationM, 0.1);
+        const fitDistance = Math.max(
+          size.x / (2 * horizontalTangent),
+          size.z / (2 * verticalTangent),
+          floorHeight * 2,
+          1.5,
+        ) * 1.12;
+        const target = new THREE.Vector3(
+          center.x,
+          floorFocusElevation(level),
+          center.z,
+        );
+        const position = new THREE.Vector3(
+          center.x,
+          level.topElevationM + fitDistance,
+          center.z + fitDistance * 0.025,
+        );
+        controls.minDistance = Math.max(0.2, Math.min(floorHeight * 0.45, fitDistance * 0.15));
+        controls.maxDistance = Math.max(controls.maxDistance, fitDistance * 4);
+
+        if (reducedMotion) {
+          camera.position.copy(position);
+          controls.target.copy(target);
+          camera.fov = fov;
+          camera.updateProjectionMatrix();
+          controls.update();
+          cameraTween = undefined;
+        } else {
+          cameraTween = {
+            start: performance.now(),
+            duration: 750,
+            fromPosition: camera.position.clone(),
+            toPosition: position,
+            fromTarget: controls.target.clone(),
+            toTarget: target,
+            fromFov: camera.fov,
+            toFov: fov,
+          };
+        }
+      };
       if (clientPresentation) {
         const startsAtNight = presentationStartsAtNight(buildingPresentation);
         if (startsAtNight) {
@@ -1309,6 +1394,7 @@ export function Viewer3D({
       renderer.forceContextLoss();
       renderer.domElement.remove();
       exteriorViewRef.current = null;
+      clientFloorViewRef.current = null;
       resetRef.current = null;
       floorRef.current = null;
       sectionRef.current = null;
@@ -1528,10 +1614,58 @@ export function Viewer3D({
         ))}
       </div>}
 
+      {clientPresentation && showClientFloorControls && mode === "model" && availableFloors.length > 0 && (
+        <nav className="client-floor-controls" aria-label="Select building floor">
+          <span className="client-floor-controls__label">FLOOR</span>
+          <button
+            type="button"
+            aria-pressed={clientFloorSelection === null}
+            className={clientFloorSelection === null ? "client-floor-control client-floor-control--active" : "client-floor-control"}
+            title="Show the complete building"
+            onClick={() => clientFloorViewRef.current?.(null)}
+          >
+            All
+          </button>
+          {availableFloors.map((floor) => {
+            const label = floor === 0 ? "Ground" : `${floor}F`;
+            return (
+              <button
+                type="button"
+                key={floor}
+                aria-label={floor === 0 ? "Show Ground Floor only" : `Show Floor ${floor} only`}
+                aria-pressed={clientFloorSelection === floor}
+                className={clientFloorSelection === floor ? "client-floor-control client-floor-control--active" : "client-floor-control"}
+                title={floor === 0 ? "Ground floor, top view" : `Floor ${floor}, top view`}
+                onClick={() => clientFloorViewRef.current?.(floor)}
+              >
+                {label}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            aria-pressed={clientFloorSelection === "top"}
+            className={clientFloorSelection === "top" ? "client-floor-control client-floor-control--active" : "client-floor-control"}
+            title="Top-down view of the complete model; roof is not isolated as a separate floor"
+            onClick={() => clientFloorViewRef.current?.("top")}
+          >
+            Top
+          </button>
+        </nav>
+      )}
       {clientPresentation && <nav className="client-camera-views" aria-label="Camera views">
         {(["hero", "front", "corner", "entrance", "aerial"] as ExteriorView[]).map((view) => <button
           type="button" key={view} aria-pressed={exteriorView === view}
-          onClick={() => { selectedExteriorRef.current = view; setExteriorView(view); exteriorViewRef.current?.(view); }}
+          onClick={() => {
+            if (clientPresentation && showClientFloorControls) {
+              floorRef.current?.(null);
+              setSelectedFloor(null);
+              setClientFloorSelection(null);
+            }
+            selectedExteriorRef.current = view;
+            setExteriorView(view);
+            exteriorViewRef.current?.(view);
+          }}
         >{view === "hero" ? "Overview" : view === "entrance" ? "Entry view" : view.charAt(0).toUpperCase() + view.slice(1)}</button>)}
         {projectLocation && <a
           className="client-camera-location"
