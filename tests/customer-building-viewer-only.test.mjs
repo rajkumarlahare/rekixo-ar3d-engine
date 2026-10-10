@@ -70,8 +70,12 @@ test("Building customer top action buttons center their labels consistently on m
 });
 
 
-test("customer Building viewer exposes floor isolation only when floor metadata is configured", () => {
-  assert.match(publicApp, /showClientFloorControls=\{floorReady && availableFloors\.length > 0\}/);
+test("customer Building viewer exposes floor isolation when floor metadata is missing", () => {
+  assert.match(publicApp, /const DEFAULT_CLIENT_FLOORS = \[0, 1, 2, 3, 4, 5\];/);
+  assert.match(publicApp, /const hasConfiguredFloorMetadata =[\\s\\S]*floorSettings\\.floorLevels\\?\\.length/);
+  assert.match(publicApp, /const availableFloors = hasConfiguredFloorMetadata[\\s\\S]*DEFAULT_CLIENT_FLOORS/);
+  assert.match(publicApp, /showClientFloorControls=\\{availableFloors\\.length > 0\\}/);
+  assert.doesNotMatch(publicApp, /showClientFloorControls=\\{floorReady && availableFloors\\.length > 0\\}/);
   assert.match(viewer, /showClientFloorControls\?: boolean/);
   assert.match(viewer, /clientPresentation && showClientFloorControls && mode === "model" && availableFloors\.length > 0/);
   assert.match(viewer, /aria-label="Select building floor"/);
