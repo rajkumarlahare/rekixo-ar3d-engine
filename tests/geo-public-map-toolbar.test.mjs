@@ -77,3 +77,11 @@ test("normal camera row spans available width without a panel or button pills", 
   assert.match(transparentRow, /box-shadow:\s*none !important/);
   assert.match(transparentRow, /button\.is-active::after/);
 });
+
+
+test("Geo customer view omits developer runtime and fallback badges", () => {
+  assert.doesNotMatch(geoApp, /geo-quality-badge|GEO RUNTIME|GEO FALLBACK|Integrated vector terrain \+ immutable 3D Building/);
+  assert.doesNotMatch(geoStyles, /\.geo-quality-badge/);
+  assert.match(geoStyles, /\.geo-fallback-note\s*\{/);
+  assert.match(geoApp, /aria-label=\{mapFallbackReason\}/);
+});

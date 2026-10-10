@@ -68,3 +68,9 @@ test("Building customer top action buttons center their labels consistently on m
   assert.match(styles, /main\.client-showcase--viewer-only \.viewer-actions \.viewer-action\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*align-items:\s*center;[\s\S]*justify-content:\s*center;[\s\S]*line-height:\s*1\.1/);
   assert.match(styles, /main\.client-showcase--viewer-only \.viewer-actions \.viewer-action,[\s\S]*\.viewer-action:first-child\s*\{[\s\S]*display:\s*inline-flex !important/);
 });
+
+
+test("customer-facing Building viewer does not show instructional gesture footer", () => {
+  assert.match(viewer, /!compactUi && !clientPresentation && <div className="viewer-help"/);
+  assert.match(viewer, /Drag to rotate · Two-finger\/secondary drag to pan · Pinch or wheel to zoom/);
+});

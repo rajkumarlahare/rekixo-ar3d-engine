@@ -222,8 +222,7 @@
   min-height: min(74vh, 840px);
 }
 
-.geo-fallback-note,
-.geo-quality-badge {
+.geo-fallback-note {
   position: absolute;
   z-index: 6;
   display: grid;
@@ -233,24 +232,6 @@
   background: rgba(5, 16, 27, .86);
   backdrop-filter: blur(12px);
   pointer-events: none;
-}
-
-.geo-quality-badge {
-  left: 14px;
-  bottom: 14px;
-  padding: 9px 11px;
-}
-
-.geo-quality-badge span {
-  color: #617a92;
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: .12em;
-}
-
-.geo-quality-badge strong {
-  font-size: 11px;
-  color: #e7f4ff;
 }
 
 .geo-fallback-note {
@@ -376,11 +357,6 @@
   .geo-integrated-scene--fallback > section {
     min-height: 66vh;
     border-radius: 15px;
-  }
-
-  .geo-quality-badge {
-    left: 8px;
-    bottom: 8px;
   }
 
   .geo-fallback-note {
