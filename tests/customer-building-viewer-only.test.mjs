@@ -21,15 +21,18 @@ test("customer Building page keeps only its compact brand header and primary 3D 
   assert.doesNotMatch(publicApp, /<footer>/);
 });
 
-test("the viewer exposes the configured project location beside its existing camera presets", () => {
+test("the viewer shows a Location-only link while retaining the configured Google Maps destination", () => {
   assert.match(viewer, /projectLocation\?: string/);
   assert.match(viewer, /allowWalkControls && !clientPresentation/);
   assert.match(viewer, /allowInteriorControls && !clientPresentation/);
   assert.match(viewer, /allowInteriorControls && !clientPresentation && <div className="viewer-floor-controls"/);
   assert.match(viewer, /className="client-camera-views"/);
   assert.match(viewer, /className="client-camera-location"/);
+  assert.match(viewer, /href=\{\`https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=\$\{encodeURIComponent\(projectLocation\)\}\`\}/);
+  assert.match(viewer, /aria-label=\{`Open \$\{projectLocation\} in Google Maps`\}/);
   assert.match(viewer, /<span>Location<\/span>/);
-  assert.match(viewer, /Open \$\{projectLocation\} in Google Maps/);
+  assert.doesNotMatch(viewer, /<strong>\{projectLocation\}<\/strong>/);
+  assert.doesNotMatch(styles, /\.client-camera-location > strong/);
   assert.match(viewer, /\["hero", "front", "corner", "entrance", "aerial"\] as ExteriorView\[\]/);
   for (const label of ["Overview", "Entry view", "Location"]) {
     assert.ok(viewer.includes(label), `Expected camera control label ${label}`);

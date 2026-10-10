@@ -1541,7 +1541,6 @@ export function Viewer3D({
           aria-label={`Open ${projectLocation} in Google Maps`}
         >
           <span>Location</span>
-          <strong>{projectLocation}</strong>
         </a>}
       </nav>}
       {walkMode && (
