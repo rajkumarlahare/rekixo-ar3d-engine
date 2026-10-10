@@ -70,18 +70,16 @@ test("Building customer top action buttons center their labels consistently on m
 });
 
 
-test("customer Building viewer exposes floor isolation when floor metadata is missing", () => {
-  assert.ok(publicApp.includes("const DEFAULT_CLIENT_FLOORS = [0, 1, 2, 3, 4, 5];"));
-  assert.ok(publicApp.includes("const hasConfiguredFloorMetadata ="));
-  assert.ok(publicApp.includes("const availableFloors = hasConfiguredFloorMetadata"));
-  assert.ok(publicApp.includes("showClientFloorControls={availableFloors.length > 0}"));
-  assert.ok(!publicApp.includes("showClientFloorControls={floorReady && availableFloors.length > 0}"));
-  assert.match(viewer, /showClientFloorControls\?: boolean/);
-  assert.match(viewer, /clientPresentation && showClientFloorControls && mode === "model" && availableFloors\.length > 0/);
+test("customer Building floor isolation waits for source-backed model geometry", () => {
+  assert.match(publicApp, /configuredFloorIdsOf\(floorSettings\)/);
+  assert.doesNotMatch(publicApp, /DEFAULT_CLIENT_FLOORS/);
+  assert.match(viewer, /deriveFloorGeometryFromModel\(\{/);
+  assert.match(viewer, /clientFloorControlsReady && clientFloorIds\.length > 0/);
+  assert.match(publicApp, /showClientFloorControls=\{true\}|showClientFloorControls\s*\n/);
   assert.match(viewer, /aria-label="Select building floor"/);
-  assert.match(viewer, /Show Ground Floor only/);
-  assert.ok(viewer.includes("Show Floor ${floor} only"));
-  assert.match(viewer, /clientFloorViewRef\.current\?\.\(floor\)/);
+  assert.match(viewer, /aria-label="Show roof only"/);
+  assert.match(viewer, /clientFloorViewRef\.current\?\.\("roof"\)/);
+  assert.ok(!publicApp.includes("const DEFAULT_CLIENT_FLOORS = [0, 1, 2, 3, 4, 5];"));
 });
 
 test("floor selection clips to configured level geometry and frames it from above", () => {
@@ -91,7 +89,8 @@ test("floor selection clips to configured level geometry and frames it from abov
   assert.match(viewer, /const fov = 34/);
   assert.match(viewer, /duration: 750/);
   assert.match(viewer, /clientFloorViewRef\.current = \(selection\)/);
-  assert.match(viewer, /title="Top-down view of the complete model; roof is not isolated as a separate floor"/);
+  assert.match(viewer, /title="Top-down view of the complete model; this does not isolate a floor"/);
+  assert.match(viewer, /title="Isolate the roof and upper structure using detected model bounds"/);
 });
 
 test("customer exterior camera and reset controls always exit floor isolation", () => {

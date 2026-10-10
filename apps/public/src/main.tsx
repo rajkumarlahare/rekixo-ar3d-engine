@@ -15,10 +15,6 @@ import "./viewer/walkthrough-ui.css";
 
 const GeoPublicDemo = lazy(() => import("./geo/GeoPublicDemo"));
 
-// Customer viewers must still expose floor exploration when a project has no configured Typical Floor scene.
-// The viewer uses these IDs to infer evenly spaced floor bands from the model's vertical bounds.
-const DEFAULT_CLIENT_FLOORS = [0, 1, 2, 3, 4, 5];
-
 type UnitFact = { series: string; type: string; areaSqFt: number };
 type NearbyFact = { name: string; distance: string };
 
@@ -99,6 +95,18 @@ function floorIdsOf(settings: FloorSettings) {
   ).sort((a, b) => a - b);
 }
 
+function configuredFloorIdsOf(settings: FloorSettings) {
+  const explicit = settings.floorLevels?.map((item) => item.floor) ?? [];
+  const values = explicit.length
+    ? explicit
+    : settings.floors?.length
+      ? [0, ...settings.floors]
+      : [];
+  return Array.from(
+    new Set(values.filter((item) => Number.isFinite(item))),
+  ).sort((a, b) => a - b);
+}
+
 function floorLabel(floor: number) {
   if (floor === 0) return "G";
   if (floor < 0) return `B${Math.abs(floor)}`;
@@ -143,12 +151,7 @@ function ProjectNavigation({ experience, walkFloor }: { experience: ClientExperi
   const floorSettings = settingsOf<FloorSettings>(sceneOf(experience, "typical-floor"));
   const capabilities = clientViewerCapabilities(experience);
   const floorReady = capabilities.floors;
-  const hasConfiguredFloorMetadata =
-    (floorSettings.floorLevels?.length ?? 0) > 0 ||
-    (floorSettings.floors?.length ?? 0) > 0;
-  const availableFloors = hasConfiguredFloorMetadata
-    ? floorIdsOf(floorSettings)
-    : [...DEFAULT_CLIENT_FLOORS];
+  const availableFloors = configuredFloorIdsOf(floorSettings);
 
   return (
     <section className="viewer-section">
@@ -167,7 +170,7 @@ function ProjectNavigation({ experience, walkFloor }: { experience: ClientExperi
         buildingPresentation={experience.buildingPresentation}
         allowInteriorControls={floorReady}
         allowWalkControls={capabilities.walk}
-        showClientFloorControls={availableFloors.length > 0}
+        showClientFloorControls
       />
     </section>
   );
