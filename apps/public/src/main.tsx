@@ -15,6 +15,10 @@ import "./viewer/walkthrough-ui.css";
 
 const GeoPublicDemo = lazy(() => import("./geo/GeoPublicDemo"));
 
+// Customer viewers must still expose floor exploration when a project has no configured Typical Floor scene.
+// The viewer uses these IDs to infer evenly spaced floor bands from the model's vertical bounds.
+const DEFAULT_CLIENT_FLOORS = [0, 1, 2, 3, 4, 5];
+
 type UnitFact = { series: string; type: string; areaSqFt: number };
 type NearbyFact = { name: string; distance: string };
 
@@ -139,7 +143,12 @@ function ProjectNavigation({ experience, walkFloor }: { experience: ClientExperi
   const floorSettings = settingsOf<FloorSettings>(sceneOf(experience, "typical-floor"));
   const capabilities = clientViewerCapabilities(experience);
   const floorReady = capabilities.floors;
-  const availableFloors = floorReady ? floorIdsOf(floorSettings) : [];
+  const hasConfiguredFloorMetadata =
+    (floorSettings.floorLevels?.length ?? 0) > 0 ||
+    (floorSettings.floors?.length ?? 0) > 0;
+  const availableFloors = hasConfiguredFloorMetadata
+    ? floorIdsOf(floorSettings)
+    : [...DEFAULT_CLIENT_FLOORS];
 
   return (
     <section className="viewer-section">
@@ -158,7 +167,7 @@ function ProjectNavigation({ experience, walkFloor }: { experience: ClientExperi
         buildingPresentation={experience.buildingPresentation}
         allowInteriorControls={floorReady}
         allowWalkControls={capabilities.walk}
-        showClientFloorControls={floorReady && availableFloors.length > 0}
+        showClientFloorControls={availableFloors.length > 0}
       />
     </section>
   );
