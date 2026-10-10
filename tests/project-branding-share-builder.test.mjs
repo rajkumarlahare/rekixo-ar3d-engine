@@ -38,6 +38,14 @@ const builderStyles = await readFile(
   new URL("../apps/admin/src/branding/project-share-builder.css", import.meta.url),
   "utf8",
 );
+const shareCardBranding = await readFile(
+  new URL("../apps/admin/src/branding/shareCardBranding.ts", import.meta.url),
+  "utf8",
+);
+const globalShareBrand = await readFile(
+  new URL("../apps/admin/src/branding/globalShareBrand.ts", import.meta.url),
+  "utf8",
+);
 const publicApp = await readFile(
   new URL("../apps/public/src/main.tsx", import.meta.url),
   "utf8",
@@ -128,4 +136,20 @@ test("Admin route and public Building/Geo viewers use one project logo without r
   assert.ok(publicApp.includes("brand-project-logo"));
   assert.ok(geoApp.includes('loadPublicBranding(slug, "geo"'));
   assert.ok(geoApp.includes("jio-public-project-logo"));
+});
+
+
+test("share card composition uses the Platform AR3D logo asset without changing logo/favicon processing", () => {
+  assert.ok(globalShareBrand.includes('data:image/webp;base64,'));
+  assert.ok(globalShareBrand.includes('id: "ar3d-vision-studio"'));
+  assert.ok(globalShareBrand.includes("footerCornerSampleWidthRatio: 0.12"));
+  assert.ok(shareCardBranding.includes("GLOBAL_SHARE_BRAND_DATA_URL"));
+  assert.ok(shareCardBranding.includes("loadGlobalShareBrandBitmap"));
+  assert.ok(shareCardBranding.includes("footerCornerColors"));
+  assert.ok(shareCardBranding.includes("context.drawImage(brandBitmap"));
+  assert.ok(shareCardBranding.includes("MAX_PUBLIC_SHARE_IMAGE_BYTES = 550 * 1024"));
+  assert.ok(builder.includes("prepareBrandedShareCard(file)"));
+  assert.ok(builder.includes("prepareLogo(file)"));
+  assert.ok(builder.includes("uploadProjectLogo"));
+  assert.ok(builder.includes("uploadProjectShareCard"));
 });
