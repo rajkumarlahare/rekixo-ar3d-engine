@@ -45,7 +45,6 @@ function sourceFixture() {
     },
   ];
 
-  const values = [];
   const bufferViews = [];
   const accessors = [];
   const meshes = [];
