@@ -1178,13 +1178,7 @@ footer { padding-top: 24px; display: flex; justify-content: space-between; gap: 
   text-transform: uppercase;
 }
 
-.client-camera-location > strong {
-  max-width: 190px;
-  overflow: hidden;
-  color: inherit;
-  font-size: 9px;
-  text-overflow: ellipsis;
-}
+
 
 @media (max-width: 700px) {
   .client-showcase--viewer-only {
