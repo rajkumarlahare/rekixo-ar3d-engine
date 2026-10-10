@@ -75,7 +75,7 @@ test("customer Building floor isolation waits for source-backed model geometry",
   assert.doesNotMatch(publicApp, /DEFAULT_CLIENT_FLOORS/);
   assert.match(viewer, /deriveFloorGeometryFromModel\(\{/);
   assert.match(viewer, /clientFloorControlsReady && clientFloorIds\.length > 0/);
-  assert.match(viewer, /showClientFloorControls=\{true\}|showClientFloorControls\s*\n/);
+  assert.match(publicApp, /showClientFloorControls=\{true\}|showClientFloorControls\s*\n/);
   assert.match(viewer, /aria-label="Select building floor"/);
   assert.match(viewer, /aria-label="Show roof only"/);
   assert.match(viewer, /clientFloorViewRef\.current\?\.\("roof"\)/);
