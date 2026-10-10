@@ -63,5 +63,5 @@ test("Building customer content starts at the top and the viewer fills only the 
 
 test("Building customer top action buttons center their labels consistently on mobile", () => {
   assert.match(styles, /main\.client-showcase--viewer-only \.viewer-actions \.viewer-action\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*align-items:\s*center;[\s\S]*justify-content:\s*center;[\s\S]*line-height:\s*1\.1/);
-  assert.match(styles, /main\.client-showcase--viewer-only \.viewer-actions \.viewer-action:first-child,[\s\S]*display:\s*inline-flex !important/);
+  assert.match(styles, /main\.client-showcase--viewer-only \.viewer-actions \.viewer-action,[\s\S]*\.viewer-action:first-child\s*\{[\s\S]*display:\s*inline-flex !important/);
 });
