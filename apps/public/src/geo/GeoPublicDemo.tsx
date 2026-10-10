@@ -286,7 +286,6 @@ function IntegratedGeoScene({ data, toolbarContainer }: { data: GeoPayload; tool
   const cameraActionRef = useRef<((view: GeoCameraView) => void) | null>(null);
   const [cameraView, setCameraView] = useState<GeoCameraView>("overview");
   const [satelliteMaxZoom, setSatelliteMaxZoom] = useState<number | null>(null);
-  const [quality, setQuality] = useState("Preparing integrated 3D map");
   const [failure, setFailure] = useState("");
 
   useEffect(() => {
@@ -377,7 +376,6 @@ function IntegratedGeoScene({ data, toolbarContainer }: { data: GeoPayload; tool
           contextTimer = window.setTimeout(() => {
             if (cancelled || contextRestored) return;
             setFailure(webglTimeoutMessage(map));
-            setQuality("Fallback Building view");
             overlay?.setMap(null);
           }, WEBGL_CONTEXT_TIMEOUT_MS);
         };
@@ -386,7 +384,6 @@ function IntegratedGeoScene({ data, toolbarContainer }: { data: GeoPayload; tool
         overlay.onAdd = () => {
           if (cancelled) return;
           setFailure("");
-          setQuality("Preparing integrated vector 3D map");
         };
         overlay.onContextRestored = ({ gl }) => {
           if (cancelled) return;
@@ -403,7 +400,6 @@ function IntegratedGeoScene({ data, toolbarContainer }: { data: GeoPayload; tool
           renderer.outputColorSpace = THREE.SRGBColorSpace;
           renderer.toneMapping = THREE.ACESFilmicToneMapping;
           renderer.toneMappingExposure = 0.95;
-          setQuality("Integrated vector terrain + immutable 3D Building");
           overlay?.requestRedraw();
         };
         overlay.onDraw = ({ gl, transformer }) => {
@@ -423,7 +419,6 @@ function IntegratedGeoScene({ data, toolbarContainer }: { data: GeoPayload; tool
           renderer?.dispose();
           renderer = undefined;
           if (!cancelled) {
-            setQuality("3D map context restoring");
             armContextTimer();
           }
         };
@@ -485,7 +480,6 @@ function IntegratedGeoScene({ data, toolbarContainer }: { data: GeoPayload; tool
             ? reason.message
             : "Integrated 3D Geo scene initialize nahi hui.",
         );
-        setQuality("Fallback Building view");
       });
 
     return () => {
@@ -546,10 +540,6 @@ function IntegratedGeoScene({ data, toolbarContainer }: { data: GeoPayload; tool
           </div>
         </div>
       )}
-      <div className="geo-quality-badge" role="status">
-        <span>GEO RUNTIME</span>
-        <strong>{quality}</strong>
-      </div>
     </div>
   );
 }
@@ -615,11 +605,6 @@ export default function GeoPublicDemo() {
       </main>
     );
 
-  const mapFallbackReason = !data.maps.apiKey
-    ? "Google Maps browser key is not configured"
-    : !data.maps.mapId
-      ? "Production Google Maps JavaScript Vector Map ID is not configured"
-      : "Integrated Google Maps runtime is not configured";
 
   return (
     <main className="jio-public-shell">
@@ -669,10 +654,6 @@ export default function GeoPublicDemo() {
             compactUi
             presentationView="building"
           />
-          <div className="geo-quality-badge">
-            <span>GEO FALLBACK</span>
-            <strong>{mapFallbackReason}</strong>
-          </div>
         </section>
       )}
 
