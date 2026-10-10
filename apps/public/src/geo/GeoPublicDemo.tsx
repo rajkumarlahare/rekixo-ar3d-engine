@@ -606,6 +606,12 @@ export default function GeoPublicDemo() {
     );
 
 
+  const mapFallbackReason = !data.maps.apiKey
+    ? "Google Maps browser key is not configured"
+    : !data.maps.mapId
+      ? "Production Google Maps JavaScript Vector Map ID is not configured"
+      : "Integrated Google Maps runtime is not configured";
+
   return (
     <main className="jio-public-shell">
       <header className="jio-public-header">
@@ -647,7 +653,7 @@ export default function GeoPublicDemo() {
           <div ref={setToolbarContainer} className="geo-public-toolbar-slot" aria-label="Map camera controls" />
         </div>
       ) : (
-        <section className="geo-integrated-scene geo-integrated-scene--fallback">
+        <section className="geo-integrated-scene geo-integrated-scene--fallback" aria-label={mapFallbackReason}>
           <Viewer3D
             modelUrl={data.model.url}
             modelLabel={data.model.name}
