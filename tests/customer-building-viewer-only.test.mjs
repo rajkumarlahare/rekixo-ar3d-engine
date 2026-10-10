@@ -29,7 +29,7 @@ test("the viewer shows a Location-only link while retaining the configured Googl
   assert.match(viewer, /className="client-camera-views"/);
   assert.match(viewer, /className="client-camera-location"/);
   assert.match(viewer, /href=\{\`https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=\$\{encodeURIComponent\(projectLocation\)\}\`\}/);
-  assert.match(viewer, /aria-label="Open project location in Google Maps"/);
+  assert.match(viewer, /aria-label=\{`Open \$\{projectLocation\} in Google Maps`\}/);
   assert.match(viewer, /<span>Location<\/span>/);
   assert.doesNotMatch(viewer, /<strong>\{projectLocation\}<\/strong>/);
   assert.doesNotMatch(styles, /\.client-camera-location > strong/);
