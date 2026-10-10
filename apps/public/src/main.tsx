@@ -752,7 +752,7 @@ function App() {
           {branding?.logoUrl ? <img className="brand-project-logo" src={branding.logoUrl} alt="" /> : <span>AR</span>}
           <div>
             <strong>{branding?.logoUrl ? experience.project.name : "AR3D STUDIO"}</strong>
-            <small>{branding?.logoUrl ? "Interactive 3D Experience" : "Interactive Real Estate"}</small>
+            <small>{experience.project.location || (branding?.logoUrl ? "Interactive 3D Experience" : "Interactive Real Estate")}</small>
           </div>
         </a>
       </header>
