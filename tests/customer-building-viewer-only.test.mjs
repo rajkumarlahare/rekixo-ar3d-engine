@@ -48,3 +48,20 @@ test("viewer-only Building page fits its complete header and 3D controls inside 
   assert.match(styles, /@media \(max-width: 700px\)/);
   assert.match(styles, /@media \(max-height: 520px\)/);
 });
+
+
+test("Building customer header uses the configured project location as subtitle", () => {
+  assert.match(publicApp, /experience\.project\.location \|\| \(branding\?\.logoUrl/);
+  assert.match(styles, /main\.client-showcase--viewer-only \.project-header--viewer-only \.brand small\s*\{[\s\S]*display:\s*block !important/);
+});
+
+test("Building customer content starts at the top and the viewer fills only the remaining viewport", () => {
+  assert.match(styles, /main\.client-showcase--viewer-only\.experience\s*\{[\s\S]*justify-content:\s*flex-start;[\s\S]*height:\s*100dvh;[\s\S]*padding:\s*5px 0 6px !important/);
+  assert.match(styles, /main\.client-showcase--viewer-only \.module-stage\s*\{[\s\S]*flex:\s*1 1 0;[\s\S]*min-height:\s*0/);
+  assert.match(styles, /main\.client-showcase--viewer-only \.viewer-section\s*\{[\s\S]*flex:\s*1 1 0;[\s\S]*margin:\s*0/);
+});
+
+test("Building customer top action buttons center their labels consistently on mobile", () => {
+  assert.match(styles, /main\.client-showcase--viewer-only \.viewer-actions \.viewer-action\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*align-items:\s*center;[\s\S]*justify-content:\s*center;[\s\S]*line-height:\s*1\.1/);
+  assert.match(styles, /main\.client-showcase--viewer-only \.viewer-actions \.viewer-action:first-child,[\s\S]*display:\s*inline-flex !important/);
+});
