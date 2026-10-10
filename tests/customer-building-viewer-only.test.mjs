@@ -76,7 +76,7 @@ test("customer Building viewer exposes floor isolation only when floor metadata 
   assert.match(viewer, /clientPresentation && showClientFloorControls && mode === "model" && availableFloors\.length > 0/);
   assert.match(viewer, /aria-label="Select building floor"/);
   assert.match(viewer, /Show Ground Floor only/);
-  assert.match(viewer, /Show Floor \\{floor\\} only/);
+  assert.ok(viewer.includes("Show Floor ${floor} only"));
   assert.match(viewer, /clientFloorViewRef\.current\?\.\(floor\)/);
 });
 
