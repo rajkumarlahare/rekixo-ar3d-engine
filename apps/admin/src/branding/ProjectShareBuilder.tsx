@@ -469,7 +469,7 @@ export default function ProjectShareBuilder() {
           <aside className="engine-branding-preview">
             <div className="engine-branding-preview-head"><span>LINK PREVIEW</span><span>{activeExperience.toUpperCase()}</span></div>
             <div className="engine-branding-social-card">
-              <div className="engine-branding-image">
+              <div className={cardUrl ? "engine-branding-image engine-branding-image--populated" : "engine-branding-image"}>
                 {cardUrl ? <img src={cardUrl} alt="Final share card preview" /> : <div><BrandingIcon name="image" size={30} /><b>Share poster preview</b><small>Choose the image customers will see on social links.</small></div>}
               </div>
               <div className="engine-branding-social-copy">
