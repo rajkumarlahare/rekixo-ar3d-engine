@@ -1169,6 +1169,58 @@ footer { padding-top: 24px; display: flex; justify-content: space-between; gap: 
   color: #e3edf7;
   text-decoration: none;
 }
+/* Customer Building floor isolation: separate from the exterior-camera buttons. */
+.client-floor-controls {
+  position: absolute;
+  z-index: 11;
+  top: 10px;
+  right: 10px;
+  max-width: min(690px, calc(100% - 245px));
+  padding: 5px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border: 1px solid #ffffff2b;
+  border-radius: 12px;
+  background: #06111ded;
+  box-shadow: 0 8px 24px #0005;
+  backdrop-filter: blur(14px);
+  scrollbar-width: none;
+}
+.client-floor-controls::-webkit-scrollbar { display: none; }
+.client-floor-controls__label {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  color: #78e9b8;
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: .12em;
+}
+.client-floor-control {
+  flex: 0 0 auto;
+  min-width: 35px;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid #2a4057;
+  border-radius: 8px;
+  background: #102238;
+  color: #d6e3f2;
+  font-size: 9px;
+  font-weight: 850;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.client-floor-control:hover,
+.client-floor-control:focus-visible,
+.client-floor-control--active {
+  border-color: #4adca2;
+  background: #10432f;
+  color: #a8f5d1;
+  outline: none;
+}
+
 
 .client-camera-location > span {
   color: #6de9b4;
@@ -1202,6 +1254,17 @@ footer { padding-top: 24px; display: flex; justify-content: space-between; gap: 
     min-height: min(320px, calc(100dvh - 58px));
     border-radius: 15px;
   }
+
+  .client-floor-controls {
+    top: 51px;
+    left: 8px;
+    right: 8px;
+    max-width: none;
+    justify-content: flex-start;
+  }
+
+  .client-floor-controls__label { padding: 0 4px; }
+  .client-floor-control { min-height: 30px; padding: 0 9px; }
 
   .client-camera-views {
     left: 8px;
@@ -1296,6 +1359,7 @@ body:has(main.client-showcase--viewer-only) {
   }
 }
 @media (max-height: 520px) {
+  .client-floor-controls { top: 46px; }
   .project-header--viewer-only {
     min-height: 30px;
     margin-bottom: 4px;
