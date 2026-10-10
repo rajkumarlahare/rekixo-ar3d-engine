@@ -1223,9 +1223,6 @@ footer { padding-top: 24px; display: flex; justify-content: space-between; gap: 
     max-width: 100%;
   }
 
-  .client-camera-location > strong {
-    max-width: min(150px, 35vw);
-  }
 }
 
 
