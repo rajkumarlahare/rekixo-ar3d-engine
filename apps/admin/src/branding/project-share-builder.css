@@ -336,6 +336,22 @@
   background: repeating-linear-gradient(135deg, #0c1b2c, #0c1b2c 14px, #0a1726 14px, #0a1726 28px);
 }
 .engine-branding-image > img { display: block; width: 100%; height: 100%; max-height: 520px; object-fit: contain; }
+
+/* Branded cards include an appended footer, so preserve the file's full aspect ratio.
+   The placeholder keeps its fixed social-card frame; a real card must not be cropped. */
+.engine-branding-image--populated {
+  aspect-ratio: auto;
+  min-height: 0;
+  display: block;
+}
+.engine-branding-image--populated > img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 520px;
+  object-fit: contain;
+  object-position: center;
+}
 .engine-branding-image > div { max-width: 250px; padding: 18px; display: grid; justify-items: center; gap: 7px; text-align: center; color: #8195b2; }
 .engine-branding-image > div b { color: #cdd9eb; font-size: 12px; }
 .engine-branding-image > div small { font-size: 10px; line-height: 1.5; }

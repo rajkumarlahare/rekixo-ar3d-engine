@@ -153,3 +153,11 @@ test("share card composition uses the Platform AR3D logo asset without changing 
   assert.ok(builder.includes("uploadProjectLogo"));
   assert.ok(builder.includes("uploadProjectShareCard"));
 });
+
+test("share preview shows the full generated card instead of cropping off its footer", () => {
+  assert.ok(builder.includes('cardUrl ? "engine-branding-image engine-branding-image--populated"'));
+  assert.ok(builderStyles.includes(".engine-branding-image--populated"));
+  assert.ok(builderStyles.includes("aspect-ratio: auto"));
+  assert.ok(builderStyles.includes("height: auto"));
+  assert.ok(builderStyles.includes("object-position: center"));
+});
