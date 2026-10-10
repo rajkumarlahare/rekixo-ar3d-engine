@@ -89,7 +89,8 @@ test("floor selection clips to configured level geometry and frames it from abov
   assert.match(viewer, /const fov = 34/);
   assert.match(viewer, /duration: 750/);
   assert.match(viewer, /clientFloorViewRef\.current = \(selection\)/);
-  assert.match(viewer, /title="Top-down view of the complete model; roof is not isolated as a separate floor"/);
+  assert.match(viewer, /title="Top-down view of the complete model; this does not isolate a floor"/);
+  assert.match(viewer, /title="Isolate the roof and upper structure using detected model bounds"/);
 });
 
 test("customer exterior camera and reset controls always exit floor isolation", () => {
