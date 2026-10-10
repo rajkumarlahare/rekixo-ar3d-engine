@@ -19,10 +19,10 @@ import {
   type BrandingExperience,
   type CloudProjectBrandingState,
 } from "../studio/cloud";
+import { prepareBrandedShareCard } from "./shareCardBranding";
 import "./project-share-builder.css";
 
 const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
-const MAX_FINAL_CARD_BYTES = 550 * 1024;
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 type PreparedLogo = { sourceFile: File; logoFile: File; faviconFile: File };
@@ -83,115 +83,6 @@ async function prepareLogo(file: File): Promise<PreparedLogo> {
     logoFile: fileFromBlob(logo, "project-logo.webp", "image/webp"),
     faviconFile: fileFromBlob(favicon, "project-favicon.png", "image/png"),
   };
-}
-
-function sampleFooterColor(bitmap: ImageBitmap) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 24;
-  canvas.height = 24;
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!context) return [13, 24, 41] as const;
-  context.drawImage(bitmap, 0, 0, 24, 24);
-  const pixels = context.getImageData(0, 0, 24, 24).data;
-  let red = 0, green = 0, blue = 0, count = 0;
-  for (let i = 0; i < pixels.length; i += 4) {
-    if (pixels[i + 3] < 32) continue;
-    red += pixels[i]; green += pixels[i + 1]; blue += pixels[i + 2]; count++;
-  }
-  if (!count) return [13, 24, 41] as const;
-  return [
-    Math.round((red / count) * 0.42),
-    Math.round((green / count) * 0.42),
-    Math.round((blue / count) * 0.42),
-  ] as const;
-}
-
-async function encodeShareCard(canvas: HTMLCanvasElement) {
-  for (const quality of [0.86, 0.78, 0.70, 0.62, 0.54, 0.46, 0.38]) {
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/webp", quality),
-    );
-    if (blob?.type === "image/webp" && blob.size <= MAX_FINAL_CARD_BYTES)
-      return fileFromBlob(blob, "ar3d-share-card.webp", "image/webp");
-  }
-  for (const quality of [0.82, 0.72, 0.62, 0.52, 0.42]) {
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", quality),
-    );
-    if (blob?.type === "image/jpeg" && blob.size <= MAX_FINAL_CARD_BYTES)
-      return fileFromBlob(blob, "ar3d-share-card.jpg", "image/jpeg");
-  }
-  throw new Error("Share card 550 KB ke andar optimize nahi hui. Chhoti ya less detailed image choose karein.");
-}
-
-async function prepareShareCard(file: File): Promise<PreparedCard> {
-  if (!IMAGE_TYPES.has(file.type)) throw new Error("Share poster JPG, PNG ya WebP me choose karein.");
-  if (!file.size || file.size > MAX_SOURCE_BYTES) throw new Error("Original poster 8 MB se chhota hona chahiye.");
-  const bitmap = await createImageBitmap(file);
-  try {
-    if (bitmap.width < 1 || bitmap.height < 1 || bitmap.width * bitmap.height > 100_000_000)
-      throw new Error("Poster dimensions supported range me nahi hain.");
-    const scale = Math.min(
-      1,
-      2560 / Math.max(bitmap.width, bitmap.height),
-      Math.sqrt(6_000_000 / (bitmap.width * bitmap.height)),
-    );
-    const width = Math.max(1, Math.round(bitmap.width * scale));
-    const height = Math.max(1, Math.round(bitmap.height * scale));
-    const footerHeight = Math.max(88, Math.round(width * 0.075));
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height + footerHeight;
-    const context = canvas.getContext("2d", { alpha: false });
-    if (!context) throw new Error("Share card canvas initialize nahi hua.");
-
-    // Preserve the entire source image. Branding lives in a separate footer.
-    context.drawImage(bitmap, 0, 0, width, height);
-    const [red, green, blue] = sampleFooterColor(bitmap);
-    const footer = context.createLinearGradient(0, height, width, height + footerHeight);
-    footer.addColorStop(0, `rgb(${red}, ${green}, ${blue})`);
-    footer.addColorStop(1, `rgb(${Math.max(4, red - 7)}, ${Math.max(10, green - 7)}, ${Math.max(18, blue - 5)})`);
-    context.fillStyle = footer;
-    context.fillRect(0, height, width, footerHeight);
-    context.fillStyle = "rgba(255,255,255,0.2)";
-    context.fillRect(0, height, width, 1);
-
-    const scaleFactor = width / 1200;
-    const centerX = Math.round(width / 2);
-    const centerY = Math.round(height + footerHeight / 2);
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-    if (width < 560) {
-      context.fillStyle = "#ffffff";
-      context.font = `900 ${Math.max(13, Math.round(18 * scaleFactor))}px Arial, sans-serif`;
-      context.fillText("AR3D STUDIO", centerX, centerY);
-    } else {
-      const markRadius = Math.max(14, Math.round(21 * scaleFactor));
-      const markX = centerX - Math.round(112 * scaleFactor);
-      context.beginPath();
-      context.arc(markX, centerY, markRadius, 0, Math.PI * 2);
-      context.fillStyle = "#0e3b30";
-      context.fill();
-      context.strokeStyle = "#51e5ac";
-      context.lineWidth = Math.max(1, 1.5 * scaleFactor);
-      context.stroke();
-      context.fillStyle = "#75f1bc";
-      context.font = `900 ${Math.max(15, Math.round(22 * scaleFactor))}px Arial, sans-serif`;
-      context.fillText("R", markX, centerY + 0.5);
-      context.textAlign = "left";
-      context.fillStyle = "#ffffff";
-      context.font = `900 ${Math.max(13, Math.round(21 * scaleFactor))}px Arial, sans-serif`;
-      context.fillText("AR3D STUDIO", centerX - Math.round(78 * scaleFactor), centerY - Math.round(3 * scaleFactor));
-      context.fillStyle = "rgba(255,255,255,0.72)";
-      context.font = `700 ${Math.max(8, Math.round(10 * scaleFactor))}px Arial, sans-serif`;
-      context.fillText("INTERACTIVE 3D EXPERIENCE", centerX - Math.round(78 * scaleFactor), centerY + Math.round(16 * scaleFactor));
-    }
-
-    const cardFile = await encodeShareCard(canvas);
-    return { sourceFile: file, cardFile };
-  } finally {
-    bitmap.close();
-  }
 }
 
 function revokeUrl(url: string) {
@@ -307,7 +198,7 @@ export default function ProjectShareBuilder() {
     setMessage("");
     setError("");
     try {
-      const prepared = await prepareShareCard(file);
+      const prepared = await prepareBrandedShareCard(file);
       if (activeExperience === "geo") setReuseBuildingPoster(false);
       setShareFiles((current) => ({ ...current, [activeExperience]: prepared }));
       setMessage("Share poster ka preview ready hai; original image unchanged rahegi aur AR3D footer alag hai.");
