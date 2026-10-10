@@ -11,11 +11,13 @@ import type {
 } from "@rekixo/3d-contracts";
 import { createFloorExploder, enhanceArchitecturalModel } from "./realism";
 import {
+  deriveFloorGeometryFromModel,
   floorFocusElevation,
   floorGeometryFor,
   resolveFloorGeometry,
   type FloorGeometryInput,
   type FloorGeometryLevel,
+  type ModelMeshBounds,
 } from "./floorGeometry";
 import {
   clampWalkPosition,
@@ -128,7 +130,7 @@ export function Viewer3D({
   const [exteriorView, setExteriorView] = useState<ExteriorView>("hero");
   const resetRef = useRef<(() => void) | null>(null);
   const floorRef = useRef<((floor: number | null) => void) | null>(null);
-  const clientFloorViewRef = useRef<((selection: number | "top" | null) => void) | null>(null);
+  const clientFloorViewRef = useRef<((selection: number | "roof" | "top" | null) => void) | null>(null);
   const sectionRef = useRef<((enabled: boolean) => void) | null>(null);
   const lightingRef = useRef<((night: boolean) => void) | null>(null);
   const explodeRef = useRef<((enabled: boolean) => void) | null>(null);
@@ -146,7 +148,10 @@ export function Viewer3D({
   const [errorMessage, setErrorMessage] = useState<string>();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedFloor, setSelectedFloor] = useState<number | null>(initialFloor);
-  const [clientFloorSelection, setClientFloorSelection] = useState<number | "top" | null>(null);
+  const [clientFloorSelection, setClientFloorSelection] = useState<number | "roof" | "top" | null>(null);
+  const [clientFloorIds, setClientFloorIds] = useState<number[]>([]);
+  const [clientRoofAvailable, setClientRoofAvailable] = useState(false);
+  const [clientFloorControlsReady, setClientFloorControlsReady] = useState(false);
   const [sectionEnabled, setSectionEnabled] = useState(interactionMode === "section");
   const [nightMode, setNightMode] = useState(false);
   const [exploded, setExploded] = useState(initialExploded);
@@ -163,6 +168,10 @@ export function Viewer3D({
     const hostElement: HTMLDivElement = candidate;
 
     let disposed = false;
+    setClientFloorIds([]);
+    setClientRoofAvailable(false);
+    setClientFloorControlsReady(false);
+    setClientFloorSelection(null);
     let abortModelLoad: (() => void) | undefined;
     let animationFrame = 0;
     let activeObject: THREE.Object3D | undefined;
@@ -215,6 +224,7 @@ export function Viewer3D({
     );
     let modelBounds: THREE.Box3 | undefined;
     let resolvedFloorGeometry: FloorGeometryLevel[] = [];
+    let resolvedRoofGeometry: FloorGeometryLevel | undefined;
     let walkColliders: THREE.Object3D[] = [];
 
     const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 2000);
@@ -324,9 +334,9 @@ export function Viewer3D({
     };
     resetRef.current = resetCamera;
 
-    const applyFloor = (floor: number | null) => {
+    const applyFloorLevel = (level: FloorGeometryLevel | null) => {
       if (!modelBounds) return;
-      if (floor === null) {
+      if (level === null) {
         renderer.clippingPlanes = sectionEnabledRef.current
           ? renderer.clippingPlanes.filter(
               (plane) => Math.abs(plane.normal.x) > 0.5,
@@ -335,8 +345,6 @@ export function Viewer3D({
         return;
       }
 
-      const level = floorGeometryFor(resolvedFloorGeometry, floor);
-      if (!level) return;
       const sectionPlanes = sectionEnabledRef.current
         ? renderer.clippingPlanes.filter(
             (plane) => Math.abs(plane.normal.x) > 0.5,
@@ -358,6 +366,15 @@ export function Viewer3D({
         controls.target.y = floorFocusElevation(level);
         controls.update();
       }
+    };
+
+    const applyFloor = (floor: number | null) => {
+      if (floor === null) {
+        applyFloorLevel(null);
+        return;
+      }
+      const level = floorGeometryFor(resolvedFloorGeometry, floor);
+      if (level) applyFloorLevel(level);
     };
 
     const sectionEnabledRef = { current: interactionMode === "section" };
@@ -777,13 +794,48 @@ export function Viewer3D({
       modelBounds = new THREE.Box3().setFromObject(object);
       modelProfile = applyModelProfileExterior(object, referenceVisual);
       referenceExterior = modelProfile?.exterior;
-      resolvedFloorGeometry = resolveFloorGeometry({
+      const configuredFloorGeometry = resolveFloorGeometry({
         floorIds: availableFloors,
         minY: modelBounds.min.y,
         maxY: modelBounds.max.y,
         scene: floorGeometry,
         profile: modelProfile?.floorGeometry,
       });
+      const meshBounds: ModelMeshBounds[] = [];
+      object.traverse((node) => {
+        if (!(node instanceof THREE.Mesh)) return;
+        const meshBox = new THREE.Box3().setFromObject(node);
+        if (meshBox.isEmpty()) return;
+        meshBounds.push({
+          minX: meshBox.min.x,
+          minY: meshBox.min.y,
+          minZ: meshBox.min.z,
+          maxX: meshBox.max.x,
+          maxY: meshBox.max.y,
+          maxZ: meshBox.max.z,
+        });
+      });
+      const modelDerivedFloorGeometry = deriveFloorGeometryFromModel({
+        modelBounds: {
+          minX: modelBounds.min.x,
+          minY: modelBounds.min.y,
+          minZ: modelBounds.min.z,
+          maxX: modelBounds.max.x,
+          maxY: modelBounds.max.y,
+          maxZ: modelBounds.max.z,
+        },
+        meshBounds,
+        floorIds: availableFloors,
+      });
+      resolvedFloorGeometry = configuredFloorGeometry.length
+        ? configuredFloorGeometry
+        : modelDerivedFloorGeometry.floors;
+      resolvedRoofGeometry = modelDerivedFloorGeometry.roof;
+      if (clientPresentation) {
+        setClientFloorIds(resolvedFloorGeometry.map((level) => level.floor));
+        setClientRoofAvailable(Boolean(resolvedRoofGeometry));
+        setClientFloorControlsReady(resolvedFloorGeometry.length > 0);
+      }
       if (referenceExterior) {
         scene.background = referenceExterior.daylightSky;
         sun.position.set(-16, 30, 16);
@@ -1042,15 +1094,16 @@ export function Viewer3D({
           return;
         }
 
-        const level = floorGeometryFor(resolvedFloorGeometry, selection);
+        const level = selection === "roof"
+          ? resolvedRoofGeometry
+          : floorGeometryFor(resolvedFloorGeometry, selection);
         if (!level) return;
 
-        applyFloor(selection);
-        setSelectedFloor(selection);
+        applyFloorLevel(level);
+        setSelectedFloor(typeof selection === "number" ? selection : null);
         setClientFloorSelection(selection);
 
-        // Frame the selected floor in a near-vertical plan view using the actual
-        // published model bounds and this project's configured floor elevations.
+        // Use detected/configured physical elevations, not equal-height slices.
         const bounds = modelBounds;
         const size = bounds.getSize(new THREE.Vector3());
         const center = bounds.getCenter(new THREE.Vector3());
@@ -1614,7 +1667,7 @@ export function Viewer3D({
         ))}
       </div>}
 
-      {clientPresentation && showClientFloorControls && mode === "model" && availableFloors.length > 0 && (
+      {clientPresentation && showClientFloorControls && mode === "model" && clientFloorControlsReady && clientFloorIds.length > 0 && (
         <nav className="client-floor-controls" aria-label="Select building floor">
           <span className="client-floor-controls__label">FLOOR</span>
           <button
@@ -1626,27 +1679,39 @@ export function Viewer3D({
           >
             All
           </button>
-          {availableFloors.map((floor) => {
-            const label = floor === 0 ? "Ground" : `${floor}F`;
+          {clientFloorIds.map((floor) => {
+            const label = floor === 0 ? "Ground" : floor < 0 ? `B${Math.abs(floor)}` : `${floor}F`;
             return (
               <button
                 type="button"
                 key={floor}
-                aria-label={floor === 0 ? "Show Ground Floor only" : `Show Floor ${floor} only`}
+                aria-label={floor === 0 ? "Show Ground Floor only" : floor < 0 ? `Show Basement ${Math.abs(floor)} only` : `Show Floor ${floor} only`}
                 aria-pressed={clientFloorSelection === floor}
                 className={clientFloorSelection === floor ? "client-floor-control client-floor-control--active" : "client-floor-control"}
-                title={floor === 0 ? "Ground floor, top view" : `Floor ${floor}, top view`}
+                title={floor === 0 ? "Ground floor, top view" : floor < 0 ? `Basement ${Math.abs(floor)}, top view` : `Floor ${floor}, top view`}
                 onClick={() => clientFloorViewRef.current?.(floor)}
               >
                 {label}
               </button>
             );
           })}
+          {clientRoofAvailable && (
+            <button
+              type="button"
+              aria-label="Show roof only"
+              aria-pressed={clientFloorSelection === "roof"}
+              className={clientFloorSelection === "roof" ? "client-floor-control client-floor-control--active" : "client-floor-control"}
+              title="Isolate the roof and upper structure using detected model bounds"
+              onClick={() => clientFloorViewRef.current?.("roof")}
+            >
+              Roof
+            </button>
+          )}
           <button
             type="button"
             aria-pressed={clientFloorSelection === "top"}
             className={clientFloorSelection === "top" ? "client-floor-control client-floor-control--active" : "client-floor-control"}
-            title="Top-down view of the complete model; roof is not isolated as a separate floor"
+            title="Top-down view of the complete model; this does not isolate a floor"
             onClick={() => clientFloorViewRef.current?.("top")}
           >
             Top
