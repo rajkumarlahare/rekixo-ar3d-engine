@@ -359,11 +359,6 @@
     border-radius: 15px;
   }
 
-  .geo-quality-badge {
-    left: 8px;
-    bottom: 8px;
-  }
-
   .geo-fallback-note {
     left: 8px;
     right: 8px;
