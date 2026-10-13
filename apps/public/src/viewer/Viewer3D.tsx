@@ -1133,12 +1133,16 @@ export function Viewer3D({
           : floorGeometryFor(resolvedFloorGeometry, selection);
         if (!level) return;
 
-        applyFloorLevel(level);
+        // Return the actual original meshes assigned to this floor and frame
+        // that geometry, not the whole building, in the top camera.
+        const selectedBounds = applyFloorLevel(level);
         setSelectedFloor(typeof selection === "number" ? selection : null);
         setClientFloorSelection(selection);
 
-        // Use detected/configured physical elevations, not equal-height slices.
-        const bounds = modelBounds;
+        const bounds =
+          selectedBounds && !selectedBounds.isEmpty()
+            ? selectedBounds
+            : modelBounds;
         const size = bounds.getSize(new THREE.Vector3());
         const center = bounds.getCenter(new THREE.Vector3());
         const fov = 34;
