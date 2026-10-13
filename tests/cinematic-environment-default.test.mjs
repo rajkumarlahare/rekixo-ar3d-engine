@@ -274,13 +274,13 @@ test("customer exterior exposes an accessible time-of-day control tied to the so
   const sky = read("apps/public/src/viewer/exteriorSky.ts");
   const styles = read("apps/public/src/styles.css");
 
-  assert.match(sky, /setTimeOfDay\\(hours: number\\)/);
-  assert.match(viewer, /timeOfDayRef\\.current = \\(hours\\) => sky\\?\\.setTimeOfDay\\(hours\\)/);
-  assert.match(viewer, /clientPresentation && experienceMode !== "interior" && <div className="viewer-time-of-day"/);
-  assert.match(viewer, /aria-label="Exterior lighting time"/);
-  assert.match(viewer, /lightingRef\\.current\\?\\.\\(false\\)/);
-  assert.match(viewer, /timeOfDayRef\\.current\\?\\.\\(hours\\)/);
-  assert.match(viewer, /sun\\.position\\.copy\\(solar\\.direction\\)/);
-  assert.match(styles, /\\.viewer-time-of-day/);
-  assert.match(styles, /\\.viewer-time-of-day input\\[type="range"\\]/);
+  assert.ok(sky.includes("setTimeOfDay(hours: number)"));
+  assert.ok(viewer.includes("timeOfDayRef.current = (hours) => sky?.setTimeOfDay(hours)"));
+  assert.ok(viewer.includes('clientPresentation && experienceMode !== "interior" && <div className="viewer-time-of-day"'));
+  assert.ok(viewer.includes('aria-label="Exterior lighting time"'));
+  assert.ok(viewer.includes("lightingRef.current?.(false)"));
+  assert.ok(viewer.includes("timeOfDayRef.current?.(hours)"));
+  assert.ok(viewer.includes("sun.position.copy(solar.direction)"));
+  assert.ok(styles.includes(".viewer-time-of-day"));
+  assert.ok(styles.includes('.viewer-time-of-day input[type="range"]'));
 });
