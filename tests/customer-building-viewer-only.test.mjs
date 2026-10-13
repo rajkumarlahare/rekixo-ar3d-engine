@@ -86,7 +86,11 @@ test("customer floor selection uses source visibility modes and frames the selec
   assert.match(viewer, /renderer\.clippingPlanes = \[/);
   assert.match(viewer, /floorGeometryFor\(resolvedFloorGeometry, selection\)/);
   assert.match(viewer, /floorFocusElevation\(level\)/);
-  assert.match(viewer, /const fov = 34/);\n  assert.match(viewer, /floorVisibilityController\.showFloor\(level, clientFloorReviewModeRef\.current\)/);\n  assert.match(viewer, /aria-label="Stacked floor view"/);\n  assert.match(viewer, /aria-label="Isolate selected floor"/);\n  assert.match(viewer, /stackedView \? size\.y \/ \(2 \* verticalTangent\) : 0/);
+  assert.match(viewer, /const fov = 34/);
+  assert.match(viewer, /floorVisibilityController\.showFloor\(level, clientFloorReviewModeRef\.current\)/);
+  assert.match(viewer, /aria-label="Stacked floor view"/);
+  assert.match(viewer, /aria-label="Isolate selected floor"/);
+  assert.match(viewer, /stackedView \? size\.y \/ \(2 \* verticalTangent\) : 0/);
   assert.match(viewer, /duration: 750/);
   assert.match(viewer, /clientFloorViewRef\.current = \(selection\)/);
   assert.match(viewer, /title="Top-down view of the complete model; this does not isolate a floor"/);
