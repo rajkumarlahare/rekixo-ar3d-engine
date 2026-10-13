@@ -143,6 +143,7 @@ export type PublicSiteElementKind =
   | "plant"
   | "gate"
   | "outdoor-light"
+  | "water"
   | "column"
   | "beam"
   | "slab"
