@@ -20,9 +20,14 @@ const camera = await import(compile("apps/public/src/viewer/exteriorCamera.ts"))
 const source = await import(compile("apps/public/src/viewer/sourcePresentation.ts"));
 const runtimeUrl = compile("apps/public/src/viewer/publicRuntimeContext.ts");
 const runtime = await import(runtimeUrl);
+const surfaceUrl = compile("apps/public/src/viewer/proceduralSurfaceMaterials.ts");
+const presentationUrl = compile("apps/public/src/viewer/presentationEnvironment.ts", {
+  "./proceduralSurfaceMaterials": surfaceUrl,
+});
 const environment = await import(compile("apps/public/src/viewer/siteEnvironment.ts", {
   "./publicRuntimeContext": runtimeUrl,
-  "./presentationEnvironment": compile("apps/public/src/viewer/presentationEnvironment.ts"),
+  "./presentationEnvironment": presentationUrl,
+  "./proceduralSurfaceMaterials": surfaceUrl,
 }));
 
 test("client modules exclude disabled and absent scenes", () => {
@@ -53,14 +58,59 @@ test("exterior views keep every measured building corner in portrait and landsca
     }
   }
 });
-test("source-backed environments retain instancing and suppress generic dressing", () => {
+test("source-backed environments retain instancing while the presentation root remains a safe site layer", () => {
   runtime.setPublicRuntimeSiteElements([{ id: "tree-1", kind: "tree", x: 0, y: 0, z: 4, width: 2, depth: 2, height: 4, rotation: 0, color: "#228844" }]);
   const result = environment.createArchitecturalSiteEnvironment(new THREE.Box3(new THREE.Vector3(-4, 0, -4), new THREE.Vector3(4, 20, 4)), {}, false, true);
   assert.equal(result.root.userData.sourceBackedSiteElementCount, 1);
   assert.ok(result.root.children.some((mesh) => mesh.isInstancedMesh));
-  assert.notEqual(result.root.userData.presentationOnly, true);
+  assert.equal(result.root.userData.presentationOnly, true);
+  assert.equal(result.root.userData.nonAuthoritative, true);
+  assert.ok(result.root.children.some((mesh) => mesh.name === "Site tree trunks"));
   result.dispose(); runtime.clearPublicRuntimeSiteElements();
 });
+test("reviewed water features render as translucent animated physical surfaces", () => {
+  const water = {
+    id: "reviewed-pool",
+    kind: "water",
+    x: 0,
+    y: 0,
+    z: 0,
+    width: 6,
+    depth: 3,
+    height: 0.04,
+    rotation: 0,
+    color: "#4c9cc5",
+  };
+  runtime.setPublicRuntimeSiteElements([water]);
+  const result = environment.createArchitecturalSiteEnvironment(
+    new THREE.Box3(new THREE.Vector3(-4, 0, -4), new THREE.Vector3(4, 20, 4)),
+    {},
+    false,
+    true,
+    0,
+    "always",
+    true,
+  );
+  const group = result.root.children.find((node) => node.name === "Reviewed site water feature");
+  assert.ok(group);
+  const mesh = group.children.find((node) => node.isMesh && node.userData.sourceSiteElementId === "reviewed-pool");
+  assert.ok(mesh);
+  assert.ok(mesh.material.isMeshPhysicalMaterial);
+  assert.equal(mesh.material.transparent, true);
+  assert.ok(mesh.material.clearcoat >= 0.9);
+  mesh.material.onBeforeCompile({
+    uniforms: {},
+    vertexShader: "#include <common>\\nvoid main() {\\n#include <begin_vertex>\\n}",
+    fragmentShader: "",
+  }, {});
+  const before = mesh.material.userData.elapsed;
+  result.update(0.05);
+  assert.ok(mesh.material.userData.elapsed > before);
+  assert.ok(mesh.material.userData.waterShader.uniforms.uRekixoWaterTime.value > before);
+  result.dispose();
+  runtime.clearPublicRuntimeSiteElements();
+});
+
 test("generic exterior dressing is opt-in and clearly non-authoritative", () => {
   const bounds = new THREE.Box3(new THREE.Vector3(-4, 0, -4), new THREE.Vector3(4, 20, 4));
   const plain = environment.createArchitecturalSiteEnvironment(bounds, {}, false);

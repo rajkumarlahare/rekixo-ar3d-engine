@@ -51,6 +51,29 @@ function cylinder(
   return mesh;
 }
 
+function addWater(root: T.Object3D, item: SiteElement) {
+  const surface = new T.Mesh(
+    new T.PlaneGeometry(Math.max(item.width, 0.2), Math.max(item.depth, 0.2), 12, 12),
+    new T.MeshPhysicalMaterial({
+      color: item.color,
+      roughness: 0.14,
+      metalness: 0.02,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      side: T.DoubleSide,
+      clearcoat: 1,
+      clearcoatRoughness: 0.12,
+      ior: 1.333,
+    }),
+  );
+  surface.name = "Reviewed water feature";
+  surface.rotation.x = -Math.PI / 2;
+  surface.position.y = Math.max(0.025, item.height);
+  surface.receiveShadow = true;
+  root.add(surface);
+}
+
 function addArea(root: T.Object3D, item: SiteElement) {
   box(
     root,
@@ -201,6 +224,9 @@ export function addSiteElementVisual(
       break;
     case "outdoor-light":
       addOutdoorLight(root, item);
+      break;
+    case "water":
+      addWater(root, item);
       break;
   }
 }

@@ -4,10 +4,11 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
-import type {
-  BuildingPresentationManifestV1,
-  CameraPreset3D,
-  PublicWalkthroughGraph,
+import {
+  DEFAULT_BUILDING_ENVIRONMENT_PROFILE_V1,
+  type BuildingPresentationManifestV1,
+  type CameraPreset3D,
+  type PublicWalkthroughGraph,
 } from "@rekixo/3d-contracts";
 import { createFloorExploder, enhanceArchitecturalModel } from "./realism";
 import {
@@ -31,7 +32,6 @@ import {
   type WalkDirection,
 } from "./walkthrough";
 import WalkGraphPanel from "./WalkGraphPanel";
-import { createArchitecturalSiteEnvironment } from "./siteEnvironment";
 import {
   applyModelProfileExterior,
   loadModelProfileMaterialEnhancer,
@@ -49,6 +49,7 @@ import {
   presentationStartsAtNight,
 } from "./buildingPresentationRuntime";
 import { createExteriorSky } from "./exteriorSky";
+import { createPremiumPresentationMotion } from "./premiumPresentationMotion";
 import { exteriorCameraView, type ExteriorView } from "./exteriorCamera";
 import { createPreviewBuilding } from "./viewerPreview";
 import { disposeViewerObject } from "./viewerResources";
@@ -188,9 +189,15 @@ export function Viewer3D({
           return undefined;
         })
       : Promise.resolve(undefined);
+    const siteEnvironmentModulePromise = import("./siteEnvironment").catch((error) => {
+      console.warn("Customer site environment module could not be loaded.", error);
+      return undefined;
+    });
     let homeView: HomeView | undefined;
     let floorExploder: ReturnType<typeof createFloorExploder> | undefined;
-    let siteEnvironment: ReturnType<typeof createArchitecturalSiteEnvironment> | undefined;
+    let siteEnvironment: ReturnType<typeof import("./siteEnvironment").createArchitecturalSiteEnvironment> | undefined;
+    let presentationMotion: ReturnType<typeof createPremiumPresentationMotion> | undefined;
+    let siteInteractionController: ReturnType<typeof import("./siteInteractionController").createSiteInteractionController> | undefined;
     let modelProfile: ModelProfileRuntime | undefined;
     let projectExperience: ExperienceRuntime | undefined;
     let referenceExterior: ModelProfileRuntime["exterior"];
@@ -221,12 +228,22 @@ export function Viewer3D({
 
     const mobile = isMobileDevice();
     const presentationAppearance = buildingPresentation?.appearance;
+    // Historical V1 releases predate environment profiles. Give them the same
+    // safe default at runtime without rewriting immutable release manifests.
+    const environmentProfile = buildingPresentation?.environment.profile ??
+      (buildingPresentation?.environment.mode === "minimal"
+        ? undefined
+        : DEFAULT_BUILDING_ENVIRONMENT_PROFILE_V1);
+    const environmentMobileQuality =
+      mobile || environmentProfile?.quality === "performance";
     const referenceVisual =
       visualPreset === "reference-render" ||
       presentationAppearance?.referenceVisual === true;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const scene = new THREE.Scene();
-    const sky = clientPresentation ? createExteriorSky(reducedMotion) : undefined;
+    const sky = clientPresentation
+      ? createExteriorSky(reducedMotion, environmentProfile?.motion.clouds === "drifting")
+      : undefined;
     if (sky) scene.add(sky.root);
     scene.background = new THREE.Color(
       presentationAppearance?.background ?? (referenceVisual ? "#65798f" : "#8faec8"),
@@ -804,7 +821,10 @@ export function Viewer3D({
     lightingRef.current = applyLighting;
 
     const mountObject = async (object: THREE.Object3D, usePreset: boolean) => {
-      const floorVisibilityModule = await floorVisibilityModulePromise;
+      const [floorVisibilityModule, siteEnvironmentModule] = await Promise.all([
+        floorVisibilityModulePromise,
+        siteEnvironmentModulePromise,
+      ]);
       if (disposed) {
         disposeViewerObject(object);
         return;
@@ -957,22 +977,60 @@ export function Viewer3D({
         controls.maxDistance = Math.max(radiusForView * 5.5, 28);
       }
 
+      presentationMotion?.dispose();
+      presentationMotion = undefined;
+      siteInteractionController?.dispose();
+      siteInteractionController = undefined;
       siteEnvironment?.dispose();
       if (siteEnvironment) scene.remove(siteEnvironment.root);
       let includedSourceSite = false;
       object.traverse((node) => {
         if (node.userData.sourceGeometry?.siteGeometry === "included-in-source") includedSourceSite = true;
       });
-      siteEnvironment = createArchitecturalSiteEnvironment(
-        bounds,
-        renderer,
-        mobile,
-        clientPresentation &&
-          (buildingPresentation?.environment.genericDressing ?? true) &&
-          !includedSourceSite,
-        floorGeometry.find((level) => level.floor === 0 && Number.isFinite(level.elevationM))?.elevationM ?? modelProfile?.floorGeometry?.find((level) => level.floor === 0)?.elevationM,
-      );
-      scene.add(siteEnvironment.root);
+      const additiveBaseline = environmentProfile?.baseline === "always";
+      if (siteEnvironmentModule) {
+        siteEnvironment = siteEnvironmentModule.createArchitecturalSiteEnvironment(
+          bounds,
+          renderer,
+          environmentMobileQuality,
+          clientPresentation &&
+            (additiveBaseline || (!environmentProfile && buildingPresentation?.environment.mode !== "minimal" && (buildingPresentation?.environment.genericDressing ?? true))) &&
+            (!includedSourceSite || additiveBaseline),
+          floorGeometry.find((level) => level.floor === 0 && Number.isFinite(level.elevationM))?.elevationM ?? modelProfile?.floorGeometry?.find((level) => level.floor === 0)?.elevationM,
+          additiveBaseline ? "always" : "empty-only",
+          environmentProfile?.preset === "cinematic-exterior" && environmentProfile.motion.water !== "off",
+        );
+        scene.add(siteEnvironment.root);
+        if (
+          clientPresentation &&
+          environmentProfile?.preset === "cinematic-exterior" &&
+          environmentProfile.motion.vegetation !== "off"
+        ) {
+          presentationMotion = createPremiumPresentationMotion(siteEnvironment.root, {
+            reducedMotion,
+            mobile: environmentMobileQuality,
+          });
+        }
+        if (
+          clientPresentation &&
+          environmentProfile?.preset === "cinematic-exterior"
+        ) {
+          void import("./siteInteractionController")
+            .then(({ createSiteInteractionController }) => {
+              if (disposed || activeObject !== object || !siteEnvironment) return;
+              siteInteractionController?.dispose();
+              siteInteractionController = createSiteInteractionController(
+                siteEnvironment.root,
+                camera,
+                renderer.domElement,
+                reducedMotion,
+              );
+            })
+            .catch((error) => {
+              console.warn("Customer site interaction module could not be loaded.", error);
+            });
+        }
+      }
       if (clientPresentation) {
         const span = Math.max(sizeForView.x, sizeForView.y, sizeForView.z, 1);
         sun.position.copy(centerForView).add(new THREE.Vector3(span * -0.7, span * 1.2, span));
@@ -1447,6 +1505,9 @@ export function Viewer3D({
 
       const delta = Math.min(clock.getDelta(), 0.05);
       sky?.update(delta, camera);
+      presentationMotion?.update(delta);
+      siteEnvironment?.update(delta);
+      siteInteractionController?.update(delta);
 
       if (cameraTween && !walkActive) {
         const elapsed = performance.now() - cameraTween.start;
@@ -1497,6 +1558,10 @@ export function Viewer3D({
       controls.removeEventListener("start", cancelCameraTween);
       controls.dispose();
       sky?.dispose();
+      presentationMotion?.dispose();
+      presentationMotion = undefined;
+      siteInteractionController?.dispose();
+      siteInteractionController = undefined;
       renderer.domElement.removeEventListener("webglcontextlost", handleContextLost);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);

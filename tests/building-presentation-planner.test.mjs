@@ -9,10 +9,23 @@ const rawSource = fs.readFileSync(
 );
 
 async function loadPlanner() {
-  const executable = rawSource.replace(
-    /import \{\s*DEFAULT_SCENE_APPEARANCE,[\s\S]*?\} from "\.\/domain";/,
-    `const DEFAULT_SCENE_APPEARANCE = { exposure: 1, sunIntensity: 3.2, hemisphereIntensity: 2.8, background: "#dbe3e7", referenceVisual: true, nightMode: false };`,
-  );
+  const executable = rawSource
+    .replace(
+      /import \{\s*DEFAULT_BUILDING_ENVIRONMENT_PROFILE_V1,[\s\S]*?\} from "@rekixo\/3d-contracts";/,
+      `const DEFAULT_BUILDING_ENVIRONMENT_PROFILE_V1 = {
+        format: "rekixo-environment-profile",
+        version: 1,
+        preset: "cinematic-exterior",
+        quality: "auto",
+        baseline: "always",
+        siteDataPolicy: "additive",
+        motion: { clouds: "drifting", vegetation: "subtle", water: "opt-in", traffic: "opt-in" },
+      };`,
+    )
+    .replace(
+      /import \{\s*DEFAULT_SCENE_APPEARANCE,[\s\S]*?\} from "\.\/domain";/,
+      `const DEFAULT_SCENE_APPEARANCE = { exposure: 1, sunIntensity: 3.2, hemisphereIntensity: 2.8, background: "#dbe3e7", referenceVisual: true, nightMode: false };`,
+    );
   const result = ts.transpileModule(executable, {
     fileName: "buildingPresentationPlanner.ts",
     reportDiagnostics: true,
@@ -160,7 +173,16 @@ test("R3 planner produces deterministic source-preserving presentation intellige
   assert.equal(first.model.canonicalSha256, "c".repeat(64));
   assert.equal(first.appearance.mood, "evening");
   assert.equal(first.environment.mode, "source-backed");
-  assert.equal(first.environment.genericDressing, false);
+  assert.equal(first.environment.genericDressing, true);
+  assert.deepEqual(first.environment.profile, {
+    format: "rekixo-environment-profile",
+    version: 1,
+    preset: "cinematic-exterior",
+    quality: "auto",
+    baseline: "always",
+    siteDataPolicy: "additive",
+    motion: { clouds: "drifting", vegetation: "subtle", water: "opt-in", traffic: "opt-in" },
+  });
   assert.equal(first.cameras.shots.length, 5);
   assert.deepEqual(first.cameras.shots.map((shot) => shot.kind), ["hero", "front", "corner", "entrance", "aerial"]);
   assert.equal(first.interactions.floorExplorer, true);

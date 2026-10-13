@@ -16,6 +16,42 @@ export type BuildingEnvironmentModeV1 =
   | "presentation-default"
   | "minimal";
 
+export type BuildingEnvironmentQualityV1 =
+  | "auto"
+  | "cinematic"
+  | "balanced"
+  | "performance";
+
+export interface BuildingEnvironmentProfileV1 {
+  format: "rekixo-environment-profile";
+  version: 1;
+  preset: "cinematic-exterior" | "minimal";
+  quality: BuildingEnvironmentQualityV1;
+  baseline: "always" | "minimal";
+  siteDataPolicy: "additive";
+  motion: {
+    clouds: "drifting" | "off";
+    vegetation: "subtle" | "off";
+    water: "opt-in" | "off";
+    traffic: "opt-in" | "off";
+  };
+}
+
+export const DEFAULT_BUILDING_ENVIRONMENT_PROFILE_V1: BuildingEnvironmentProfileV1 = {
+  format: "rekixo-environment-profile",
+  version: 1,
+  preset: "cinematic-exterior",
+  quality: "auto",
+  baseline: "always",
+  siteDataPolicy: "additive",
+  motion: {
+    clouds: "drifting",
+    vegetation: "subtle",
+    water: "opt-in",
+    traffic: "opt-in",
+  },
+};
+
 export interface BuildingVec3V1 {
   x: number;
   y: number;
@@ -81,6 +117,8 @@ export interface BuildingPresentationManifestV1 {
     mode: BuildingEnvironmentModeV1;
     sourceBacked: boolean;
     genericDressing: boolean;
+    /** Additive, release-bound exterior policy. Optional only for old immutable V1 releases. */
+    profile?: BuildingEnvironmentProfileV1;
   };
   cameras: {
     defaultShotId: string;
@@ -244,6 +282,27 @@ export function assertBuildingPresentationManifestV1(
     (environment.mode === "source-backed" && !environment.sourceBacked)
   )
     throw Error("Invalid Building environment policy.");
+
+  if (environment.profile !== undefined) {
+    const profile = environment.profile;
+    if (
+      !profile ||
+      profile.format !== "rekixo-environment-profile" ||
+      profile.version !== 1 ||
+      !["cinematic-exterior", "minimal"].includes(profile.preset) ||
+      !["auto", "cinematic", "balanced", "performance"].includes(profile.quality) ||
+      !["always", "minimal"].includes(profile.baseline) ||
+      profile.siteDataPolicy !== "additive" ||
+      !profile.motion ||
+      !["drifting", "off"].includes(profile.motion.clouds) ||
+      !["subtle", "off"].includes(profile.motion.vegetation) ||
+      !["opt-in", "off"].includes(profile.motion.water) ||
+      !["opt-in", "off"].includes(profile.motion.traffic) ||
+      (profile.preset === "minimal" && profile.baseline !== "minimal") ||
+      (profile.preset === "cinematic-exterior" && profile.baseline !== "always")
+    )
+      throw Error("Invalid Building environment profile.");
+  }
 
   const cameras = manifest.cameras;
   if (

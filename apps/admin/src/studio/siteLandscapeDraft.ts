@@ -42,6 +42,7 @@ const DEFAULTS: Record<
     height: 3.2,
     color: "#4f5357",
   },
+  water: { width: 5, depth: 3, height: 0.04, color: "#4c9cc5" },
 };
 
 function stableKey(value: string) {
@@ -97,7 +98,7 @@ function dimensionsFromBounds(
 }
 
 function areaKind(kind: LandscapeSiteElementKind) {
-  return ["garden", "lawn", "path", "road", "parking"].includes(kind);
+  return ["garden", "lawn", "path", "road", "parking", "water"].includes(kind);
 }
 
 function pointCentre(

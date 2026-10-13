@@ -1,9 +1,10 @@
-import type {
-  BuildingBoundsV1,
-  BuildingCameraKindV1,
-  BuildingCameraShotV1,
-  BuildingPresentationManifestV1,
-  CanonicalModelManifestV1,
+import {
+  DEFAULT_BUILDING_ENVIRONMENT_PROFILE_V1,
+  type BuildingBoundsV1,
+  type BuildingCameraKindV1,
+  type BuildingCameraShotV1,
+  type BuildingPresentationManifestV1,
+  type CanonicalModelManifestV1,
 } from "@rekixo/3d-contracts";
 import {
   DEFAULT_SCENE_APPEARANCE,
@@ -232,12 +233,14 @@ export function buildBuildingPresentationManifestV1(
       ? {
           mode: "source-backed",
           sourceBacked: true,
-          genericDressing: false,
+          genericDressing: true,
+          profile: structuredClone(DEFAULT_BUILDING_ENVIRONMENT_PROFILE_V1),
         }
       : {
           mode: "presentation-default",
           sourceBacked: false,
           genericDressing: true,
+          profile: structuredClone(DEFAULT_BUILDING_ENVIRONMENT_PROFILE_V1),
         },
     cameras: {
       defaultShotId: "hero",
