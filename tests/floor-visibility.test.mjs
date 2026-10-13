@@ -17,7 +17,7 @@ test("customer floor isolation uses original mesh visibility and not vertical cl
 test("cross-storey meshes remain intact instead of being cut", () => {
   assert.match(visibility, /Keep structural\/facade objects spanning several storeys intact/);
   assert.match(visibility, /height > Math\.max\(top - bottom, 0\.1\) \* 1\.5/);
-  assert.match(visibility, /record\.mesh\.visible = record\.originalVisible/);
+  assert.match(visibility, /record\.mesh\.material = ghostMaterialFor\(record\)/);\n  assert.match(visibility, /opacity = Math\.min\(materialWithOpacity\.opacity, 0\.16\)/);\n  assert.match(visibility, /record\.mesh\.material = record\.originalMaterial/);
 });
 
 test("explicit floor names and source geometry can map imported meshes to levels", () => {
