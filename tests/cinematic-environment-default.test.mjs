@@ -98,8 +98,12 @@ test("generated vegetation motion is wired to the customer render loop and respe
 
   assert.match(motion, /environmentRoot\.userData\.presentationOnly !== true/);
   assert.match(motion, /options\.reducedMotion/);
-  assert.match(motion, /object\.name === "Site tree"/);
-  assert.match(motion, /object\.name === "Site plant"/);
+  assert.match(motion, /object\.name === "Site tree foliage"/);
+  assert.match(motion, /object\.name === "Site plant foliage"/);
+  assert.match(motion, /uRekixoWindTime/);
+  assert.match(motion, /uRekixoWindStrength/);
+  assert.match(motion, /#ifdef USE_INSTANCING/);
+  assert.doesNotMatch(motion, /target\.object\.rotation\.(x|z) =/);
   assert.match(viewer, /createPremiumPresentationMotion\(siteEnvironment\.root/);
   assert.match(viewer, /presentationMotion\?\.update\(delta\)/);
   assert.match(viewer, /presentationMotion\?\.dispose\(\)/);
@@ -148,6 +152,27 @@ test("customer exterior sky animates a warm sunrise with layered clouds and sync
   assert.match(viewer, /sun\.color\.lerpColors\(dawnSunColor, daySunColor, solar\.daylight\)/);
   assert.match(viewer, /scene\.fog\.color\.lerpColors\(dawnFogColor, dayFogColor, solar\.daylight\)/);
   assert.match(viewer, /if \(sky && !currentNight\)/);
+});
+
+test("customer exterior supports release-bound urban, suburban, farm, and hillside context presets", () => {
+  const contract = read("packages/contracts/src/building-presentation-manifest-v1.ts");
+  const fallback = read("apps/public/src/viewer/presentationEnvironment.ts");
+  const site = read("apps/public/src/viewer/siteEnvironment.ts");
+  const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
+
+  assert.match(contract, /export type BuildingEnvironmentLandscapeV1/);
+  assert.match(contract, /landscape\?: BuildingEnvironmentLandscapeV1/);
+  assert.match(contract, /landscape: "auto"/);
+  assert.match(contract, /"rural-farm", "hillside"/);
+  assert.match(fallback, /export type PresentationLandscapePreset/);
+  assert.match(fallback, /function addFarmFields/);
+  assert.match(fallback, /function addHillsideBackdrop/);
+  assert.match(fallback, /function addUrbanContext/);
+  assert.match(fallback, /Presentation farm field rows/);
+  assert.match(fallback, /landscape !== "rural-farm"/);
+  assert.match(site, /landscapePreset: PresentationLandscapePreset = "auto"/);
+  assert.match(site, /landscapePreset !== "hillside" && !hasRoad/);
+  assert.match(viewer, /environmentProfile\?\.landscape \?\? "auto"/);
 });
 
 const require = createRequire(import.meta.url);
