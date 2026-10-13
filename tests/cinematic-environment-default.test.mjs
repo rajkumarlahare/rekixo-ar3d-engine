@@ -116,18 +116,18 @@ test("customer camera and generated outdoor surfaces stay stable while zooming a
   const fallback = read("apps/public/src/viewer/presentationEnvironment.ts");
 
   assert.match(camera, /export function updateCameraDepthRange/);
-  assert.match(camera, /camera\\.near = near/);
-  assert.match(camera, /camera\\.far = far/);
-  assert.match(viewer, /updateCameraDepthRange\\(camera, controls\\.target, modelBounds\\)/);
+  assert.match(camera, /camera\.near = near/);
+  assert.match(camera, /camera\.far = far/);
+  assert.match(viewer, /updateCameraDepthRange\(camera, controls\.target, modelBounds\)/);
   assert.match(surfaces, /configureProceduralSurfaceTextures/);
-  assert.match(surfaces, /texture\\.anisotropy = configuredAnisotropy/);
-  assert.match(surfaces, /texture\\.repeat\\.set\\(4, 4\\)/);
+  assert.match(surfaces, /texture\.anisotropy = configuredAnisotropy/);
+  assert.match(surfaces, /texture\.repeat\.set\(4, 4\)/);
   assert.match(site, /includeGround: !sourceSiteIncluded/);
   assert.match(site, /includeSurroundingGround: !sourceSiteIncluded/);
-  assert.match(site, /configureProceduralSurfaceTextures\\(renderer\\)/);
-  assert.match(fallback, /includeSurroundingGround\\?: boolean/);
-  assert.match(fallback, /if \\(includeGround\\)/);
-  assert.match(fallback, /if \\(includeSurroundingGround\\)/);
+  assert.match(site, /configureProceduralSurfaceTextures\(renderer\)/);
+  assert.match(fallback, /includeSurroundingGround\?: boolean/);
+  assert.match(fallback, /if \(includeGround\)/);
+  assert.match(fallback, /if \(includeSurroundingGround\)/);
 });
 
 const require = createRequire(import.meta.url);
