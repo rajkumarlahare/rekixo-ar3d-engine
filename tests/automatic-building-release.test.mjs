@@ -6,6 +6,7 @@ import {
   gltfSceneBounds,
 } from "../workers/automatic-building-release.mjs";
 import { sanitizeBuildingPresentationForRelease } from "../workers/building-presentation-policy.mjs";
+import { publicStudioSnapshot } from "../workers/studio-draft-validation.mjs";
 
 const MODEL_SHA = "a".repeat(64);
 
@@ -63,6 +64,48 @@ test("canonical GLB presentation bounds fail closed without accessor min/max", (
   assert.equal(gltfSceneBounds(gltf), null);
 });
 
+test("public Studio snapshot preserves the chosen landscape preset for release generation", () => {
+  const snapshot = publicStudioSnapshot({
+    schema: 1,
+    id: "project-landscape",
+    slug: "project-landscape",
+    name: "Landscape project",
+    updated: "2026-10-13T00:00:00.000Z",
+    assets: [],
+    releases: [],
+    scene: {
+      scale: 1,
+      landscapePreset: "hillside",
+      floors: [],
+      rooms: [],
+      furniture: [],
+      siteElements: [],
+      walls: [],
+      openings: [],
+    },
+  });
+  assert.equal(snapshot.scene.landscapePreset, "hillside");
+});
+
+test("automatic Building presentation rejects unknown landscape presets", async () => {
+  const draft = { scene: { modelTransform: { rotationY: 0 }, landscapePreset: "oceanfront" } };
+  await assert.rejects(
+    () =>
+      buildAutomaticBuildingPresentation({
+        canonical: {
+          modelArtifact: { sha256: MODEL_SHA },
+          bounds: {
+            min: { x: -1, y: 0, z: -1 },
+            max: { x: 1, y: 3, z: 1 },
+          },
+        },
+        draft,
+        sourceEvidence: { sourcePackSourceIds: [], sourceClaimIds: [] },
+      }),
+    /Invalid customer landscape preset/,
+  );
+});
+
 test("automatic Building presentation is release-valid and source-preserving", async () => {
   const sourceEvidence = {
     sourcePackSourceIds: ["source-dwg", "source-fbx"],
@@ -77,6 +120,7 @@ test("automatic Building presentation is release-valid and source-preserving", a
   };
   const draft = {
     scene: {
+      landscapePreset: "rural-farm",
       floors: [
         { id: "floor_0", name: "Ground", elevation: 0 },
         { id: "floor_1", name: "Floor 1", elevation: 3.2 },
@@ -146,6 +190,9 @@ test("automatic Building presentation is release-valid and source-preserving", a
   assert.equal(presentation.appearance.mood, "evening");
   assert.equal(presentation.environment.mode, "source-backed");
   assert.equal(presentation.environment.genericDressing, false);
+  assert.equal(presentation.environment.profile.landscape, "rural-farm");
+  assert.equal(presentation.environment.profile.preset, "cinematic-exterior");
+  assert.equal(presentation.environment.profile.siteDataPolicy, "additive");
   assert.equal(presentation.materials.overrides[0].source, "operator");
   assert.deepEqual(
     presentation.cameras.shots.map((shot) => shot.kind),
@@ -164,5 +211,16 @@ test("automatic Building presentation is release-valid and source-preserving", a
       modelSha256: MODEL_SHA,
       sourceEvidence,
     }),
+  );
+
+  const invalidProfile = structuredClone(presentation);
+  invalidProfile.environment.profile.landscape = "oceanfront";
+  assert.throws(
+    () =>
+      sanitizeBuildingPresentationForRelease(invalidProfile, {
+        modelSha256: MODEL_SHA,
+        sourceEvidence,
+      }),
+    /environment profile/,
   );
 });

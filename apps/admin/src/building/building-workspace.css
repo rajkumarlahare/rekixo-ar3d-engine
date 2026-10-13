@@ -189,3 +189,77 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+.building-workspace__environment {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+  align-items: center;
+  gap: 24px;
+  padding: 20px;
+}
+
+.building-workspace__environment > div:first-child {
+  display: grid;
+  gap: 8px;
+}
+
+.building-workspace__environment h3 {
+  margin: 0;
+  color: #e7eef9;
+  font-size: 16px;
+}
+
+.building-workspace__environment p {
+  margin: 0;
+  color: #f4b942;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.building-workspace__environment span,
+.building-workspace__environment small,
+.building-workspace__environment-unavailable {
+  color: #8c9bb4;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.building-workspace__environment label {
+  display: grid;
+  gap: 8px;
+  color: #becbe0;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.building-workspace__environment select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #334766;
+  border-radius: 10px;
+  background: #0a1527;
+  color: #eaf0fa;
+  padding: 0 12px;
+}
+
+.building-workspace__environment select:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.building-workspace__environment-message {
+  color: #8bdbb2 !important;
+}
+
+.building-workspace__environment-error {
+  color: #ff9999 !important;
+}
+
+@media (max-width: 700px) {
+  .building-workspace__environment {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}

@@ -118,6 +118,29 @@ export function sanitizeBuildingPresentationForRelease(
     (environment.mode === "source-backed" && !environment.sourceBacked))
     throw Error("Invalid Building presentation environment policy.");
 
+  if (environment.profile !== undefined) {
+    const profile = environment.profile;
+    if (
+      !object(profile) ||
+      profile.format !== "rekixo-environment-profile" ||
+      profile.version !== 1 ||
+      !["cinematic-exterior", "minimal"].includes(profile.preset) ||
+      !["auto", "cinematic", "balanced", "performance"].includes(profile.quality) ||
+      (profile.landscape !== undefined &&
+        !["auto", "urban", "suburban", "rural-farm", "hillside"].includes(profile.landscape)) ||
+      !["always", "minimal"].includes(profile.baseline) ||
+      profile.siteDataPolicy !== "additive" ||
+      !object(profile.motion) ||
+      !["drifting", "off"].includes(profile.motion.clouds) ||
+      !["subtle", "off"].includes(profile.motion.vegetation) ||
+      !["opt-in", "off"].includes(profile.motion.water) ||
+      !["opt-in", "off"].includes(profile.motion.traffic) ||
+      (profile.preset === "minimal" && profile.baseline !== "minimal") ||
+      (profile.preset === "cinematic-exterior" && profile.baseline !== "always")
+    )
+      throw Error("Invalid Building presentation environment profile.");
+  }
+
   const cameras = value.cameras;
   if (!object(cameras) || !id(cameras.defaultShotId) ||
     !Array.isArray(cameras.shots) || cameras.shots.length < 1 || cameras.shots.length > 20)

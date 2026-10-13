@@ -21,11 +21,14 @@ const viewerSource = fs.readFileSync(
 
 test("R7 ambient motion is deterministic and presentation-dressing-only", () => {
   assert.match(motionSource, /presentationOnly !== true/);
-  assert.match(motionSource, /Site tree/);
-  assert.match(motionSource, /Site plant/);
+  assert.match(motionSource, /Site tree foliage/);
+  assert.match(motionSource, /Site plant foliage/);
   assert.match(motionSource, /reducedMotion/);
-  assert.match(motionSource, /baseRotationX/);
-  assert.match(motionSource, /baseRotationZ/);
+  assert.match(motionSource, /uRekixoWindTime/);
+  assert.match(motionSource, /uRekixoWindStrength/);
+  assert.match(motionSource, /#ifdef USE_INSTANCING/);
+  assert.match(motionSource, /originalOnBeforeCompile/);
+  assert.doesNotMatch(motionSource, /target\.object\.rotation\.(?:x|z) =/);
   assert.doesNotMatch(motionSource, /Math\.random/);
   assert.doesNotMatch(motionSource, /geometry\.(?:translate|scale|rotate)/);
 });

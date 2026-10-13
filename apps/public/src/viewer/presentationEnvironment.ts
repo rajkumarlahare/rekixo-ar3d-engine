@@ -123,6 +123,7 @@ function addTree(
     dummy.updateMatrix();
     crowns.setMatrixAt(i, dummy.matrix);
   }
+  crowns.name = "Site tree foliage";
   crowns.castShadow = !mobile;
   crowns.receiveShadow = true;
   crowns.instanceMatrix.needsUpdate = true;
@@ -158,6 +159,7 @@ function addPlant(
     new THREE.SphereGeometry(1, mobile ? 8 : 14, mobile ? 5 : 9),
     material(color, 0.96),
   );
+  foliage.name = "Site plant foliage";
   foliage.scale.set(width * 0.38, height * 0.4, width * 0.38);
   foliage.position.y = potHeight + height * 0.36;
   foliage.castShadow = !mobile;
@@ -220,7 +222,200 @@ function addCar(root: THREE.Group, x: number, y: number, z: number, length: numb
   wheels.castShadow = true; group.add(wheels); root.add(group);
 }
 
+export type PresentationLandscapePreset =
+  | "auto"
+  | "urban"
+  | "suburban"
+  | "rural-farm"
+  | "hillside";
+
+
+/** Build a low-cost agricultural edge without crossing the measured building/site bounds. */
+function addFarmFields(
+  root: THREE.Group,
+  bounds: THREE.Box3,
+  mobile: boolean,
+  baseY: number,
+  span: number,
+  margin: number,
+) {
+  const size = bounds.getSize(new THREE.Vector3());
+  const center = bounds.getCenter(new THREE.Vector3());
+  const fieldWidth = Math.max(span * 0.68, 7);
+  const fieldDepth = Math.max(size.z + margin * 0.85, span * 1.25);
+  const rowCount = mobile ? 7 : 13;
+  const plantsPerRow = mobile ? 12 : 24;
+  const cropGeometry = new THREE.ConeGeometry(mobile ? 0.055 : 0.07, mobile ? 0.32 : 0.44, 4);
+  const cropMaterial = material("#75914b", 0.98);
+  const cropGoldMaterial = material("#a3a15a", 0.98);
+
+  for (const side of [-1, 1]) {
+    const fieldX =
+      side < 0
+        ? bounds.min.x - margin * 0.45 - fieldWidth / 2
+        : bounds.max.x + margin * 0.45 + fieldWidth / 2;
+    addBox(
+      root,
+      "Presentation farm field soil",
+      fieldWidth,
+      0.055,
+      fieldDepth,
+      fieldX,
+      baseY - 0.055,
+      center.z - margin * 0.16,
+      "#8d8b60",
+      { roughness: 1 },
+    );
+
+    const rowGeometry = new THREE.BoxGeometry(0.038, 0.018, fieldDepth * 0.96);
+    const furrows = new THREE.InstancedMesh(
+      rowGeometry,
+      material("#687449", 1),
+      rowCount,
+    );
+    furrows.name = "Presentation farm field rows";
+    furrows.receiveShadow = true;
+    const rowStep = fieldWidth / rowCount;
+    const dummy = new THREE.Object3D();
+    for (let row = 0; row < rowCount; row++) {
+      dummy.position.set(
+        fieldX - fieldWidth / 2 + rowStep * (row + 0.5),
+        baseY - 0.017,
+        center.z - margin * 0.16,
+      );
+      dummy.updateMatrix();
+      furrows.setMatrixAt(row, dummy.matrix);
+    }
+    furrows.instanceMatrix.needsUpdate = true;
+    root.add(furrows);
+    rowGeometry.dispose();
+
+    const count = rowCount * plantsPerRow;
+    const crops = new THREE.InstancedMesh(
+      cropGeometry,
+      side < 0 ? cropMaterial : cropGoldMaterial,
+      count,
+    );
+    crops.name = "Site plant foliage";
+    crops.castShadow = !mobile;
+    crops.receiveShadow = true;
+    let index = 0;
+    for (let row = 0; row < rowCount; row++) {
+      for (let plant = 0; plant < plantsPerRow; plant++) {
+        const along = (plant + 0.5) / plantsPerRow - 0.5;
+        const deterministicJitter = Math.sin((row + 1) * 11.73 + plant * 3.17) * 0.055;
+        dummy.position.set(
+          fieldX - fieldWidth / 2 + rowStep * (row + 0.5) + deterministicJitter,
+          baseY + (mobile ? 0.14 : 0.2),
+          center.z - margin * 0.16 + along * fieldDepth,
+        );
+        dummy.rotation.set(
+          Math.sin(plant * 0.6 + row) * 0.055,
+          (row % 2) * 0.12,
+          Math.cos(plant * 0.4 + row) * 0.04,
+        );
+        const variation = 0.78 + ((row * 7 + plant * 3) % 5) * 0.07;
+        dummy.scale.set(variation, variation, variation);
+        dummy.updateMatrix();
+        crops.setMatrixAt(index++, dummy.matrix);
+      }
+    }
+    crops.instanceMatrix.needsUpdate = true;
+    root.add(crops);
+  }
+}
+
+/** Distant soft ridges provide a horizon without creating geometry over the source site. */
+function addHillsideBackdrop(
+  root: THREE.Group,
+  center: THREE.Vector3,
+  baseY: number,
+  span: number,
+  mobile: boolean,
+) {
+  const geometry = new THREE.SphereGeometry(1, mobile ? 12 : 20, mobile ? 7 : 12);
+  const ridgeSpecs = [
+    { x: -2.6, z: -2.5, sx: 2.3, sy: 0.42, sz: 1.35, color: "#798b70" },
+    { x: 2.8, z: -3.0, sx: 2.5, sy: 0.52, sz: 1.45, color: "#687f67" },
+    { x: 0.1, z: 3.0, sx: 2.9, sy: 0.38, sz: 1.5, color: "#93a084" },
+    { x: -3.5, z: 0.4, sx: 1.6, sy: 0.32, sz: 2.2, color: "#849277" },
+    { x: 3.5, z: -0.6, sx: 1.8, sy: 0.34, sz: 2.1, color: "#7e8e73" },
+  ];
+  for (const [index, spec] of ridgeSpecs.entries()) {
+    const ridge = new THREE.Mesh(
+      geometry,
+      material(spec.color, 1),
+    );
+    ridge.name = `Presentation hillside ridge ${index + 1}`;
+    ridge.position.set(
+      center.x + spec.x * span,
+      baseY - span * 0.16,
+      center.z + spec.z * span,
+    );
+    ridge.scale.set(span * spec.sx, span * spec.sy, span * spec.sz);
+    ridge.receiveShadow = true;
+    root.add(ridge);
+  }
+}
+
+/** Minimal hazed silhouettes establish an urban skyline at a distance from the property. */
+function addUrbanContext(
+  root: THREE.Group,
+  center: THREE.Vector3,
+  baseY: number,
+  span: number,
+  mobile: boolean,
+) {
+  const count = mobile ? 5 : 10;
+  const colors = ["#919b9e", "#a1a5a1", "#8b989d", "#b1b0a5"];
+  const addRow = (axis: "x" | "z", sign: -1 | 1, row: number) => {
+    for (let index = 0; index < count; index++) {
+      const phase = index + row * 2.1;
+      const width = span * (0.22 + ((index * 7 + row * 3) % 4) * 0.045);
+      const height = span * (0.18 + ((index * 5 + row * 2) % 6) * 0.055);
+      const depth = span * (0.16 + ((index * 3 + row) % 3) * 0.045);
+      const offset = (index - (count - 1) / 2) * span * 0.53;
+      const distance = span * (3.8 + row * 0.75);
+      const x = axis === "z" ? center.x + offset : center.x + sign * distance;
+      const z = axis === "x" ? center.z + offset : center.z + sign * distance;
+      addBox(
+        root,
+        "Presentation distant urban context",
+        axis === "z" ? width : depth,
+        height,
+        axis === "x" ? width : depth,
+        x,
+        baseY + height / 2 - span * 0.02,
+        z,
+        colors[(index + row) % colors.length],
+        { roughness: 0.98, castShadow: false },
+      );
+      // Small roofline variation breaks the repeated block silhouette.
+      if (!mobile && index % 3 === 1) {
+        addBox(
+          root,
+          "Presentation distant urban roofline",
+          width * 0.48,
+          height * 0.06,
+          depth * 0.48,
+          x,
+          baseY + height + height * 0.03 - span * 0.02,
+          z,
+          "#858f91",
+          { roughness: 1, castShadow: false },
+        );
+      }
+      void phase;
+    }
+  };
+  addRow("z", -1, 0);
+  addRow("z", 1, 1);
+  addRow("x", -1, 0);
+  addRow("x", 1, 1);
+}
+
 export interface PresentationFallbackOptions {
+  landscapePreset?: PresentationLandscapePreset;
   includeRoad?: boolean;
   includeCars?: boolean;
   includeSidewalk?: boolean;
@@ -243,15 +438,18 @@ export function addPresentationFallback(
   groundElevation = bounds.min.y,
   options: PresentationFallbackOptions = {},
 ) {
-  const includeRoad = options.includeRoad ?? true;
-  const includeCars = options.includeCars ?? true;
-  const includeSidewalk = options.includeSidewalk ?? true;
+  const landscape = options.landscapePreset === undefined || options.landscapePreset === "auto"
+    ? "suburban"
+    : options.landscapePreset;
+  const includeRoad = options.includeRoad ?? landscape !== "hillside";
+  const includeCars = options.includeCars ?? landscape === "urban";
+  const includeSidewalk = options.includeSidewalk ?? (landscape === "urban" || landscape === "suburban");
   const includeDriveway = options.includeDriveway ?? true;
-  const includeLawn = options.includeLawn ?? true;
+  const includeLawn = (options.includeLawn ?? true) && landscape !== "rural-farm";
   const includeTrees = options.includeTrees ?? true;
   const includePlants = options.includePlants ?? true;
-  const includeLamps = options.includeLamps ?? true;
-  const includeContextMassing = options.includeContextMassing ?? true;
+  const includeLamps = options.includeLamps ?? landscape !== "rural-farm";
+  const includeContextMassing = options.includeContextMassing ?? false;
   const includeGround = options.includeGround ?? true;
   const includeSurroundingGround = options.includeSurroundingGround ?? true;
   const size = bounds.getSize(new THREE.Vector3());
@@ -285,7 +483,9 @@ export function addPresentationFallback(
     );
   }
 
-  const roadDepth = Math.max(span * 0.34, 4.8);
+  const roadDepth = landscape === "rural-farm"
+    ? Math.max(span * 0.16, 3.2)
+    : Math.max(span * 0.34, 4.8);
   const roadZ = bounds.max.z + margin * 0.58 + roadDepth / 2;
   if (includeRoad) {
     addBox(
@@ -443,6 +643,18 @@ export function addPresentationFallback(
     }
   }
 
+
+  if (landscape === "rural-farm") {
+    addFarmFields(root, bounds, mobile, baseY, span, margin);
+  }
+
+  if (landscape === "hillside") {
+    addHillsideBackdrop(root, center, baseY, span, mobile);
+  }
+
+  if (landscape === "urban") {
+    addUrbanContext(root, center, baseY, span, mobile);
+  }
 
   if (includeContextMassing && !mobile) {
     const contextZ = bounds.min.z - margin * 4.0;

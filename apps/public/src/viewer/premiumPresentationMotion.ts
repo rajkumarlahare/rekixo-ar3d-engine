@@ -1,15 +1,19 @@
 import * as THREE from "three";
 
-type PremiumMotionTargetKind = "tree" | "plant";
+type WindTargetKind = "tree" | "plant";
+type WindUniform = { value: number };
+type WindShaderUniforms = {
+  uRekixoWindTime?: WindUniform;
+  uRekixoWindStrength?: WindUniform;
+};
 
-interface PremiumMotionTarget {
-  object: THREE.Object3D;
-  kind: PremiumMotionTargetKind;
-  baseRotationX: number;
-  baseRotationZ: number;
-  phase: number;
-  amplitude: number;
-  speed: number;
+interface WindTarget {
+  material: THREE.MeshStandardMaterial;
+  kind: WindTargetKind;
+  strength: number;
+  uniforms?: WindShaderUniforms;
+  originalOnBeforeCompile: THREE.Material["onBeforeCompile"];
+  originalProgramCacheKey: THREE.Material["customProgramCacheKey"];
 }
 
 export interface PremiumPresentationMotion {
@@ -18,7 +22,6 @@ export interface PremiumPresentationMotion {
   dispose(): void;
 }
 
-const GOLDEN_PHASE = 1.618033988749895;
 const MAX_FRAME_DELTA_SECONDS = 0.05;
 
 function noMotion(): PremiumPresentationMotion {
@@ -29,25 +32,28 @@ function noMotion(): PremiumPresentationMotion {
   };
 }
 
-function presentationTargetKind(object: THREE.Object3D): PremiumMotionTargetKind | undefined {
-  if (object.name === "Site tree") return "tree";
-  if (object.name === "Site plant") return "plant";
+function foliageKind(object: THREE.Object3D): WindTargetKind | undefined {
+  if (object.name === "Site tree foliage") return "tree";
+  if (object.name === "Site plant foliage") return "plant";
   return undefined;
 }
 
+function materialsOf(object: THREE.Object3D): THREE.MeshStandardMaterial[] {
+  if (!(object instanceof THREE.Mesh)) return [];
+  const materials = Array.isArray(object.material) ? object.material : [object.material];
+  return materials.filter(
+    (entry): entry is THREE.MeshStandardMaterial =>
+      entry instanceof THREE.MeshStandardMaterial,
+  );
+}
+
 /**
- * Adds restrained ambient motion only to Rekixo-generated presentation dressing.
+ * Adds subtle wind deformation to generated foliage only.
  *
- * Safety boundary:
- * - the root must be explicitly marked `presentationOnly`;
- * - source Building geometry is never accepted as a target;
- * - only generated Site tree / Site plant groups move;
- * - transforms are restored on dispose;
- * - reduced-motion users receive a deterministic no-op controller.
- *
- * The controller allocates its target table once. `update` performs only scalar
- * math and transform writes so it can share the viewer render loop without
- * per-frame object allocation.
+ * The wind runs in foliage vertex shaders rather than rotating whole tree
+ * groups: trunks, pots, foundations, and reviewed/source Building geometry stay
+ * still. Instance position provides each tree/plant a distinct wind phase.
+ * The controller only attaches to roots explicitly marked presentationOnly.
  */
 export function createPremiumPresentationMotion(
   environmentRoot: THREE.Object3D | undefined,
@@ -60,60 +66,84 @@ export function createPremiumPresentationMotion(
   )
     return noMotion();
 
-  const targets: PremiumMotionTarget[] = [];
+  const targetByMaterial = new Map<THREE.MeshStandardMaterial, WindTarget>();
   environmentRoot.traverse((object) => {
-    const kind = presentationTargetKind(object);
+    const kind = foliageKind(object);
     if (!kind) return;
-
-    const index = targets.length;
-    const mobileFactor = options.mobile ? 0.65 : 1;
-    targets.push({
-      object,
-      kind,
-      baseRotationX: object.rotation.x,
-      baseRotationZ: object.rotation.z,
-      phase:
-        index * GOLDEN_PHASE +
-        object.position.x * 0.037 +
-        object.position.z * 0.021,
-      amplitude: (kind === "tree" ? 0.012 : 0.02) * mobileFactor,
-      speed: kind === "tree" ? 0.68 : 0.9,
-    });
+    for (const windMaterial of materialsOf(object)) {
+      if (targetByMaterial.has(windMaterial) || windMaterial.userData.rekixoWindEnabled === true)
+        continue;
+      targetByMaterial.set(windMaterial, {
+        material: windMaterial,
+        kind,
+        strength: (kind === "tree" ? 0.095 : 0.055) * (options.mobile ? 0.72 : 1),
+        originalOnBeforeCompile: windMaterial.onBeforeCompile,
+        originalProgramCacheKey: windMaterial.customProgramCacheKey,
+      });
+    }
   });
 
+  const targets = [...targetByMaterial.values()];
   if (!targets.length) return noMotion();
 
   let elapsed = 0;
   let disposed = false;
+  for (const target of targets) {
+    const windMaterial = target.material;
+    const originalOnBeforeCompile = target.originalOnBeforeCompile;
+    const originalProgramCacheKey = target.originalProgramCacheKey;
+    windMaterial.userData.rekixoWindEnabled = true;
+    windMaterial.onBeforeCompile = (shader, renderer) => {
+      originalOnBeforeCompile.call(windMaterial, shader, renderer);
+      shader.uniforms.uRekixoWindTime = { value: elapsed };
+      shader.uniforms.uRekixoWindStrength = { value: target.strength };
+      shader.vertexShader = shader.vertexShader.replace(
+        "#include <common>",
+        "#include <common>\nuniform float uRekixoWindTime;\nuniform float uRekixoWindStrength;",
+      );
+      shader.vertexShader = shader.vertexShader.replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          float rekixoWindPhase = instanceMatrix[3].x * 0.173 + instanceMatrix[3].z * 0.137;
+        #else
+          float rekixoWindPhase = 0.0;
+        #endif
+        float rekixoWindHeight = max(position.y, 0.0);
+        float rekixoWindWave = sin(uRekixoWindTime * 0.72 + rekixoWindPhase + position.z * 1.7 + position.x * 0.8);
+        transformed.x += rekixoWindWave * rekixoWindHeight * uRekixoWindStrength;
+        transformed.z += cos(uRekixoWindTime * 0.51 + rekixoWindPhase * 1.3 + position.x) *
+          rekixoWindHeight * uRekixoWindStrength * 0.38;`,
+      );
+      target.uniforms = shader.uniforms as WindShaderUniforms;
+    };
+    windMaterial.customProgramCacheKey = () =>
+      `${originalProgramCacheKey.call(windMaterial)}|rekixo-foliage-wind-v1-${target.kind}`;
+    windMaterial.needsUpdate = true;
+  }
 
   return {
     enabled: true,
     update(deltaSeconds: number) {
       if (disposed || !Number.isFinite(deltaSeconds)) return;
-      elapsed += Math.min(
-        Math.max(deltaSeconds, 0),
-        MAX_FRAME_DELTA_SECONDS,
-      );
-
+      elapsed += Math.min(Math.max(deltaSeconds, 0), MAX_FRAME_DELTA_SECONDS);
       for (const target of targets) {
-        const primary =
-          Math.sin(elapsed * target.speed + target.phase) * target.amplitude;
-        const secondary =
-          Math.sin(
-            elapsed * target.speed * 0.47 + target.phase * 1.7,
-          ) *
-          target.amplitude *
-          0.32;
-        target.object.rotation.z = target.baseRotationZ + primary;
-        target.object.rotation.x = target.baseRotationX + secondary;
+        if (target.uniforms?.uRekixoWindTime) {
+          target.uniforms.uRekixoWindTime.value = elapsed;
+        }
+        if (target.uniforms?.uRekixoWindStrength) {
+          target.uniforms.uRekixoWindStrength.value = target.strength;
+        }
       }
     },
     dispose() {
       if (disposed) return;
       disposed = true;
       for (const target of targets) {
-        target.object.rotation.x = target.baseRotationX;
-        target.object.rotation.z = target.baseRotationZ;
+        target.material.onBeforeCompile = target.originalOnBeforeCompile;
+        target.material.customProgramCacheKey = target.originalProgramCacheKey;
+        delete target.material.userData.rekixoWindEnabled;
+        target.material.needsUpdate = true;
       }
       targets.length = 0;
     },
