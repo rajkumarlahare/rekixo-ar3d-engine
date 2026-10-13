@@ -4,10 +4,11 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
-import type {
-  BuildingPresentationManifestV1,
-  CameraPreset3D,
-  PublicWalkthroughGraph,
+import {
+  DEFAULT_BUILDING_ENVIRONMENT_PROFILE_V1,
+  type BuildingPresentationManifestV1,
+  type CameraPreset3D,
+  type PublicWalkthroughGraph,
 } from "@rekixo/3d-contracts";
 import { createFloorExploder, enhanceArchitecturalModel } from "./realism";
 import {
@@ -223,13 +224,19 @@ export function Viewer3D({
 
     const mobile = isMobileDevice();
     const presentationAppearance = buildingPresentation?.appearance;
+    // Historical V1 releases predate environment profiles. Give them the same
+    // safe default at runtime without rewriting immutable release manifests.
+    const environmentProfile = buildingPresentation?.environment.profile ??
+      (buildingPresentation?.environment.mode === "minimal"
+        ? undefined
+        : DEFAULT_BUILDING_ENVIRONMENT_PROFILE_V1);
     const referenceVisual =
       visualPreset === "reference-render" ||
       presentationAppearance?.referenceVisual === true;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const scene = new THREE.Scene();
     const sky = clientPresentation
-      ? createExteriorSky(reducedMotion, buildingPresentation?.environment.profile?.motion.clouds !== "off")
+      ? createExteriorSky(reducedMotion, environmentProfile?.motion.clouds === "drifting")
       : undefined;
     if (sky) scene.add(sky.root);
     scene.background = new THREE.Color(
@@ -969,14 +976,13 @@ export function Viewer3D({
       object.traverse((node) => {
         if (node.userData.sourceGeometry?.siteGeometry === "included-in-source") includedSourceSite = true;
       });
-      const environmentProfile = buildingPresentation?.environment.profile;
       const additiveBaseline = environmentProfile?.baseline === "always";
       siteEnvironment = createArchitecturalSiteEnvironment(
         bounds,
         renderer,
         mobile,
         clientPresentation &&
-          (additiveBaseline || (buildingPresentation?.environment.genericDressing ?? true)) &&
+          (additiveBaseline || (!environmentProfile && buildingPresentation?.environment.mode !== "minimal" && (buildingPresentation?.environment.genericDressing ?? true))) &&
           !includedSourceSite,
         floorGeometry.find((level) => level.floor === 0 && Number.isFinite(level.elevationM))?.elevationM ?? modelProfile?.floorGeometry?.find((level) => level.floor === 0)?.elevationM,
         additiveBaseline ? "always" : "empty-only",
@@ -984,8 +990,8 @@ export function Viewer3D({
       scene.add(siteEnvironment.root);
       if (
         clientPresentation &&
-        environmentProfile?.preset !== "minimal" &&
-        environmentProfile?.motion.vegetation !== "off"
+        environmentProfile?.preset === "cinematic-exterior" &&
+        environmentProfile.motion.vegetation !== "off"
       ) {
         presentationMotion = createPremiumPresentationMotion(siteEnvironment.root, {
           reducedMotion,
