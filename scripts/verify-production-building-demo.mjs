@@ -294,6 +294,26 @@ async function verifyPage(slug) {
   assert(type.toLowerCase().includes("text/html"), `Public Building page is not HTML for ${slug}.`);
   assert(/<div\s+id=["']root["']/i.test(html), `Public Building page is missing the app root for ${slug}.`);
   assert(/<script\b[^>]*type=["']module["']/i.test(html), `Public Building page is missing its module bundle for ${slug}.`);
+  // Inspect the exact JavaScript bundle served by the live project route. This
+  // distinguishes an old/stale public bundle from runtime floor-resolution issues.
+  try {
+    const scriptMatch = html.match(/<script\b[^>]*\bsrc=["']([^"']+\.js(?:\?[^"']*)?)["'][^>]*>\s*<\/script>/i);
+    if (!scriptMatch) throw new Error("module script source not found");
+    const scriptUrl = absoluteUrl(scriptMatch[1]);
+    const bundleResponse = await fetchReady(scriptUrl, { headers: { Accept: "text/javascript" } });
+    const bundle = await bundleResponse.text();
+    const floorControlsPresent =
+      bundle.includes("Select building floor") &&
+      bundle.includes("Show Ground Floor only") &&
+      bundle.includes("client-floor-controls");
+    console.log(
+      "LIVE_PUBLIC_UI_BUNDLE: " + slug +
+      " | asset=" + new URL(scriptUrl).pathname +
+      " | floorControls=" + floorControlsPresent,
+    );
+  } catch (error) {
+    console.log("LIVE_PUBLIC_UI_BUNDLE_UNAVAILABLE: " + slug + " | " + String(error).slice(0, 240));
+  }
 }
 
 async function verifyModel(slug, modelUrl) {
