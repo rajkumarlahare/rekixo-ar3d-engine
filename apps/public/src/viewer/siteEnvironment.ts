@@ -553,7 +553,7 @@ export function createArchitecturalSiteEnvironment(
       ? {
           includeGround: !sourceSiteIncluded,
           includeSurroundingGround: !sourceSiteIncluded,
-          includeRoad: !hasRoad,
+          includeRoad: landscapePreset !== "hillside" && !hasRoad,
           includeCars: false,
           landscapePreset,
           includeSidewalk: landscapePreset !== "rural-farm" && landscapePreset !== "hillside" && !hasPath,
