@@ -901,43 +901,6 @@ export function Viewer3D({
         setClientFloorControlsReady(resolvedFloorGeometry.length > 0);
       }
 
-      // Opt-in, production-safe diagnosis used by the post-deploy browser check.
-      // It is silent for normal customers unless sessionStorage enables it.
-      if (clientPresentation) {
-        let floorDebugEnabled = false;
-        try {
-          floorDebugEnabled = window.sessionStorage.getItem("ar3d.floorDebug") === "1";
-        } catch {
-          floorDebugEnabled = false;
-        }
-        if (floorDebugEnabled) {
-          console.info("[AR3D_FLOOR_RUNTIME]", JSON.stringify({
-            modelBounds: {
-              minY: modelBounds.min.y,
-              maxY: modelBounds.max.y,
-            },
-            availableFloorIds: availableFloors,
-            configuredFloorGeometry: configuredFloorGeometry.map((level) => ({
-              floor: level.floor, bottom: level.elevationM, top: level.topElevationM,
-            })),
-            detectedFloorGeometry: detectedFloorGeometry.floors.map((level) => ({
-              floor: level.floor, bottom: level.elevationM, top: level.topElevationM,
-            })),
-            detectedRoof: detectedFloorGeometry.roof
-              ? { bottom: detectedFloorGeometry.roof.elevationM, top: detectedFloorGeometry.roof.topElevationM }
-              : null,
-            floorVisibilityChecks: modelDerivedFloorGeometry.floors.map((level) => ({
-              floor: level.floor,
-              hasFloor: floorVisibilityController?.hasFloor(level) ?? false,
-            })),
-            resolvedFloorGeometry: resolvedFloorGeometry.map((level) => ({
-              floor: level.floor, bottom: level.elevationM, top: level.topElevationM,
-            })),
-            roofAvailable: Boolean(resolvedRoofGeometry),
-            meshCount: meshBounds.length,
-          }));
-        }
-      }
       windowMaterials.clear();
       if (clientPresentation) object.traverse((node) => {
         if (!(node instanceof THREE.Mesh)) return;
