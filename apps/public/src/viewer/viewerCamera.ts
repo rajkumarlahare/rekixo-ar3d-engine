@@ -52,6 +52,62 @@ export function normalizeCameraPreset(preset: CameraPreset3D): HomeView {
   return { position, target, fov };
 }
 
+/**
+ * Keep the depth buffer focused on the active architectural view. Authored
+ * camera shots bypass fitCamera(), and zooming otherwise keeps a stale far
+ * plane (often 2000m) that makes near-coplanar faces fight for the same depth.
+ */
+export function updateCameraDepthRange(
+  camera: THREE.PerspectiveCamera,
+  target: THREE.Vector3,
+  bounds: THREE.Box3,
+) {
+  if (bounds.isEmpty()) return false;
+
+  const width = Math.max(bounds.max.x - bounds.min.x, 0);
+  const height = Math.max(bounds.max.y - bounds.min.y, 0);
+  const depth = Math.max(bounds.max.z - bounds.min.z, 0);
+  const modelScale = Math.max(width, height, depth, 0.1);
+  const centerX = (bounds.min.x + bounds.max.x) * 0.5;
+  const centerY = (bounds.min.y + bounds.max.y) * 0.5;
+  const centerZ = (bounds.min.z + bounds.max.z) * 0.5;
+  const radius = Math.max(Math.hypot(width, height, depth) * 0.5, modelScale * 0.5);
+  const centerDistance = Math.hypot(
+    camera.position.x - centerX,
+    camera.position.y - centerY,
+    camera.position.z - centerZ,
+  );
+  const targetDistance = Math.max(camera.position.distanceTo(target), 0.01);
+
+  // Choose the largest safe near plane for the current zoom while keeping a
+  // small scale-relative floor for detailed architectural geometry.
+  const nearFloor = Math.max(0.0005, modelScale * 0.00002);
+  const near = Math.max(
+    nearFloor,
+    Math.min(targetDistance * 0.01, modelScale * 0.004),
+  );
+  // The generated exterior ground extends beyond the source bounds. Keep a
+  // scale-based horizon margin but avoid the fixed 0.01..2000 range on houses.
+  const far = Math.max(
+    centerDistance + radius * 1.25 + modelScale * 0.1,
+    modelScale * 18,
+    near * 1000,
+    10,
+  );
+
+  if (!Number.isFinite(near) || !Number.isFinite(far) || far <= near) return false;
+  if (
+    Math.abs(camera.near - near) > 0.00001 ||
+    Math.abs(camera.far - far) > 0.001
+  ) {
+    camera.near = near;
+    camera.far = far;
+    camera.updateProjectionMatrix();
+    return true;
+  }
+  return false;
+}
+
 export function fitCamera(
   object: THREE.Object3D,
   camera: THREE.PerspectiveCamera,
