@@ -852,7 +852,11 @@ export function Viewer3D({
               })),
             }
           : detectedFloorGeometry;
-      resolvedFloorGeometry = configuredFloorGeometry.length
+      const explicitGeometryMatchesDetectedCount =
+        configuredFloorGeometry.length > 0 &&
+        (detectedFloorGeometry.floors.length === 0 ||
+          configuredFloorGeometry.length === detectedFloorGeometry.floors.length);
+      resolvedFloorGeometry = explicitGeometryMatchesDetectedCount
         ? configuredFloorGeometry
         : modelDerivedFloorGeometry.floors;
       resolvedRoofGeometry = modelDerivedFloorGeometry.roof
