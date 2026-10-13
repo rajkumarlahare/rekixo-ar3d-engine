@@ -77,20 +77,20 @@ test("customer Building floor isolation waits for source-backed model geometry",
   assert.match(viewer, /clientFloorControlsReady && clientFloorIds\.length > 0/);
   assert.match(publicApp, /showClientFloorControls=\{true\}|showClientFloorControls\s*\n/);
   assert.match(viewer, /aria-label="Select building floor"/);
-  assert.match(viewer, /aria-label="Show roof only"/);
+  assert.match(viewer, /aria-label=\{clientFloorReviewMode === "stacked" \? "Show roof and lower floors" : "Show roof only"\}/);
   assert.match(viewer, /clientFloorViewRef\.current\?\.\("roof"\)/);
   assert.ok(!publicApp.includes("const DEFAULT_CLIENT_FLOORS = [0, 1, 2, 3, 4, 5];"));
 });
 
-test("floor selection clips to configured level geometry and frames it from above", () => {
+test("customer floor selection uses source visibility modes and frames the selected stack", () => {
   assert.match(viewer, /renderer\.clippingPlanes = \[/);
   assert.match(viewer, /floorGeometryFor\(resolvedFloorGeometry, selection\)/);
   assert.match(viewer, /floorFocusElevation\(level\)/);
-  assert.match(viewer, /const fov = 34/);
+  assert.match(viewer, /const fov = 34/);\n  assert.match(viewer, /floorVisibilityController\.showFloor\(level, clientFloorReviewModeRef\.current\)/);\n  assert.match(viewer, /aria-label="Stacked floor view"/);\n  assert.match(viewer, /aria-label="Isolate selected floor"/);\n  assert.match(viewer, /stackedView \? size\.y \/ \(2 \* verticalTangent\) : 0/);
   assert.match(viewer, /duration: 750/);
   assert.match(viewer, /clientFloorViewRef\.current = \(selection\)/);
   assert.match(viewer, /title="Top-down view of the complete model; this does not isolate a floor"/);
-  assert.match(viewer, /title="Isolate the roof and upper structure using detected model bounds"/);
+  assert.match(viewer, /clientFloorReviewMode === "stacked" \? "Show the roof with all lower floors; hide upper structures above the roof" : "Isolate the roof and upper structure using detected model bounds"/);
 });
 
 test("customer exterior camera and reset controls always exit floor isolation", () => {
