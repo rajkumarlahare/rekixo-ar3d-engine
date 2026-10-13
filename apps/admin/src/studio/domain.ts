@@ -44,7 +44,8 @@ export type LandscapeSiteElementKind =
   | "tree"
   | "plant"
   | "gate"
-  | "outdoor-light";
+  | "outdoor-light"
+  | "water";
 
 export type StructuralElementKind =
   | "column"
@@ -1032,6 +1033,7 @@ export function validateScene(s: Scene): void {
         "plant",
         "gate",
         "outdoor-light",
+        "water",
         ...STRUCTURAL_ELEMENT_KINDS,
       ].includes(site.kind) ||
       !number(site.x, -10000, 10000) ||
