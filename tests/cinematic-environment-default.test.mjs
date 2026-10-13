@@ -108,6 +108,28 @@ test("generated vegetation motion is wired to the customer render loop and respe
   assert.match(sky, /!reducedMotion && driftClouds/);
 });
 
+test("customer camera and generated outdoor surfaces stay stable while zooming and orbiting", () => {
+  const camera = read("apps/public/src/viewer/viewerCamera.ts");
+  const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
+  const surfaces = read("apps/public/src/viewer/proceduralSurfaceMaterials.ts");
+  const site = read("apps/public/src/viewer/siteEnvironment.ts");
+  const fallback = read("apps/public/src/viewer/presentationEnvironment.ts");
+
+  assert.match(camera, /export function updateCameraDepthRange/);
+  assert.match(camera, /camera\\.near = near/);
+  assert.match(camera, /camera\\.far = far/);
+  assert.match(viewer, /updateCameraDepthRange\\(camera, controls\\.target, modelBounds\\)/);
+  assert.match(surfaces, /configureProceduralSurfaceTextures/);
+  assert.match(surfaces, /texture\\.anisotropy = configuredAnisotropy/);
+  assert.match(surfaces, /texture\\.repeat\\.set\\(4, 4\\)/);
+  assert.match(site, /includeGround: !sourceSiteIncluded/);
+  assert.match(site, /includeSurroundingGround: !sourceSiteIncluded/);
+  assert.match(site, /configureProceduralSurfaceTextures\\(renderer\\)/);
+  assert.match(fallback, /includeSurroundingGround\\?: boolean/);
+  assert.match(fallback, /if \\(includeGround\\)/);
+  assert.match(fallback, /if \\(includeSurroundingGround\\)/);
+});
+
 const require = createRequire(import.meta.url);
 const threeUrl = pathToFileURL(
   path.join(path.dirname(require.resolve("three")), "three.module.js"),
