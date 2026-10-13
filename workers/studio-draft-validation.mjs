@@ -236,6 +236,12 @@ function validateScene(scene, assetIds) {
   )
     throw Error("Invalid Studio scene or scene limits exceeded.");
 
+  if (
+    scene.landscapePreset !== undefined &&
+    !["auto", "urban", "suburban", "rural-farm", "hillside"].includes(scene.landscapePreset)
+  )
+    throw Error("Invalid customer landscape preset.");
+
   if (scene.modelId !== undefined && !assetIds.has(scene.modelId))
     throw Error("Studio scene model asset is missing.");
   if (
