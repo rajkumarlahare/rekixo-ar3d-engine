@@ -245,6 +245,18 @@ export function Viewer3D({
       visualPreset === "reference-render" ||
       presentationAppearance?.referenceVisual === true;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const baseFogDensity = referenceVisual ? 0.00082 : 0.0015;
+    const baseSunIntensity = presentationAppearance?.sunIntensity ?? (referenceVisual ? 1.78 : 2.25);
+    const baseHemisphereIntensity = presentationAppearance?.hemisphereIntensity ?? (referenceVisual ? 0.62 : 1.45);
+    const baseFillIntensity = referenceVisual ? 0.10 : 0.55;
+    const baseExposure = presentationAppearance?.exposure ?? (referenceVisual ? 0.84 : 0.9);
+    const baseEnvironmentIntensity = referenceVisual ? 0.34 : 0.65;
+    const dawnSunColor = new THREE.Color("#ffad72");
+    const daySunColor = new THREE.Color(referenceVisual ? "#ffd3a6" : "#ffe4c2");
+    const dawnFillColor = new THREE.Color("#f7b579");
+    const dayFillColor = new THREE.Color("#99bfe0");
+    const dawnFogColor = new THREE.Color("#e8b09a");
+    const dayFogColor = new THREE.Color(referenceVisual ? "#71859a" : "#a9bfd0");
     const scene = new THREE.Scene();
     const sky = clientPresentation
       ? createExteriorSky(reducedMotion, environmentProfile?.motion.clouds === "drifting")
@@ -255,7 +267,7 @@ export function Viewer3D({
     );
     scene.fog = new THREE.FogExp2(
       referenceVisual ? 0x71859a : 0xa9bfd0,
-      referenceVisual ? 0.00082 : 0.0015,
+      baseFogDensity,
     );
     let modelBounds: THREE.Box3 | undefined;
     let resolvedFloorGeometry: FloorGeometryLevel[] = [];
@@ -273,7 +285,7 @@ export function Viewer3D({
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure =
-      presentationAppearance?.exposure ?? (referenceVisual ? 0.84 : 0.9);
+      baseExposure;
     renderer.shadowMap.enabled = referenceVisual || !mobile;
     renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? (referenceVisual ? 1.55 : 1.35) : 2));
@@ -301,7 +313,7 @@ export function Viewer3D({
     const hemi = new THREE.HemisphereLight(
       0xdcecff,
       0x514b45,
-      presentationAppearance?.hemisphereIntensity ?? (referenceVisual ? 0.62 : 1.45),
+      baseHemisphereIntensity,
     );
     if (referenceVisual) {
       hemi.color.setHex(0xd6e4ef);
@@ -311,7 +323,7 @@ export function Viewer3D({
 
     const sun = new THREE.DirectionalLight(
       0xffe4c2,
-      presentationAppearance?.sunIntensity ?? (referenceVisual ? 1.78 : 2.25),
+      baseSunIntensity,
     );
     if (referenceVisual) sun.color.setHex(0xffd3a6);
     sun.position.set(referenceVisual ? 14 : 10, referenceVisual ? 13 : 18, referenceVisual ? 17 : 12);
@@ -323,7 +335,7 @@ export function Viewer3D({
     sun.shadow.normalBias = 0.018;
     scene.add(sun);
 
-    const fill = new THREE.DirectionalLight(0x99bfe0, referenceVisual ? 0.10 : 0.55);
+    const fill = new THREE.DirectionalLight(0x99bfe0, baseFillIntensity);
     fill.position.set(-10, 8, -7);
     scene.add(fill);
 
@@ -334,7 +346,7 @@ export function Viewer3D({
     const pmrem = new THREE.PMREMGenerator(renderer);
     const environmentTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     scene.environment = environmentTexture;
-    scene.environmentIntensity = referenceVisual ? 0.34 : 0.65;
+    scene.environmentIntensity = baseEnvironmentIntensity;
 
     const updateSize = () => {
       const width = Math.max(hostElement.clientWidth, 1);
@@ -439,22 +451,22 @@ export function Viewer3D({
       );
       scene.fog = new THREE.FogExp2(
         night ? 0x182130 : referenceVisual ? 0x71859a : 0xa9bfd0,
-        night ? 0.0025 : referenceVisual ? 0.00082 : 0.0015,
+        night ? 0.0025 : baseFogDensity,
       );
       hemi.intensity = night
         ? 0.72
-        : presentationAppearance?.hemisphereIntensity ?? (referenceVisual ? 0.62 : 1.45);
+        : baseHemisphereIntensity;
       sun.color.setHex(night ? 0xb1caff : referenceVisual ? 0xffd3a6 : 0xffe4c2);
       fill.color.setHex(night ? 0xffb370 : 0x99bfe0);
       sun.intensity = night
         ? 0.38
-        : presentationAppearance?.sunIntensity ?? (referenceVisual ? 1.78 : 2.25);
-      fill.intensity = night ? 0.3 : referenceVisual ? 0.10 : 0.55;
+        : baseSunIntensity;
+      fill.intensity = night ? 0.3 : baseFillIntensity;
       warmFill.intensity = night ? 7 : referenceVisual ? 2.6 : 0;
       renderer.toneMappingExposure = night
         ? Math.min(presentationAppearance?.exposure ?? 0.82, 0.9)
-        : presentationAppearance?.exposure ?? (referenceVisual ? 0.84 : 0.9);
-      scene.environmentIntensity = night ? 0.42 : referenceVisual ? 0.34 : 0.65;
+        : baseExposure;
+      scene.environmentIntensity = night ? 0.42 : baseEnvironmentIntensity;
       for (const [material, original] of windowMaterials) {
         material.emissive.copy(night ? new THREE.Color("#ffbe72") : original.color);
         material.emissiveIntensity = night ? 0.28 : original.intensity;
@@ -1511,6 +1523,23 @@ export function Viewer3D({
 
       const delta = Math.min(clock.getDelta(), 0.05);
       sky?.update(delta, camera);
+      if (sky && !currentNight) {
+        const solar = sky.solarState;
+        sun.position.copy(solar.direction).multiplyScalar(50);
+        // Keep the low sunrise light just above the architectural horizon.
+        if (solar.timeOfDay < 6.2) sun.position.y = Math.max(sun.position.y, 5);
+        sun.color.lerpColors(dawnSunColor, daySunColor, solar.daylight);
+        sun.intensity = baseSunIntensity * (0.18 + solar.daylight * 0.82);
+        fill.color.lerpColors(dawnFillColor, dayFillColor, solar.daylight);
+        fill.intensity = baseFillIntensity * (0.6 + solar.daylight * 0.4);
+        hemi.intensity = baseHemisphereIntensity * (0.72 + solar.daylight * 0.28);
+        renderer.toneMappingExposure = baseExposure + (1 - solar.daylight) * 0.035;
+        scene.environmentIntensity = baseEnvironmentIntensity * (0.72 + solar.daylight * 0.28);
+        if (scene.fog instanceof THREE.FogExp2) {
+          scene.fog.color.lerpColors(dawnFogColor, dayFogColor, solar.daylight);
+          scene.fog.density = baseFogDensity + (0.00185 - baseFogDensity) * (1 - solar.daylight);
+        }
+      }
       presentationMotion?.update(delta);
       siteEnvironment?.update(delta);
       siteInteractionController?.update(delta);

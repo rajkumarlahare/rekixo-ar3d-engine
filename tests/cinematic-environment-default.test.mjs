@@ -130,6 +130,26 @@ test("customer camera and generated outdoor surfaces stay stable while zooming a
   assert.match(fallback, /if \(includeSurroundingGround\)/);
 });
 
+
+test("customer exterior sky animates a warm sunrise with layered clouds and synchronized lighting", () => {
+  const sky = read("apps/public/src/viewer/exteriorSky.ts");
+  const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
+
+  assert.match(sky, /export interface ExteriorSolarState/);
+  assert.match(sky, /sunriseElapsed < 45/);
+  assert.match(sky, /setTimeOfDay\(hours: number\)/);
+  assert.match(sky, /uniform vec3 sunDirection/);
+  assert.match(sky, /uniform float goldenHour/);
+  assert.match(sky, /float horizonGlow/);
+  assert.match(sky, /float lowCloud/);
+  assert.match(sky, /float highCloud/);
+  assert.match(sky, /!reducedMotion && driftClouds/);
+  assert.match(viewer, /sun\.position\.copy\(solar\.direction\)/);
+  assert.match(viewer, /sun\.color\.lerpColors\(dawnSunColor, daySunColor, solar\.daylight\)/);
+  assert.match(viewer, /scene\.fog\.color\.lerpColors\(dawnFogColor, dayFogColor, solar\.daylight\)/);
+  assert.match(viewer, /if \(sky && !currentNight\)/);
+});
+
 const require = createRequire(import.meta.url);
 const threeUrl = pathToFileURL(
   path.join(path.dirname(require.resolve("three")), "three.module.js"),
