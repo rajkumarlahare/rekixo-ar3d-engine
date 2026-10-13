@@ -24,6 +24,16 @@ function floorFromNodeName(name: string): number | null {
   return null;
 }
 
+function floorFromHierarchy(node: THREE.Object3D): number | null {
+  let current: THREE.Object3D | null = node;
+  while (current) {
+    const floor = floorFromNodeName(current.name);
+    if (floor !== null) return floor;
+    current = current.parent;
+  }
+  return null;
+}
+
 function boxFor(mesh: THREE.Mesh): THREE.Box3 | null {
   mesh.updateWorldMatrix(true, false);
   const box = new THREE.Box3().setFromObject(mesh);
@@ -44,11 +54,10 @@ export function createFloorVisibilityController(
     if (!(node instanceof THREE.Mesh)) return;
     const box = boxFor(node);
     if (!box) return;
-    const nameFloor = floorFromNodeName(node.name);
     records.push({
       mesh: node,
       originalVisible: node.visible,
-      floor: nameFloor,
+      floor: floorFromHierarchy(node),
       shared: false,
     });
   });
