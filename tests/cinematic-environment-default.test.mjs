@@ -141,7 +141,8 @@ test("customer exterior sky animates a warm sunrise with layered clouds and sync
 
   assert.match(sky, /export interface ExteriorSolarState/);
   assert.match(sky, /sunriseElapsed < 45/);
-  assert.match(sky, /setTimeOfDay\(hours: number\)/);
+  assert.match(sky, /updateSolar\(solarTime\)/);
+  assert.doesNotMatch(sky, /setTimeOfDay/);
   assert.match(sky, /uniform vec3 sunDirection/);
   assert.match(sky, /uniform float goldenHour/);
   assert.match(sky, /float horizonGlow/);
@@ -269,18 +270,34 @@ test("generated site gate leaves open on click, animate smoothly, and restore on
 });
 
 
-test("customer exterior exposes an accessible time-of-day control tied to the solar lighting rig", () => {
+test("customer exterior keeps sunrise cinematic without exposing a time-of-day slider UI", () => {
   const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
   const sky = read("apps/public/src/viewer/exteriorSky.ts");
   const styles = read("apps/public/src/styles.css");
 
-  assert.ok(sky.includes("setTimeOfDay(hours: number)"));
-  assert.ok(viewer.includes("timeOfDayRef.current = (hours) => sky?.setTimeOfDay(hours)"));
-  assert.ok(viewer.includes('clientPresentation && experienceMode !== "interior" && <div className="viewer-time-of-day"'));
-  assert.ok(viewer.includes('aria-label="Exterior lighting time"'));
-  assert.ok(viewer.includes("lightingRef.current?.(false)"));
-  assert.ok(viewer.includes("timeOfDayRef.current?.(hours)"));
+  assert.doesNotMatch(viewer, /formatSolarTime|timeOfDayRef|solarTimeOfDay|viewer-time-of-day/);
+  assert.doesNotMatch(sky, /setTimeOfDay|normalizedHour/);
+  assert.ok(!styles.includes(".viewer-time-of-day"));
+  const productionSmoke = read("e2e/production-floor-controls.spec.ts");
+  assert.ok(productionSmoke.includes('page.locator(".viewer-time-of-day")'));
+  assert.ok(productionSmoke.includes("Customer exterior must not expose the manual lighting-time slider"));
+  assert.match(sky, /sunriseElapsed < 45/);
   assert.ok(viewer.includes("sun.position.copy(solar.direction)"));
-  assert.ok(styles.includes(".viewer-time-of-day"));
-  assert.ok(styles.includes('.viewer-time-of-day input[type="range"]'));
+});
+
+
+
+test("default suburban and urban exteriors add lived-in neighborhood context", () => {
+  const fallback = read("apps/public/src/viewer/presentationEnvironment.ts");
+
+  assert.ok(fallback.includes("function addNeighborhoodContext("));
+  assert.ok(fallback.includes("function addNeighborhoodBuilding("));
+  assert.ok(fallback.includes("Presentation neighborhood windows"));
+  assert.ok(fallback.includes("Presentation neighborhood lawn plot"));
+  assert.ok(fallback.includes("Presentation neighborhood road"));
+  assert.ok(fallback.includes("Presentation neighborhood sidewalk"));
+  assert.ok(fallback.includes('if (landscape === "urban" || landscape === "suburban") {'));
+  assert.ok(fallback.includes("addUrbanContext(root, center, baseY, span, mobile)"));
+  assert.ok(fallback.includes("addNeighborhoodContext(root, bounds, center, baseY, span, margin, mobile, landscape)"));
+  assert.ok(fallback.includes("root.userData.nonAuthoritative = true"));
 });
