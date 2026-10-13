@@ -7,12 +7,19 @@ test("live customer Building page renders and operates real floor-review buttons
   test.setTimeout(180_000);
   const pageErrors: string[] = [];
   const failedRequests: string[] = [];
+  const floorDiagnostics: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.text().includes("[AR3D_FLOOR_RUNTIME]")) floorDiagnostics.push(message.text());
+  });
   page.on("requestfailed", (request) => {
     if (/3Dprojects|\.glb(?:\?|$)|model/i.test(request.url()))
       failedRequests.push(request.url() + " :: " + (request.failure()?.errorText || "request failed"));
   });
 
+  await page.addInitScript(() => {
+    try { window.sessionStorage.setItem("ar3d.floorDebug", "1"); } catch { /* diagnostics are optional */ }
+  });
   const pageUrl = origin + "/3Dprojects/" + encodeURIComponent(slug);
   const response = await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
   expect(response, "Live customer page did not return a document").toBeTruthy();
@@ -36,6 +43,7 @@ test("live customer Building page renders and operates real floor-review buttons
       JSON.stringify(state) +
       " pageErrors=" + JSON.stringify(pageErrors) +
       " failedRequests=" + JSON.stringify(failedRequests) +
+      " floorDiagnostics=" + JSON.stringify(floorDiagnostics) +
       " cause=" + String(error),
     );
   }
@@ -61,6 +69,7 @@ test("live customer Building page renders and operates real floor-review buttons
       "state=" + JSON.stringify(state) +
       " pageErrors=" + JSON.stringify(pageErrors) +
       " failedRequests=" + JSON.stringify(failedRequests) +
+      " floorDiagnostics=" + JSON.stringify(floorDiagnostics) +
       " cause=" + String(error),
     );
   }
@@ -85,6 +94,7 @@ test("live customer Building page renders and operates real floor-review buttons
     "LIVE_FLOOR_UI_RUNTIME: " + slug + " | buttons=" +
     JSON.stringify(await floorNav.locator("button").allTextContents()),
   );
+  console.log("LIVE_FLOOR_RUNTIME_DIAGNOSTICS: " + JSON.stringify(floorDiagnostics));
 
   for (const accessibleName of ["Show Ground Floor only", "Show Floor 1 only", "Show Floor 5 only", "Show roof only"]) {
     const button = floorNav.getByRole("button", { name: accessibleName });
