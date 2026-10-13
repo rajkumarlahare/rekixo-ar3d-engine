@@ -291,7 +291,7 @@ export function addPresentationFallback(
       "#343a40",
       { roughness: 0.98 },
     );
-  
+
     for (let i = -25; i <= 25; i++) {
       addBox(root, "Presentation road lane marking", siteWidth * 0.055, 0.02, 0.08, center.x + siteWidth * i * 0.13, baseY + 0.036, roadZ, "#d9d5c5", { roughness: 0.99 });
     }
@@ -385,7 +385,7 @@ export function addPresentationFallback(
       addTree(root, bounds.min.x - margin * 0.62, baseY, z, treeHeight, crownWidth, mobile, "#4c7b50");
       addTree(root, bounds.max.x + margin * 0.62, baseY, z, treeHeight * 0.92, crownWidth * 0.9, mobile, "#567f4e");
     }
-  
+
     const frontTreeZ = sidewalkZ - sidewalkDepth * 0.2;
     for (const offset of [-0.36, 0.36]) {
       addTree(
