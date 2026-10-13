@@ -31,6 +31,7 @@ test("old customer releases get the default profile at runtime without rewriting
   assert.match(viewer, /buildingPresentation\?\.environment\.profile \?\?/);
   assert.match(viewer, /DEFAULT_BUILDING_ENVIRONMENT_PROFILE_V1/);
   assert.match(viewer, /buildingPresentation\?\.environment\.mode === "minimal"/);
+  assert.match(viewer, /\(!includedSourceSite \|\| additiveBaseline\)/);
 });
 
 test("baseline environment layers are additive when reviewed site data is sparse", () => {
@@ -54,6 +55,9 @@ test("default roads, paths, ground and lawns use deterministic procedural surfac
   assert.match(surfaces, /new THREE\.DataTexture/);
   assert.match(surfaces, /textureCache\.get\(kind\)/);
   assert.match(surfaces, /textureCache\.set\(kind, texture\)/);
+  assert.match(surfaces, /texture\.userData\.rekixoSharedResource = true/);
+  const resourceDisposal = read("apps/public/src/viewer/viewerResources.ts");
+  assert.match(resourceDisposal, /value\.userData\.rekixoSharedResource !== true/);
   assert.match(surfaces, /THREE\.SRGBColorSpace/);
   assert.doesNotMatch(surfaces, /Math\.random|fetch\(/);
   assert.match(fallback, /surfaceKindForName/);
