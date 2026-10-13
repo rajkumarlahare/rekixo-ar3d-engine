@@ -437,6 +437,7 @@ export function Viewer3D({
       walkthrough?.rooms.find((room) => room.id === id);
 
     const enterGraphRoom = (id: string, preserveDirection = false) => {
+      if (clientPresentation) floorVisibilityController?.showAll();
       if (!walkthrough) return false;
       const room = graphRoom(id);
       if (!room) return false;
@@ -555,6 +556,7 @@ export function Viewer3D({
     };
 
     const enterRoom = (id: string) => {
+      if (clientPresentation) floorVisibilityController?.showAll();
       if (walkthrough && graphRoom(id)) {
         enterGraphRoom(id);
         return;
@@ -825,7 +827,9 @@ export function Viewer3D({
           maxZ: meshBox.max.z,
         });
       });
-      const modelDerivedFloorGeometry = deriveFloorGeometryFromModel({
+      // First detect physical floor bands without assuming that project metadata
+      // already has the same number of floor IDs as the uploaded model.
+      const detectedFloorGeometry = deriveFloorGeometryFromModel({
         modelBounds: {
           minX: modelBounds.min.x,
           minY: modelBounds.min.y,
@@ -835,12 +839,28 @@ export function Viewer3D({
           maxZ: modelBounds.max.z,
         },
         meshBounds,
-        floorIds: availableFloors,
       });
+      // Keep explicit project IDs only when the configuration count matches the
+      // source-detected bands. Stale/missing IDs must not hide valid model floors.
+      const modelDerivedFloorGeometry =
+        availableFloors.length === detectedFloorGeometry.floors.length
+          ? {
+              ...detectedFloorGeometry,
+              floors: detectedFloorGeometry.floors.map((level, index) => ({
+                ...level,
+                floor: availableFloors[index],
+              })),
+            }
+          : detectedFloorGeometry;
       resolvedFloorGeometry = configuredFloorGeometry.length
         ? configuredFloorGeometry
         : modelDerivedFloorGeometry.floors;
-      resolvedRoofGeometry = modelDerivedFloorGeometry.roof;
+      resolvedRoofGeometry = modelDerivedFloorGeometry.roof
+        ? {
+            ...modelDerivedFloorGeometry.roof,
+            floor: resolvedFloorGeometry.length,
+          }
+        : undefined;
       if (clientPresentation) {
         setClientFloorIds(resolvedFloorGeometry.map((level) => level.floor));
         setClientRoofAvailable(Boolean(resolvedRoofGeometry));
@@ -1183,6 +1203,11 @@ export function Viewer3D({
 
 
       const setExperience = (nextMode: ExperienceMode, instant = false) => {
+        if (clientPresentation) {
+          floorVisibilityController?.showAll();
+          setClientFloorSelection(null);
+          setSelectedFloor(null);
+        }
         currentExperienceMode = nextMode;
         if (!projectExperience || !activeObject || !siteEnvironment) return;
         walkActive = false;
