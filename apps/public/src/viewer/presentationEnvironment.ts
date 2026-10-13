@@ -483,7 +483,9 @@ export function addPresentationFallback(
     );
   }
 
-  const roadDepth = Math.max(span * 0.34, 4.8);
+  const roadDepth = landscape === "rural-farm"
+    ? Math.max(span * 0.16, 3.2)
+    : Math.max(span * 0.34, 4.8);
   const roadZ = bounds.max.z + margin * 0.58 + roadDepth / 2;
   if (includeRoad) {
     addBox(
