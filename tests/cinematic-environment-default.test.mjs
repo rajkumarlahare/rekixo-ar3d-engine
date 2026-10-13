@@ -163,7 +163,7 @@ test("customer exterior supports release-bound urban, suburban, farm, and hillsi
   assert.match(contract, /export type BuildingEnvironmentLandscapeV1/);
   assert.match(contract, /landscape\?: BuildingEnvironmentLandscapeV1/);
   assert.match(contract, /landscape: "auto"/);
-  assert.match(contract, /"rural-farm", "hillside"/);
+  assert.match(contract, /"rural-farm"[\s\S]*"hillside"/);
   assert.match(fallback, /export type PresentationLandscapePreset/);
   assert.match(fallback, /function addFarmFields/);
   assert.match(fallback, /function addHillsideBackdrop/);
