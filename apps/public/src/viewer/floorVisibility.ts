@@ -11,6 +11,8 @@ interface MeshRecord {
 }
 
 export interface FloorVisibilityController {
+  /** True when this level contains original opaque meshes that can be isolated. */
+  hasFloor(level: FloorGeometryLevel): boolean;
   /** Show one complete source floor and return its non-ghost mesh bounds. */
   showFloor(level: FloorGeometryLevel): THREE.Box3 | undefined;
   /** Restore exact imported visibility/material state and return the whole model. */
@@ -107,6 +109,20 @@ export function createFloorVisibilityController(
     });
   });
 
+  const hasFloor = (level: FloorGeometryLevel) => {
+    const bottom = level.elevationM;
+    const top = level.topElevationM;
+    const selectedHeight = Math.max(top - bottom, 0.1);
+    return records.some((record) => {
+      if (!record.originalVisible) return false;
+      if (record.floor !== null) return record.floor === level.floor;
+      const height = record.box.max.y - record.box.min.y;
+      if (height > selectedHeight * 1.5) return false;
+      const centerY = (record.box.min.y + record.box.max.y) / 2;
+      return centerY >= bottom - 0.02 && centerY <= top + 0.02;
+    });
+  };
+
   const showAll = () => {
     const bounds = emptyBounds();
     for (const record of records) {
@@ -118,6 +134,7 @@ export function createFloorVisibilityController(
   };
 
   return {
+    hasFloor,
     showFloor(level) {
       const bounds = emptyBounds();
       const bottom = level.elevationM;
