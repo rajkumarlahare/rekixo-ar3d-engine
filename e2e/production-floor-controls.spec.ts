@@ -30,6 +30,10 @@ test("live customer Building page renders and operates real floor-review buttons
   try {
     await expect(page.locator(".viewer-loader")).toBeHidden({ timeout: 120_000 });
     await expect(page.locator(".viewer-canvas")).toBeVisible();
+    await expect(
+      page.locator(".viewer-time-of-day"),
+      "Customer exterior must not expose the manual lighting-time slider",
+    ).toHaveCount(0);
   } catch (error) {
     const state = await page.evaluate(() => ({
       title: document.title,
