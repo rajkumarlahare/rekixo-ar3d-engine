@@ -4,8 +4,9 @@ import type { FloorGeometryLevel } from "./floorGeometry";
 interface MeshRecord {
   mesh: THREE.Mesh;
   originalVisible: boolean;
+  originalMaterial: THREE.Material | THREE.Material[];
+  ghostMaterial?: THREE.Material | THREE.Material[];
   floor: number | null;
-  shared: boolean;
 }
 
 export interface FloorVisibilityController {
@@ -16,11 +17,31 @@ export interface FloorVisibilityController {
 
 function floorFromNodeName(name: string): number | null {
   const normalized = name.trim().toLowerCase().replace(/[\s-]+/g, "_");
-  if (/^(ground|ground_floor|stilt|floor_?0|level_?0|gf)$/.test(normalized)) return 0;
-  const match = normalized.match(/^(?:floor|level|storey|story|f)_?(\d+)(?:_.*)?$/);
-  if (match) return Number(match[1]);
-  const suffix = normalized.match(/(?:^|_)(?:floor|level|storey|story|f)_?(\d+)(?:_|$)/);
-  if (suffix) return Number(suffix[1]);
+  if (/^(ground|ground_floor|stilt|floor_?0|level_?0|gf|groundfloor)$/.test(normalized)) return 0;
+
+  const wordFloor: Record<string, number> = {
+    first: 1, first_floor: 1, "1st_floor": 1,
+    second: 2, second_floor: 2, "2nd_floor": 2,
+    third: 3, third_floor: 3, "3rd_floor": 3,
+    fourth: 4, fourth_floor: 4, "4th_floor": 4,
+    fifth: 5, fifth_floor: 5, "5th_floor": 5,
+    sixth: 6, sixth_floor: 6, "6th_floor": 6,
+    seventh: 7, seventh_floor: 7, "7th_floor": 7,
+    eighth: 8, eighth_floor: 8, "8th_floor": 8,
+    ninth: 9, ninth_floor: 9, "9th_floor": 9,
+    tenth: 10, tenth_floor: 10, "10th_floor": 10,
+  };
+  if (wordFloor[normalized] !== undefined) return wordFloor[normalized];
+
+  const prefixed = normalized.match(/^(?:floor|level|storey|story|f)_?(\d+)(?:_.*)?$/);
+  if (prefixed) return Number(prefixed[1]);
+
+  const suffixed = normalized.match(/^(\d+)(?:st|nd|rd|th)?_?(?:floor|level|storey|story|f)$/);
+  if (suffixed) return Number(suffixed[1]);
+
+  const embedded = normalized.match(/(?:^|_)(?:floor|level|storey|story)_?(\d+)(?:_|$)/);
+  if (embedded) return Number(embedded[1]);
+
   return null;
 }
 
@@ -40,10 +61,32 @@ function boxFor(mesh: THREE.Mesh): THREE.Box3 | null {
   return box.isEmpty() ? null : box;
 }
 
+function ghostMaterialFor(record: MeshRecord): THREE.Material | THREE.Material[] {
+  if (record.ghostMaterial) return record.ghostMaterial;
+  const makeGhost = (material: THREE.Material) => {
+    const clone = material.clone();
+    const materialWithOpacity = clone as THREE.Material & {
+      opacity?: number;
+      transparent?: boolean;
+      depthWrite?: boolean;
+    };
+    if (typeof materialWithOpacity.opacity === "number")
+      materialWithOpacity.opacity = Math.min(materialWithOpacity.opacity, 0.16);
+    if ("transparent" in materialWithOpacity) materialWithOpacity.transparent = true;
+    if ("depthWrite" in materialWithOpacity) materialWithOpacity.depthWrite = false;
+    clone.needsUpdate = true;
+    return clone;
+  };
+  record.ghostMaterial = Array.isArray(record.originalMaterial)
+    ? record.originalMaterial.map(makeGhost)
+    : makeGhost(record.originalMaterial);
+  return record.ghostMaterial;
+}
+
 /**
- * Isolates customer floors by toggling the original imported mesh objects.
- * Meshes spanning multiple floor bands are treated as shared building fabric
- * and remain visible rather than being cut or destructively split.
+ * Shows the selected floor using existing mesh objects; no mesh is cut or
+ * reconstructed. Unlabelled objects spanning multiple storeys remain as
+ * translucent context so they do not obscure the selected floor in plan view.
  */
 export function createFloorVisibilityController(
   root: THREE.Object3D,
@@ -57,48 +100,67 @@ export function createFloorVisibilityController(
     records.push({
       mesh: node,
       originalVisible: node.visible,
+      originalMaterial: node.material,
       floor: floorFromHierarchy(node),
-      shared: false,
     });
   });
 
   const showAll = () => {
-    for (const record of records) record.mesh.visible = record.originalVisible;
+    for (const record of records) {
+      record.mesh.visible = record.originalVisible;
+      record.mesh.material = record.originalMaterial;
+    }
   };
 
   return {
     showFloor(level) {
       const bottom = level.elevationM;
       const top = level.topElevationM;
+      const selectedHeight = Math.max(top - bottom, 0.1);
+
       for (const record of records) {
         const box = boxFor(record.mesh);
         if (!box) {
           record.mesh.visible = record.originalVisible;
+          record.mesh.material = record.originalMaterial;
           continue;
         }
+
         const height = box.max.y - box.min.y;
         const centerY = (box.min.y + box.max.y) / 2;
-        const nameFloor = record.floor;
 
-        // A name-based assignment is only trusted for explicit floor labels.
-        if (nameFloor !== null) {
-          record.mesh.visible = record.originalVisible &&
-            (nameFloor === level.floor || height > Math.max(top - bottom, 0.1) * 1.5);
+        // A reviewed/explicit group label wins over bounds heuristics.
+        if (record.floor !== null) {
+          record.mesh.material = record.originalMaterial;
+          record.mesh.visible = record.originalVisible && record.floor === level.floor;
           continue;
         }
 
-        // Keep structural/facade objects spanning several storeys intact.
-        // Never slice them: they stay visible in every floor view.
-        if (height > Math.max(top - bottom, 0.1) * 1.5) {
+        // The original object spans storeys: keep it as ghost context, never cut it.
+        if (height > selectedHeight * 1.5) {
           record.mesh.visible = record.originalVisible;
+          record.mesh.material = ghostMaterialFor(record);
           continue;
         }
 
-        const centerInSelectedBand = centerY >= bottom - 0.02 && centerY <= top + 0.02;
+        record.mesh.material = record.originalMaterial;
+        const centerInSelectedBand =
+          centerY >= bottom - 0.02 && centerY <= top + 0.02;
         record.mesh.visible = record.originalVisible && centerInSelectedBand;
       }
     },
     showAll,
-    dispose: showAll,
+    dispose() {
+      showAll();
+      for (const record of records) {
+        const materials = Array.isArray(record.ghostMaterial)
+          ? record.ghostMaterial
+          : record.ghostMaterial
+            ? [record.ghostMaterial]
+            : [];
+        for (const material of materials) material.dispose();
+        record.ghostMaterial = undefined;
+      }
+    },
   };
 }
