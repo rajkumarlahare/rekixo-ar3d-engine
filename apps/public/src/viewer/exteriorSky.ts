@@ -17,11 +17,6 @@ const smoothRange = (start: number, end: number, value: number) => {
   return amount * amount * (3 - 2 * amount);
 };
 
-function normalizedHour(value: number) {
-  if (!Number.isFinite(value)) return 9;
-  return ((value % 24) + 24) % 24;
-}
-
 /** Art-directed east-to-west sun arc for a consistent cinematic customer preview. */
 function updateSolarState(hours: number, state: ExteriorSolarState) {
   const progress = (hours - 6) / 12;
@@ -179,10 +174,6 @@ export function createExteriorSky(reducedMotion: boolean, driftClouds = true) {
         updateSolar(5.5 + (3.5 * sunriseElapsed) / 45);
       }
       if (!reducedMotion && driftClouds) uniforms.elapsed.value += delta;
-    },
-    setTimeOfDay(hours: number) {
-      sunriseElapsed = 45;
-      updateSolar(normalizedHour(hours));
     },
     setNight(night: boolean) {
       uniforms.night.value = night ? 1 : 0;
