@@ -49,6 +49,7 @@ import {
   presentationStartsAtNight,
 } from "./buildingPresentationRuntime";
 import { createExteriorSky } from "./exteriorSky";
+import { createPremiumPresentationMotion } from "./premiumPresentationMotion";
 import { exteriorCameraView, type ExteriorView } from "./exteriorCamera";
 import { createPreviewBuilding } from "./viewerPreview";
 import { disposeViewerObject } from "./viewerResources";
@@ -191,6 +192,7 @@ export function Viewer3D({
     let homeView: HomeView | undefined;
     let floorExploder: ReturnType<typeof createFloorExploder> | undefined;
     let siteEnvironment: ReturnType<typeof createArchitecturalSiteEnvironment> | undefined;
+    let presentationMotion: ReturnType<typeof createPremiumPresentationMotion> | undefined;
     let modelProfile: ModelProfileRuntime | undefined;
     let projectExperience: ExperienceRuntime | undefined;
     let referenceExterior: ModelProfileRuntime["exterior"];
@@ -226,7 +228,9 @@ export function Viewer3D({
       presentationAppearance?.referenceVisual === true;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const scene = new THREE.Scene();
-    const sky = clientPresentation ? createExteriorSky(reducedMotion) : undefined;
+    const sky = clientPresentation
+      ? createExteriorSky(reducedMotion, buildingPresentation?.environment.profile?.motion.clouds !== "off")
+      : undefined;
     if (sky) scene.add(sky.root);
     scene.background = new THREE.Color(
       presentationAppearance?.background ?? (referenceVisual ? "#65798f" : "#8faec8"),
@@ -957,22 +961,37 @@ export function Viewer3D({
         controls.maxDistance = Math.max(radiusForView * 5.5, 28);
       }
 
+      presentationMotion?.dispose();
+      presentationMotion = undefined;
       siteEnvironment?.dispose();
       if (siteEnvironment) scene.remove(siteEnvironment.root);
       let includedSourceSite = false;
       object.traverse((node) => {
         if (node.userData.sourceGeometry?.siteGeometry === "included-in-source") includedSourceSite = true;
       });
+      const environmentProfile = buildingPresentation?.environment.profile;
+      const additiveBaseline = environmentProfile?.baseline === "always";
       siteEnvironment = createArchitecturalSiteEnvironment(
         bounds,
         renderer,
         mobile,
         clientPresentation &&
-          (buildingPresentation?.environment.genericDressing ?? true) &&
+          (additiveBaseline || (buildingPresentation?.environment.genericDressing ?? true)) &&
           !includedSourceSite,
         floorGeometry.find((level) => level.floor === 0 && Number.isFinite(level.elevationM))?.elevationM ?? modelProfile?.floorGeometry?.find((level) => level.floor === 0)?.elevationM,
+        additiveBaseline ? "always" : "empty-only",
       );
       scene.add(siteEnvironment.root);
+      if (
+        clientPresentation &&
+        environmentProfile?.preset !== "minimal" &&
+        environmentProfile?.motion.vegetation !== "off"
+      ) {
+        presentationMotion = createPremiumPresentationMotion(siteEnvironment.root, {
+          reducedMotion,
+          mobile,
+        });
+      }
       if (clientPresentation) {
         const span = Math.max(sizeForView.x, sizeForView.y, sizeForView.z, 1);
         sun.position.copy(centerForView).add(new THREE.Vector3(span * -0.7, span * 1.2, span));
@@ -1447,6 +1466,7 @@ export function Viewer3D({
 
       const delta = Math.min(clock.getDelta(), 0.05);
       sky?.update(delta, camera);
+      presentationMotion?.update(delta);
 
       if (cameraTween && !walkActive) {
         const elapsed = performance.now() - cameraTween.start;
@@ -1497,6 +1517,8 @@ export function Viewer3D({
       controls.removeEventListener("start", cancelCameraTween);
       controls.dispose();
       sky?.dispose();
+      presentationMotion?.dispose();
+      presentationMotion = undefined;
       renderer.domElement.removeEventListener("webglcontextlost", handleContextLost);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
