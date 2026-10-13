@@ -19,6 +19,9 @@ test("Phase 10 classifies only explicit site and landscape semantics", () => {
   assert.equal(semantics.classifySiteSemantic("Footpath Paving"), "path");
   assert.equal(semantics.classifySiteSemantic("Entrance Gate"), "gate");
   assert.equal(semantics.classifySiteSemantic("Street Light Pole"), "outdoor-light");
+  assert.equal(semantics.classifySiteSemantic("Swimming Pool"), "water");
+  assert.equal(semantics.classifySiteSemantic("Ornamental Pond"), "water");
+  assert.equal(semantics.classifySiteSemantic("Water Tank"), undefined);
   assert.equal(semantics.classifySiteSemantic("A-WALL-EXTERNAL"), undefined);
   assert.equal(semantics.classifySiteSemantic("Bedroom Window"), undefined);
 });
