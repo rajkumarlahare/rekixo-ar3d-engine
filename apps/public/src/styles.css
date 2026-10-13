@@ -1198,6 +1198,15 @@ footer { padding-top: 24px; display: flex; justify-content: space-between; gap: 
   font-weight: 950;
   letter-spacing: .12em;
 }
+.client-floor-controls__mode-label {
+  flex: 0 0 auto;
+  margin-left: 2px;
+  padding: 0 4px;
+  color: #9db3c9;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .09em;
+}
 .client-floor-control {
   flex: 0 0 auto;
   min-width: 35px;
@@ -1211,6 +1220,13 @@ footer { padding-top: 24px; display: flex; justify-content: space-between; gap: 
   font-weight: 850;
   white-space: nowrap;
   cursor: pointer;
+}
+.client-floor-control--mode {
+  min-width: 49px;
+  padding-inline: 8px;
+}
+.client-floor-control--mode[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 1px #4adca2;
 }
 .client-floor-control:hover,
 .client-floor-control:focus-visible,
