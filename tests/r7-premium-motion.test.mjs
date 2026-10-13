@@ -52,7 +52,7 @@ test("R7 guided tour consumes immutable manifest timing through one director", (
 
 test("R7 preserves existing viewer reduced-motion camera and sky safety", () => {
   assert.match(viewerSource, /const reducedMotion = window\.matchMedia/);
-  assert.match(viewerSource, /createExteriorSky\(reducedMotion\)/);
+  assert.match(viewerSource, /createExteriorSky\(reducedMotion, environmentProfile\?\.motion\.clouds === "drifting"\)/);
   assert.match(viewerSource, /if \(instant \|\| reducedMotion\)/);
   assert.match(viewerSource, /cameraTween/);
 });
