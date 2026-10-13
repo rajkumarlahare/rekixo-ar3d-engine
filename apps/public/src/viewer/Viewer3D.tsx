@@ -52,7 +52,7 @@ import { createExteriorSky } from "./exteriorSky";
 import { exteriorCameraView, type ExteriorView } from "./exteriorCamera";
 import { createPreviewBuilding } from "./viewerPreview";
 import { disposeViewerObject } from "./viewerResources";
-import { createFloorVisibilityController } from "./floorVisibility";
+import type { FloorVisibilityController } from "./floorVisibility";
 
 type ViewerMode = "booting" | "loading" | "model" | "demo" | "error";
 type PresentationView = "default" | "aerial" | "building" | "top" | "balcony" | "context";
@@ -181,7 +181,7 @@ export function Viewer3D({
     let abortModelLoad: (() => void) | undefined;
     let animationFrame = 0;
     let activeObject: THREE.Object3D | undefined;
-    let floorVisibilityController: ReturnType<typeof createFloorVisibilityController> | undefined;
+    let floorVisibilityController: FloorVisibilityController | undefined;
     let homeView: HomeView | undefined;
     let floorExploder: ReturnType<typeof createFloorExploder> | undefined;
     let siteEnvironment: ReturnType<typeof createArchitecturalSiteEnvironment> | undefined;
@@ -797,7 +797,7 @@ export function Viewer3D({
     sectionRef.current = applySection;
     lightingRef.current = applyLighting;
 
-    const mountObject = (object: THREE.Object3D, usePreset: boolean) => {
+    const mountObject = async (object: THREE.Object3D, usePreset: boolean) => {
       floorVisibilityController?.dispose();
       floorVisibilityController = undefined;
       if (activeObject) {
@@ -883,9 +883,15 @@ export function Viewer3D({
         loadModelProfileMaterialEnhancer(modelProfile);
       enhanceArchitecturalModel(object, renderer, referenceVisual);
       // Capture the post-enhancement materials so All/reset restores the actual customer presentation.
-      floorVisibilityController = clientPresentation
-        ? createFloorVisibilityController(object)
-        : undefined;
+      floorVisibilityController = undefined;
+      if (clientPresentation) {
+        try {
+          const { createFloorVisibilityController } = await import("./floorVisibility");
+          floorVisibilityController = createFloorVisibilityController(object);
+        } catch (error) {
+          console.warn("Customer floor review module could not be loaded.", error);
+        }
+      }
       if (clientPresentation && floorVisibilityController) {
         // Do not display a floor control unless the published model has original
         // meshes that can actually be shown for that level.
@@ -1353,7 +1359,7 @@ export function Viewer3D({
 
     const mountPreview = (message: string) => {
       if (disposed) return;
-      mountObject(createPreviewBuilding(), false);
+      void mountObject(createPreviewBuilding(), false);
       setErrorMessage(message);
       setProgress(100);
       setMode("demo");
@@ -1376,7 +1382,7 @@ export function Viewer3D({
           setProgress(60);
           const gltf = await loader.parseAsync(bytes, new URL(".", new URL(modelUrl, window.location.href)).href);
           if (disposed) { disposeViewerObject(gltf.scene); return; }
-          mountObject(gltf.scene, Boolean(cameraPreset));
+          void mountObject(gltf.scene, Boolean(cameraPreset));
           setProgress(100);
           setMode("model");
           if (sourcePresentation)
