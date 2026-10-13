@@ -88,11 +88,13 @@ export function updateCameraDepthRange(
   );
   // The generated exterior ground extends beyond the source bounds. Keep a
   // scale-based horizon margin but avoid the fixed 0.01..2000 range on houses.
+  // The generated fallback uses an 8-unit minimum site span even for
+  // small source models, so keep its distant ground inside the clip volume.
+  const sceneScale = Math.max(modelScale, 8);
   const far = Math.max(
     centerDistance + radius * 1.25 + modelScale * 0.1,
-    modelScale * 18,
+    sceneScale * 18,
     near * 1000,
-    10,
   );
 
   if (!Number.isFinite(near) || !Number.isFinite(far) || far <= near) return false;
