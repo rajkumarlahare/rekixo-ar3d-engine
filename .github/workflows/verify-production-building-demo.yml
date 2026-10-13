@@ -22,7 +22,7 @@ jobs:
   verify:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Check out production verifier
@@ -51,3 +51,15 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           rm -f "$OUT"
+
+      - name: Install live browser-test dependencies
+        run: npm ci
+
+      - name: Install Chromium for live customer verification
+        run: npx --no-install playwright install --with-deps chromium
+
+      - name: Verify live floor-review buttons on the actual customer site
+        env:
+          REKIXO_PUBLIC_ORIGIN: https://ar3dstudio.in
+          REKIXO_FLOOR_UI_PROJECT_SLUG: ${{ inputs.project_slug || vars.REKIXO_DEMO_PROJECT_SLUG || 'jyoti-paradise' }}
+        run: npx --no-install playwright test e2e/production-floor-controls.spec.ts --config playwright.production.config.ts

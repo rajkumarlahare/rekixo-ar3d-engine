@@ -64,5 +64,8 @@ jobs:
       - name: Run browser E2E smoke
         run: npx --no-install playwright test --config playwright.config.ts
 
+      - name: Discover live production floor-controls smoke
+        run: npx --no-install playwright test e2e/production-floor-controls.spec.ts --config playwright.production.config.ts --list
+
       - name: Diff whitespace safety
         run: git diff --check origin/main...HEAD
