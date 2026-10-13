@@ -1821,10 +1821,20 @@ export function Viewer3D({
               <button
                 type="button"
                 key={floor}
-                aria-label={floor === 0 ? "Show Ground Floor only" : floor < 0 ? `Show Basement ${Math.abs(floor)} only` : `Show Floor ${floor} only`}
+                aria-label={floor === 0
+                  ? clientFloorReviewMode === "stacked" ? "Show Ground Floor" : "Show Ground Floor only"
+                  : floor < 0
+                    ? clientFloorReviewMode === "stacked"
+                      ? `Show stacked view through Basement ${Math.abs(floor)}`
+                      : `Show Basement ${Math.abs(floor)} only`
+                    : clientFloorReviewMode === "stacked"
+                      ? `Show stacked view through Floor ${floor}`
+                      : `Show Floor ${floor} only`}
                 aria-pressed={clientFloorSelection === floor}
                 className={clientFloorSelection === floor ? "client-floor-control client-floor-control--active" : "client-floor-control"}
-                title={floor === 0 ? "Ground floor, top view" : floor < 0 ? `Basement ${Math.abs(floor)}, top view` : `Floor ${floor}, top view`}
+                title={clientFloorReviewMode === "stacked"
+                  ? `Show this floor with all lower floors; hide upper floors`
+                  : floor === 0 ? "Isolate ground floor, top view" : floor < 0 ? `Isolate basement ${Math.abs(floor)}, top view` : `Isolate floor ${floor}, top view`}
                 onClick={() => clientFloorViewRef.current?.(floor)}
               >
                 {label}
@@ -1834,10 +1844,10 @@ export function Viewer3D({
           {clientRoofAvailable && (
             <button
               type="button"
-              aria-label="Show roof only"
+              aria-label={clientFloorReviewMode === "stacked" ? "Show roof and lower floors" : "Show roof only"}
               aria-pressed={clientFloorSelection === "roof"}
               className={clientFloorSelection === "roof" ? "client-floor-control client-floor-control--active" : "client-floor-control"}
-              title="Isolate the roof and upper structure using detected model bounds"
+              title={clientFloorReviewMode === "stacked" ? "Show the roof with all lower floors; hide upper structures above the roof" : "Isolate the roof and upper structure using detected model bounds"}
               onClick={() => clientFloorViewRef.current?.("roof")}
             >
               Roof
