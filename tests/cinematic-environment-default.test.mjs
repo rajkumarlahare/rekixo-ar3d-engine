@@ -61,6 +61,32 @@ test("default roads, paths, ground and lawns use deterministic procedural surfac
   assert.match(site, /first\.kind === "lawn" \|\| first\.kind === "garden"/);
 });
 
+test("only reviewed water-feature semantics become animated source-backed water surfaces", () => {
+  const semantics = read("apps/admin/src/studio/siteSemantics.ts");
+  const draft = read("apps/admin/src/studio/siteLandscapeDraft.ts");
+  const contract = read("packages/contracts/src/index.ts");
+  const runtimeValidation = read("packages/contracts/src/runtime-validation.ts");
+  const sceneManifest = read("packages/contracts/src/scene-manifest-v2.ts");
+  const siteRuntime = read("apps/public/src/viewer/publicRuntimeContext.ts");
+  const site = read("apps/public/src/viewer/siteEnvironment.ts");
+  const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
+
+  assert.match(semantics, /return "water"/);
+  assert.match(draft, /\["garden", "lawn", "path", "road", "parking", "water"\]/);
+  assert.match(contract, /\| "water"/);
+  assert.match(runtimeValidation, /"water",\s*"column"/);
+  assert.match(sceneManifest, /"water",\s*"column"/);
+  assert.match(siteRuntime, /"water",\s*"column"/);
+  assert.match(site, /const waterElements = elements\.filter\(\(item\) => item\.kind === "water"\)/);
+  assert.match(site, /new THREE\.MeshPhysicalMaterial/);
+  assert.match(site, /waterMaterial\.onBeforeCompile/);
+  assert.match(site, /waterMotion = true/);
+  assert.match(site, /surface\.material\.userData\.waterAnimationEnabled !== true/);
+  assert.match(viewer, /environmentProfile\?\.motion\.water !== "off"/);
+  assert.match(viewer, /siteEnvironment\?\.update\(delta\)/);
+  assert.doesNotMatch(read("apps/public/src/viewer/presentationEnvironment.ts"), /Presentation water|generated water pool/i);
+});
+
 test("generated vegetation motion is wired to the customer render loop and respects reduced motion", () => {
   const motion = read("apps/public/src/viewer/premiumPresentationMotion.ts");
   const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
