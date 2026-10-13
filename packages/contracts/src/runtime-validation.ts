@@ -192,6 +192,7 @@ function assertSiteElements(value: unknown) {
         "plant",
         "gate",
         "outdoor-light",
+        "water",
         "column",
         "beam",
         "slab",
