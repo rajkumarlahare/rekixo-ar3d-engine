@@ -60,6 +60,15 @@ test("separate projects have distinct identity and floor IDs", () => {
   assert.notEqual(a.id, b.id);
   assert.notEqual(a.scene.floors[0].id, b.scene.floors[0].id);
 });
+test("Studio scene defaults to auto landscape and validates explicit context presets", () => {
+  const p = newProject("Landscape project");
+  assert.equal(p.scene.landscapePreset, "auto");
+  p.scene.landscapePreset = "rural-farm";
+  assert.doesNotThrow(() => validateProject(p));
+  p.scene.landscapePreset = "oceanfront";
+  assert.throws(() => validateProject(p), /landscape preset/);
+});
+
 test("review snapshot survives subsequent furniture and room editing", () => {
   const p = fixture(),
     v = snapshot(p, "First review");
