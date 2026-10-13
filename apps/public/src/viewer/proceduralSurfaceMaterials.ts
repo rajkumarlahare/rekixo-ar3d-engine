@@ -4,6 +4,18 @@ export type ProceduralSurfaceKind = "asphalt" | "paving" | "grass" | "soil";
 
 const textureCache = new Map<ProceduralSurfaceKind, THREE.DataTexture>();
 const TEXTURE_SIZE = 128;
+let configuredAnisotropy = 1;
+
+/** Configure cached and future detail maps for oblique camera angles. */
+export function configureProceduralSurfaceTextures(renderer: THREE.WebGLRenderer) {
+  const maxAnisotropy = renderer?.capabilities?.getMaxAnisotropy?.() ?? 1;
+  configuredAnisotropy = Math.max(1, Math.min(maxAnisotropy, 8));
+  for (const texture of textureCache.values()) {
+    if (texture.anisotropy === configuredAnisotropy) continue;
+    texture.anisotropy = configuredAnisotropy;
+    texture.needsUpdate = true;
+  }
+}
 
 function unitNoise(x: number, y: number, seed: number) {
   const value = Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453123;
@@ -38,12 +50,12 @@ export function proceduralSurfaceTexture(kind: ProceduralSurfaceKind) {
       );
       const amount =
         kind === "asphalt"
-          ? 174 + coarse * 30 + fine * 34 + speckle * 14
+          ? 174 + coarse * 18 + fine * 10 + speckle * 5
           : kind === "paving"
-            ? 188 + coarse * 28 + fine * 20 + speckle * 16
+            ? 188 + coarse * 18 + fine * 8 + speckle * 5
             : kind === "grass"
-              ? 164 + coarse * 42 + fine * 28 + speckle * 12
-              : 170 + coarse * 40 + fine * 24 + speckle * 12;
+              ? 164 + coarse * 30 + fine * 10 + speckle * 5
+              : 170 + coarse * 28 + fine * 10 + speckle * 5;
       const value = Math.max(0, Math.min(255, Math.round(amount)));
       pixels[index] = value;
       pixels[index + 1] = value;
@@ -64,7 +76,8 @@ export function proceduralSurfaceTexture(kind: ProceduralSurfaceKind) {
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(8, 8);
+  texture.repeat.set(4, 4);
+  texture.anisotropy = configuredAnisotropy;
   texture.magFilter = THREE.LinearFilter;
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.generateMipmaps = true;

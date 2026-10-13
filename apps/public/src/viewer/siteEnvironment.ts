@@ -2,7 +2,10 @@ import type { PublicSiteElement } from "@rekixo/3d-contracts";
 import * as THREE from "three";
 import { addPresentationFallback } from "./presentationEnvironment";
 import { getPublicRuntimeSiteElements } from "./publicRuntimeContext";
-import { createProceduralSurfaceMaterial } from "./proceduralSurfaceMaterials";
+import {
+  configureProceduralSurfaceTextures,
+  createProceduralSurfaceMaterial,
+} from "./proceduralSurfaceMaterials";
 
 const AREA_KINDS = new Set<PublicSiteElement["kind"]>([
   "garden",
@@ -498,13 +501,15 @@ function disposeRoot(root: THREE.Object3D) {
 
 export function createArchitecturalSiteEnvironment(
   bounds: THREE.Box3,
-  _renderer: THREE.WebGLRenderer,
+  renderer: THREE.WebGLRenderer,
   mobile: boolean,
   presentation = false,
   groundElevation?: number,
   baselinePolicy: "empty-only" | "always" = "empty-only",
   waterMotion = true,
+  sourceSiteIncluded = false,
 ) {
+  configureProceduralSurfaceTextures(renderer);
   const root = new THREE.Group();
   root.name = "source-backed-site-environment";
   const elements = getPublicRuntimeSiteElements();
@@ -542,6 +547,8 @@ export function createArchitecturalSiteEnvironment(
     );
     const baselineOptions = elements.length
       ? {
+          includeGround: !sourceSiteIncluded,
+          includeSurroundingGround: !sourceSiteIncluded,
           includeRoad: !hasRoad,
           includeCars: false,
           includeSidewalk: !hasPath,
@@ -555,6 +562,8 @@ export function createArchitecturalSiteEnvironment(
       : {
           // Until curated vehicle/context GLB assets ship, avoid adding blocky
           // placeholder cars or neighborhood cuboids to the cinematic profile.
+          includeGround: !sourceSiteIncluded,
+          includeSurroundingGround: !sourceSiteIncluded,
           includeCars: false,
           includeContextMassing: false,
         };
