@@ -27,10 +27,10 @@ function mesh(name, width, height, depth, y, color) {
 test("customer floor isolation uses original mesh visibility and not vertical clipping planes", () => {
   assert.match(viewer, /createFloorVisibilityController\(object\)/);
   assert.match(viewer, /clientPresentation && floorVisibilityController/);
-  assert.match(viewer, /floorVisibilityController\.showFloor\(level\)/);
+  assert.match(viewer, /floorVisibilityController\.showFloor\(level, clientFloorReviewModeRef\.current\)/);
   assert.match(viewer, /floorVisibilityController\.showAll\(\)/);
   assert.match(viewer, /clientFloorControlsReady && clientFloorIds\.length > 0/);
-  assert.match(viewer, /const selectedBounds = applyFloorLevel\(level\)/);
+  assert.match(viewer, /const selectedBounds = applyFloorLevel\(level\)/);\n  assert.match(viewer, /clientFloorReviewModeRef.current === "stacked"/);\n  assert.match(viewer, /aria-label="Stacked floor view"/);\n  assert.match(viewer, /aria-label="Isolate selected floor"/);
 });
 
 test("actual Three.js meshes isolate a floor, ghost a shared shell, and frame the selected geometry", () => {
@@ -70,6 +70,62 @@ test("actual Three.js meshes isolate a floor, ghost a shared shell, and frame th
   assert.equal(shell.visible, true);
   assert.equal(ground.material, groundMaterial);
   assert.equal(shell.material, shellMaterial);
+  controller.dispose();
+});
+
+test("stacked view keeps all lower floors connected and highlights the selected floor", () => {
+  const root = new THREE.Group();
+  const ground = mesh("Ground slab", 4, 2, 4, 1, "#d8d8d8");
+  const first = mesh("First floor walls", 3, 2, 3, 3, "#eeeeee");
+  const second = mesh("Second floor walls", 3, 2, 3, 5, "#cccccc");
+  const third = mesh("Third floor walls", 3, 2, 3, 7, "#bbbbbb");
+  const sharedCore = mesh("Shared lift core", 0.5, 8, 0.5, 4, "#888888");
+  root.add(ground, first, second, third, sharedCore);
+
+  const groundMaterial = ground.material;
+  const firstMaterial = first.material;
+  const secondMaterial = second.material;
+  const thirdMaterial = third.material;
+  const controller = createFloorVisibilityController(root);
+
+  const stackBounds = controller.showFloor(
+    { floor: 2, elevationM: 4, topElevationM: 6, source: "model" },
+    "stacked",
+  );
+  assert.equal(ground.visible, true, "Ground remains attached below the selected floor");
+  assert.equal(first.visible, true, "1F remains attached below the selected floor");
+  assert.equal(second.visible, true, "selected 2F is visible");
+  assert.equal(third.visible, false, "floors above the selected floor are hidden");
+  assert.equal(ground.material.transparent, true, "lower floors are muted as context");
+  assert.equal(first.material.transparent, true, "lower floors are muted as context");
+  assert.equal(second.material, secondMaterial, "selected floor retains its original material");
+  assert.equal(third.material, thirdMaterial, "hidden upper floors keep original materials");
+  assert.equal(sharedCore.visible, true, "shared vertical structure is retained without cutting");
+  assert.ok(sharedCore.material.transparent, "shared core is ghosted when it spans storeys");
+  assert.ok(stackBounds, "stacked mode returns the bounds of all shown lower and selected floors");
+  assert.equal(stackBounds.min.y, 0);
+  assert.equal(stackBounds.max.y, 6);
+
+  controller.showFloor(
+    { floor: 2, elevationM: 4, topElevationM: 6, source: "model" },
+    "isolate",
+  );
+  assert.equal(ground.visible, false, "isolate mode hides lower floors");
+  assert.equal(first.visible, false, "isolate mode hides lower floors");
+  assert.equal(second.visible, true, "isolate mode keeps selected floor visible");
+  assert.equal(third.visible, false);
+  assert.equal(second.material, secondMaterial);
+  assert.equal(sharedCore.visible, true);
+
+  controller.showAll();
+  assert.equal(ground.visible, true);
+  assert.equal(first.visible, true);
+  assert.equal(second.visible, true);
+  assert.equal(third.visible, true);
+  assert.equal(ground.material, groundMaterial);
+  assert.equal(first.material, firstMaterial);
+  assert.equal(second.material, secondMaterial);
+  assert.equal(third.material, thirdMaterial);
   controller.dispose();
 });
 
