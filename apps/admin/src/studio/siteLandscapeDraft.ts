@@ -98,7 +98,7 @@ function dimensionsFromBounds(
 }
 
 function areaKind(kind: LandscapeSiteElementKind) {
-  return ["garden", "lawn", "path", "road", "parking"].includes(kind);
+  return ["garden", "lawn", "path", "road", "parking", "water"].includes(kind);
 }
 
 function pointCentre(
