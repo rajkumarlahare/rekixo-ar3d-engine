@@ -56,6 +56,7 @@ import { createFloorVisibilityController } from "./floorVisibility";
 
 type ViewerMode = "booting" | "loading" | "model" | "demo" | "error";
 type PresentationView = "default" | "aerial" | "building" | "top" | "balcony" | "context";
+type ClientFloorReviewMode = "stacked" | "isolate";
 
 interface Viewer3DProps {
   sourcePresentation?: SourcePresentation;
@@ -132,6 +133,7 @@ export function Viewer3D({
   const resetRef = useRef<(() => void) | null>(null);
   const floorRef = useRef<((floor: number | null) => void) | null>(null);
   const clientFloorViewRef = useRef<((selection: number | "roof" | "top" | null) => void) | null>(null);
+  const clientFloorReviewModeRef = useRef<ClientFloorReviewMode>("stacked");
   const sectionRef = useRef<((enabled: boolean) => void) | null>(null);
   const lightingRef = useRef<((night: boolean) => void) | null>(null);
   const explodeRef = useRef<((enabled: boolean) => void) | null>(null);
@@ -150,6 +152,7 @@ export function Viewer3D({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedFloor, setSelectedFloor] = useState<number | null>(initialFloor);
   const [clientFloorSelection, setClientFloorSelection] = useState<number | "roof" | "top" | null>(null);
+  const [clientFloorReviewMode, setClientFloorReviewMode] = useState<ClientFloorReviewMode>("stacked");
   const [clientFloorIds, setClientFloorIds] = useState<number[]>([]);
   const [clientRoofAvailable, setClientRoofAvailable] = useState(false);
   const [clientFloorControlsReady, setClientFloorControlsReady] = useState(false);
@@ -173,6 +176,8 @@ export function Viewer3D({
     setClientRoofAvailable(false);
     setClientFloorControlsReady(false);
     setClientFloorSelection(null);
+    clientFloorReviewModeRef.current = "stacked";
+    setClientFloorReviewMode("stacked");
     let abortModelLoad: (() => void) | undefined;
     let animationFrame = 0;
     let activeObject: THREE.Object3D | undefined;
@@ -348,7 +353,7 @@ export function Viewer3D({
           : [];
         selectedBounds = level === null
           ? floorVisibilityController.showAll()
-          : floorVisibilityController.showFloor(level);
+          : floorVisibilityController.showFloor(level, clientFloorReviewModeRef.current);
       } else if (level === null) {
         renderer.clippingPlanes = sectionEnabledRef.current
           ? renderer.clippingPlanes.filter(
@@ -1200,21 +1205,25 @@ export function Viewer3D({
         const verticalTangent = Math.tan(THREE.MathUtils.degToRad(fov / 2));
         const horizontalTangent = verticalTangent * Math.max(camera.aspect, 0.25);
         const floorHeight = Math.max(level.topElevationM - level.elevationM, 0.1);
+        const stackedView = clientFloorReviewModeRef.current === "stacked";
         const fitDistance = Math.max(
           size.x / (2 * horizontalTangent),
           size.z / (2 * verticalTangent),
+          stackedView ? size.y / (2 * verticalTangent) : 0,
           floorHeight * 2,
           1.5,
-        ) * 1.12;
-        const target = new THREE.Vector3(
-          center.x,
-          floorFocusElevation(level),
-          center.z,
-        );
+        ) * (stackedView ? 1.18 : 1.12);
+        // In Stacked View, centre the camera on the visible lower-to-selected
+        // stack and use an oblique angle so connected lower storeys are visible.
+        // Isolate View remains near top-down for interior/layout inspection.
+        const targetY = stackedView
+          ? (bounds.min.y + level.topElevationM) / 2
+          : floorFocusElevation(level);
+        const target = new THREE.Vector3(center.x, targetY, center.z);
         const position = new THREE.Vector3(
           center.x,
-          level.topElevationM + fitDistance,
-          center.z + fitDistance * 0.025,
+          level.topElevationM + fitDistance * (stackedView ? 0.92 : 1),
+          center.z + fitDistance * (stackedView ? 0.68 : 0.025),
         );
         controls.minDistance = Math.max(0.2, Math.min(floorHeight * 0.45, fitDistance * 0.15));
         controls.maxDistance = Math.max(controls.maxDistance, fitDistance * 4);
@@ -1766,6 +1775,37 @@ export function Viewer3D({
       {clientPresentation && showClientFloorControls && mode === "model" && clientFloorControlsReady && clientFloorIds.length > 0 && (
         <nav className="client-floor-controls" aria-label="Select building floor">
           <span className="client-floor-controls__label">FLOOR</span>
+          <span className="client-floor-controls__mode-label">VIEW</span>
+          <button
+            type="button"
+            aria-label="Stacked floor view"
+            aria-pressed={clientFloorReviewMode === "stacked"}
+            className={clientFloorReviewMode === "stacked" ? "client-floor-control client-floor-control--mode client-floor-control--active" : "client-floor-control client-floor-control--mode"}
+            title="Show the selected floor connected to all lower floors"
+            onClick={() => {
+              clientFloorReviewModeRef.current = "stacked";
+              setClientFloorReviewMode("stacked");
+              if (typeof clientFloorSelection === "number" || clientFloorSelection === "roof")
+                clientFloorViewRef.current?.(clientFloorSelection);
+            }}
+          >
+            Stacked
+          </button>
+          <button
+            type="button"
+            aria-label="Isolate selected floor"
+            aria-pressed={clientFloorReviewMode === "isolate"}
+            className={clientFloorReviewMode === "isolate" ? "client-floor-control client-floor-control--mode client-floor-control--active" : "client-floor-control client-floor-control--mode"}
+            title="Show only the selected floor, with shared structural context"
+            onClick={() => {
+              clientFloorReviewModeRef.current = "isolate";
+              setClientFloorReviewMode("isolate");
+              if (typeof clientFloorSelection === "number" || clientFloorSelection === "roof")
+                clientFloorViewRef.current?.(clientFloorSelection);
+            }}
+          >
+            Isolate
+          </button>
           <button
             type="button"
             aria-pressed={clientFloorSelection === null}
