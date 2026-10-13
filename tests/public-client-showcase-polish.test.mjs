@@ -20,9 +20,14 @@ const camera = await import(compile("apps/public/src/viewer/exteriorCamera.ts"))
 const source = await import(compile("apps/public/src/viewer/sourcePresentation.ts"));
 const runtimeUrl = compile("apps/public/src/viewer/publicRuntimeContext.ts");
 const runtime = await import(runtimeUrl);
+const surfaceUrl = compile("apps/public/src/viewer/proceduralSurfaceMaterials.ts");
+const presentationUrl = compile("apps/public/src/viewer/presentationEnvironment.ts", {
+  "./proceduralSurfaceMaterials": surfaceUrl,
+});
 const environment = await import(compile("apps/public/src/viewer/siteEnvironment.ts", {
   "./publicRuntimeContext": runtimeUrl,
-  "./presentationEnvironment": compile("apps/public/src/viewer/presentationEnvironment.ts"),
+  "./presentationEnvironment": presentationUrl,
+  "./proceduralSurfaceMaterials": surfaceUrl,
 }));
 
 test("client modules exclude disabled and absent scenes", () => {
@@ -53,12 +58,14 @@ test("exterior views keep every measured building corner in portrait and landsca
     }
   }
 });
-test("source-backed environments retain instancing and suppress generic dressing", () => {
+test("source-backed environments retain instancing while the presentation root remains a safe site layer", () => {
   runtime.setPublicRuntimeSiteElements([{ id: "tree-1", kind: "tree", x: 0, y: 0, z: 4, width: 2, depth: 2, height: 4, rotation: 0, color: "#228844" }]);
   const result = environment.createArchitecturalSiteEnvironment(new THREE.Box3(new THREE.Vector3(-4, 0, -4), new THREE.Vector3(4, 20, 4)), {}, false, true);
   assert.equal(result.root.userData.sourceBackedSiteElementCount, 1);
   assert.ok(result.root.children.some((mesh) => mesh.isInstancedMesh));
-  assert.notEqual(result.root.userData.presentationOnly, true);
+  assert.equal(result.root.userData.presentationOnly, true);
+  assert.equal(result.root.userData.nonAuthoritative, true);
+  assert.ok(result.root.children.some((mesh) => mesh.name === "Site tree trunks"));
   result.dispose(); runtime.clearPublicRuntimeSiteElements();
 });
 test("generic exterior dressing is opt-in and clearly non-authoritative", () => {
