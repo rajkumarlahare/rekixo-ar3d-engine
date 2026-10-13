@@ -30,7 +30,10 @@ test("customer floor isolation uses original mesh visibility and not vertical cl
   assert.match(viewer, /floorVisibilityController\.showFloor\(level, clientFloorReviewModeRef\.current\)/);
   assert.match(viewer, /floorVisibilityController\.showAll\(\)/);
   assert.match(viewer, /clientFloorControlsReady && clientFloorIds\.length > 0/);
-  assert.match(viewer, /const selectedBounds = applyFloorLevel\(level\)/);\n  assert.match(viewer, /clientFloorReviewModeRef.current === "stacked"/);\n  assert.match(viewer, /aria-label="Stacked floor view"/);\n  assert.match(viewer, /aria-label="Isolate selected floor"/);
+  assert.match(viewer, /const selectedBounds = applyFloorLevel\(level\)/);
+  assert.match(viewer, /clientFloorReviewModeRef.current === "stacked"/);
+  assert.match(viewer, /aria-label="Stacked floor view"/);
+  assert.match(viewer, /aria-label="Isolate selected floor"/);
 });
 
 test("actual Three.js meshes isolate a floor, ghost a shared shell, and frame the selected geometry", () => {
