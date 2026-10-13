@@ -267,3 +267,20 @@ test("generated site gate leaves open on click, animate smoothly, and restore on
   leaf.geometry.dispose();
   leaf.material.dispose();
 });
+
+
+test("customer exterior exposes an accessible time-of-day control tied to the solar lighting rig", () => {
+  const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
+  const sky = read("apps/public/src/viewer/exteriorSky.ts");
+  const styles = read("apps/public/src/styles.css");
+
+  assert.match(sky, /setTimeOfDay\\(hours: number\\)/);
+  assert.match(viewer, /timeOfDayRef\\.current = \\(hours\\) => sky\\?\\.setTimeOfDay\\(hours\\)/);
+  assert.match(viewer, /clientPresentation && experienceMode !== "interior" && <div className="viewer-time-of-day"/);
+  assert.match(viewer, /aria-label="Exterior lighting time"/);
+  assert.match(viewer, /lightingRef\\.current\\?\\.\\(false\\)/);
+  assert.match(viewer, /timeOfDayRef\\.current\\?\\.\\(hours\\)/);
+  assert.match(viewer, /sun\\.position\\.copy\\(solar\\.direction\\)/);
+  assert.match(styles, /\\.viewer-time-of-day/);
+  assert.match(styles, /\\.viewer-time-of-day input\\[type="range"\\]/);
+});
