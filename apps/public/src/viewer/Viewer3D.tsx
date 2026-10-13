@@ -52,6 +52,7 @@ import { createExteriorSky } from "./exteriorSky";
 import { exteriorCameraView, type ExteriorView } from "./exteriorCamera";
 import { createPreviewBuilding } from "./viewerPreview";
 import { disposeViewerObject } from "./viewerResources";
+import { createFloorVisibilityController } from "./floorVisibility";
 
 type ViewerMode = "booting" | "loading" | "model" | "demo" | "error";
 type PresentationView = "default" | "aerial" | "building" | "top" | "balcony" | "context";
@@ -175,6 +176,7 @@ export function Viewer3D({
     let abortModelLoad: (() => void) | undefined;
     let animationFrame = 0;
     let activeObject: THREE.Object3D | undefined;
+    let floorVisibilityController: ReturnType<typeof createFloorVisibilityController> | undefined;
     let homeView: HomeView | undefined;
     let floorExploder: ReturnType<typeof createFloorExploder> | undefined;
     let siteEnvironment: ReturnType<typeof createArchitecturalSiteEnvironment> | undefined;
@@ -334,38 +336,43 @@ export function Viewer3D({
     };
     resetRef.current = resetCamera;
 
-    const applyFloorLevel = (level: FloorGeometryLevel | null) => {
-      if (!modelBounds) return;
-      if (level === null) {
+    const applyFloorLevel = (level: FloorGeometryLevel | null): THREE.Box3 | undefined => {
+      if (!modelBounds) return undefined;
+      let selectedBounds: THREE.Box3 | undefined;
+
+      // The customer viewer uses original mesh visibility, never floor clipping.
+      // The legacy/admin path intentionally keeps its current clipping behavior.
+      if (clientPresentation && floorVisibilityController) {
+        renderer.clippingPlanes = sectionEnabledRef.current
+          ? renderer.clippingPlanes.filter((plane) => Math.abs(plane.normal.x) > 0.5)
+          : [];
+        selectedBounds = level === null
+          ? floorVisibilityController.showAll()
+          : floorVisibilityController.showFloor(level);
+      } else if (level === null) {
         renderer.clippingPlanes = sectionEnabledRef.current
           ? renderer.clippingPlanes.filter(
               (plane) => Math.abs(plane.normal.x) > 0.5,
             )
           : [];
-        return;
+      } else {
+        const sectionPlanes = sectionEnabledRef.current
+          ? renderer.clippingPlanes.filter(
+              (plane) => Math.abs(plane.normal.x) > 0.5,
+            )
+          : [];
+        renderer.clippingPlanes = [
+          ...sectionPlanes,
+          new THREE.Plane(new THREE.Vector3(0, 1, 0), -level.elevationM),
+          new THREE.Plane(new THREE.Vector3(0, -1, 0), level.topElevationM),
+        ];
       }
 
-      const sectionPlanes = sectionEnabledRef.current
-        ? renderer.clippingPlanes.filter(
-            (plane) => Math.abs(plane.normal.x) > 0.5,
-          )
-        : [];
-      renderer.clippingPlanes = [
-        ...sectionPlanes,
-        new THREE.Plane(
-          new THREE.Vector3(0, 1, 0),
-          -level.elevationM,
-        ),
-        new THREE.Plane(
-          new THREE.Vector3(0, -1, 0),
-          level.topElevationM,
-        ),
-      ];
-
-      if (!walkActive && currentExperienceMode === "site") {
+      if (level && !walkActive && currentExperienceMode === "site") {
         controls.target.y = floorFocusElevation(level);
         controls.update();
       }
+      return selectedBounds;
     };
 
     const applyFloor = (floor: number | null) => {
@@ -430,6 +437,7 @@ export function Viewer3D({
       walkthrough?.rooms.find((room) => room.id === id);
 
     const enterGraphRoom = (id: string, preserveDirection = false) => {
+      if (clientPresentation) floorVisibilityController?.showAll();
       if (!walkthrough) return false;
       const room = graphRoom(id);
       if (!room) return false;
@@ -487,6 +495,7 @@ export function Viewer3D({
     };
 
     const enterWalkMode = (enabled: boolean, floor: number | null) => {
+      if (enabled && clientPresentation) floorVisibilityController?.showAll();
       walkActive = enabled;
       setWalkMode(enabled);
       cameraTween = undefined;
@@ -547,6 +556,7 @@ export function Viewer3D({
     };
 
     const enterRoom = (id: string) => {
+      if (clientPresentation) floorVisibilityController?.showAll();
       if (walkthrough && graphRoom(id)) {
         enterGraphRoom(id);
         return;
@@ -783,6 +793,8 @@ export function Viewer3D({
     lightingRef.current = applyLighting;
 
     const mountObject = (object: THREE.Object3D, usePreset: boolean) => {
+      floorVisibilityController?.dispose();
+      floorVisibilityController = undefined;
       if (activeObject) {
         referenceExterior?.dispose();
         scene.remove(activeObject);
@@ -815,7 +827,9 @@ export function Viewer3D({
           maxZ: meshBox.max.z,
         });
       });
-      const modelDerivedFloorGeometry = deriveFloorGeometryFromModel({
+      // First detect physical floor bands without assuming that project metadata
+      // already has the same number of floor IDs as the uploaded model.
+      const detectedFloorGeometry = deriveFloorGeometryFromModel({
         modelBounds: {
           minX: modelBounds.min.x,
           minY: modelBounds.min.y,
@@ -825,17 +839,32 @@ export function Viewer3D({
           maxZ: modelBounds.max.z,
         },
         meshBounds,
-        floorIds: availableFloors,
       });
-      resolvedFloorGeometry = configuredFloorGeometry.length
+      // Keep explicit project IDs only when the configuration count matches the
+      // source-detected bands. Stale/missing IDs must not hide valid model floors.
+      const modelDerivedFloorGeometry =
+        availableFloors.length === detectedFloorGeometry.floors.length
+          ? {
+              ...detectedFloorGeometry,
+              floors: detectedFloorGeometry.floors.map((level, index) => ({
+                ...level,
+                floor: availableFloors[index],
+              })),
+            }
+          : detectedFloorGeometry;
+      const explicitGeometryMatchesDetectedCount =
+        configuredFloorGeometry.length > 0 &&
+        (detectedFloorGeometry.floors.length === 0 ||
+          configuredFloorGeometry.length === detectedFloorGeometry.floors.length);
+      resolvedFloorGeometry = explicitGeometryMatchesDetectedCount
         ? configuredFloorGeometry
         : modelDerivedFloorGeometry.floors;
-      resolvedRoofGeometry = modelDerivedFloorGeometry.roof;
-      if (clientPresentation) {
-        setClientFloorIds(resolvedFloorGeometry.map((level) => level.floor));
-        setClientRoofAvailable(Boolean(resolvedRoofGeometry));
-        setClientFloorControlsReady(resolvedFloorGeometry.length > 0);
-      }
+      resolvedRoofGeometry = modelDerivedFloorGeometry.roof
+        ? {
+            ...modelDerivedFloorGeometry.roof,
+            floor: resolvedFloorGeometry.length,
+          }
+        : undefined;
       if (referenceExterior) {
         scene.background = referenceExterior.daylightSky;
         sun.position.set(-16, 30, 16);
@@ -848,6 +877,24 @@ export function Viewer3D({
       const materialEnhancerPromise =
         loadModelProfileMaterialEnhancer(modelProfile);
       enhanceArchitecturalModel(object, renderer, referenceVisual);
+      // Capture the post-enhancement materials so All/reset restores the actual customer presentation.
+      floorVisibilityController = clientPresentation
+        ? createFloorVisibilityController(object)
+        : undefined;
+      if (clientPresentation && floorVisibilityController) {
+        // Do not display a floor control unless the published model has original
+        // meshes that can actually be shown for that level.
+        resolvedFloorGeometry = resolvedFloorGeometry.filter((level) =>
+          floorVisibilityController!.hasFloor(level),
+        );
+        if (resolvedRoofGeometry && !floorVisibilityController.hasFloor(resolvedRoofGeometry))
+          resolvedRoofGeometry = undefined;
+        else if (resolvedRoofGeometry)
+          resolvedRoofGeometry = { ...resolvedRoofGeometry, floor: resolvedFloorGeometry.length };
+        setClientFloorIds(resolvedFloorGeometry.map((level) => level.floor));
+        setClientRoofAvailable(Boolean(resolvedRoofGeometry));
+        setClientFloorControlsReady(resolvedFloorGeometry.length > 0);
+      }
       windowMaterials.clear();
       if (clientPresentation) object.traverse((node) => {
         if (!(node instanceof THREE.Mesh)) return;
@@ -1099,12 +1146,16 @@ export function Viewer3D({
           : floorGeometryFor(resolvedFloorGeometry, selection);
         if (!level) return;
 
-        applyFloorLevel(level);
+        // Return the actual original meshes assigned to this floor and frame
+        // that geometry, not the whole building, in the top camera.
+        const selectedBounds = applyFloorLevel(level);
         setSelectedFloor(typeof selection === "number" ? selection : null);
         setClientFloorSelection(selection);
 
-        // Use detected/configured physical elevations, not equal-height slices.
-        const bounds = modelBounds;
+        const bounds =
+          selectedBounds && !selectedBounds.isEmpty()
+            ? selectedBounds
+            : modelBounds;
         const size = bounds.getSize(new THREE.Vector3());
         const center = bounds.getCenter(new THREE.Vector3());
         const fov = 34;
@@ -1169,6 +1220,11 @@ export function Viewer3D({
 
 
       const setExperience = (nextMode: ExperienceMode, instant = false) => {
+        if (clientPresentation) {
+          floorVisibilityController?.showAll();
+          setClientFloorSelection(null);
+          setSelectedFloor(null);
+        }
         currentExperienceMode = nextMode;
         if (!projectExperience || !activeObject || !siteEnvironment) return;
         walkActive = false;
@@ -1430,6 +1486,8 @@ export function Viewer3D({
       renderer.domElement.removeEventListener("pointerup", handlePointerUp);
       renderer.domElement.removeEventListener("pointercancel", handlePointerUp);
       renderer.domElement.removeEventListener("click", handleFeatureClick);
+      floorVisibilityController?.dispose();
+      floorVisibilityController = undefined;
       if (activeObject) disposeViewerObject(activeObject);
       referenceExterior?.dispose();
       if (siteEnvironment) {
