@@ -169,6 +169,13 @@ export interface Asset {
   hash: string;
   blob: Blob;
 }
+export type BuildingEnvironmentLandscapePreset =
+  | "auto"
+  | "urban"
+  | "suburban"
+  | "rural-farm"
+  | "hillside";
+
 export interface SceneAppearance {
   exposure: number;
   sunIntensity: number;
@@ -279,6 +286,8 @@ export interface Scene {
   furniture: Furniture[];
   /** Landscape plus reviewed structural-envelope primitives; kind is the discriminant. */
   siteElements?: SiteElement[];
+  /** Preset for additive customer-facing exterior context, pinned in the next Building release. */
+  landscapePreset?: BuildingEnvironmentLandscapePreset;
   walls?: Wall[];
   openings?: Opening[];
   /** Source/authoring model used for analysis, mesh tags and Studio editing. */
@@ -654,6 +663,7 @@ export function newProject(name: string): Project {
     releases: [],
     scene: {
       scale: 1,
+      landscapePreset: "auto",
       appearance: { ...DEFAULT_SCENE_APPEARANCE },
       materialOverrides: [],
       modelTransform: { x: 0, y: 0, z: 0, rotationY: 0 },
@@ -744,6 +754,11 @@ export function validateScene(s: Scene): void {
     throw Error("Duplicate or invalid object IDs.");
   if (s.modelId !== undefined && !text(s.modelId, 100))
     throw Error("Invalid model reference.");
+  if (
+    s.landscapePreset !== undefined &&
+    !["auto", "urban", "suburban", "rural-farm", "hillside"].includes(s.landscapePreset)
+  )
+    throw Error("Invalid customer landscape preset.");
   if (
     s.appearance !== undefined &&
     (!s.appearance ||
