@@ -366,6 +366,7 @@ export function createArchitecturalSiteEnvironment(
   mobile: boolean,
   presentation = false,
   groundElevation?: number,
+  baselinePolicy: "empty-only" | "always" = "empty-only",
 ) {
   const root = new THREE.Group();
   root.name = "source-backed-site-environment";
@@ -380,10 +381,54 @@ export function createArchitecturalSiteEnvironment(
   const structural = elements.filter((item) => STRUCTURAL_KINDS.has(item.kind));
 
   const presentationBulbs: THREE.MeshStandardMaterial[] = [];
+  // This root contains generated presentation dressing and reviewed site visuals only;
+  // source Building geometry is never moved by the environment motion controller.
+  root.userData.presentationOnly = true;
+  root.userData.nonAuthoritative = true;
+
   // Basement bounds are not a ground survey. Omit optional dressing if grade is unknown.
-  const knownGrade = typeof groundElevation === "number" && Number.isFinite(groundElevation);
-  if (!elements.length && presentation && !bounds.isEmpty() && (knownGrade || bounds.min.y >= -0.25)) {
-    addPresentationFallback(root, bounds, mobile, presentationBulbs, knownGrade ? groundElevation : bounds.min.y);
+  const knownGrade =
+    typeof groundElevation === "number" && Number.isFinite(groundElevation);
+  const safeGround = knownGrade || bounds.min.y >= -0.25;
+  const shouldAddBaseline =
+    presentation &&
+    !bounds.isEmpty() &&
+    safeGround &&
+    (baselinePolicy === "always" || elements.length === 0);
+
+  if (shouldAddBaseline) {
+    const hasRoad = areas.some((item) => item.kind === "road");
+    const hasPath = areas.some((item) => item.kind === "path");
+    const hasLawn = areas.some(
+      (item) => item.kind === "garden" || item.kind === "lawn",
+    );
+    const baselineOptions = elements.length
+      ? {
+          includeRoad: !hasRoad,
+          includeCars: false,
+          includeSidewalk: !hasPath,
+          includeDriveway: !hasPath,
+          includeLawn: !hasLawn,
+          includeTrees: trees.length === 0,
+          includePlants: plants.length === 0,
+          includeLamps: lights.length === 0,
+          includeContextMassing: false,
+        }
+      : {
+          // Until curated vehicle/context GLB assets ship, avoid adding blocky
+          // placeholder cars or neighborhood cuboids to the cinematic profile.
+          includeCars: false,
+          includeContextMassing: false,
+        };
+
+    addPresentationFallback(
+      root,
+      bounds,
+      mobile,
+      presentationBulbs,
+      knownGrade ? groundElevation : bounds.min.y,
+      baselineOptions,
+    );
   }
 
   addAreaBatches(root, areas);
