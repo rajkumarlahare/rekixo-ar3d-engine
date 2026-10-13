@@ -234,6 +234,8 @@ export function Viewer3D({
       (buildingPresentation?.environment.mode === "minimal"
         ? undefined
         : DEFAULT_BUILDING_ENVIRONMENT_PROFILE_V1);
+    const environmentMobileQuality =
+      mobile || environmentProfile?.quality === "performance";
     const referenceVisual =
       visualPreset === "reference-render" ||
       presentationAppearance?.referenceVisual === true;
@@ -990,13 +992,13 @@ export function Viewer3D({
         siteEnvironment = siteEnvironmentModule.createArchitecturalSiteEnvironment(
           bounds,
           renderer,
-          mobile,
+          environmentMobileQuality,
           clientPresentation &&
             (additiveBaseline || (!environmentProfile && buildingPresentation?.environment.mode !== "minimal" && (buildingPresentation?.environment.genericDressing ?? true))) &&
             !includedSourceSite,
           floorGeometry.find((level) => level.floor === 0 && Number.isFinite(level.elevationM))?.elevationM ?? modelProfile?.floorGeometry?.find((level) => level.floor === 0)?.elevationM,
           additiveBaseline ? "always" : "empty-only",
-          environmentProfile?.motion.water !== "off",
+          environmentProfile?.preset === "cinematic-exterior" && environmentProfile.motion.water !== "off",
         );
         scene.add(siteEnvironment.root);
         if (
