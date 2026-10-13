@@ -31,6 +31,7 @@ const SITE_KINDS = new Set<PublicSiteElement["kind"]>([
   "plant",
   "gate",
   "outdoor-light",
+  "water",
   "column",
   "beam",
   "slab",
