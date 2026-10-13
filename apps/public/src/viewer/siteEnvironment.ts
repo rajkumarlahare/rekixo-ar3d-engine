@@ -239,32 +239,74 @@ function addGate(root: THREE.Group, item: PublicSiteElement, mobile: boolean) {
   group.name = "Site gate";
   group.position.set(item.x, item.y, item.z);
   group.rotation.y = THREE.MathUtils.degToRad(item.rotation);
-  const gateMaterial = material(item.color, 0.55, 0.22);
+
+  const gateMaterial = material("#343a3c", 0.38, 0.68);
   const postWidth = Math.max(0.08, Math.min(0.2, item.width * 0.06));
-  const depth = Math.max(0.08, item.depth);
-  const add = (
-    width: number,
-    height: number,
-    x: number,
-    y: number,
-  ) => {
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(width, height, depth),
-      gateMaterial,
-    );
-    mesh.position.set(x, y, 0);
-    mesh.castShadow = !mobile;
-    mesh.receiveShadow = true;
-    group.add(mesh);
+  const depth = Math.max(0.06, item.depth * 0.55);
+  const postGeometry = new THREE.BoxGeometry(postWidth, item.height, depth);
+  for (const side of [-1, 1]) {
+    const post = new THREE.Mesh(postGeometry, material("#77766f", 0.52, 0.48));
+    post.position.set(side * (item.width / 2 - postWidth / 2), item.height / 2, 0);
+    post.name = "Site gate post";
+    post.castShadow = !mobile;
+    post.receiveShadow = true;
+    group.add(post);
+  }
+  postGeometry.dispose();
+
+  const clearWidth = Math.max(item.width - postWidth * 2, 0.4);
+  const leafWidth = clearWidth / 2;
+  const railThickness = Math.max(0.035, Math.min(0.075, item.height * 0.035));
+  const barWidth = Math.max(0.018, Math.min(0.04, leafWidth * 0.018));
+  const leafDepth = Math.max(0.035, depth * 0.44);
+  const railGeometry = new THREE.BoxGeometry(leafWidth, railThickness, leafDepth);
+  const barGeometry = new THREE.BoxGeometry(barWidth, item.height * 0.64, leafDepth * 0.72);
+  const capGeometry = new THREE.SphereGeometry(barWidth * 0.85, mobile ? 6 : 8, mobile ? 4 : 6);
+
+  const addLeaf = (side: -1 | 1) => {
+    const pivot = new THREE.Group();
+    pivot.name = side < 0 ? "Site gate leaf left hinge" : "Site gate leaf right hinge";
+    pivot.position.set(side * (item.width / 2 - postWidth), 0, 0);
+    const openAngle = side < 0 ? -Math.PI * 0.47 : Math.PI * 0.47;
+    pivot.userData.siteInteraction = {
+      kind: "gate-leaf",
+      closedAngle: 0,
+      openAngle,
+      sourceSiteElementId: item.id,
+    };
+
+    const railY = [item.height * 0.16, item.height * 0.49, item.height * 0.80];
+    for (const y of railY) {
+      const rail = new THREE.Mesh(railGeometry, gateMaterial);
+      rail.position.set(side * leafWidth / 2, y, 0);
+      rail.castShadow = !mobile;
+      rail.receiveShadow = true;
+      pivot.add(rail);
+    }
+
+    const picketCount = Math.max(3, Math.min(18, Math.floor(leafWidth / 0.16)));
+    for (let index = 0; index <= picketCount; index += 1) {
+      const fraction = index / picketCount;
+      const picket = new THREE.Mesh(barGeometry, gateMaterial);
+      picket.name = "Site gate picket";
+      picket.position.set(side * leafWidth * fraction, item.height * 0.48, 0);
+      picket.castShadow = !mobile;
+      picket.receiveShadow = true;
+      pivot.add(picket);
+
+      if (index === 0 || index === picketCount) {
+        const cap = new THREE.Mesh(capGeometry, gateMaterial);
+        cap.position.set(side * leafWidth * fraction, item.height * 0.84, 0);
+        cap.castShadow = !mobile;
+        pivot.add(cap);
+      }
+    }
+
+    group.add(pivot);
   };
-  add(postWidth, item.height, -item.width / 2 + postWidth / 2, item.height / 2);
-  add(postWidth, item.height, item.width / 2 - postWidth / 2, item.height / 2);
-  add(
-    Math.max(postWidth, item.width - postWidth * 2),
-    Math.max(0.06, item.height * 0.07),
-    0,
-    item.height * 0.82,
-  );
+
+  addLeaf(-1);
+  addLeaf(1);
   root.add(group);
 }
 
