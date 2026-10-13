@@ -865,11 +865,6 @@ export function Viewer3D({
             floor: resolvedFloorGeometry.length,
           }
         : undefined;
-      if (clientPresentation) {
-        setClientFloorIds(resolvedFloorGeometry.map((level) => level.floor));
-        setClientRoofAvailable(Boolean(resolvedRoofGeometry));
-        setClientFloorControlsReady(resolvedFloorGeometry.length > 0);
-      }
       if (referenceExterior) {
         scene.background = referenceExterior.daylightSky;
         sun.position.set(-16, 30, 16);
@@ -886,6 +881,20 @@ export function Viewer3D({
       floorVisibilityController = clientPresentation
         ? createFloorVisibilityController(object)
         : undefined;
+      if (clientPresentation && floorVisibilityController) {
+        // Do not display a floor control unless the published model has original
+        // meshes that can actually be shown for that level.
+        resolvedFloorGeometry = resolvedFloorGeometry.filter((level) =>
+          floorVisibilityController!.hasFloor(level),
+        );
+        if (resolvedRoofGeometry && !floorVisibilityController.hasFloor(resolvedRoofGeometry))
+          resolvedRoofGeometry = undefined;
+        else if (resolvedRoofGeometry)
+          resolvedRoofGeometry = { ...resolvedRoofGeometry, floor: resolvedFloorGeometry.length };
+        setClientFloorIds(resolvedFloorGeometry.map((level) => level.floor));
+        setClientRoofAvailable(Boolean(resolvedRoofGeometry));
+        setClientFloorControlsReady(resolvedFloorGeometry.length > 0);
+      }
       windowMaterials.clear();
       if (clientPresentation) object.traverse((node) => {
         if (!(node instanceof THREE.Mesh)) return;
