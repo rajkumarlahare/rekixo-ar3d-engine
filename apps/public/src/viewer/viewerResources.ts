@@ -5,7 +5,11 @@ function disposeMaterial(material: THREE.Material | THREE.Material[]) {
   const textures = new Set<THREE.Texture>();
   for (const item of materials) {
     for (const value of Object.values(item))
-      if (value instanceof THREE.Texture) textures.add(value);
+      if (
+        value instanceof THREE.Texture &&
+        value.userData.rekixoSharedResource !== true
+      )
+        textures.add(value);
     item.dispose();
   }
   for (const texture of textures) texture.dispose();
