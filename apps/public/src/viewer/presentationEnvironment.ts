@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { createProceduralSurfaceMaterial, type ProceduralSurfaceKind } from "./proceduralSurfaceMaterials";
 
 function material(
   color: string,
@@ -13,6 +14,17 @@ function material(
     transparent: opacity < 1,
     opacity,
   });
+}
+
+function surfaceKindForName(name: string): ProceduralSurfaceKind | undefined {
+  const normalized = name.toLowerCase();
+  if (normalized.includes("marking")) return undefined;
+  if (normalized.includes("road")) return "asphalt";
+  if (normalized.includes("lawn")) return "grass";
+  if (normalized.includes("ground") || normalized.includes("sidewalk") ||
+      normalized.includes("curb") || normalized.includes("driveway"))
+    return normalized.includes("surrounding") ? "soil" : "paving";
+  return undefined;
 }
 
 function addBox(
@@ -33,18 +45,28 @@ function addBox(
     castShadow?: boolean;
   } = {},
 ) {
+  const surfaceKind = surfaceKindForName(name);
+  const surfaceMaterial =
+    surfaceKind && (options.opacity === undefined || options.opacity === 1)
+      ? createProceduralSurfaceMaterial(
+          color,
+          surfaceKind,
+          options.roughness ?? 0.84,
+          options.metalness ?? 0,
+        )
+      : material(
+          color,
+          options.roughness ?? 0.84,
+          options.metalness ?? 0,
+          options.opacity ?? 1,
+        );
   const mesh = new THREE.Mesh(
     new THREE.BoxGeometry(
       Math.max(width, 0.02),
       Math.max(height, 0.02),
       Math.max(depth, 0.02),
     ),
-    material(
-      color,
-      options.roughness ?? 0.84,
-      options.metalness ?? 0,
-      options.opacity ?? 1,
-    ),
+    surfaceMaterial,
   );
   mesh.name = name;
   mesh.position.set(x, y, z);
@@ -86,7 +108,7 @@ function addTree(
   tree.add(trunk);
 
   const crownHeight = Math.max(height - trunkHeight * 0.58, crownWidth * 0.95);
-  const geometry = new THREE.IcosahedronGeometry(1, 1);
+  const geometry = new THREE.SphereGeometry(1, mobile ? 8 : 14, mobile ? 5 : 9);
   const foliageMaterial = material(color, 0.96);
   const clusters = mobile ? 14 : 28;
   const crowns = new THREE.InstancedMesh(geometry, foliageMaterial, clusters);
@@ -133,7 +155,7 @@ function addPlant(
   group.add(pot);
 
   const foliage = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(1, mobile ? 0 : 1),
+    new THREE.SphereGeometry(1, mobile ? 8 : 14, mobile ? 5 : 9),
     material(color, 0.96),
   );
   foliage.scale.set(width * 0.38, height * 0.4, width * 0.38);
