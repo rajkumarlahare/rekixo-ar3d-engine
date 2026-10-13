@@ -15,11 +15,11 @@ export interface FloorVisibilityController {
 }
 
 function floorFromNodeName(name: string): number | null {
-  const normalized = name.trim().toLowerCase().replace(/[\\s-]+/g, "_");
+  const normalized = name.trim().toLowerCase().replace(/[\s-]+/g, "_");
   if (/^(ground|ground_floor|stilt|floor_?0|level_?0|gf)$/.test(normalized)) return 0;
-  const match = normalized.match(/^(?:floor|level|storey|story|f)_?(\\d+)(?:_.*)?$/);
+  const match = normalized.match(/^(?:floor|level|storey|story|f)_?(\d+)(?:_.*)?$/);
   if (match) return Number(match[1]);
-  const suffix = normalized.match(/(?:^|_)(?:floor|level|storey|story|f)_?(\\d+)(?:_|$)/);
+  const suffix = normalized.match(/(?:^|_)(?:floor|level|storey|story|f)_?(\d+)(?:_|$)/);
   if (suffix) return Number(suffix[1]);
   return null;
 }
