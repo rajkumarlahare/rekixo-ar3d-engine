@@ -104,7 +104,7 @@ test("customer runtime attaches click-to-open gate leaves only for the cinematic
   assert.match(site, /kind: "gate-leaf"/);
   assert.match(site, /Site gate leaf left hinge/);
   assert.match(site, /Site gate leaf right hinge/);
-  assert.match(viewer, /createSiteInteractionController\(siteEnvironment\.root/);
+  assert.match(viewer, /createSiteInteractionController\(\s*siteEnvironment\.root/);
   assert.match(viewer, /siteInteractionController\?\.update\(delta\)/);
   assert.match(viewer, /siteInteractionController\?\.dispose\(\)/);
   assert.match(controller, /raycaster\.intersectObject\(root, true\)/);
