@@ -32,7 +32,6 @@ import {
   type WalkDirection,
 } from "./walkthrough";
 import WalkGraphPanel from "./WalkGraphPanel";
-import { createArchitecturalSiteEnvironment } from "./siteEnvironment";
 import {
   applyModelProfileExterior,
   loadModelProfileMaterialEnhancer,
@@ -51,7 +50,6 @@ import {
 } from "./buildingPresentationRuntime";
 import { createExteriorSky } from "./exteriorSky";
 import { createPremiumPresentationMotion } from "./premiumPresentationMotion";
-import { createSiteInteractionController } from "./siteInteractionController";
 import { exteriorCameraView, type ExteriorView } from "./exteriorCamera";
 import { createPreviewBuilding } from "./viewerPreview";
 import { disposeViewerObject } from "./viewerResources";
@@ -191,11 +189,15 @@ export function Viewer3D({
           return undefined;
         })
       : Promise.resolve(undefined);
+    const siteEnvironmentModulePromise = import("./siteEnvironment").catch((error) => {
+      console.warn("Customer site environment module could not be loaded.", error);
+      return undefined;
+    });
     let homeView: HomeView | undefined;
     let floorExploder: ReturnType<typeof createFloorExploder> | undefined;
-    let siteEnvironment: ReturnType<typeof createArchitecturalSiteEnvironment> | undefined;
+    let siteEnvironment: ReturnType<typeof import("./siteEnvironment").createArchitecturalSiteEnvironment> | undefined;
     let presentationMotion: ReturnType<typeof createPremiumPresentationMotion> | undefined;
-    let siteInteractionController: ReturnType<typeof createSiteInteractionController> | undefined;
+    let siteInteractionController: ReturnType<typeof import("./siteInteractionController").createSiteInteractionController> | undefined;
     let modelProfile: ModelProfileRuntime | undefined;
     let projectExperience: ExperienceRuntime | undefined;
     let referenceExterior: ModelProfileRuntime["exterior"];
@@ -817,7 +819,10 @@ export function Viewer3D({
     lightingRef.current = applyLighting;
 
     const mountObject = async (object: THREE.Object3D, usePreset: boolean) => {
-      const floorVisibilityModule = await floorVisibilityModulePromise;
+      const [floorVisibilityModule, siteEnvironmentModule] = await Promise.all([
+        floorVisibilityModulePromise,
+        siteEnvironmentModulePromise,
+      ]);
       if (disposed) {
         disposeViewerObject(object);
         return;
@@ -981,37 +986,47 @@ export function Viewer3D({
         if (node.userData.sourceGeometry?.siteGeometry === "included-in-source") includedSourceSite = true;
       });
       const additiveBaseline = environmentProfile?.baseline === "always";
-      siteEnvironment = createArchitecturalSiteEnvironment(
-        bounds,
-        renderer,
-        mobile,
-        clientPresentation &&
-          (additiveBaseline || (!environmentProfile && buildingPresentation?.environment.mode !== "minimal" && (buildingPresentation?.environment.genericDressing ?? true))) &&
-          !includedSourceSite,
-        floorGeometry.find((level) => level.floor === 0 && Number.isFinite(level.elevationM))?.elevationM ?? modelProfile?.floorGeometry?.find((level) => level.floor === 0)?.elevationM,
-        additiveBaseline ? "always" : "empty-only",
-      );
-      scene.add(siteEnvironment.root);
-      if (
-        clientPresentation &&
-        environmentProfile?.preset === "cinematic-exterior" &&
-        environmentProfile.motion.vegetation !== "off"
-      ) {
-        presentationMotion = createPremiumPresentationMotion(siteEnvironment.root, {
-          reducedMotion,
+      if (siteEnvironmentModule) {
+        siteEnvironment = siteEnvironmentModule.createArchitecturalSiteEnvironment(
+          bounds,
+          renderer,
           mobile,
-        });
-      }
-      if (
-        clientPresentation &&
-        environmentProfile?.preset === "cinematic-exterior"
-      ) {
-        siteInteractionController = createSiteInteractionController(
-          siteEnvironment.root,
-          camera,
-          renderer.domElement,
-          reducedMotion,
+          clientPresentation &&
+            (additiveBaseline || (!environmentProfile && buildingPresentation?.environment.mode !== "minimal" && (buildingPresentation?.environment.genericDressing ?? true))) &&
+            !includedSourceSite,
+          floorGeometry.find((level) => level.floor === 0 && Number.isFinite(level.elevationM))?.elevationM ?? modelProfile?.floorGeometry?.find((level) => level.floor === 0)?.elevationM,
+          additiveBaseline ? "always" : "empty-only",
         );
+        scene.add(siteEnvironment.root);
+        if (
+          clientPresentation &&
+          environmentProfile?.preset === "cinematic-exterior" &&
+          environmentProfile.motion.vegetation !== "off"
+        ) {
+          presentationMotion = createPremiumPresentationMotion(siteEnvironment.root, {
+            reducedMotion,
+            mobile,
+          });
+        }
+        if (
+          clientPresentation &&
+          environmentProfile?.preset === "cinematic-exterior"
+        ) {
+          void import("./siteInteractionController")
+            .then(({ createSiteInteractionController }) => {
+              if (disposed || activeObject !== object || !siteEnvironment) return;
+              siteInteractionController?.dispose();
+              siteInteractionController = createSiteInteractionController(
+                siteEnvironment.root,
+                camera,
+                renderer.domElement,
+                reducedMotion,
+              );
+            })
+            .catch((error) => {
+              console.warn("Customer site interaction module could not be loaded.", error);
+            });
+        }
       }
       if (clientPresentation) {
         const span = Math.max(sizeForView.x, sizeForView.y, sizeForView.z, 1);
