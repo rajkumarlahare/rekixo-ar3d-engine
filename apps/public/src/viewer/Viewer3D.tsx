@@ -91,14 +91,6 @@ interface Viewer3DProps {
   walkthrough?: PublicWalkthroughGraph;
 }
 
-function formatSolarTime(hours: number) {
-  const normalized = ((hours % 24) + 24) % 24;
-  const hour = Math.floor(normalized);
-  const minutes = Math.round((normalized - hour) * 60);
-  const displayHour = hour % 12 || 12;
-  return `${displayHour}:${String(minutes).padStart(2, "0")} ${hour >= 12 ? "PM" : "AM"}`;
-}
-
 function isMobileDevice() {
   return (
     window.matchMedia("(max-width: 760px)").matches ||
@@ -150,7 +142,6 @@ export function Viewer3D({
   const clientFloorReviewModeRef = useRef<ClientFloorReviewMode>("stacked");
   const sectionRef = useRef<((enabled: boolean) => void) | null>(null);
   const lightingRef = useRef<((night: boolean) => void) | null>(null);
-  const timeOfDayRef = useRef<((hours: number) => void) | null>(null);
   const explodeRef = useRef<((enabled: boolean) => void) | null>(null);
   const walkModeRef = useRef<((enabled: boolean, floor: number | null) => void) | null>(null);
   const walkStepRef = useRef<((direction: WalkDirection) => void) | null>(null);
@@ -173,7 +164,6 @@ export function Viewer3D({
   const [clientFloorControlsReady, setClientFloorControlsReady] = useState(false);
   const [sectionEnabled, setSectionEnabled] = useState(interactionMode === "section");
   const [nightMode, setNightMode] = useState(false);
-  const [solarTimeOfDay, setSolarTimeOfDay] = useState(9);
   const [exploded, setExploded] = useState(initialExploded);
   const [walkMode, setWalkMode] = useState(false);
   const [walkNotice, setWalkNotice] = useState("");
@@ -846,7 +836,6 @@ export function Viewer3D({
     floorRef.current = applyFloor;
     sectionRef.current = applySection;
     lightingRef.current = applyLighting;
-    timeOfDayRef.current = (hours) => sky?.setTimeOfDay(hours);
 
     const mountObject = async (object: THREE.Object3D, usePreset: boolean) => {
       const [floorVisibilityModule, siteEnvironmentModule] = await Promise.all([
@@ -1646,7 +1635,6 @@ export function Viewer3D({
       floorRef.current = null;
       sectionRef.current = null;
       lightingRef.current = null;
-      timeOfDayRef.current = null;
       explodeRef.current = null;
       walkModeRef.current = null;
       walkStepRef.current = null;
@@ -1726,32 +1714,6 @@ export function Viewer3D({
       {compactUi && experienceMode !== "interior" && <div className="viewer-compact-tools">
         <button type="button" onClick={() => { const next = !nightMode; setNightMode(next); lightingRef.current?.(next); }}>{nightMode ? "Daylight" : "Evening"}</button>
         <button type="button" onClick={() => void toggleFullscreen()}>{isFullscreen ? "Exit full screen" : "Full screen"}</button>
-      </div>}
-      {clientPresentation && experienceMode !== "interior" && <div className="viewer-time-of-day" role="group" aria-label="Exterior lighting time">
-        <div className="viewer-time-of-day__header">
-          <label htmlFor="viewer-time-of-day">Lighting time</label>
-          <output htmlFor="viewer-time-of-day">{formatSolarTime(solarTimeOfDay)}</output>
-        </div>
-        <input
-          id="viewer-time-of-day"
-          type="range"
-          min="5.5"
-          max="18.5"
-          step="0.5"
-          value={solarTimeOfDay}
-          aria-label="Exterior lighting time"
-          aria-valuetext={formatSolarTime(solarTimeOfDay)}
-          onChange={(event) => {
-            const hours = Number(event.currentTarget.value);
-            setSolarTimeOfDay(hours);
-            setNightMode(false);
-            lightingRef.current?.(false);
-            timeOfDayRef.current?.(hours);
-          }}
-        />
-        <div className="viewer-time-of-day__ticks" aria-hidden="true">
-          <span>Dawn</span><span>Midday</span><span>Golden hour</span>
-        </div>
       </div>}
       {walkMode && walkthrough && activeGraphRoom && (
         <WalkGraphPanel
