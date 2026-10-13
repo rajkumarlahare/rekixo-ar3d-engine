@@ -770,6 +770,9 @@ export function publicStudioSnapshot(draft) {
     releases: [],
     scene: {
       scale: scene.scale,
+      ...(scene.landscapePreset !== undefined
+        ? { landscapePreset: scene.landscapePreset }
+        : {}),
       ...(modelId ? { modelId } : {}),
       ...(scene.appearance
         ? { appearance: structuredClone(scene.appearance) }
