@@ -52,10 +52,11 @@ import { createExteriorSky } from "./exteriorSky";
 import { exteriorCameraView, type ExteriorView } from "./exteriorCamera";
 import { createPreviewBuilding } from "./viewerPreview";
 import { disposeViewerObject } from "./viewerResources";
-import { createFloorVisibilityController } from "./floorVisibility";
+import type { FloorVisibilityController } from "./floorVisibility";
 
 type ViewerMode = "booting" | "loading" | "model" | "demo" | "error";
 type PresentationView = "default" | "aerial" | "building" | "top" | "balcony" | "context";
+type ClientFloorReviewMode = "stacked" | "isolate";
 
 interface Viewer3DProps {
   sourcePresentation?: SourcePresentation;
@@ -132,6 +133,7 @@ export function Viewer3D({
   const resetRef = useRef<(() => void) | null>(null);
   const floorRef = useRef<((floor: number | null) => void) | null>(null);
   const clientFloorViewRef = useRef<((selection: number | "roof" | "top" | null) => void) | null>(null);
+  const clientFloorReviewModeRef = useRef<ClientFloorReviewMode>("stacked");
   const sectionRef = useRef<((enabled: boolean) => void) | null>(null);
   const lightingRef = useRef<((night: boolean) => void) | null>(null);
   const explodeRef = useRef<((enabled: boolean) => void) | null>(null);
@@ -150,6 +152,7 @@ export function Viewer3D({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedFloor, setSelectedFloor] = useState<number | null>(initialFloor);
   const [clientFloorSelection, setClientFloorSelection] = useState<number | "roof" | "top" | null>(null);
+  const [clientFloorReviewMode, setClientFloorReviewMode] = useState<ClientFloorReviewMode>("stacked");
   const [clientFloorIds, setClientFloorIds] = useState<number[]>([]);
   const [clientRoofAvailable, setClientRoofAvailable] = useState(false);
   const [clientFloorControlsReady, setClientFloorControlsReady] = useState(false);
@@ -173,10 +176,18 @@ export function Viewer3D({
     setClientRoofAvailable(false);
     setClientFloorControlsReady(false);
     setClientFloorSelection(null);
+    clientFloorReviewModeRef.current = "stacked";
+    setClientFloorReviewMode("stacked");
     let abortModelLoad: (() => void) | undefined;
     let animationFrame = 0;
     let activeObject: THREE.Object3D | undefined;
-    let floorVisibilityController: ReturnType<typeof createFloorVisibilityController> | undefined;
+    let floorVisibilityController: FloorVisibilityController | undefined;
+    const floorVisibilityModulePromise = clientPresentation
+      ? import("./floorVisibility").catch((error) => {
+          console.warn("Customer floor review module could not be loaded.", error);
+          return undefined;
+        })
+      : Promise.resolve(undefined);
     let homeView: HomeView | undefined;
     let floorExploder: ReturnType<typeof createFloorExploder> | undefined;
     let siteEnvironment: ReturnType<typeof createArchitecturalSiteEnvironment> | undefined;
@@ -348,7 +359,7 @@ export function Viewer3D({
           : [];
         selectedBounds = level === null
           ? floorVisibilityController.showAll()
-          : floorVisibilityController.showFloor(level);
+          : floorVisibilityController.showFloor(level, clientFloorReviewModeRef.current);
       } else if (level === null) {
         renderer.clippingPlanes = sectionEnabledRef.current
           ? renderer.clippingPlanes.filter(
@@ -792,7 +803,12 @@ export function Viewer3D({
     sectionRef.current = applySection;
     lightingRef.current = applyLighting;
 
-    const mountObject = (object: THREE.Object3D, usePreset: boolean) => {
+    const mountObject = async (object: THREE.Object3D, usePreset: boolean) => {
+      const floorVisibilityModule = await floorVisibilityModulePromise;
+      if (disposed) {
+        disposeViewerObject(object);
+        return;
+      }
       floorVisibilityController?.dispose();
       floorVisibilityController = undefined;
       if (activeObject) {
@@ -878,8 +894,8 @@ export function Viewer3D({
         loadModelProfileMaterialEnhancer(modelProfile);
       enhanceArchitecturalModel(object, renderer, referenceVisual);
       // Capture the post-enhancement materials so All/reset restores the actual customer presentation.
-      floorVisibilityController = clientPresentation
-        ? createFloorVisibilityController(object)
+      floorVisibilityController = floorVisibilityModule
+        ? floorVisibilityModule.createFloorVisibilityController(object)
         : undefined;
       if (clientPresentation && floorVisibilityController) {
         // Do not display a floor control unless the published model has original
@@ -896,43 +912,6 @@ export function Viewer3D({
         setClientFloorControlsReady(resolvedFloorGeometry.length > 0);
       }
 
-      // Opt-in, production-safe diagnosis used by the post-deploy browser check.
-      // It is silent for normal customers unless sessionStorage enables it.
-      if (clientPresentation) {
-        let floorDebugEnabled = false;
-        try {
-          floorDebugEnabled = window.sessionStorage.getItem("ar3d.floorDebug") === "1";
-        } catch {
-          floorDebugEnabled = false;
-        }
-        if (floorDebugEnabled) {
-          console.info("[AR3D_FLOOR_RUNTIME]", JSON.stringify({
-            modelBounds: {
-              minY: modelBounds.min.y,
-              maxY: modelBounds.max.y,
-            },
-            availableFloorIds: availableFloors,
-            configuredFloorGeometry: configuredFloorGeometry.map((level) => ({
-              floor: level.floor, bottom: level.elevationM, top: level.topElevationM,
-            })),
-            detectedFloorGeometry: detectedFloorGeometry.floors.map((level) => ({
-              floor: level.floor, bottom: level.elevationM, top: level.topElevationM,
-            })),
-            detectedRoof: detectedFloorGeometry.roof
-              ? { bottom: detectedFloorGeometry.roof.elevationM, top: detectedFloorGeometry.roof.topElevationM }
-              : null,
-            floorVisibilityChecks: modelDerivedFloorGeometry.floors.map((level) => ({
-              floor: level.floor,
-              hasFloor: floorVisibilityController?.hasFloor(level) ?? false,
-            })),
-            resolvedFloorGeometry: resolvedFloorGeometry.map((level) => ({
-              floor: level.floor, bottom: level.elevationM, top: level.topElevationM,
-            })),
-            roofAvailable: Boolean(resolvedRoofGeometry),
-            meshCount: meshBounds.length,
-          }));
-        }
-      }
       windowMaterials.clear();
       if (clientPresentation) object.traverse((node) => {
         if (!(node instanceof THREE.Mesh)) return;
@@ -1200,21 +1179,25 @@ export function Viewer3D({
         const verticalTangent = Math.tan(THREE.MathUtils.degToRad(fov / 2));
         const horizontalTangent = verticalTangent * Math.max(camera.aspect, 0.25);
         const floorHeight = Math.max(level.topElevationM - level.elevationM, 0.1);
+        const stackedView = clientFloorReviewModeRef.current === "stacked";
         const fitDistance = Math.max(
           size.x / (2 * horizontalTangent),
           size.z / (2 * verticalTangent),
+          stackedView ? size.y / (2 * verticalTangent) : 0,
           floorHeight * 2,
           1.5,
-        ) * 1.12;
-        const target = new THREE.Vector3(
-          center.x,
-          floorFocusElevation(level),
-          center.z,
-        );
+        ) * (stackedView ? 1.18 : 1.12);
+        // In Stacked View, centre the camera on the visible lower-to-selected
+        // stack and use an oblique angle so connected lower storeys are visible.
+        // Isolate View remains near top-down for interior/layout inspection.
+        const targetY = stackedView
+          ? (bounds.min.y + level.topElevationM) / 2
+          : floorFocusElevation(level);
+        const target = new THREE.Vector3(center.x, targetY, center.z);
         const position = new THREE.Vector3(
           center.x,
-          level.topElevationM + fitDistance,
-          center.z + fitDistance * 0.025,
+          level.topElevationM + fitDistance * (stackedView ? 0.92 : 1),
+          center.z + fitDistance * (stackedView ? 0.68 : 0.025),
         );
         controls.minDistance = Math.max(0.2, Math.min(floorHeight * 0.45, fitDistance * 0.15));
         controls.maxDistance = Math.max(controls.maxDistance, fitDistance * 4);
@@ -1381,7 +1364,7 @@ export function Viewer3D({
 
     const mountPreview = (message: string) => {
       if (disposed) return;
-      mountObject(createPreviewBuilding(), false);
+      void mountObject(createPreviewBuilding(), false);
       setErrorMessage(message);
       setProgress(100);
       setMode("demo");
@@ -1404,7 +1387,7 @@ export function Viewer3D({
           setProgress(60);
           const gltf = await loader.parseAsync(bytes, new URL(".", new URL(modelUrl, window.location.href)).href);
           if (disposed) { disposeViewerObject(gltf.scene); return; }
-          mountObject(gltf.scene, Boolean(cameraPreset));
+          void mountObject(gltf.scene, Boolean(cameraPreset));
           setProgress(100);
           setMode("model");
           if (sourcePresentation)
@@ -1766,6 +1749,37 @@ export function Viewer3D({
       {clientPresentation && showClientFloorControls && mode === "model" && clientFloorControlsReady && clientFloorIds.length > 0 && (
         <nav className="client-floor-controls" aria-label="Select building floor">
           <span className="client-floor-controls__label">FLOOR</span>
+          <span className="client-floor-controls__mode-label">VIEW</span>
+          <button
+            type="button"
+            aria-label="Stacked floor view"
+            aria-pressed={clientFloorReviewMode === "stacked"}
+            className={clientFloorReviewMode === "stacked" ? "client-floor-control client-floor-control--mode client-floor-control--active" : "client-floor-control client-floor-control--mode"}
+            title="Show the selected floor connected to all lower floors"
+            onClick={() => {
+              clientFloorReviewModeRef.current = "stacked";
+              setClientFloorReviewMode("stacked");
+              if (typeof clientFloorSelection === "number" || clientFloorSelection === "roof")
+                clientFloorViewRef.current?.(clientFloorSelection);
+            }}
+          >
+            Stacked
+          </button>
+          <button
+            type="button"
+            aria-label="Isolate selected floor"
+            aria-pressed={clientFloorReviewMode === "isolate"}
+            className={clientFloorReviewMode === "isolate" ? "client-floor-control client-floor-control--mode client-floor-control--active" : "client-floor-control client-floor-control--mode"}
+            title="Show only the selected floor, with shared structural context"
+            onClick={() => {
+              clientFloorReviewModeRef.current = "isolate";
+              setClientFloorReviewMode("isolate");
+              if (typeof clientFloorSelection === "number" || clientFloorSelection === "roof")
+                clientFloorViewRef.current?.(clientFloorSelection);
+            }}
+          >
+            Isolate
+          </button>
           <button
             type="button"
             aria-pressed={clientFloorSelection === null}
@@ -1781,10 +1795,20 @@ export function Viewer3D({
               <button
                 type="button"
                 key={floor}
-                aria-label={floor === 0 ? "Show Ground Floor only" : floor < 0 ? `Show Basement ${Math.abs(floor)} only` : `Show Floor ${floor} only`}
+                aria-label={floor === 0
+                  ? clientFloorReviewMode === "stacked" ? "Show Ground Floor" : "Show Ground Floor only"
+                  : floor < 0
+                    ? clientFloorReviewMode === "stacked"
+                      ? `Show stacked view through Basement ${Math.abs(floor)}`
+                      : `Show Basement ${Math.abs(floor)} only`
+                    : clientFloorReviewMode === "stacked"
+                      ? `Show stacked view through Floor ${floor}`
+                      : `Show Floor ${floor} only`}
                 aria-pressed={clientFloorSelection === floor}
                 className={clientFloorSelection === floor ? "client-floor-control client-floor-control--active" : "client-floor-control"}
-                title={floor === 0 ? "Ground floor, top view" : floor < 0 ? `Basement ${Math.abs(floor)}, top view` : `Floor ${floor}, top view`}
+                title={clientFloorReviewMode === "stacked"
+                  ? `Show this floor with all lower floors; hide upper floors`
+                  : floor === 0 ? "Isolate ground floor, top view" : floor < 0 ? `Isolate basement ${Math.abs(floor)}, top view` : `Isolate floor ${floor}, top view`}
                 onClick={() => clientFloorViewRef.current?.(floor)}
               >
                 {label}
@@ -1794,10 +1818,10 @@ export function Viewer3D({
           {clientRoofAvailable && (
             <button
               type="button"
-              aria-label="Show roof only"
+              aria-label={clientFloorReviewMode === "stacked" ? "Show roof and lower floors" : "Show roof only"}
               aria-pressed={clientFloorSelection === "roof"}
               className={clientFloorSelection === "roof" ? "client-floor-control client-floor-control--active" : "client-floor-control"}
-              title="Isolate the roof and upper structure using detected model bounds"
+              title={clientFloorReviewMode === "stacked" ? "Show the roof with all lower floors; hide upper structures above the roof" : "Isolate the roof and upper structure using detected model bounds"}
               onClick={() => clientFloorViewRef.current?.("roof")}
             >
               Roof

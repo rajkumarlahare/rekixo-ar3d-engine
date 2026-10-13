@@ -74,21 +74,22 @@ test("live customer Building page renders and operates real floor-review buttons
     );
   }
 
-  const expectedFloors = [
-    ["Show Ground Floor only", "Ground"],
-    ["Show Floor 1 only", "1F"],
-    ["Show Floor 2 only", "2F"],
-    ["Show Floor 3 only", "3F"],
-    ["Show Floor 4 only", "4F"],
-    ["Show Floor 5 only", "5F"],
+  const expectedStackedFloors = [
+    "Show Ground Floor",
+    "Show stacked view through Floor 1",
+    "Show stacked view through Floor 2",
+    "Show stacked view through Floor 3",
+    "Show stacked view through Floor 4",
+    "Show stacked view through Floor 5",
   ];
-  for (const [accessibleName] of expectedFloors) {
+  for (const accessibleName of expectedStackedFloors) {
     await expect(
       floorNav.getByRole("button", { name: accessibleName }),
-      "Missing required live floor button: " + accessibleName,
+      "Missing required stacked floor button: " + accessibleName,
     ).toBeVisible();
   }
-  await expect(floorNav.getByRole("button", { name: "Show roof only" })).toBeVisible();
+  await expect(floorNav.getByRole("button", { name: "Show roof and lower floors" })).toBeVisible();
+  await expect(floorNav.getByRole("button", { name: "Stacked floor view" })).toHaveAttribute("aria-pressed", "true");
 
   console.log(
     "LIVE_FLOOR_UI_RUNTIME: " + slug + " | buttons=" +
@@ -96,8 +97,17 @@ test("live customer Building page renders and operates real floor-review buttons
   );
   console.log("LIVE_FLOOR_RUNTIME_DIAGNOSTICS: " + JSON.stringify(floorDiagnostics));
 
+  for (const accessibleName of ["Show Ground Floor", "Show stacked view through Floor 1", "Show stacked view through Floor 5", "Show roof and lower floors"]) {
+    const button = floorNav.getByRole("button", { name: accessibleName });
+    await button.click();
+    await expect(button, accessibleName + " should become active after click").toHaveAttribute("aria-pressed", "true");
+  }
+
+  await floorNav.getByRole("button", { name: "Isolate selected floor" }).click();
+  await expect(floorNav.getByRole("button", { name: "Isolate selected floor" })).toHaveAttribute("aria-pressed", "true");
   for (const accessibleName of ["Show Ground Floor only", "Show Floor 1 only", "Show Floor 5 only", "Show roof only"]) {
     const button = floorNav.getByRole("button", { name: accessibleName });
+    await expect(button, "Isolate mode must expose accurate labels: " + accessibleName).toBeVisible();
     await button.click();
     await expect(button, accessibleName + " should become active after click").toHaveAttribute("aria-pressed", "true");
   }

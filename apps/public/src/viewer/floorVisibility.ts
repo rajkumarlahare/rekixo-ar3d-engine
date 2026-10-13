@@ -6,7 +6,7 @@ interface MeshRecord {
   box: THREE.Box3;
   originalVisible: boolean;
   originalMaterial: THREE.Material | THREE.Material[];
-  ghostMaterial?: THREE.Material | THREE.Material[];
+  contextMaterials?: Map<number, THREE.Material | THREE.Material[]>;
   floor: number | null;
 }
 
@@ -14,7 +14,7 @@ export interface FloorVisibilityController {
   /** True when this level contains original opaque meshes that can be isolated. */
   hasFloor(level: FloorGeometryLevel): boolean;
   /** Show one complete source floor and return its non-ghost mesh bounds. */
-  showFloor(level: FloorGeometryLevel): THREE.Box3 | undefined;
+  showFloor(level: FloorGeometryLevel, mode?: "stacked" | "isolate"): THREE.Box3 | undefined;
   /** Restore exact imported visibility/material state and return the whole model. */
   showAll(): THREE.Box3 | undefined;
   dispose(): void;
@@ -60,20 +60,27 @@ function floorFromHierarchy(node: THREE.Object3D): number | null {
   return null;
 }
 
-function ghostMaterialFor(record: MeshRecord): THREE.Material | THREE.Material[] {
-  if (record.ghostMaterial) return record.ghostMaterial;
-  const makeGhost = (material: THREE.Material) => {
+function contextMaterialFor(
+  record: MeshRecord,
+  requestedOpacity: number,
+): THREE.Material | THREE.Material[] {
+  const opacityKey = Math.round(requestedOpacity * 100) / 100;
+  record.contextMaterials ??= new Map();
+  const cached = record.contextMaterials.get(opacityKey);
+  if (cached) return cached;
+  const makeContext = (material: THREE.Material) => {
     const clone = material.clone();
-    clone.opacity = Math.min(clone.opacity, 0.16);
+    clone.opacity = Math.min(clone.opacity, opacityKey);
     clone.transparent = true;
     clone.depthWrite = false;
     clone.needsUpdate = true;
     return clone;
   };
-  record.ghostMaterial = Array.isArray(record.originalMaterial)
-    ? record.originalMaterial.map(makeGhost)
-    : makeGhost(record.originalMaterial);
-  return record.ghostMaterial;
+  const contextMaterial = Array.isArray(record.originalMaterial)
+    ? record.originalMaterial.map(makeContext)
+    : makeContext(record.originalMaterial);
+  record.contextMaterials.set(opacityKey, contextMaterial);
+  return contextMaterial;
 }
 
 function emptyBounds() {
@@ -135,35 +142,62 @@ export function createFloorVisibilityController(
 
   return {
     hasFloor,
-    showFloor(level) {
+    showFloor(level, mode = "isolate") {
       const bounds = emptyBounds();
       const bottom = level.elevationM;
       const top = level.topElevationM;
       const selectedHeight = Math.max(top - bottom, 0.1);
+      const stacked = mode === "stacked";
+      const selectedContextOpacity = 0.46;
+      const sharedContextOpacity = 0.16;
 
       for (const record of records) {
         const height = record.box.max.y - record.box.min.y;
         const centerY = (record.box.min.y + record.box.max.y) / 2;
 
-        // Floor-named source groups are stronger evidence than a bbox heuristic.
+        // A floor-labelled source group is authoritative for floor membership.
         if (record.floor !== null) {
-          record.mesh.material = record.originalMaterial;
-          record.mesh.visible = record.originalVisible && record.floor === level.floor;
-          if (record.mesh.visible) addBounds(bounds, record.box);
+          const belongsToSelected = record.floor === level.floor;
+          const belongsBelowSelected = stacked && record.floor < level.floor;
+          record.mesh.visible = record.originalVisible &&
+            (belongsToSelected || belongsBelowSelected);
+          if (belongsToSelected) {
+            record.mesh.material = record.originalMaterial;
+            if (record.mesh.visible) addBounds(bounds, record.box);
+          } else if (record.mesh.visible && belongsBelowSelected) {
+            record.mesh.material = contextMaterialFor(record, selectedContextOpacity);
+            addBounds(bounds, record.box);
+          } else {
+            record.mesh.material = record.originalMaterial;
+          }
           continue;
         }
 
-        // Keep whole objects spanning storeys intact as a light context layer.
+        // Objects spanning multiple storeys (lift core, columns, facade shell)
+        // cannot be split without cutting. Keep them whole as a subtle context.
         if (height > selectedHeight * 1.5) {
           record.mesh.visible = record.originalVisible;
-          record.mesh.material = ghostMaterialFor(record);
+          record.mesh.material = contextMaterialFor(record, sharedContextOpacity);
           continue;
         }
 
-        record.mesh.material = record.originalMaterial;
-        const belongsToFloor = centerY >= bottom - 0.02 && centerY <= top + 0.02;
-        record.mesh.visible = record.originalVisible && belongsToFloor;
-        if (record.mesh.visible) addBounds(bounds, record.box);
+        const belongsToSelected = centerY >= bottom - 0.02 && centerY <= top + 0.02;
+        const belongsBelowSelected = stacked && centerY < bottom - 0.02;
+        const belongsInVisibleStack =
+          stacked && centerY <= top + 0.02 && (belongsToSelected || belongsBelowSelected);
+
+        if (belongsToSelected) {
+          record.mesh.visible = record.originalVisible;
+          record.mesh.material = record.originalMaterial;
+          if (record.mesh.visible) addBounds(bounds, record.box);
+        } else if (belongsInVisibleStack && belongsBelowSelected) {
+          record.mesh.visible = record.originalVisible;
+          record.mesh.material = contextMaterialFor(record, selectedContextOpacity);
+          if (record.mesh.visible) addBounds(bounds, record.box);
+        } else {
+          record.mesh.visible = false;
+          record.mesh.material = record.originalMaterial;
+        }
       }
       return bounds.isEmpty() ? undefined : bounds;
     },
@@ -171,13 +205,12 @@ export function createFloorVisibilityController(
     dispose() {
       showAll();
       for (const record of records) {
-        const materials = Array.isArray(record.ghostMaterial)
-          ? record.ghostMaterial
-          : record.ghostMaterial
-            ? [record.ghostMaterial]
-            : [];
-        for (const material of materials) material.dispose();
-        record.ghostMaterial = undefined;
+        for (const cached of record.contextMaterials?.values() ?? []) {
+          const materials = Array.isArray(cached) ? cached : [cached];
+          for (const material of materials) material.dispose();
+        }
+        record.contextMaterials?.clear();
+        record.contextMaterials = undefined;
       }
     },
   };
