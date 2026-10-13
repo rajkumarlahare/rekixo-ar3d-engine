@@ -1,7 +1,7 @@
 import * as THREE from "three";
 
 /** Procedural outdoor sky; no network textures, additional lights or per-frame allocations. */
-export function createExteriorSky(reducedMotion: boolean) {
+export function createExteriorSky(reducedMotion: boolean, driftClouds = true) {
   const uniforms = {
     elapsed: { value: 0 },
     night: { value: 0 },
@@ -54,7 +54,7 @@ export function createExteriorSky(reducedMotion: boolean) {
     root,
     update(delta: number, camera: THREE.Camera) {
       root.position.copy(camera.position);
-      if (!reducedMotion) uniforms.elapsed.value += delta;
+      if (!reducedMotion && driftClouds) uniforms.elapsed.value += delta;
     },
     setNight(night: boolean) { uniforms.night.value = night ? 1 : 0; },
     dispose() { root.geometry.dispose(); material.dispose(); },
