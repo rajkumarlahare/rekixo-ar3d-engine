@@ -82,7 +82,7 @@ test("only reviewed water-feature semantics become animated source-backed water 
   assert.match(site, /waterMaterial\.onBeforeCompile/);
   assert.match(site, /waterMotion = true/);
   assert.match(site, /surface\.material\.userData\.waterAnimationEnabled !== true/);
-  assert.match(viewer, /environmentProfile\?\.motion\.water !== "off"/);
+  assert.match(viewer, /environmentProfile\?\.preset === "cinematic-exterior" && environmentProfile\.motion\.water !== "off"/);
   assert.match(viewer, /siteEnvironment\?\.update\(delta\)/);
   assert.doesNotMatch(read("apps/public/src/viewer/presentationEnvironment.ts"), /Presentation water|generated water pool/i);
 });
