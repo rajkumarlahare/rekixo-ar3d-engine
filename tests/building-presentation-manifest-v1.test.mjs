@@ -181,6 +181,55 @@ test("Building Presentation Manifest V1 validates additive cinematic environment
   assert.doesNotThrow(() => assertBuildingPresentationManifestV1(manifest()));
 });
 
+test("Building environment landscape presets are optional for old manifests and validated when supplied", async () => {
+  const { assertBuildingPresentationManifestV1 } = await loadContract();
+  const valid = manifest();
+  valid.environment.profile = {
+    format: "rekixo-environment-profile",
+    version: 1,
+    preset: "cinematic-exterior",
+    quality: "auto",
+    landscape: "rural-farm",
+    baseline: "always",
+    siteDataPolicy: "additive",
+    motion: {
+      clouds: "drifting",
+      vegetation: "subtle",
+      water: "opt-in",
+      traffic: "opt-in",
+    },
+  };
+  assert.doesNotThrow(() => assertBuildingPresentationManifestV1(valid));
+
+  const invalid = manifest();
+  invalid.environment.profile = {
+    ...valid.environment.profile,
+    landscape: "oceanfront",
+  };
+  assert.throws(
+    () => assertBuildingPresentationManifestV1(invalid),
+    /environment profile/,
+  );
+
+  // Existing published V1 profiles without this additive field remain valid.
+  const legacy = manifest();
+  legacy.environment.profile = {
+    format: "rekixo-environment-profile",
+    version: 1,
+    preset: "cinematic-exterior",
+    quality: "auto",
+    baseline: "always",
+    siteDataPolicy: "additive",
+    motion: {
+      clouds: "drifting",
+      vegetation: "subtle",
+      water: "opt-in",
+      traffic: "opt-in",
+    },
+  };
+  assert.doesNotThrow(() => assertBuildingPresentationManifestV1(legacy));
+});
+
 test("Building Presentation Manifest V1 pins provenance and rejects duplicate source identities", async () => {
   const { assertBuildingPresentationManifestV1 } = await loadContract();
   const value = manifest();
