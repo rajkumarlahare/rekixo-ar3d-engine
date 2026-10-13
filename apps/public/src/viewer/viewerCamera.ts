@@ -92,8 +92,7 @@ export function updateCameraDepthRange(
   // small source models, so keep its distant ground inside the clip volume.
   const sceneScale = Math.max(modelScale, 8);
   const far = Math.max(
-    centerDistance + radius * 1.25 + modelScale * 0.1,
-    sceneScale * 18,
+    centerDistance + sceneScale * 24,
     near * 1000,
   );
 
