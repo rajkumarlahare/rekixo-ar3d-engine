@@ -182,6 +182,12 @@ export function Viewer3D({
     let animationFrame = 0;
     let activeObject: THREE.Object3D | undefined;
     let floorVisibilityController: FloorVisibilityController | undefined;
+    const floorVisibilityModulePromise = clientPresentation
+      ? import("./floorVisibility").catch((error) => {
+          console.warn("Customer floor review module could not be loaded.", error);
+          return undefined;
+        })
+      : Promise.resolve(undefined);
     let homeView: HomeView | undefined;
     let floorExploder: ReturnType<typeof createFloorExploder> | undefined;
     let siteEnvironment: ReturnType<typeof createArchitecturalSiteEnvironment> | undefined;
@@ -798,6 +804,11 @@ export function Viewer3D({
     lightingRef.current = applyLighting;
 
     const mountObject = async (object: THREE.Object3D, usePreset: boolean) => {
+      const floorVisibilityModule = await floorVisibilityModulePromise;
+      if (disposed) {
+        disposeViewerObject(object);
+        return;
+      }
       floorVisibilityController?.dispose();
       floorVisibilityController = undefined;
       if (activeObject) {
@@ -883,15 +894,9 @@ export function Viewer3D({
         loadModelProfileMaterialEnhancer(modelProfile);
       enhanceArchitecturalModel(object, renderer, referenceVisual);
       // Capture the post-enhancement materials so All/reset restores the actual customer presentation.
-      floorVisibilityController = undefined;
-      if (clientPresentation) {
-        try {
-          const { createFloorVisibilityController } = await import("./floorVisibility");
-          floorVisibilityController = createFloorVisibilityController(object);
-        } catch (error) {
-          console.warn("Customer floor review module could not be loaded.", error);
-        }
-      }
+      floorVisibilityController = floorVisibilityModule
+        ? floorVisibilityModule.createFloorVisibilityController(object)
+        : undefined;
       if (clientPresentation && floorVisibilityController) {
         // Do not display a floor control unless the published model has original
         // meshes that can actually be shown for that level.
