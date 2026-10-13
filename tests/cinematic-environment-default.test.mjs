@@ -38,9 +38,9 @@ test("baseline environment layers are additive when reviewed site data is sparse
   const site = read("apps/public/src/viewer/siteEnvironment.ts");
   assert.match(site, /baselinePolicy: "empty-only" \| "always" = "empty-only"/);
   assert.match(site, /baselinePolicy === "always" \|\| elements\.length === 0/);
-  assert.match(site, /includeRoad: !hasRoad/);
-  assert.match(site, /includeSidewalk: !hasPath/);
-  assert.match(site, /includeLawn: !hasLawn/);
+  assert.match(site, /includeRoad: landscapePreset !== "hillside" && !hasRoad/);
+  assert.match(site, /includeSidewalk: landscapePreset !== "rural-farm" && landscapePreset !== "hillside" && !hasPath/);
+  assert.match(site, /includeLawn: landscapePreset !== "rural-farm" && !hasLawn/);
   assert.match(site, /includeTrees: trees\.length === 0/);
   assert.match(site, /includePlants: plants\.length === 0/);
   assert.match(site, /root\.userData\.presentationOnly = true/);
