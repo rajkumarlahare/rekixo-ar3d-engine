@@ -96,6 +96,22 @@ const gateInteractions = await import(
   Buffer.from(gateInteractionCode).toString("base64"),
 );
 
+test("customer runtime attaches click-to-open gate leaves only for the cinematic profile", () => {
+  const site = read("apps/public/src/viewer/siteEnvironment.ts");
+  const viewer = read("apps/public/src/viewer/Viewer3D.tsx");
+  const controller = read("apps/public/src/viewer/siteInteractionController.ts");
+  assert.match(site, /function addGate\(/);
+  assert.match(site, /kind: "gate-leaf"/);
+  assert.match(site, /Site gate leaf left hinge/);
+  assert.match(site, /Site gate leaf right hinge/);
+  assert.match(viewer, /createSiteInteractionController\(siteEnvironment\.root/);
+  assert.match(viewer, /siteInteractionController\?\.update\(delta\)/);
+  assert.match(viewer, /siteInteractionController\?\.dispose\(\)/);
+  assert.match(controller, /raycaster\.intersectObject\(root, true\)/);
+  assert.match(controller, /event\.stopPropagation\(\)/);
+  assert.match(controller, /reducedMotion/);
+});
+
 test("generated site gate leaves open on click, animate smoothly, and restore on disposal", () => {
   const THREE = require("three");
   const root = new THREE.Group();
