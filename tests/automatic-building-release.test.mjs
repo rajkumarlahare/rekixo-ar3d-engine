@@ -63,6 +63,25 @@ test("canonical GLB presentation bounds fail closed without accessor min/max", (
   assert.equal(gltfSceneBounds(gltf), null);
 });
 
+test("automatic Building presentation rejects unknown landscape presets", async () => {
+  const draft = { scene: { modelTransform: { rotationY: 0 }, landscapePreset: "oceanfront" } };
+  await assert.rejects(
+    () =>
+      buildAutomaticBuildingPresentation({
+        canonical: {
+          modelArtifact: { sha256: MODEL_SHA },
+          bounds: {
+            min: { x: -1, y: 0, z: -1 },
+            max: { x: 1, y: 3, z: 1 },
+          },
+        },
+        draft,
+        sourceEvidence: { sourcePackSourceIds: [], sourceClaimIds: [] },
+      }),
+    /Invalid customer landscape preset/,
+  );
+});
+
 test("automatic Building presentation is release-valid and source-preserving", async () => {
   const sourceEvidence = {
     sourcePackSourceIds: ["source-dwg", "source-fbx"],
@@ -77,6 +96,7 @@ test("automatic Building presentation is release-valid and source-preserving", a
   };
   const draft = {
     scene: {
+      landscapePreset: "rural-farm",
       floors: [
         { id: "floor_0", name: "Ground", elevation: 0 },
         { id: "floor_1", name: "Floor 1", elevation: 3.2 },
@@ -146,6 +166,9 @@ test("automatic Building presentation is release-valid and source-preserving", a
   assert.equal(presentation.appearance.mood, "evening");
   assert.equal(presentation.environment.mode, "source-backed");
   assert.equal(presentation.environment.genericDressing, false);
+  assert.equal(presentation.environment.profile.landscape, "rural-farm");
+  assert.equal(presentation.environment.profile.preset, "cinematic-exterior");
+  assert.equal(presentation.environment.profile.siteDataPolicy, "additive");
   assert.equal(presentation.materials.overrides[0].source, "operator");
   assert.deepEqual(
     presentation.cameras.shots.map((shot) => shot.kind),
