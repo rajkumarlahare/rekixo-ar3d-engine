@@ -14,22 +14,23 @@ test("customer floor isolation uses original mesh visibility and not vertical cl
   assert.doesNotMatch(visibility, /new THREE\.Plane/);
 });
 
-test("cross-storey meshes remain intact instead of being cut", () => {
-  assert.match(visibility, /Keep structural\/facade objects spanning several storeys intact/);
-  assert.match(visibility, /height > Math\.max\(top - bottom, 0\.1\) \* 1\.5/);
-  assert.match(visibility, /record\.mesh\.material = ghostMaterialFor\(record\)/);
+test("cross-storey meshes are ghosted while a floor is isolated and restored on All", () => {
+  assert.match(visibility, /selectedHeight/);
+  assert.match(visibility, /ghostMaterialFor\(record\)/);
   assert.match(visibility, /opacity = Math\.min\(materialWithOpacity\.opacity, 0\.16\)/);
   assert.match(visibility, /record\.mesh\.material = record\.originalMaterial/);
+  assert.match(visibility, /height > selectedHeight \* 1\.5/);
 });
 
-test("explicit floor names and source geometry can map imported meshes to levels", () => {
+test("explicit floor names and source bounds are used for mesh assignment", () => {
   assert.match(visibility, /floorFromNodeName/);
   assert.match(visibility, /ground_floor/);
-  assert.match(visibility, /floor\|level\|storey\|story\|f/);
   assert.match(visibility, /centerY >= bottom - 0\.02 && centerY <= top \+ 0\.02/);
+  assert.match(visibility, /record\.floor === level\.floor/);
 });
 
-test("walkthrough and disposal restore source object visibility", () => {
+test("walkthrough and disposal restore source object visibility and materials", () => {
   assert.match(viewer, /if \(enabled && clientPresentation\) floorVisibilityController\?\.showAll\(\)/);
   assert.match(viewer, /floorVisibilityController\?\.dispose\(\)/);
+  assert.match(visibility, /material\.dispose\(\)/);
 });
