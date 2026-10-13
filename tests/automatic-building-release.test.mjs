@@ -6,6 +6,7 @@ import {
   gltfSceneBounds,
 } from "../workers/automatic-building-release.mjs";
 import { sanitizeBuildingPresentationForRelease } from "../workers/building-presentation-policy.mjs";
+import { publicStudioSnapshot } from "../workers/studio-draft-validation.mjs";
 
 const MODEL_SHA = "a".repeat(64);
 
@@ -61,6 +62,29 @@ test("canonical GLB presentation bounds fail closed without accessor min/max", (
   const gltf = gltfWithNode({});
   delete gltf.accessors[0].max;
   assert.equal(gltfSceneBounds(gltf), null);
+});
+
+test("public Studio snapshot preserves the chosen landscape preset for release generation", () => {
+  const snapshot = publicStudioSnapshot({
+    schema: 1,
+    id: "project-landscape",
+    slug: "project-landscape",
+    name: "Landscape project",
+    updated: "2026-10-13T00:00:00.000Z",
+    assets: [],
+    releases: [],
+    scene: {
+      scale: 1,
+      landscapePreset: "hillside",
+      floors: [],
+      rooms: [],
+      furniture: [],
+      siteElements: [],
+      walls: [],
+      openings: [],
+    },
+  });
+  assert.equal(snapshot.scene.landscapePreset, "hillside");
 });
 
 test("automatic Building presentation rejects unknown landscape presets", async () => {
