@@ -355,6 +355,24 @@ export async function buildAutomaticBuildingPresentation({ canonical, draft, sou
   const floors = Array.isArray(scene.floors) ? scene.floors : [];
   const siteElements = Array.isArray(scene.siteElements) ? scene.siteElements : [];
   const openings = Array.isArray(scene.openings) ? scene.openings : [];
+  const landscapePreset = scene.landscapePreset ?? "auto";
+  if (!["auto", "urban", "suburban", "rural-farm", "hillside"].includes(landscapePreset))
+    throw Error("Invalid customer landscape preset.");
+  const environmentProfile = {
+    format: "rekixo-environment-profile",
+    version: 1,
+    preset: "cinematic-exterior",
+    quality: "auto",
+    landscape: landscapePreset,
+    baseline: "always",
+    siteDataPolicy: "additive",
+    motion: {
+      clouds: "drifting",
+      vegetation: "subtle",
+      water: "opt-in",
+      traffic: "opt-in",
+    },
+  };
   const sourceBackedEnvironment = siteElements.some((item) => item?.origin === "cad-auto" || item?.origin === "model-cad-auto");
   const sourceBackedUnits = new Set(
     rooms
@@ -406,8 +424,18 @@ export async function buildAutomaticBuildingPresentation({ canonical, draft, sou
     },
     materials: { mode: "source-preserving", overrides: materialOverrides },
     environment: sourceBackedEnvironment
-      ? { mode: "source-backed", sourceBacked: true, genericDressing: false }
-      : { mode: "presentation-default", sourceBacked: false, genericDressing: true },
+      ? {
+          mode: "source-backed",
+          sourceBacked: true,
+          genericDressing: false,
+          profile: structuredClone(environmentProfile),
+        }
+      : {
+          mode: "presentation-default",
+          sourceBacked: false,
+          genericDressing: true,
+          profile: structuredClone(environmentProfile),
+        },
     cameras: {
       defaultShotId: "hero",
       shots: shotKinds.map((kind) => cameraShot(kind, bounds, orientation)),
