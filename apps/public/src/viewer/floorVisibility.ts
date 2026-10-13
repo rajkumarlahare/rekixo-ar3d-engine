@@ -3,6 +3,7 @@ import type { FloorGeometryLevel } from "./floorGeometry";
 
 interface MeshRecord {
   mesh: THREE.Mesh;
+  box: THREE.Box3;
   originalVisible: boolean;
   originalMaterial: THREE.Material | THREE.Material[];
   ghostMaterial?: THREE.Material | THREE.Material[];
@@ -10,8 +11,10 @@ interface MeshRecord {
 }
 
 export interface FloorVisibilityController {
-  showFloor(level: FloorGeometryLevel): void;
-  showAll(): void;
+  /** Show one complete source floor and return its non-ghost mesh bounds. */
+  showFloor(level: FloorGeometryLevel): THREE.Box3 | undefined;
+  /** Restore exact imported visibility/material state and return the whole model. */
+  showAll(): THREE.Box3 | undefined;
   dispose(): void;
 }
 
@@ -55,25 +58,13 @@ function floorFromHierarchy(node: THREE.Object3D): number | null {
   return null;
 }
 
-function boxFor(mesh: THREE.Mesh): THREE.Box3 | null {
-  mesh.updateWorldMatrix(true, false);
-  const box = new THREE.Box3().setFromObject(mesh);
-  return box.isEmpty() ? null : box;
-}
-
 function ghostMaterialFor(record: MeshRecord): THREE.Material | THREE.Material[] {
   if (record.ghostMaterial) return record.ghostMaterial;
   const makeGhost = (material: THREE.Material) => {
     const clone = material.clone();
-    const materialWithOpacity = clone as THREE.Material & {
-      opacity?: number;
-      transparent?: boolean;
-      depthWrite?: boolean;
-    };
-    if (typeof materialWithOpacity.opacity === "number")
-      materialWithOpacity.opacity = Math.min(materialWithOpacity.opacity, 0.16);
-    if ("transparent" in materialWithOpacity) materialWithOpacity.transparent = true;
-    if ("depthWrite" in materialWithOpacity) materialWithOpacity.depthWrite = false;
+    clone.opacity = Math.min(clone.opacity, 0.16);
+    clone.transparent = true;
+    clone.depthWrite = false;
     clone.needsUpdate = true;
     return clone;
   };
@@ -83,10 +74,20 @@ function ghostMaterialFor(record: MeshRecord): THREE.Material | THREE.Material[]
   return record.ghostMaterial;
 }
 
+function emptyBounds() {
+  return new THREE.Box3();
+}
+
+function addBounds(bounds: THREE.Box3, box: THREE.Box3) {
+  if (box.isEmpty()) return;
+  bounds.union(box);
+}
+
 /**
- * Shows the selected floor using existing mesh objects; no mesh is cut or
- * reconstructed. Unlabelled objects spanning multiple storeys remain as
- * translucent context so they do not obscure the selected floor in plan view.
+ * Non-destructively isolates the imported model's existing mesh objects.
+ * Explicit Floor/Level group labels win; otherwise a mesh is assigned by its
+ * world-space vertical centre. Objects spanning multiple storeys remain as
+ * translucent context, never cut by clipping planes.
  */
 export function createFloorVisibilityController(
   root: THREE.Object3D,
@@ -95,10 +96,11 @@ export function createFloorVisibilityController(
   const records: MeshRecord[] = [];
   root.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
-    const box = boxFor(node);
-    if (!box) return;
+    const box = new THREE.Box3().setFromObject(node);
+    if (box.isEmpty()) return;
     records.push({
       mesh: node,
+      box,
       originalVisible: node.visible,
       originalMaterial: node.material,
       floor: floorFromHierarchy(node),
@@ -106,37 +108,35 @@ export function createFloorVisibilityController(
   });
 
   const showAll = () => {
+    const bounds = emptyBounds();
     for (const record of records) {
       record.mesh.visible = record.originalVisible;
       record.mesh.material = record.originalMaterial;
+      if (record.originalVisible) addBounds(bounds, record.box);
     }
+    return bounds.isEmpty() ? undefined : bounds;
   };
 
   return {
     showFloor(level) {
+      const bounds = emptyBounds();
       const bottom = level.elevationM;
       const top = level.topElevationM;
       const selectedHeight = Math.max(top - bottom, 0.1);
 
       for (const record of records) {
-        const box = boxFor(record.mesh);
-        if (!box) {
-          record.mesh.visible = record.originalVisible;
-          record.mesh.material = record.originalMaterial;
-          continue;
-        }
+        const height = record.box.max.y - record.box.min.y;
+        const centerY = (record.box.min.y + record.box.max.y) / 2;
 
-        const height = box.max.y - box.min.y;
-        const centerY = (box.min.y + box.max.y) / 2;
-
-        // A reviewed/explicit group label wins over bounds heuristics.
+        // Floor-named source groups are stronger evidence than a bbox heuristic.
         if (record.floor !== null) {
           record.mesh.material = record.originalMaterial;
           record.mesh.visible = record.originalVisible && record.floor === level.floor;
+          if (record.mesh.visible) addBounds(bounds, record.box);
           continue;
         }
 
-        // The original object spans storeys: keep it as ghost context, never cut it.
+        // Keep whole objects spanning storeys intact as a light context layer.
         if (height > selectedHeight * 1.5) {
           record.mesh.visible = record.originalVisible;
           record.mesh.material = ghostMaterialFor(record);
@@ -144,10 +144,11 @@ export function createFloorVisibilityController(
         }
 
         record.mesh.material = record.originalMaterial;
-        const centerInSelectedBand =
-          centerY >= bottom - 0.02 && centerY <= top + 0.02;
-        record.mesh.visible = record.originalVisible && centerInSelectedBand;
+        const belongsToFloor = centerY >= bottom - 0.02 && centerY <= top + 0.02;
+        record.mesh.visible = record.originalVisible && belongsToFloor;
+        if (record.mesh.visible) addBounds(bounds, record.box);
       }
+      return bounds.isEmpty() ? undefined : bounds;
     },
     showAll,
     dispose() {
