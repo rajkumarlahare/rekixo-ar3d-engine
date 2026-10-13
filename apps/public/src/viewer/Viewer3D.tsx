@@ -1008,7 +1008,7 @@ export function Viewer3D({
         ) {
           presentationMotion = createPremiumPresentationMotion(siteEnvironment.root, {
             reducedMotion,
-            mobile,
+            mobile: environmentMobileQuality,
           });
         }
         if (
