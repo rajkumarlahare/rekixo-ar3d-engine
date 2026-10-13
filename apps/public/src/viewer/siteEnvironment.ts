@@ -252,7 +252,6 @@ function addGate(root: THREE.Group, item: PublicSiteElement, mobile: boolean) {
     post.receiveShadow = true;
     group.add(post);
   }
-  postGeometry.dispose();
 
   const clearWidth = Math.max(item.width - postWidth * 2, 0.4);
   const leafWidth = clearWidth / 2;
@@ -267,6 +266,7 @@ function addGate(root: THREE.Group, item: PublicSiteElement, mobile: boolean) {
     const pivot = new THREE.Group();
     pivot.name = side < 0 ? "Site gate leaf left hinge" : "Site gate leaf right hinge";
     pivot.position.set(side * (item.width / 2 - postWidth), 0, 0);
+    const spanDirection = side < 0 ? 1 : -1;
     const openAngle = side < 0 ? -Math.PI * 0.47 : Math.PI * 0.47;
     pivot.userData.siteInteraction = {
       kind: "gate-leaf",
@@ -278,7 +278,7 @@ function addGate(root: THREE.Group, item: PublicSiteElement, mobile: boolean) {
     const railY = [item.height * 0.16, item.height * 0.49, item.height * 0.80];
     for (const y of railY) {
       const rail = new THREE.Mesh(railGeometry, gateMaterial);
-      rail.position.set(side * leafWidth / 2, y, 0);
+      rail.position.set(spanDirection * leafWidth / 2, y, 0);
       rail.castShadow = !mobile;
       rail.receiveShadow = true;
       pivot.add(rail);
@@ -289,14 +289,14 @@ function addGate(root: THREE.Group, item: PublicSiteElement, mobile: boolean) {
       const fraction = index / picketCount;
       const picket = new THREE.Mesh(barGeometry, gateMaterial);
       picket.name = "Site gate picket";
-      picket.position.set(side * leafWidth * fraction, item.height * 0.48, 0);
+      picket.position.set(spanDirection * leafWidth * fraction, item.height * 0.48, 0);
       picket.castShadow = !mobile;
       picket.receiveShadow = true;
       pivot.add(picket);
 
       if (index === 0 || index === picketCount) {
         const cap = new THREE.Mesh(capGeometry, gateMaterial);
-        cap.position.set(side * leafWidth * fraction, item.height * 0.84, 0);
+        cap.position.set(spanDirection * leafWidth * fraction, item.height * 0.84, 0);
         cap.castShadow = !mobile;
         pivot.add(cap);
       }
