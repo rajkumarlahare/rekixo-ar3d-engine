@@ -995,7 +995,7 @@ export function Viewer3D({
           environmentMobileQuality,
           clientPresentation &&
             (additiveBaseline || (!environmentProfile && buildingPresentation?.environment.mode !== "minimal" && (buildingPresentation?.environment.genericDressing ?? true))) &&
-            !includedSourceSite,
+            (!includedSourceSite || additiveBaseline),
           floorGeometry.find((level) => level.floor === 0 && Number.isFinite(level.elevationM))?.elevationM ?? modelProfile?.floorGeometry?.find((level) => level.floor === 0)?.elevationM,
           additiveBaseline ? "always" : "empty-only",
           environmentProfile?.preset === "cinematic-exterior" && environmentProfile.motion.water !== "off",
