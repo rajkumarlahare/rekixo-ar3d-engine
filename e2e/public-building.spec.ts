@@ -122,16 +122,31 @@ test("public exterior client flow works on desktop and mobile without pending/ad
     throw new Error(`Public viewer did not finish loading. Browser errors: ${JSON.stringify(errors)}. ${String(error)}`);
   }
   await expect(page.locator(".viewer-canvas")).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Select building floor" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Show Ground Floor only" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Show Floor 1 only" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Show Floor 5 only" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Show roof only" })).toBeVisible();
-  await page.getByRole("button", { name: "Show Floor 1 only" }).click();
-  await expect(page.getByRole("button", { name: "Show Floor 1 only" })).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Show roof only" }).click();
-  await expect(page.getByRole("button", { name: "Show roof only" })).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Top", exact: true }).click();
+  const floorNav = page.getByRole("navigation", { name: "Select building floor" });
+  await expect(floorNav).toBeVisible();
+  await expect(floorNav.getByRole("button", { name: "Stacked floor view" })).toHaveAttribute("aria-pressed", "true");
+  await expect(floorNav.getByRole("button", { name: "Isolate selected floor" })).toHaveAttribute("aria-pressed", "false");
+  await expect(floorNav.getByRole("button", { name: "Show Ground Floor" })).toBeVisible();
+  await expect(floorNav.getByRole("button", { name: "Show stacked view through Floor 1" })).toBeVisible();
+  await expect(floorNav.getByRole("button", { name: "Show stacked view through Floor 5" })).toBeVisible();
+  await expect(floorNav.getByRole("button", { name: "Show roof and lower floors" })).toBeVisible();
+  await floorNav.getByRole("button", { name: "Show stacked view through Floor 1" }).click();
+  await expect(floorNav.getByRole("button", { name: "Show stacked view through Floor 1" })).toHaveAttribute("aria-pressed", "true");
+  await floorNav.getByRole("button", { name: "Show roof and lower floors" }).click();
+  await expect(floorNav.getByRole("button", { name: "Show roof and lower floors" })).toHaveAttribute("aria-pressed", "true");
+
+  // Isolation keeps the former one-floor-at-a-time workflow for detailed review.
+  await floorNav.getByRole("button", { name: "Isolate selected floor" }).click();
+  await expect(floorNav.getByRole("button", { name: "Isolate selected floor" })).toHaveAttribute("aria-pressed", "true");
+  await expect(floorNav.getByRole("button", { name: "Show Ground Floor only" })).toBeVisible();
+  await expect(floorNav.getByRole("button", { name: "Show Floor 1 only" })).toBeVisible();
+  await expect(floorNav.getByRole("button", { name: "Show Floor 5 only" })).toBeVisible();
+  await expect(floorNav.getByRole("button", { name: "Show roof only" })).toBeVisible();
+  await floorNav.getByRole("button", { name: "Show Floor 1 only" }).click();
+  await expect(floorNav.getByRole("button", { name: "Show Floor 1 only" })).toHaveAttribute("aria-pressed", "true");
+  await floorNav.getByRole("button", { name: "Show roof only" }).click();
+  await expect(floorNav.getByRole("button", { name: "Show roof only" })).toHaveAttribute("aria-pressed", "true");
+  await floorNav.getByRole("button", { name: "Top", exact: true }).click();
   await expect(page.getByRole("button", { name: "Top", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".viewer-notice")).toHaveCount(0);
   await expect(page.getByText(/Source pending|Media unavailable|MODEL STATUS|Production/)).toHaveCount(0);
