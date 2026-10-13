@@ -1,6 +1,9 @@
 import type { PublicSiteElement } from "@rekixo/3d-contracts";
 import * as THREE from "three";
-import { addPresentationFallback } from "./presentationEnvironment";
+import {
+  addPresentationFallback,
+  type PresentationLandscapePreset,
+} from "./presentationEnvironment";
 import { getPublicRuntimeSiteElements } from "./publicRuntimeContext";
 import {
   configureProceduralSurfaceTextures,
@@ -508,6 +511,7 @@ export function createArchitecturalSiteEnvironment(
   baselinePolicy: "empty-only" | "always" = "empty-only",
   waterMotion = true,
   sourceSiteIncluded = false,
+  landscapePreset: PresentationLandscapePreset = "auto",
 ) {
   configureProceduralSurfaceTextures(renderer);
   const root = new THREE.Group();
@@ -551,20 +555,22 @@ export function createArchitecturalSiteEnvironment(
           includeSurroundingGround: !sourceSiteIncluded,
           includeRoad: !hasRoad,
           includeCars: false,
-          includeSidewalk: !hasPath,
+          landscapePreset,
+          includeSidewalk: landscapePreset !== "rural-farm" && landscapePreset !== "hillside" && !hasPath,
           includeDriveway: !hasPath,
-          includeLawn: !hasLawn,
+          includeLawn: landscapePreset !== "rural-farm" && !hasLawn,
           includeTrees: trees.length === 0,
           includePlants: plants.length === 0,
-          includeLamps: lights.length === 0,
+          includeLamps: landscapePreset !== "rural-farm" && lights.length === 0,
           includeContextMassing: false,
         }
       : {
           // Until curated vehicle/context GLB assets ship, avoid adding blocky
           // placeholder cars or neighborhood cuboids to the cinematic profile.
+          landscapePreset,
           includeGround: !sourceSiteIncluded,
           includeSurroundingGround: !sourceSiteIncluded,
-          includeCars: false,
+          includeCars: landscapePreset === "urban" && !mobile,
           includeContextMassing: false,
         };
 
