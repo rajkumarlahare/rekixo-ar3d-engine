@@ -2,11 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { publicProjectPath } from "@rekixo/3d-engine-core";
 import {
   experiences,
+  loadDraft,
   projects,
   releases,
+  saveDraft,
   type CloudProjectSummary,
   type CloudReleaseSummary,
 } from "../studio/cloud";
+import type {
+  BuildingEnvironmentLandscapePreset,
+  Project,
+} from "../studio/domain";
 import "./building-workspace.css";
 
 function selectedProjectSlug() {
@@ -18,6 +24,11 @@ export default function BuildingWorkspace() {
   const [project, setProject] = useState<CloudProjectSummary>();
   const [releaseItems, setReleaseItems] = useState<CloudReleaseSummary[]>([]);
   const [hasGeo, setHasGeo] = useState(false);
+  const [presentationDraft, setPresentationDraft] = useState<Project>();
+  const [draftRevision, setDraftRevision] = useState<number | null>(null);
+  const [savingLandscape, setSavingLandscape] = useState(false);
+  const [landscapeMessage, setLandscapeMessage] = useState("");
+  const [landscapeError, setLandscapeError] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -30,12 +41,19 @@ export default function BuildingWorkspace() {
     let live = true;
     setLoading(true);
     setError("");
-    void Promise.all([projects("", "active", 100, 0), releases(slug), experiences(slug)])
-      .then(([projectResult, releaseResult, experienceResult]) => {
+    void Promise.all([
+      projects("", "active", 100, 0),
+      releases(slug),
+      experiences(slug),
+      loadDraft(slug).catch(() => undefined),
+    ])
+      .then(([projectResult, releaseResult, experienceResult, draftResult]) => {
         if (!live) return;
         setProject(projectResult.projects.find((item) => item.slug === slug));
         setReleaseItems(releaseResult.releases);
         setHasGeo(experienceResult.experiences.some((item) => item.type === "geo"));
+        setPresentationDraft(draftResult?.draft);
+        setDraftRevision(draftResult?.revision ?? null);
       })
       .catch((reason) => {
         if (live) setError(reason instanceof Error ? reason.message : "Building state load nahi hua.");
@@ -50,6 +68,38 @@ export default function BuildingWorkspace() {
 
   const activeRelease = useMemo(() => releaseItems.find((item) => item.active), [releaseItems]);
   const buildingLive = Boolean(project?.status === "published" && activeRelease);
+
+  async function changeLandscapePreset(value: BuildingEnvironmentLandscapePreset) {
+    if (!presentationDraft || draftRevision === null || savingLandscape) return;
+    const nextDraft: Project = {
+      ...presentationDraft,
+      updated: new Date().toISOString(),
+      scene: {
+        ...presentationDraft.scene,
+        landscapePreset: value,
+      },
+    };
+    setPresentationDraft(nextDraft);
+    setSavingLandscape(true);
+    setLandscapeError("");
+    setLandscapeMessage("");
+    try {
+      const result = await saveDraft(nextDraft, draftRevision);
+      setDraftRevision(result.revision);
+      setLandscapeMessage("Saved to cloud draft. The choice applies to the next immutable Building release.");
+    } catch (reason) {
+      setLandscapeError(reason instanceof Error ? reason.message : "Landscape preset was not saved.");
+      try {
+        const fresh = await loadDraft(slug);
+        setPresentationDraft(fresh.draft);
+        setDraftRevision(fresh.revision);
+      } catch {
+        // Keep the visible error; a refresh can recover the saved draft state.
+      }
+    } finally {
+      setSavingLandscape(false);
+    }
+  }
 
   return (
     <div className="building-workspace">
@@ -73,6 +123,40 @@ export default function BuildingWorkspace() {
             <a className="engine-control-link" href={publicProjectPath(slug)} target="_blank" rel="noreferrer">Open Building Site</a>
           ) : null}
         </div>
+      </section>
+
+      <section className="building-workspace__environment engine-control-card">
+        <div>
+          <p>EXTERIOR ENVIRONMENT</p>
+          <h3>Customer surroundings</h3>
+          <span>
+            Pick a context for the next Building release. Reviewed/source Building geometry stays authoritative; generated surroundings are additive.
+          </span>
+          {landscapeMessage ? <small className="building-workspace__environment-message">{landscapeMessage}</small> : null}
+          {landscapeError ? <small className="building-workspace__environment-error">{landscapeError}</small> : null}
+        </div>
+        {presentationDraft ? (
+          <label>
+            Landscape preset
+            <select
+              aria-label="Customer landscape preset"
+              value={presentationDraft.scene.landscapePreset ?? "auto"}
+              disabled={savingLandscape || draftRevision === null}
+              onChange={(event) => void changeLandscapePreset(event.target.value as BuildingEnvironmentLandscapePreset)}
+            >
+              <option value="auto">Auto / Suburban</option>
+              <option value="urban">Urban / City</option>
+              <option value="suburban">Suburban / Gardens</option>
+              <option value="rural-farm">Rural Farm / Fields</option>
+              <option value="hillside">Hillside / Natural</option>
+            </select>
+            <small>{savingLandscape ? "Saving…" : "Saved with optimistic draft revision checks."}</small>
+          </label>
+        ) : (
+          <div className="building-workspace__environment-unavailable">
+            {loading ? "Loading presentation draft…" : "Start the Source Pack / Building draft before selecting an environment."}
+          </div>
+        )}
       </section>
 
       <section className="building-workspace__flow" aria-label="Building workflow">
