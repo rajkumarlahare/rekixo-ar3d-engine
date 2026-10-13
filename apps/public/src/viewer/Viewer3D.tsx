@@ -996,6 +996,7 @@ export function Viewer3D({
             !includedSourceSite,
           floorGeometry.find((level) => level.floor === 0 && Number.isFinite(level.elevationM))?.elevationM ?? modelProfile?.floorGeometry?.find((level) => level.floor === 0)?.elevationM,
           additiveBaseline ? "always" : "empty-only",
+          environmentProfile?.motion.water !== "off",
         );
         scene.add(siteEnvironment.root);
         if (
@@ -1503,6 +1504,7 @@ export function Viewer3D({
       const delta = Math.min(clock.getDelta(), 0.05);
       sky?.update(delta, camera);
       presentationMotion?.update(delta);
+      siteEnvironment?.update(delta);
       siteInteractionController?.update(delta);
 
       if (cameraTween && !walkActive) {
