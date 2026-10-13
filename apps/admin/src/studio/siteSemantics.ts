@@ -14,6 +14,10 @@ export function classifySiteSemantic(
 ): LandscapeSiteElementKind | undefined {
   const text = normalized(value);
   if (!text) return undefined;
+  if (
+    /\b(?:swimming pool|lap pool|reflecting pool|reflection pool|ornamental pool|water feature|water body|pond)\b/.test(text)
+  )
+    return "water";
 
   if (
     /\b(?:outdoor light|street light|streetlight|lamp post|lamppost|bollard light|light pole)\b/.test(
