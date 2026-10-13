@@ -85,10 +85,8 @@ export function createFloorVisibilityController(
           continue;
         }
 
-        const overlapsSelectedBand = box.max.y > bottom + 0.02 && box.min.y < top - 0.02;
         const centerInSelectedBand = centerY >= bottom - 0.02 && centerY <= top + 0.02;
-        record.mesh.visible = record.originalVisible &&
-          (centerInSelectedBand || overlapsSelectedBand);
+        record.mesh.visible = record.originalVisible && centerInSelectedBand;
       }
     },
     showAll,
