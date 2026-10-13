@@ -48,6 +48,7 @@ export type SceneSiteElementKindV2 =
   | "plant"
   | "gate"
   | "outdoor-light"
+  | "water"
   | "column"
   | "beam"
   | "slab"
@@ -560,6 +561,7 @@ export function assertSceneManifestV2(
         "plant",
         "gate",
         "outdoor-light",
+        "water",
         "column",
         "beam",
         "slab",
