@@ -188,4 +188,15 @@ test("automatic Building presentation is release-valid and source-preserving", a
       sourceEvidence,
     }),
   );
+
+  const invalidProfile = structuredClone(presentation);
+  invalidProfile.environment.profile.landscape = "oceanfront";
+  assert.throws(
+    () =>
+      sanitizeBuildingPresentationForRelease(invalidProfile, {
+        modelSha256: MODEL_SHA,
+        sourceEvidence,
+      }),
+    /environment profile/,
+  );
 });
