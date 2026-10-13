@@ -148,6 +148,39 @@ test("Building Presentation Manifest V1 keeps material, environment, camera and 
   );
 });
 
+test("Building Presentation Manifest V1 validates additive cinematic environment profile while preserving legacy manifests", async () => {
+  const { assertBuildingPresentationManifestV1 } = await loadContract();
+  const value = manifest();
+  value.environment.profile = {
+    format: "rekixo-environment-profile",
+    version: 1,
+    preset: "cinematic-exterior",
+    quality: "auto",
+    baseline: "always",
+    siteDataPolicy: "additive",
+    motion: {
+      clouds: "drifting",
+      vegetation: "subtle",
+      water: "opt-in",
+      traffic: "opt-in",
+    },
+  };
+  assert.doesNotThrow(() => assertBuildingPresentationManifestV1(value));
+
+  const unsafe = manifest();
+  unsafe.environment.profile = {
+    ...value.environment.profile,
+    siteDataPolicy: "replace-source",
+  };
+  assert.throws(
+    () => assertBuildingPresentationManifestV1(unsafe),
+    /environment profile/,
+  );
+
+  // The profile remains optional for historical immutable V1 releases.
+  assert.doesNotThrow(() => assertBuildingPresentationManifestV1(manifest()));
+});
+
 test("Building Presentation Manifest V1 pins provenance and rejects duplicate source identities", async () => {
   const { assertBuildingPresentationManifestV1 } = await loadContract();
   const value = manifest();
