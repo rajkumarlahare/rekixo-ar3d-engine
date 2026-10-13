@@ -41,7 +41,12 @@ import {
   type ExperienceRuntime,
   type ModelProfileRuntime,
 } from "./projectProfiles";
-import { applyPreset, fitCamera, type HomeView } from "./viewerCamera";
+import {
+  applyPreset,
+  fitCamera,
+  updateCameraDepthRange,
+  type HomeView,
+} from "./viewerCamera";
 import { applySourcePresentation, type SourcePresentation } from "./sourcePresentation";
 import {
   applyBuildingPresentationMaterials,
@@ -999,6 +1004,7 @@ export function Viewer3D({
           floorGeometry.find((level) => level.floor === 0 && Number.isFinite(level.elevationM))?.elevationM ?? modelProfile?.floorGeometry?.find((level) => level.floor === 0)?.elevationM,
           additiveBaseline ? "always" : "empty-only",
           environmentProfile?.preset === "cinematic-exterior" && environmentProfile.motion.water !== "off",
+          includedSourceSite,
         );
         scene.add(siteEnvironment.root);
         if (
@@ -1532,7 +1538,10 @@ export function Viewer3D({
       } else {
         controls.update();
       }
-      if (clientPresentation && modelBounds && !walkActive) camera.position.y = Math.max(camera.position.y, modelBounds.min.y + 0.4);
+      if (clientPresentation && modelBounds && !walkActive) {
+        camera.position.y = Math.max(camera.position.y, modelBounds.min.y + 0.4);
+        updateCameraDepthRange(camera, controls.target, modelBounds);
+      }
       renderer.render(scene, camera);
     };
     render();
