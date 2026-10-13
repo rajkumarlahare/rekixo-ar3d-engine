@@ -8,10 +8,8 @@ let configuredAnisotropy = 1;
 
 /** Configure cached and future detail maps for oblique camera angles. */
 export function configureProceduralSurfaceTextures(renderer: THREE.WebGLRenderer) {
-  configuredAnisotropy = Math.max(
-    1,
-    Math.min(renderer.capabilities.getMaxAnisotropy(), 8),
-  );
+  const maxAnisotropy = renderer?.capabilities?.getMaxAnisotropy?.() ?? 1;
+  configuredAnisotropy = Math.max(1, Math.min(maxAnisotropy, 8));
   for (const texture of textureCache.values()) {
     if (texture.anisotropy === configuredAnisotropy) continue;
     texture.anisotropy = configuredAnisotropy;
