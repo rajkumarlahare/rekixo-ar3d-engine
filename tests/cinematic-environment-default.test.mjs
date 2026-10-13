@@ -287,17 +287,11 @@ test("customer exterior keeps sunrise cinematic without exposing a time-of-day s
 
 
 
-test("default suburban and urban exteriors add lived-in neighborhood context", () => {
+test("exterior presentation does not generate added neighborhood building blocks", () => {
   const fallback = read("apps/public/src/viewer/presentationEnvironment.ts");
+  const helperSection = fallback.slice(0, fallback.indexOf("export interface PresentationFallbackOptions"));
 
-  assert.ok(fallback.includes("function addNeighborhoodContext("));
-  assert.ok(fallback.includes("function addNeighborhoodBuilding("));
-  assert.ok(fallback.includes("Presentation neighborhood windows"));
-  assert.ok(fallback.includes("Presentation neighborhood lawn plot"));
-  assert.ok(fallback.includes("Presentation neighborhood road"));
-  assert.ok(fallback.includes("Presentation neighborhood sidewalk"));
-  assert.ok(fallback.includes('if (landscape === "urban" || landscape === "suburban") {'));
-  assert.ok(fallback.includes("addUrbanContext(root, center, baseY, span, mobile)"));
-  assert.ok(fallback.includes("addNeighborhoodContext(root, bounds, center, baseY, span, margin, mobile, landscape)"));
-  assert.ok(fallback.includes("root.userData.nonAuthoritative = true"));
+  assert.doesNotMatch(helperSection, /function addNeighborhoodContext|function addNeighborhoodBuilding|Presentation neighborhood windows/);
+  assert.ok(fallback.includes('if (landscape === "urban") {\n    addUrbanContext(root, center, baseY, span, mobile);\n  }'));
+  assert.ok(fallback.includes('const includeCars = options.includeCars ?? landscape === "urban";'));
 });
