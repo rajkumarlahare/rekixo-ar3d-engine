@@ -565,12 +565,12 @@ export function createArchitecturalSiteEnvironment(
           includeContextMassing: false,
         }
       : {
-          // Generated traffic is limited to desktop exterior presentation;
-          // reviewed source-site geometry remains authoritative and untouched.
+          // Until curated vehicle/context GLB assets ship, avoid adding blocky
+          // placeholder cars or neighborhood cuboids to the cinematic profile.
           landscapePreset,
           includeGround: !sourceSiteIncluded,
           includeSurroundingGround: !sourceSiteIncluded,
-          includeCars: (landscapePreset === "urban" || landscapePreset === "suburban") && !mobile,
+          includeCars: landscapePreset === "urban" && !mobile,
           includeContextMassing: false,
         };
 
