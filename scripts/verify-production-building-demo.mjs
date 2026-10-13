@@ -50,6 +50,242 @@ async function getJson(url, accepted = [200]) {
   return { response, body: await response.json() };
 }
 
+
+function multiplyMatrix4(a, b) {
+  const out = new Array(16).fill(0);
+  for (let column = 0; column < 4; column += 1)
+    for (let row = 0; row < 4; row += 1)
+      for (let k = 0; k < 4; k += 1)
+        out[column * 4 + row] += a[k * 4 + row] * b[column * 4 + k];
+  return out;
+}
+
+function localNodeMatrix(node) {
+  if (Array.isArray(node?.matrix) && node.matrix.length === 16 &&
+      node.matrix.every(finite)) return node.matrix;
+  const [x, y, z, w] = Array.isArray(node?.rotation) ? node.rotation : [0, 0, 0, 1];
+  const [sx, sy, sz] = Array.isArray(node?.scale) ? node.scale : [1, 1, 1];
+  const [tx, ty, tz] = Array.isArray(node?.translation) ? node.translation : [0, 0, 0];
+  const x2 = x + x, y2 = y + y, z2 = z + z;
+  const xx = x * x2, xy = x * y2, xz = x * z2;
+  const yy = y * y2, yz = y * z2, zz = z * z2;
+  const wx = w * x2, wy = w * y2, wz = w * z2;
+  return [
+    (1 - (yy + zz)) * sx, (xy + wz) * sx, (xz - wy) * sx, 0,
+    (xy - wz) * sy, (1 - (xx + zz)) * sy, (yz + wx) * sy, 0,
+    (xz + wy) * sz, (yz - wx) * sz, (1 - (xx + yy)) * sz, 0,
+    tx, ty, tz, 1,
+  ];
+}
+
+function transformPoint(matrix, point) {
+  const [x, y, z] = point;
+  const w = matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15];
+  const divisor = w && w !== 1 ? w : 1;
+  return [
+    (matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12]) / divisor,
+    (matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13]) / divisor,
+    (matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14]) / divisor,
+  ];
+}
+
+function emptyBox() {
+  return { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] };
+}
+
+function extendBox(target, point) {
+  for (let axis = 0; axis < 3; axis += 1) {
+    target.min[axis] = Math.min(target.min[axis], point[axis]);
+    target.max[axis] = Math.max(target.max[axis], point[axis]);
+  }
+}
+
+function mergeBox(target, source) {
+  if (!source || !source.min.every(Number.isFinite) || !source.max.every(Number.isFinite)) return;
+  extendBox(target, source.min);
+  extendBox(target, source.max);
+}
+
+function boxSize(box) {
+  return box.min.every(Number.isFinite) && box.max.every(Number.isFinite)
+    ? box.max.map((value, axis) => value - box.min[axis])
+    : [0, 0, 0];
+}
+
+async function readGlbJsonDocument(modelUrl) {
+  const firstResponse = await fetchReady(
+    modelUrl,
+    { headers: { Range: "bytes=0-19" } },
+    [200, 206],
+  );
+  const firstBytes = new Uint8Array(await firstResponse.arrayBuffer());
+  if (firstBytes.length < 20 ||
+      String.fromCharCode(...firstBytes.subarray(0, 4)) !== "glTF") {
+    return { format: "not-glb", byteLength: firstBytes.byteLength };
+  }
+  const header = new DataView(firstBytes.buffer, firstBytes.byteOffset, firstBytes.byteLength);
+  const version = header.getUint32(4, true);
+  const jsonLength = header.getUint32(12, true);
+  const jsonType = header.getUint32(16, true);
+  if (version !== 2 || jsonType !== 0x4e4f534a || jsonLength < 2 || jsonLength > 12 * 1024 * 1024)
+    return { format: "glb-header-unexpected", version, jsonLength, jsonType };
+
+  let jsonBytes;
+  const jsonStart = 20;
+  const jsonEnd = jsonStart + jsonLength;
+  if (firstBytes.length >= jsonEnd) {
+    jsonBytes = firstBytes.subarray(jsonStart, jsonEnd);
+  } else {
+    const jsonResponse = await fetchReady(
+      modelUrl,
+      { headers: { Range: "bytes=" + jsonStart + "-" + (jsonEnd - 1) } },
+      [200, 206],
+    );
+    const rangeBytes = new Uint8Array(await jsonResponse.arrayBuffer());
+    jsonBytes = jsonResponse.status === 206
+      ? rangeBytes
+      : rangeBytes.subarray(jsonStart, jsonEnd);
+  }
+  const json = JSON.parse(new TextDecoder().decode(jsonBytes).replace(/\0+$/g, "").trim());
+  return { format: "glb-v2", json };
+}
+
+function inspectGltfGeometry(json) {
+  const nodes = Array.isArray(json?.nodes) ? json.nodes : [];
+  const meshes = Array.isArray(json?.meshes) ? json.meshes : [];
+  const accessors = Array.isArray(json?.accessors) ? json.accessors : [];
+  const parents = new Array(nodes.length).fill(-1);
+  nodes.forEach((node, parent) => {
+    for (const child of Array.isArray(node?.children) ? node.children : [])
+      if (Number.isInteger(child) && child >= 0 && child < nodes.length && parents[child] === -1)
+        parents[child] = parent;
+  });
+
+  const matrixCache = new Array(nodes.length);
+  function worldMatrix(index, seen = new Set()) {
+    if (matrixCache[index]) return matrixCache[index];
+    if (seen.has(index)) return localNodeMatrix(nodes[index]);
+    seen.add(index);
+    const local = localNodeMatrix(nodes[index]);
+    const parent = parents[index];
+    matrixCache[index] = parent >= 0
+      ? multiplyMatrix4(worldMatrix(parent, seen), local)
+      : local;
+    return matrixCache[index];
+  }
+
+  function ownMeshBox(nodeIndex) {
+    const node = nodes[nodeIndex];
+    const meshIndex = node?.mesh;
+    if (!Number.isInteger(meshIndex) || !meshes[meshIndex]) return undefined;
+    const box = emptyBox();
+    let hasPositionBounds = false;
+    const matrix = worldMatrix(nodeIndex);
+    for (const primitive of meshes[meshIndex].primitives || []) {
+      const accessorIndex = primitive?.attributes?.POSITION;
+      const accessor = Number.isInteger(accessorIndex) ? accessors[accessorIndex] : undefined;
+      if (!Array.isArray(accessor?.min) || !Array.isArray(accessor?.max) ||
+          accessor.min.length !== 3 || accessor.max.length !== 3 ||
+          ![...accessor.min, ...accessor.max].every(finite)) continue;
+      hasPositionBounds = true;
+      for (let mask = 0; mask < 8; mask += 1) {
+        const point = [0, 1, 2].map((axis) =>
+          mask & (1 << axis) ? accessor.max[axis] : accessor.min[axis]);
+        extendBox(box, transformPoint(matrix, point));
+      }
+    }
+    return hasPositionBounds ? box : undefined;
+  }
+
+  const nodeBounds = new Array(nodes.length);
+  const active = new Set();
+  function subtreeBox(index) {
+    if (nodeBounds[index]) return nodeBounds[index];
+    if (active.has(index)) return undefined;
+    active.add(index);
+    const box = emptyBox();
+    mergeBox(box, ownMeshBox(index));
+    for (const child of Array.isArray(nodes[index]?.children) ? nodes[index].children : [])
+      mergeBox(box, subtreeBox(child));
+    active.delete(index);
+    nodeBounds[index] = box;
+    return box;
+  }
+
+  const roots = Array.isArray(json?.scenes?.[json?.scene ?? 0]?.nodes)
+    ? json.scenes[json.scene ?? 0].nodes
+    : nodes.map((_node, index) => index).filter((index) => parents[index] < 0);
+  const overall = emptyBox();
+  for (const root of roots) mergeBox(overall, subtreeBox(root));
+  nodes.forEach((_node, index) => mergeBox(overall, subtreeBox(index)));
+
+  const modelSize = boxSize(overall);
+  const meshNodes = nodes
+    .map((node, index) => ({ node, index, box: ownMeshBox(index) }))
+    .filter((item) => item.box);
+  const groups = nodes
+    .map((node, index) => ({ node, index, box: subtreeBox(index) }))
+    .filter((item) => !Number.isInteger(item.node.mesh) &&
+      item.box && item.box.min.every(Number.isFinite) && item.box.max.every(Number.isFinite));
+  const candidates = [...meshNodes, ...groups].map(({ node, index, box }) => {
+    const size = boxSize(box);
+    return {
+      name: String(node.name || "node-" + index).slice(0, 90),
+      index,
+      minY: box.min[1],
+      maxY: box.max[1],
+      height: size[1],
+      width: size[0],
+      depth: size[2],
+      isGroup: !Number.isInteger(node.mesh),
+    };
+  }).filter((item) => item.height >= 2.3 && item.height <= 3.5 &&
+    item.width >= modelSize[0] * 0.4 && item.depth >= modelSize[2] * 0.4);
+
+  const histogram = new Map();
+  for (const item of meshNodes) {
+    const center = (item.box.min[1] + item.box.max[1]) / 2;
+    const key = (Math.floor(center * 2) / 2).toFixed(1);
+    histogram.set(key, (histogram.get(key) || 0) + 1);
+  }
+  const sortedHistogram = [...histogram.entries()]
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([centerY, count]) => centerY + ":" + count);
+
+  return {
+    nodeCount: nodes.length,
+    meshCount: meshes.length,
+    meshNodeCount: meshNodes.length,
+    hierarchyGroupCount: groups.length,
+    bounds: { min: overall.min.map((v) => Number(v.toFixed(3))), max: overall.max.map((v) => Number(v.toFixed(3))) },
+    modelSize: modelSize.map((v) => Number(v.toFixed(3))),
+    floorSizedCandidates: candidates.length,
+    candidates: candidates.slice(0, 16).map(({ name, minY, maxY, width, depth, isGroup }) => ({
+      name, minY: Number(minY.toFixed(3)), maxY: Number(maxY.toFixed(3)),
+      width: Number(width.toFixed(3)), depth: Number(depth.toFixed(3)), isGroup,
+    })),
+    meshCenterHistogram: sortedHistogram.join(" "),
+    namedNodes: nodes.map((node) => String(node?.name || "")).filter((name) =>
+      /floor|storey|story|level|ground|stilt|roof|terrace/i.test(name)).slice(0, 30),
+  };
+}
+
+async function inspectGlbGeometry(slug, modelUrl) {
+  try {
+    const url = absoluteUrl(modelUrl);
+    if (!url) throw new Error("model URL missing");
+    const loaded = await readGlbJsonDocument(url);
+    if (loaded.format !== "glb-v2") {
+      console.log("LIVE_MODEL_GEOMETRY: " + slug + " | " + JSON.stringify(loaded));
+      return;
+    }
+    const report = inspectGltfGeometry(loaded.json);
+    console.log("LIVE_MODEL_GEOMETRY: " + slug + " | " + JSON.stringify(report));
+  } catch (error) {
+    console.log("LIVE_MODEL_GEOMETRY_UNAVAILABLE: " + slug + " | " + String(error).slice(0, 260));
+  }
+}
+
 async function verifyPage(slug) {
   const url = `${origin}/3Dprojects/${encodeURIComponent(slug)}`;
   const response = await fetchReady(url, { headers: { Accept: "text/html" } });
@@ -199,6 +435,7 @@ for (const release of releases) {
     verifyModel(slug, publicProject.model.url),
   ]);
   verifyCamera(slug, publicProject.camera);
+  await inspectGlbGeometry(slug, publicProject.model.url);
   const floorSummary = verifyFloorSettings(slug, publicProject.scenes);
   const walkSummary = verifyWalkthrough(slug, publicProject.walkthrough);
 
