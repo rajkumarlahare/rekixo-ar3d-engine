@@ -230,6 +230,9 @@ export interface PresentationFallbackOptions {
   includePlants?: boolean;
   includeLamps?: boolean;
   includeContextMassing?: boolean;
+  /** Do not lay generated ground slabs over site geometry that is in the source model. */
+  includeGround?: boolean;
+  includeSurroundingGround?: boolean;
 }
 
 export function addPresentationFallback(
@@ -249,6 +252,8 @@ export function addPresentationFallback(
   const includePlants = options.includePlants ?? true;
   const includeLamps = options.includeLamps ?? true;
   const includeContextMassing = options.includeContextMassing ?? true;
+  const includeGround = options.includeGround ?? true;
+  const includeSurroundingGround = options.includeSurroundingGround ?? true;
   const size = bounds.getSize(new THREE.Vector3());
   const center = bounds.getCenter(new THREE.Vector3());
   const baseY = groundElevation;
@@ -261,20 +266,24 @@ export function addPresentationFallback(
   root.userData.presentationOnly = true;
   root.userData.nonAuthoritative = true;
 
-  addBox(root, "Presentation surrounding ground", siteWidth * 18, 0.1, siteDepth * 18, center.x, baseY - 0.21, center.z, "#89977d", { roughness: 1 });
+  if (includeSurroundingGround) {
+    addBox(root, "Presentation surrounding ground", siteWidth * 18, 0.1, siteDepth * 18, center.x, baseY - 0.21, center.z, "#89977d", { roughness: 1 });
+  }
 
-  addBox(
-    root,
-    "Presentation ground",
-    siteWidth,
-    0.18,
-    siteDepth,
-    center.x,
-    baseY - 0.11,
-    center.z,
-    "#d7d1c5",
-    { roughness: 0.97 },
-  );
+  if (includeGround) {
+    addBox(
+      root,
+      "Presentation ground",
+      siteWidth,
+      0.18,
+      siteDepth,
+      center.x,
+      baseY - 0.11,
+      center.z,
+      "#d7d1c5",
+      { roughness: 0.97 },
+    );
+  }
 
   const roadDepth = Math.max(span * 0.34, 4.8);
   const roadZ = bounds.max.z + margin * 0.58 + roadDepth / 2;
