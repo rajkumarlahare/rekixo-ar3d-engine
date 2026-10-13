@@ -234,6 +234,85 @@ function addPlantBatches(
   foliageGeometry.dispose();
 }
 
+interface WaterSurfaceRuntime {
+  mesh: THREE.Mesh;
+  material: THREE.MeshPhysicalMaterial;
+  elapsed: number;
+}
+
+function addWaterSurfaces(
+  root: THREE.Group,
+  items: readonly PublicSiteElement[],
+  mobile: boolean,
+  animate: boolean,
+): WaterSurfaceRuntime[] {
+  return items.map((item) => {
+    const group = new THREE.Group();
+    group.name = "Reviewed site water feature";
+    group.position.set(item.x, item.y + Math.max(0.025, item.height), item.z);
+    group.rotation.y = THREE.MathUtils.degToRad(item.rotation);
+
+    const waterMaterial = new THREE.MeshPhysicalMaterial({
+      name: `Reviewed water ${item.id}`,
+      color: item.color,
+      roughness: 0.14,
+      metalness: 0.02,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      clearcoat: 1,
+      clearcoatRoughness: 0.12,
+      ior: 1.333,
+      envMapIntensity: 1.25,
+    });
+
+    waterMaterial.userData.waterAnimationEnabled = animate;
+    waterMaterial.userData.elapsed = 0;
+    waterMaterial.onBeforeCompile = (shader) => {
+      shader.uniforms.uRekixoWaterTime = {
+        value: waterMaterial.userData.elapsed as number,
+      };
+      shader.vertexShader = shader.vertexShader.replace(
+        "#include <common>",
+        "#include <common>\nuniform float uRekixoWaterTime;",
+      );
+      shader.vertexShader = shader.vertexShader.replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+        if (${animate ? "true" : "false"}) {
+          float waveA = sin(position.x * 1.7 + position.y * 0.8 + uRekixoWaterTime * 0.78);
+          float waveB = sin(position.y * 2.2 - position.x * 1.1 - uRekixoWaterTime * 0.54);
+          float waveC = sin((position.x + position.y) * 3.8 + uRekixoWaterTime * 0.31);
+          transformed.z += (waveA * 0.009 + waveB * 0.006 + waveC * 0.0025);
+        }`,
+      );
+      waterMaterial.userData.waterShader = shader;
+    };
+    waterMaterial.customProgramCacheKey = () =>
+      `rekixo-water-surface-v1-${animate ? "animated" : "static"}`;
+
+    const segments = mobile ? 16 : 28;
+    const geometry = new THREE.PlaneGeometry(
+      Math.max(item.width, 0.2),
+      Math.max(item.depth, 0.2),
+      segments,
+      segments,
+    );
+    const mesh = new THREE.Mesh(geometry, waterMaterial);
+    mesh.name = `Reviewed water surface ${item.id}`;
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.receiveShadow = true;
+    mesh.castShadow = false;
+    mesh.userData.presentationOnly = true;
+    mesh.userData.sourceSiteElementId = item.id;
+    group.add(mesh);
+    root.add(group);
+
+    return { mesh, material: waterMaterial, elapsed: 0 };
+  });
+}
+
 function addGate(root: THREE.Group, item: PublicSiteElement, mobile: boolean) {
   const group = new THREE.Group();
   group.name = "Site gate";
@@ -424,6 +503,7 @@ export function createArchitecturalSiteEnvironment(
   presentation = false,
   groundElevation?: number,
   baselinePolicy: "empty-only" | "always" = "empty-only",
+  waterMotion = true,
 ) {
   const root = new THREE.Group();
   root.name = "source-backed-site-environment";
@@ -434,6 +514,7 @@ export function createArchitecturalSiteEnvironment(
   const trees = elements.filter((item) => item.kind === "tree");
   const plants = elements.filter((item) => item.kind === "plant");
   const gates = elements.filter((item) => item.kind === "gate");
+  const waterElements = elements.filter((item) => item.kind === "water");
   const lights = elements.filter((item) => item.kind === "outdoor-light");
   const structural = elements.filter((item) => STRUCTURAL_KINDS.has(item.kind));
 
@@ -492,11 +573,26 @@ export function createArchitecturalSiteEnvironment(
   addTreeBatches(root, trees, mobile);
   addPlantBatches(root, plants, mobile);
   gates.forEach((item) => addGate(root, item, mobile));
+  const waterSurfaces = addWaterSurfaces(root, waterElements, mobile, presentation && waterMotion);
   const bulbMaterial = addOutdoorLights(root, lights, mobile);
   addStructuralBatches(root, structural, mobile);
 
   return {
     root,
+    update(deltaSeconds: number) {
+      if (!presentation || !Number.isFinite(deltaSeconds)) return;
+      const delta = Math.min(Math.max(deltaSeconds, 0), 0.05);
+      for (const surface of waterSurfaces) {
+        if (surface.material.userData.waterAnimationEnabled !== true) continue;
+        surface.elapsed += delta;
+        surface.material.userData.elapsed = surface.elapsed;
+        const shader = surface.material.userData.waterShader as
+          | { uniforms: Record<string, { value: number }> }
+          | undefined;
+        if (shader?.uniforms.uRekixoWaterTime)
+          shader.uniforms.uRekixoWaterTime.value = surface.elapsed;
+      }
+    },
     setNight(night: boolean) {
       if (bulbMaterial) bulbMaterial.emissiveIntensity = night ? 4.2 : 0.38;
       for (const bulb of presentationBulbs) bulb.emissiveIntensity = night ? 4.2 : 0.38;
