@@ -2,6 +2,7 @@ import type { PublicSiteElement } from "@rekixo/3d-contracts";
 import * as THREE from "three";
 import { addPresentationFallback } from "./presentationEnvironment";
 import { getPublicRuntimeSiteElements } from "./publicRuntimeContext";
+import { createProceduralSurfaceMaterial } from "./proceduralSurfaceMaterials";
 
 const AREA_KINDS = new Set<PublicSiteElement["kind"]>([
   "garden",
@@ -70,10 +71,24 @@ function addAreaBatches(root: THREE.Group, items: readonly PublicSiteElement[]) 
   const geometry = new THREE.BoxGeometry(1, 1, 1);
   for (const rows of groupsFor(items).values()) {
     const first = rows[0];
-    const surfaceMaterial = material(
-      first.color,
-      first.kind === "road" || first.kind === "parking" ? 0.94 : 0.88,
-    );
+    const surfaceKind =
+      first.kind === "road" || first.kind === "parking"
+        ? "asphalt"
+        : first.kind === "lawn" || first.kind === "garden"
+          ? "grass"
+          : first.kind === "path"
+            ? "paving"
+            : undefined;
+    const surfaceMaterial = surfaceKind
+      ? createProceduralSurfaceMaterial(
+          first.color,
+          surfaceKind,
+          first.kind === "road" || first.kind === "parking" ? 0.94 : 0.88,
+        )
+      : material(
+          first.color,
+          first.kind === "road" || first.kind === "parking" ? 0.94 : 0.88,
+        );
     const mesh = new THREE.InstancedMesh(
       geometry.clone(),
       surfaceMaterial,
@@ -131,7 +146,7 @@ function addTreeBatches(
   trunks.instanceMatrix.needsUpdate = true;
   root.add(trunks);
 
-  const crownGeometry = new THREE.IcosahedronGeometry(1, mobile ? 0 : 1);
+  const crownGeometry = new THREE.SphereGeometry(1, mobile ? 8 : 14, mobile ? 5 : 9);
   for (const rows of groupsFor(items).values()) {
     const crowns = new THREE.InstancedMesh(
       crownGeometry.clone(),
@@ -192,7 +207,7 @@ function addPlantBatches(
   pots.instanceMatrix.needsUpdate = true;
   root.add(pots);
 
-  const foliageGeometry = new THREE.IcosahedronGeometry(1, mobile ? 0 : 1);
+  const foliageGeometry = new THREE.SphereGeometry(1, mobile ? 8 : 14, mobile ? 5 : 9);
   for (const rows of groupsFor(items).values()) {
     const foliage = new THREE.InstancedMesh(
       foliageGeometry.clone(),
