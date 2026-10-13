@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
+import ts from "typescript";
 
 const read = (path) => fs.readFileSync(path, "utf8");
 
@@ -72,4 +76,81 @@ test("generated vegetation motion is wired to the customer render loop and respe
   assert.match(viewer, /environmentProfile\.motion\.vegetation !== "off"/);
   assert.match(sky, /createExteriorSky\(reducedMotion: boolean, driftClouds = true\)/);
   assert.match(sky, /!reducedMotion && driftClouds/);
+});
+
+const require = createRequire(import.meta.url);
+const threeUrl = pathToFileURL(
+  path.join(path.dirname(require.resolve("three")), "three.module.js"),
+).href;
+const gateInteractionCode = ts.transpileModule(
+  read("apps/public/src/viewer/siteInteractionController.ts"),
+  {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
+  },
+).outputText.replaceAll('from "three"', `from "${threeUrl}"`);
+const gateInteractions = await import(
+  "data:text/javascript;base64," +
+  Buffer.from(gateInteractionCode).toString("base64"),
+);
+
+test("generated site gate leaves open on click, animate smoothly, and restore on disposal", () => {
+  const THREE = require("three");
+  const root = new THREE.Group();
+  const pivot = new THREE.Group();
+  pivot.userData.siteInteraction = {
+    kind: "gate-leaf",
+    closedAngle: 0,
+    openAngle: -1.4,
+  };
+  const leaf = new THREE.Mesh(
+    new THREE.BoxGeometry(1, 1.8, 0.08),
+    new THREE.MeshStandardMaterial(),
+  );
+  pivot.add(leaf);
+  root.add(pivot);
+
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  camera.position.set(0, 0.5, 5);
+  camera.lookAt(0, 0.5, 0);
+  camera.updateMatrixWorld(true);
+  root.updateMatrixWorld(true);
+
+  const callbacks = new Map();
+  const canvas = {
+    style: { cursor: "" },
+    addEventListener(name, callback) { callbacks.set(name, callback); },
+    removeEventListener(name) { callbacks.delete(name); },
+    getBoundingClientRect() { return { left: 0, top: 0, width: 100, height: 100 }; },
+  };
+  const controller = gateInteractions.createSiteInteractionController(
+    root,
+    camera,
+    canvas,
+    false,
+  );
+  assert.equal(controller.gateCount, 1);
+  let defaultPrevented = false;
+  let propagationStopped = false;
+  callbacks.get("click")({
+    button: 0,
+    clientX: 50,
+    clientY: 50,
+    preventDefault() { defaultPrevented = true; },
+    stopPropagation() { propagationStopped = true; },
+  });
+  assert.equal(defaultPrevented, true);
+  assert.equal(propagationStopped, true);
+  controller.update(0.05);
+  assert.ok(pivot.rotation.y < -0.05, "gate pivot should begin its smooth opening arc");
+  controller.update(0.05);
+  controller.update(0.05);
+  assert.ok(pivot.rotation.y < -0.3, "gate should continue opening over multiple frames");
+  controller.dispose();
+  assert.equal(pivot.rotation.y, 0);
+  assert.equal(callbacks.has("click"), false);
+  leaf.geometry.dispose();
+  leaf.material.dispose();
 });
