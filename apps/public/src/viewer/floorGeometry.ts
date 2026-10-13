@@ -212,58 +212,131 @@ export function deriveFloorGeometryFromModel(options: {
     if (run.length >= 3) runs.push(run);
   }
 
-  // Prefer the longest contiguous stack, then the broadest footprint.
+  type StackSummary = {
+    stack: ModelMeshBounds[];
+    averageStoreyHeight: number;
+    stackStart: number;
+    stackEnd: number;
+    ground: ModelMeshBounds;
+    upper: ModelMeshBounds;
+  };
+
+  function summarizeStack(stack: ModelMeshBounds[]): StackSummary | undefined {
+    if (stack.length < 3) return undefined;
+    const averageStoreyHeight =
+      stack.reduce((sum, box) => sum + box.maxY - box.minY, 0) / stack.length;
+    if (!(averageStoreyHeight >= 2.3 && averageStoreyHeight <= 3.5))
+      return undefined;
+
+    const stackStart = stack[0].minY;
+    const stackEnd = stack[stack.length - 1].maxY;
+    const stackFootprint = stack[Math.floor(stack.length / 2)];
+    const stackSet = new Set(stack);
+    const groundCandidates = candidates.filter((box) =>
+      !stackSet.has(box) &&
+      Math.abs(box.maxY - stackStart) <= 0.05 &&
+      box.minY < stackStart &&
+      horizontalOverlapRatio(box, stackFootprint) >= 0.65
+    );
+    groundCandidates.sort((a, b) => {
+      const areaA = (a.maxX - a.minX) * (a.maxZ - a.minZ);
+      const areaB = (b.maxX - b.minX) * (b.maxZ - b.minZ);
+      return areaB - areaA;
+    });
+    const ground = groundCandidates[0];
+    if (!ground) return undefined;
+
+    const upperCandidates = candidates.filter((box) =>
+      !stackSet.has(box) &&
+      Math.abs(box.minY - stackEnd) <= averageStoreyHeight * 0.16 &&
+      box.maxY - stackEnd >= averageStoreyHeight * 0.55 &&
+      horizontalOverlapRatio(box, stackFootprint) >= 0.65
+    );
+    upperCandidates.sort((a, b) => {
+      const differenceA = Math.abs((a.maxY - stackEnd) - averageStoreyHeight);
+      const differenceB = Math.abs((b.maxY - stackEnd) - averageStoreyHeight);
+      if (Math.abs(differenceA - differenceB) > 0.02)
+        return differenceA - differenceB;
+      const areaA = (a.maxX - a.minX) * (a.maxZ - a.minZ);
+      const areaB = (b.maxX - b.minX) * (b.maxZ - b.minZ);
+      return areaB - areaA;
+    });
+    const upper = upperCandidates[0];
+    if (!upper || !(upper.maxY > stackEnd)) return undefined;
+
+    return { stack, averageStoreyHeight, stackStart, stackEnd, ground, upper };
+  }
+
+  // First use the strict repeated-footprint stack when available.
   runs.sort((a, b) => {
     if (b.length !== a.length) return b.length - a.length;
     const area = (box: ModelMeshBounds) =>
       (box.maxX - box.minX) * (box.maxZ - box.minZ);
     return area(b[0]) - area(a[0]);
   });
-  const stack = runs[0];
-  if (!stack || stack.length < 3) return { floors: [] };
+  let summary = runs
+    .map((run) => summarizeStack(run))
+    .find((item) => item !== undefined);
 
-  const stackSet = new Set(stack);
-  const averageStoreyHeight =
-    stack.reduce((sum, box) => sum + box.maxY - box.minY, 0) / stack.length;
-  if (!(averageStoreyHeight >= 2.3 && averageStoreyHeight <= 3.5))
-    return { floors: [] };
+  if (!summary) {
+    // FBX exporters can give each storey slightly different X/Z bounds even
+    // when the geometry is clearly a vertical stack. Cluster by measured Y
+    // interval first, then follow overlapping storey-sized bands. This keeps
+    // the measured floor elevations; it never divides total building height.
+    const bandGroups: ModelMeshBounds[][] = [];
+    for (const box of [...candidates].sort((a, b) => a.minY - b.minY)) {
+      const group = bandGroups.find((items) => {
+        const representative = items[0];
+        return Math.abs(box.minY - representative.minY) <= 0.25 &&
+          Math.abs(box.maxY - representative.maxY) <= 0.25 &&
+          horizontalOverlapRatio(box, representative) >= 0.65;
+      });
+      if (group) group.push(box);
+      else bandGroups.push([box]);
+    }
 
-  const stackStart = stack[0].minY;
-  const stackEnd = stack[stack.length - 1].maxY;
-  const stackFootprint = stack[0];
+    const area = (box: ModelMeshBounds) =>
+      (box.maxX - box.minX) * (box.maxZ - box.minZ);
+    const verticalBands = bandGroups
+      .map((group) => [...group].sort((a, b) => area(b) - area(a))[0])
+      .sort((a, b) => a.minY - b.minY);
+    const chains: ModelMeshBounds[][] = [];
+    let chain: ModelMeshBounds[] = [];
+    for (const band of verticalBands) {
+      const previous = chain[chain.length - 1];
+      const gap = previous ? band.minY - previous.maxY : 0;
+      const previousHeight = previous ? previous.maxY - previous.minY : 0;
+      const currentHeight = band.maxY - band.minY;
+      const contiguous = previous &&
+        gap >= -0.15 &&
+        gap <= 0.35 &&
+        Math.abs(currentHeight - previousHeight) <= 0.55 &&
+        horizontalOverlapRatio(band, previous) >= 0.65;
+      if (previous && !contiguous) {
+        chains.push(chain);
+        chain = [];
+      }
+      chain.push(band);
+    }
+    if (chain.length) chains.push(chain);
 
-  const groundCandidates = candidates.filter((box) =>
-    !stackSet.has(box) &&
-    Math.abs(box.maxY - stackStart) <= 0.05 &&
-    box.minY < stackStart &&
-    horizontalOverlapRatio(box, stackFootprint) >= 0.65
-  );
-  groundCandidates.sort((a, b) => {
-    const areaA = (a.maxX - a.minX) * (a.maxZ - a.minZ);
-    const areaB = (b.maxX - b.minX) * (b.maxZ - b.minZ);
-    return areaB - areaA;
-  });
-  const ground = groundCandidates[0];
-  if (!ground) return { floors: [] };
+    // The full vertical chain normally consists of Ground, repeated upper
+    // floors, and the top storey. Trim only those end bands when their measured
+    // elevations touch the building base and leave a plausible roof above.
+    const fallbackSummaries = chains
+      .filter((items) =>
+        items.length >= 5 &&
+        items[0].minY <= bounds.minY + 1.2 &&
+        bounds.maxY - items[items.length - 1].maxY >= 0.2
+      )
+      .map((items) => summarizeStack(items.slice(1, -1)))
+      .filter((item): item is StackSummary => item !== undefined)
+      .sort((a, b) => b.stack.length - a.stack.length);
+    summary = fallbackSummaries[0];
+  }
 
-  const upperCandidates = candidates.filter((box) =>
-    !stackSet.has(box) &&
-    Math.abs(box.minY - stackEnd) <= averageStoreyHeight * 0.16 &&
-    box.maxY - stackEnd >= averageStoreyHeight * 0.55 &&
-    horizontalOverlapRatio(box, stackFootprint) >= 0.65
-  );
-  upperCandidates.sort((a, b) => {
-    const differenceA = Math.abs((a.maxY - stackEnd) - averageStoreyHeight);
-    const differenceB = Math.abs((b.maxY - stackEnd) - averageStoreyHeight);
-    if (Math.abs(differenceA - differenceB) > 0.02)
-      return differenceA - differenceB;
-    const areaA = (a.maxX - a.minX) * (a.maxZ - a.minZ);
-    const areaB = (b.maxX - b.minX) * (b.maxZ - b.minZ);
-    return areaB - areaA;
-  });
-  const upper = upperCandidates[0];
-  if (!upper || !(upper.maxY > stackEnd)) return { floors: [] };
-
+  if (!summary) return { floors: [] };
+  const { stack, averageStoreyHeight, stackStart, stackEnd, ground, upper } = summary;
   const bandCount = stack.length + 2; // Ground + repeated floors + upper floor.
   const requestedIds = normalizeFloorIds(options.floorIds ?? []);
   if (requestedIds.length > 0 && requestedIds.length !== bandCount)

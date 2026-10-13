@@ -83,6 +83,26 @@ test("source mesh measurements produce measured floor bands and a separate roof 
   close(result.roof.topElevationM, 20.8534, "roof top");
 });
 
+test("near-identical floor footprints still resolve when each storey has a slight horizontal offset", () => {
+  const offsets = [0, 0.18, 0.36, 0.54, 0.72, 0.9];
+  const shiftedMeshBounds = meshBounds.map((box, index) => {
+    const offset = offsets[index] ?? 0;
+    return {
+      ...box,
+      minX: box.minX + offset,
+      maxX: box.maxX + offset,
+      minZ: box.minZ + offset,
+      maxZ: box.maxZ + offset,
+    };
+  });
+  const result = deriveFloorGeometryFromModel({ modelBounds, meshBounds: shiftedMeshBounds });
+  assert.equal(result.floors.length, 6);
+  close(result.floors[0].elevationM, 0.3048, "offset Ground bottom");
+  close(result.floors[1].elevationM, 3.048, "offset 1F bottom");
+  close(result.floors[5].topElevationM, 18.034, "offset 5F top");
+  assert.ok(result.roof, "offset floor geometry should retain a roof band");
+});
+
 test("a GLB without a repeated vertical mesh stack fails closed instead of inventing cuts", () => {
   const result = deriveFloorGeometryFromModel({
     modelBounds,
