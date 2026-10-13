@@ -27,6 +27,9 @@ test("production demo verifier checks the customer route, source model and safe 
   assert.match(verifier, /meshNodeCount/);
   assert.match(verifier, /hierarchyGroupCount/);
   assert.match(verifier, /meshCenterHistogram/);
+  assert.match(verifier, /LIVE_PUBLIC_UI_BUNDLE/);
+  assert.match(verifier, /Show Ground Floor only/);
+  assert.match(verifier, /client-floor-controls/);
   assert.match(verifier, /Range: "bytes=0-19"/);
   assert.doesNotMatch(verifier, /reconstruct|inferRoom|replaceModel/i);
 });
