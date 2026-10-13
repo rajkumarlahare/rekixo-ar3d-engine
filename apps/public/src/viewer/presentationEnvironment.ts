@@ -198,13 +198,35 @@ function addCar(root: THREE.Group, x: number, y: number, z: number, length: numb
   wheels.castShadow = true; group.add(wheels); root.add(group);
 }
 
+export interface PresentationFallbackOptions {
+  includeRoad?: boolean;
+  includeCars?: boolean;
+  includeSidewalk?: boolean;
+  includeDriveway?: boolean;
+  includeLawn?: boolean;
+  includeTrees?: boolean;
+  includePlants?: boolean;
+  includeLamps?: boolean;
+  includeContextMassing?: boolean;
+}
+
 export function addPresentationFallback(
   root: THREE.Group,
   bounds: THREE.Box3,
   mobile: boolean,
   bulbMaterials: THREE.MeshStandardMaterial[],
   groundElevation = bounds.min.y,
+  options: PresentationFallbackOptions = {},
 ) {
+  const includeRoad = options.includeRoad ?? true;
+  const includeCars = options.includeCars ?? true;
+  const includeSidewalk = options.includeSidewalk ?? true;
+  const includeDriveway = options.includeDriveway ?? true;
+  const includeLawn = options.includeLawn ?? true;
+  const includeTrees = options.includeTrees ?? true;
+  const includePlants = options.includePlants ?? true;
+  const includeLamps = options.includeLamps ?? true;
+  const includeContextMassing = options.includeContextMassing ?? true;
   const size = bounds.getSize(new THREE.Vector3());
   const center = bounds.getCenter(new THREE.Vector3());
   const baseY = groundElevation;
@@ -234,135 +256,164 @@ export function addPresentationFallback(
 
   const roadDepth = Math.max(span * 0.34, 4.8);
   const roadZ = bounds.max.z + margin * 0.58 + roadDepth / 2;
-  addBox(
-    root,
-    "Presentation road",
-    siteWidth * 8,
-    0.12,
-    roadDepth,
-    center.x,
-    baseY - 0.035,
-    roadZ,
-    "#343a40",
-    { roughness: 0.98 },
-  );
-
-  for (let i = -25; i <= 25; i++) {
-    addBox(root, "Presentation road lane marking", siteWidth * 0.055, 0.02, 0.08, center.x + siteWidth * i * 0.13, baseY + 0.036, roadZ, "#d9d5c5", { roughness: 0.99 });
+  if (includeRoad) {
+    addBox(
+      root,
+      "Presentation road",
+      siteWidth * 8,
+      0.12,
+      roadDepth,
+      center.x,
+      baseY - 0.035,
+      roadZ,
+      "#343a40",
+      { roughness: 0.98 },
+    );
+  
+    for (let i = -25; i <= 25; i++) {
+      addBox(root, "Presentation road lane marking", siteWidth * 0.055, 0.02, 0.08, center.x + siteWidth * i * 0.13, baseY + 0.036, roadZ, "#d9d5c5", { roughness: 0.99 });
+    }
   }
+
 
   const sidewalkDepth = Math.max(span * 0.075, 1.2);
   const sidewalkZ = roadZ - roadDepth / 2 - sidewalkDepth / 2 - 0.18;
-  addBox(
-    root,
-    "Presentation sidewalk",
-    siteWidth * 1.18,
-    0.12,
-    sidewalkDepth,
-    center.x,
-    baseY + 0.015,
-    sidewalkZ,
-    "#c7c0b3",
-    { roughness: 0.96 },
-  );
+  if (includeSidewalk) {
+    addBox(
+      root,
+      "Presentation sidewalk",
+      siteWidth * 1.18,
+      0.12,
+      sidewalkDepth,
+      center.x,
+      baseY + 0.015,
+      sidewalkZ,
+      "#c7c0b3",
+      { roughness: 0.96 },
+    );
+  }
 
-  addBox(root, "Presentation street curb", siteWidth * 1.18, 0.22, 0.18, center.x, baseY + 0.08, sidewalkZ + sidewalkDepth / 2, "#eee9dd", { roughness: 0.92 });
-  addCar(root, center.x + siteWidth * 0.36, baseY + 0.04, roadZ - roadDepth * 0.25, Math.max(span * 0.14, 3.6), "#e3e8e8");
-  if (!mobile) addCar(root, center.x - siteWidth * 0.46, baseY + 0.04, roadZ - roadDepth * 0.25, Math.max(span * 0.13, 3.4), "#344c65");
+
+  if (includeSidewalk) {
+    addBox(root, "Presentation street curb", siteWidth * 1.18, 0.22, 0.18, center.x, baseY + 0.08, sidewalkZ + sidewalkDepth / 2, "#eee9dd", { roughness: 0.92 });
+  }
+
+
+  if (includeCars) {
+    addCar(root, center.x + siteWidth * 0.36, baseY + 0.04, roadZ - roadDepth * 0.25, Math.max(span * 0.14, 3.6), "#e3e8e8");
+    if (!mobile) addCar(root, center.x - siteWidth * 0.46, baseY + 0.04, roadZ - roadDepth * 0.25, Math.max(span * 0.13, 3.4), "#344c65");
+  }
+
+
   const driveDepth = Math.max(sidewalkZ - sidewalkDepth / 2 - bounds.max.z, 1.2);
-  addBox(
-    root,
-    "Presentation driveway",
-    Math.max(size.x * 0.28, 2.4),
-    0.11,
-    driveDepth,
-    center.x + size.x * 0.16,
-    baseY + 0.01,
-    bounds.max.z + driveDepth / 2,
-    "#b6aea1",
-    { roughness: 0.94 },
-  );
+  if (includeDriveway) {
+    addBox(
+      root,
+      "Presentation driveway",
+      Math.max(size.x * 0.28, 2.4),
+      0.11,
+      driveDepth,
+      center.x + size.x * 0.16,
+      baseY + 0.01,
+      bounds.max.z + driveDepth / 2,
+      "#b6aea1",
+      { roughness: 0.94 },
+    );
+  }
+
 
   const lawnWidth = Math.max(margin * 0.72, 1.8);
-  addBox(
-    root,
-    "Presentation lawn left",
-    lawnWidth,
-    0.08,
-    Math.max(siteDepth - roadDepth * 0.9, 3),
-    bounds.min.x - lawnWidth / 2 - margin * 0.16,
-    baseY - 0.005,
-    center.z - margin * 0.12,
-    "#5e8056",
-    { roughness: 0.99 },
-  );
-  addBox(
-    root,
-    "Presentation lawn right",
-    lawnWidth,
-    0.08,
-    Math.max(siteDepth - roadDepth * 0.9, 3),
-    bounds.max.x + lawnWidth / 2 + margin * 0.16,
-    baseY - 0.005,
-    center.z - margin * 0.12,
-    "#5e8056",
-    { roughness: 0.99 },
-  );
-
-  const treeHeight = Math.max(size.y * 0.17, 2.8);
-  const crownWidth = Math.max(treeHeight * 0.5, 1.4);
-  const treeZs = [
-    bounds.min.z + size.z * 0.08,
-    center.z,
-    bounds.max.z - size.z * 0.08,
-  ];
-  for (const z of treeZs) {
-    addTree(root, bounds.min.x - margin * 0.62, baseY, z, treeHeight, crownWidth, mobile, "#4c7b50");
-    addTree(root, bounds.max.x + margin * 0.62, baseY, z, treeHeight * 0.92, crownWidth * 0.9, mobile, "#567f4e");
-  }
-
-  const frontTreeZ = sidewalkZ - sidewalkDepth * 0.2;
-  for (const offset of [-0.36, 0.36]) {
-    addTree(
+  if (includeLawn) {
+    addBox(
       root,
-      center.x + siteWidth * offset,
-      baseY,
-      frontTreeZ,
-      treeHeight * 0.82,
-      crownWidth * 0.82,
-      mobile,
-      "#4f8257",
+      "Presentation lawn left",
+      lawnWidth,
+      0.08,
+      Math.max(siteDepth - roadDepth * 0.9, 3),
+      bounds.min.x - lawnWidth / 2 - margin * 0.16,
+      baseY - 0.005,
+      center.z - margin * 0.12,
+      "#5e8056",
+      { roughness: 0.99 },
+    );
+    addBox(
+      root,
+      "Presentation lawn right",
+      lawnWidth,
+      0.08,
+      Math.max(siteDepth - roadDepth * 0.9, 3),
+      bounds.max.x + lawnWidth / 2 + margin * 0.16,
+      baseY - 0.005,
+      center.z - margin * 0.12,
+      "#5e8056",
+      { roughness: 0.99 },
     );
   }
 
-  const plantZ = bounds.max.z + Math.max(margin * 0.12, 0.9);
-  for (const offset of [-0.34, -0.12, 0.12, 0.34]) {
-    addPlant(
-      root,
-      center.x + size.x * offset,
-      baseY,
-      plantZ,
-      Math.max(span * 0.055, 0.55),
-      Math.max(span * 0.07, 0.75),
-      mobile,
-      offset < 0 ? "#4c8d5b" : "#5c9458",
-    );
+
+  if (includeTrees) {
+    const treeHeight = Math.max(size.y * 0.17, 2.8);
+    const crownWidth = Math.max(treeHeight * 0.5, 1.4);
+    const treeZs = [
+      bounds.min.z + size.z * 0.08,
+      center.z,
+      bounds.max.z - size.z * 0.08,
+    ];
+    for (const z of treeZs) {
+      addTree(root, bounds.min.x - margin * 0.62, baseY, z, treeHeight, crownWidth, mobile, "#4c7b50");
+      addTree(root, bounds.max.x + margin * 0.62, baseY, z, treeHeight * 0.92, crownWidth * 0.9, mobile, "#567f4e");
+    }
+  
+    const frontTreeZ = sidewalkZ - sidewalkDepth * 0.2;
+    for (const offset of [-0.36, 0.36]) {
+      addTree(
+        root,
+        center.x + siteWidth * offset,
+        baseY,
+        frontTreeZ,
+        treeHeight * 0.82,
+        crownWidth * 0.82,
+        mobile,
+        "#4f8257",
+      );
+    }
   }
 
-  const lampHeight = Math.max(size.y * 0.13, 2.5);
-  for (const offset of [-0.32, 0, 0.32]) {
-    addLamp(
-      root,
-      center.x + siteWidth * offset,
-      baseY,
-      sidewalkZ,
-      lampHeight,
-      mobile,
-      bulbMaterials,
-    );
+
+  if (includePlants) {
+    const plantZ = bounds.max.z + Math.max(margin * 0.12, 0.9);
+    for (const offset of [-0.34, -0.12, 0.12, 0.34]) {
+      addPlant(
+        root,
+        center.x + size.x * offset,
+        baseY,
+        plantZ,
+        Math.max(span * 0.055, 0.55),
+        Math.max(span * 0.07, 0.75),
+        mobile,
+        offset < 0 ? "#4c8d5b" : "#5c9458",
+      );
+    }
   }
 
-  if (!mobile) {
+
+  if (includeLamps) {
+    const lampHeight = Math.max(size.y * 0.13, 2.5);
+    for (const offset of [-0.32, 0, 0.32]) {
+      addLamp(
+        root,
+        center.x + siteWidth * offset,
+        baseY,
+        sidewalkZ,
+        lampHeight,
+        mobile,
+        bulbMaterials,
+      );
+    }
+  }
+
+
+  if (includeContextMassing && !mobile) {
     const contextZ = bounds.min.z - margin * 4.0;
     const contextHeight = Math.max(size.y * 0.18, 2.4);
     for (const offset of [-0.65, -0.30, 0, 0.35, 0.7]) {
