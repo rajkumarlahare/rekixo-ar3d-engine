@@ -22,11 +22,20 @@ export type BuildingEnvironmentQualityV1 =
   | "balanced"
   | "performance";
 
+export type BuildingEnvironmentLandscapeV1 =
+  | "auto"
+  | "urban"
+  | "suburban"
+  | "rural-farm"
+  | "hillside";
+
 export interface BuildingEnvironmentProfileV1 {
   format: "rekixo-environment-profile";
   version: 1;
   preset: "cinematic-exterior" | "minimal";
   quality: BuildingEnvironmentQualityV1;
+  /** Optional and backward-compatible; auto chooses a conservative suburban context. */
+  landscape?: BuildingEnvironmentLandscapeV1;
   baseline: "always" | "minimal";
   siteDataPolicy: "additive";
   motion: {
@@ -42,6 +51,7 @@ export const DEFAULT_BUILDING_ENVIRONMENT_PROFILE_V1: BuildingEnvironmentProfile
   version: 1,
   preset: "cinematic-exterior",
   quality: "auto",
+  landscape: "auto",
   baseline: "always",
   siteDataPolicy: "additive",
   motion: {
@@ -291,6 +301,8 @@ export function assertBuildingPresentationManifestV1(
       profile.version !== 1 ||
       !["cinematic-exterior", "minimal"].includes(profile.preset) ||
       !["auto", "cinematic", "balanced", "performance"].includes(profile.quality) ||
+      (profile.landscape !== undefined &&
+        !["auto", "urban", "suburban", "rural-farm", "hillside"].includes(profile.landscape)) ||
       !["always", "minimal"].includes(profile.baseline) ||
       profile.siteDataPolicy !== "additive" ||
       !profile.motion ||
