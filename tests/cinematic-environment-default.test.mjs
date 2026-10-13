@@ -141,7 +141,8 @@ test("customer exterior sky animates a warm sunrise with layered clouds and sync
 
   assert.match(sky, /export interface ExteriorSolarState/);
   assert.match(sky, /sunriseElapsed < 45/);
-  assert.match(sky, /setTimeOfDay\(hours: number\)/);
+  assert.match(sky, /updateSolar\(solarTime\)/);
+  assert.doesNotMatch(sky, /setTimeOfDay/);
   assert.match(sky, /uniform vec3 sunDirection/);
   assert.match(sky, /uniform float goldenHour/);
   assert.match(sky, /float horizonGlow/);
