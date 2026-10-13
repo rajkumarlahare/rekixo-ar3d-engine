@@ -62,7 +62,7 @@ export function createExteriorSky(reducedMotion: boolean, driftClouds = true) {
   let sunriseElapsed = reducedMotion ? 45 : 0;
   let solarTime = reducedMotion ? 9 : 5.5;
   const updateSolar = (hours: number) => {
-    solarTime = normalizedHour(hours);
+    solarTime = hours;
     updateSolarState(solarTime, solarState);
     uniforms.sunDirection.value.copy(solarState.direction);
     uniforms.daylight.value = solarState.daylight;
