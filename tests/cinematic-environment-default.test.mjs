@@ -292,6 +292,6 @@ test("exterior presentation does not generate added neighborhood building blocks
   const helperSection = fallback.slice(0, fallback.indexOf("export interface PresentationFallbackOptions"));
 
   assert.doesNotMatch(helperSection, /function addNeighborhoodContext|function addNeighborhoodBuilding|Presentation neighborhood windows/);
-  assert.match(fallback, /if (landscape === "urban") {\s*addUrbanContext\(root, center, baseY, span, mobile\);/);
-  assert.match(fallback, /const includeCars = options\.includeCars \?\? landscape === "urban";/);
+  assert.ok(fallback.includes('if (landscape === "urban") {\n    addUrbanContext(root, center, baseY, span, mobile);\n  }'));
+  assert.ok(fallback.includes('const includeCars = options.includeCars ?? landscape === "urban";'));
 });
