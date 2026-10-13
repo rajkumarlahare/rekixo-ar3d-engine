@@ -793,6 +793,8 @@ export function Viewer3D({
     lightingRef.current = applyLighting;
 
     const mountObject = (object: THREE.Object3D, usePreset: boolean) => {
+      floorVisibilityController?.dispose();
+      floorVisibilityController = undefined;
       if (activeObject) {
         referenceExterior?.dispose();
         scene.remove(activeObject);
@@ -801,8 +803,6 @@ export function Viewer3D({
       activeObject = object;
       scene.add(object);
       object.updateMatrixWorld(true);
-      floorVisibilityController?.dispose();
-      floorVisibilityController = undefined;
       modelBounds = new THREE.Box3().setFromObject(object);
       modelProfile = applyModelProfileExterior(object, referenceVisual);
       referenceExterior = modelProfile?.exterior;
@@ -1477,6 +1477,8 @@ export function Viewer3D({
       renderer.domElement.removeEventListener("pointerup", handlePointerUp);
       renderer.domElement.removeEventListener("pointercancel", handlePointerUp);
       renderer.domElement.removeEventListener("click", handleFeatureClick);
+      floorVisibilityController?.dispose();
+      floorVisibilityController = undefined;
       if (activeObject) disposeViewerObject(activeObject);
       referenceExterior?.dispose();
       if (siteEnvironment) {
@@ -1491,8 +1493,6 @@ export function Viewer3D({
       environmentTexture.dispose();
       pmrem.dispose();
       renderer.dispose();
-      floorVisibilityController?.dispose();
-      floorVisibilityController = undefined;
       renderer.forceContextLoss();
       renderer.domElement.remove();
       exteriorViewRef.current = null;
