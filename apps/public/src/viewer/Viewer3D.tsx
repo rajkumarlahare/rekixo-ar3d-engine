@@ -492,6 +492,7 @@ export function Viewer3D({
     };
 
     const enterWalkMode = (enabled: boolean, floor: number | null) => {
+      if (enabled && clientPresentation) floorVisibilityController?.showAll();
       walkActive = enabled;
       setWalkMode(enabled);
       cameraTween = undefined;
