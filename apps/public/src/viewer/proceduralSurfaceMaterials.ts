@@ -59,6 +59,8 @@ export function proceduralSurfaceTexture(kind: ProceduralSurfaceKind) {
     THREE.RGBAFormat,
   );
   texture.name = `rekixo-environment-${kind}-detail-v1`;
+  // This cached texture is shared across viewers and must outlive a single viewer.
+  texture.userData.rekixoSharedResource = true;
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
