@@ -51,6 +51,7 @@ import {
 } from "./buildingPresentationRuntime";
 import { createExteriorSky } from "./exteriorSky";
 import { createPremiumPresentationMotion } from "./premiumPresentationMotion";
+import { createSiteInteractionController } from "./siteInteractionController";
 import { exteriorCameraView, type ExteriorView } from "./exteriorCamera";
 import { createPreviewBuilding } from "./viewerPreview";
 import { disposeViewerObject } from "./viewerResources";
@@ -194,6 +195,7 @@ export function Viewer3D({
     let floorExploder: ReturnType<typeof createFloorExploder> | undefined;
     let siteEnvironment: ReturnType<typeof createArchitecturalSiteEnvironment> | undefined;
     let presentationMotion: ReturnType<typeof createPremiumPresentationMotion> | undefined;
+    let siteInteractionController: ReturnType<typeof createSiteInteractionController> | undefined;
     let modelProfile: ModelProfileRuntime | undefined;
     let projectExperience: ExperienceRuntime | undefined;
     let referenceExterior: ModelProfileRuntime["exterior"];
@@ -970,6 +972,8 @@ export function Viewer3D({
 
       presentationMotion?.dispose();
       presentationMotion = undefined;
+      siteInteractionController?.dispose();
+      siteInteractionController = undefined;
       siteEnvironment?.dispose();
       if (siteEnvironment) scene.remove(siteEnvironment.root);
       let includedSourceSite = false;
@@ -997,6 +1001,17 @@ export function Viewer3D({
           reducedMotion,
           mobile,
         });
+      }
+      if (
+        clientPresentation &&
+        environmentProfile?.preset === "cinematic-exterior"
+      ) {
+        siteInteractionController = createSiteInteractionController(
+          siteEnvironment.root,
+          camera,
+          renderer.domElement,
+          reducedMotion,
+        );
       }
       if (clientPresentation) {
         const span = Math.max(sizeForView.x, sizeForView.y, sizeForView.z, 1);
@@ -1473,6 +1488,7 @@ export function Viewer3D({
       const delta = Math.min(clock.getDelta(), 0.05);
       sky?.update(delta, camera);
       presentationMotion?.update(delta);
+      siteInteractionController?.update(delta);
 
       if (cameraTween && !walkActive) {
         const elapsed = performance.now() - cameraTween.start;
@@ -1525,6 +1541,8 @@ export function Viewer3D({
       sky?.dispose();
       presentationMotion?.dispose();
       presentationMotion = undefined;
+      siteInteractionController?.dispose();
+      siteInteractionController = undefined;
       renderer.domElement.removeEventListener("webglcontextlost", handleContextLost);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
