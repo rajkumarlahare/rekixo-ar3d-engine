@@ -278,6 +278,9 @@ test("customer exterior keeps sunrise cinematic without exposing a time-of-day s
   assert.doesNotMatch(viewer, /formatSolarTime|timeOfDayRef|solarTimeOfDay|viewer-time-of-day/);
   assert.doesNotMatch(sky, /setTimeOfDay|normalizedHour/);
   assert.ok(!styles.includes(".viewer-time-of-day"));
+  const productionSmoke = read("e2e/production-floor-controls.spec.ts");
+  assert.ok(productionSmoke.includes('page.locator(".viewer-time-of-day")'));
+  assert.ok(productionSmoke.includes("Customer exterior must not expose the manual lighting-time slider"));
   assert.match(sky, /sunriseElapsed < 45/);
   assert.ok(viewer.includes("sun.position.copy(solar.direction)"));
 });
