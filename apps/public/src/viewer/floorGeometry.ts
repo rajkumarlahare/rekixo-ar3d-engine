@@ -212,7 +212,16 @@ export function deriveFloorGeometryFromModel(options: {
     if (run.length >= 3) runs.push(run);
   }
 
-  function summarizeStack(stack: ModelMeshBounds[]) {
+  type StackSummary = {
+    stack: ModelMeshBounds[];
+    averageStoreyHeight: number;
+    stackStart: number;
+    stackEnd: number;
+    ground: ModelMeshBounds;
+    upper: ModelMeshBounds;
+  };
+
+  function summarizeStack(stack: ModelMeshBounds[]): StackSummary | undefined {
     if (stack.length < 3) return undefined;
     const averageStoreyHeight =
       stack.reduce((sum, box) => sum + box.maxY - box.minY, 0) / stack.length;
@@ -321,7 +330,7 @@ export function deriveFloorGeometryFromModel(options: {
         bounds.maxY - items[items.length - 1].maxY >= 0.2
       )
       .map((items) => summarizeStack(items.slice(1, -1)))
-      .filter((item) => item !== undefined)
+      .filter((item): item is StackSummary => item !== undefined)
       .sort((a, b) => b.stack.length - a.stack.length);
     summary = fallbackSummaries[0];
   }
