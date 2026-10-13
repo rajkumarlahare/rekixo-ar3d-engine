@@ -336,18 +336,19 @@ export function Viewer3D({
     };
     resetRef.current = resetCamera;
 
-    const applyFloorLevel = (level: FloorGeometryLevel | null) => {
-      if (!modelBounds) return;
+    const applyFloorLevel = (level: FloorGeometryLevel | null): THREE.Box3 | undefined => {
+      if (!modelBounds) return undefined;
+      let selectedBounds: THREE.Box3 | undefined;
 
-      // Customer floor review must preserve authored geometry. Toggle original
-      // mesh visibility instead of clipping the building through floor slabs,
-      // facade shells, interiors, columns, stairs or other cross-floor objects.
+      // The customer viewer uses original mesh visibility, never floor clipping.
+      // The legacy/admin path intentionally keeps its current clipping behavior.
       if (clientPresentation && floorVisibilityController) {
         renderer.clippingPlanes = sectionEnabledRef.current
           ? renderer.clippingPlanes.filter((plane) => Math.abs(plane.normal.x) > 0.5)
           : [];
-        if (level === null) floorVisibilityController.showAll();
-        else floorVisibilityController.showFloor(level);
+        selectedBounds = level === null
+          ? floorVisibilityController.showAll()
+          : floorVisibilityController.showFloor(level);
       } else if (level === null) {
         renderer.clippingPlanes = sectionEnabledRef.current
           ? renderer.clippingPlanes.filter(
@@ -371,6 +372,7 @@ export function Viewer3D({
         controls.target.y = floorFocusElevation(level);
         controls.update();
       }
+      return selectedBounds;
     };
 
     const applyFloor = (floor: number | null) => {
@@ -798,9 +800,7 @@ export function Viewer3D({
       scene.add(object);
       object.updateMatrixWorld(true);
       floorVisibilityController?.dispose();
-      floorVisibilityController = clientPresentation
-        ? createFloorVisibilityController(object)
-        : undefined;
+      floorVisibilityController = undefined;
       modelBounds = new THREE.Box3().setFromObject(object);
       modelProfile = applyModelProfileExterior(object, referenceVisual);
       referenceExterior = modelProfile?.exterior;
@@ -858,6 +858,10 @@ export function Viewer3D({
       const materialEnhancerPromise =
         loadModelProfileMaterialEnhancer(modelProfile);
       enhanceArchitecturalModel(object, renderer, referenceVisual);
+      // Capture the post-enhancement materials so All/reset restores the actual customer presentation.
+      floorVisibilityController = clientPresentation
+        ? createFloorVisibilityController(object)
+        : undefined;
       windowMaterials.clear();
       if (clientPresentation) object.traverse((node) => {
         if (!(node instanceof THREE.Mesh)) return;
