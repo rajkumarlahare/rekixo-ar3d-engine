@@ -15,7 +15,7 @@ test("universal grass uses the requested real-world 1, 2 and 3 inch tiers", () =
 
 test("the lawn underlay and curved horizon stay in a bounded low-poly presentation mesh", () => {
   assert.match(grass, /createCurvedGroundGeometry/);
-  assert.match(grass, /segments = mobile \? 64 : 112/);
+  assert.match(grass, /baseSegments = mobile \? 64 : 112/);
   assert.match(grass, /rings = mobile \? 22 : 36/);
   assert.match(grass, /vertexColors: true/);
   assert.match(grass, /proceduralSurfaceTexture\("grass"\)/);
