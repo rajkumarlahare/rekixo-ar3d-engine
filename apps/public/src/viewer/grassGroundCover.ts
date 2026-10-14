@@ -110,17 +110,50 @@ function convexHull(points: readonly THREE.Vector2[]): THREE.Vector2[] {
   return [...lower, ...upper];
 }
 
-function insetFromCenter(hull: readonly THREE.Vector2[], amount: number): THREE.Vector2[] {
+function cross2(a: THREE.Vector2, b: THREE.Vector2) {
+  return a.x * b.y - a.y * b.x;
+}
+
+/** Offset each convex-hull edge outward by a stable wall-clearance margin. */
+function offsetPolygonOutward(hull: readonly THREE.Vector2[], amount: number): THREE.Vector2[] {
   if (hull.length < 3) return hull.map(point => point.clone());
-  const center = hull.reduce((sum, point) => sum.add(point), new THREE.Vector2()).multiplyScalar(1 / hull.length);
-  // A conservative radial inset avoids a rectangular terrain slab. The outline
-  // follows the source footprint vertices while staying just outside the walls.
-  return hull.map(point => {
-    const direction = center.clone().sub(point);
-    const distance = direction.length();
-    if (distance <= amount + 0.01) return point.clone();
-    return point.clone().addScaledVector(direction.normalize(), amount);
+  const signedArea = hull.reduce((sum, point, index) => {
+    const next = hull[(index + 1) % hull.length];
+    return sum + point.x * next.y - next.x * point.y;
+  }, 0) / 2;
+  const orientation = signedArea >= 0 ? 1 : -1;
+  return hull.map((point, index) => {
+    const previous = hull[(index + hull.length - 1) % hull.length];
+    const next = hull[(index + 1) % hull.length];
+    const incoming = point.clone().sub(previous).normalize();
+    const outgoing = next.clone().sub(point).normalize();
+    const normalIn = new THREE.Vector2(incoming.y * orientation, -incoming.x * orientation);
+    const normalOut = new THREE.Vector2(outgoing.y * orientation, -outgoing.x * orientation);
+    const bisector = normalIn.add(normalOut);
+    if (bisector.lengthSq() < 1e-8) return point.clone().addScaledVector(normalOut, amount);
+    bisector.normalize();
+    const denominator = Math.max(bisector.dot(normalOut), 0.25);
+    const distance = Math.min(amount / denominator, amount * 3);
+    return point.clone().addScaledVector(bisector, distance);
   });
+}
+
+/** Distance from an interior origin to a convex polygon along the given ray. */
+function rayPolygonRadius(direction: THREE.Vector2, polygon: readonly THREE.Vector2[]) {
+  let radius = 0;
+  for (let index = 0; index < polygon.length; index += 1) {
+    const a = polygon[index];
+    const b = polygon[(index + 1) % polygon.length];
+    const edge = b.clone().sub(a);
+    const denominator = cross2(direction, edge);
+    if (Math.abs(denominator) < 1e-8) continue;
+    const distance = cross2(a, edge) / denominator;
+    const alongEdge = cross2(a, direction) / denominator;
+    if (distance >= 0 && alongEdge >= -1e-7 && alongEdge <= 1 + 1e-7) {
+      radius = Math.max(radius, distance);
+    }
+  }
+  return radius;
 }
 
 function pointInPolygon(x: number, z: number, polygon: readonly THREE.Vector2[]) {
@@ -146,35 +179,31 @@ function createCurvedGroundGeometry(
   const safeFootprint = footprint.length >= 3
     ? footprint
     : [new THREE.Vector2(-0.5, -0.5), new THREE.Vector2(0.5, -0.5), new THREE.Vector2(0.5, 0.5), new THREE.Vector2(-0.5, 0.5)];
-  const inner = insetFromCenter(safeFootprint, 0.06);
-  const center = safeFootprint.reduce((sum, p) => sum.add(p), new THREE.Vector2()).multiplyScalar(1 / safeFootprint.length);
+  const inner = offsetPolygonOutward(safeFootprint, 0.18);
+  const center = safeFootprint.reduce((sum, point) => sum.add(point), new THREE.Vector2()).multiplyScalar(1 / safeFootprint.length);
+  const localPolygon = inner.map(point => point.clone().sub(center));
+  const angles = Array.from({ length: baseSegments }, (_, index) => index / baseSegments * TAU);
+  for (const point of localPolygon) {
+    const angle = (Math.atan2(point.y, point.x) + TAU) % TAU;
+    angles.push(angle);
+  }
+  angles.sort((a, b) => a - b);
+  const uniqueAngles = angles.filter((angle, index) => index === 0 || Math.abs(angle - angles[index - 1]) > 1e-7);
+  const count = uniqueAngles.length;
   const positions: number[] = [];
   const colors: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
-  const innerPoints = inner.map(point => new THREE.Vector2(point.x - center.x, point.y - center.y));
-  const count = Math.max(baseSegments, innerPoints.length);
-  const innerPerimeter: THREE.Vector2[] = [];
-  // Uniformly sample the actual polygon perimeter so inner and outer rings share
-  // vertices and the annulus remains a connected, low-poly surface.
-  const edgeLengths = innerPoints.map((p, i) => p.distanceTo(innerPoints[(i + 1) % innerPoints.length]));
-  const perimeter = edgeLengths.reduce((sum, value) => sum + value, 0);
-  for (let sample = 0; sample < count; sample += 1) {
-    let distance = (sample / count) * perimeter;
-    let edge = 0;
-    while (edge < edgeLengths.length - 1 && distance > edgeLengths[edge]) {
-      distance -= edgeLengths[edge++];
-    }
-    const from = innerPoints[edge];
-    const to = innerPoints[(edge + 1) % innerPoints.length];
-    const t = distance / Math.max(edgeLengths[edge], 1e-9);
-    innerPerimeter.push(from.clone().lerp(to, t));
-  }
 
   const turfNear = new THREE.Color("#557e3e");
   const turfFar = new THREE.Color("#748f60");
   const horizonHaze = new THREE.Color("#a3bdba");
   const cloudEdge = new THREE.Color("#c7d9e0");
+  const radialStart = uniqueAngles.map(angle => {
+    const direction = new THREE.Vector2(Math.cos(angle), Math.sin(angle));
+    return Math.max(rayPolygonRadius(direction, localPolygon) + 0.025, 0.55);
+  });
+
   for (let ring = 0; ring <= rings; ring += 1) {
     const t = ring / rings;
     const bend = smooth01((t - 0.70) / 0.30);
@@ -185,17 +214,21 @@ function createCurvedGroundGeometry(
         ? turfFar.clone().lerp(horizonHaze, smooth01((t - 0.70) / 0.14))
         : horizonHaze.clone().lerp(cloudEdge, smooth01((t - 0.84) / 0.16));
     for (let segment = 0; segment < count; segment += 1) {
-      const angle = (segment / count) * TAU;
-      const outerX = Math.cos(angle) * radius;
-      const outerZ = Math.sin(angle) * radius;
-      const innerPoint = innerPerimeter[segment];
-      const x = innerPoint.x + (outerX - innerPoint.x) * t;
-      const z = innerPoint.y + (outerZ - innerPoint.y) * t;
+      const angle = uniqueAngles[segment];
+      const directionX = Math.cos(angle);
+      const directionZ = Math.sin(angle);
+      const startRadius = radialStart[segment];
+      const ringRadius = startRadius + (radius - startRadius) * t;
+      const x = directionX * ringRadius;
+      const z = directionZ * ringRadius;
       positions.push(x, lift, z);
       colors.push(tint.r, tint.g, tint.b);
       uvs.push(x / 8, z / 8);
     }
   }
+
+  // The inner loop traces an offset polygon, not a Box3; each radial strip begins
+  // outside the building wall and expands continuously into the curved horizon.
   for (let ring = 0; ring < rings; ring += 1) {
     const start = ring * count;
     const outer = (ring + 1) * count;
@@ -206,6 +239,7 @@ function createCurvedGroundGeometry(
       indices.push(a, b, d, b, c, d);
     }
   }
+
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
@@ -424,6 +458,7 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
   };
 
   root.userData.footprintOutlineVertexCount = footprintHull.length;
+  root.userData.footprintOutlineSourcePointCount = options.footprintPoints?.length ?? 0;
   root.userData.grassBladeInstanceCount = instances.reduce((sum, tier) => sum + tier.length, 0);
   root.userData.grassBladeTierCounts = instances.map((tier) => tier.length);
   root.userData.horizonRadius = radius;
