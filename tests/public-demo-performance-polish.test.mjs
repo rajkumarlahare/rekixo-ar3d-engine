@@ -32,6 +32,17 @@ test("low-power and responsive polish reduce UI cost while preserving usability"
   assert.match(css, /viewer-loader-track/);
 });
 
+test("source-site detection shares the model bounds traversal instead of walking the scene twice", () => {
+  const viewer = fs.readFileSync("apps/public/src/viewer/Viewer3D.tsx", "utf8");
+  const boundsStart = viewer.indexOf("const worldBoundsByMesh = new Map<THREE.Mesh, THREE.Box3>()");
+  const boundsEnd = viewer.indexOf("// First detect physical floor bands", boundsStart);
+  assert.ok(boundsStart >= 0 && boundsEnd > boundsStart);
+  const boundsPass = viewer.slice(boundsStart, boundsEnd);
+  assert.match(boundsPass, /node\.userData\.sourceGeometry\?\.siteGeometry === "included-in-source"/);
+  assert.match(viewer, /const preserveSourceSite = includedSourceSite/);
+  assert.equal((viewer.match(/node\.userData\.sourceGeometry\?\.siteGeometry === "included-in-source"/g) ?? []).length, 1);
+});
+
 test("Building renderer honors the presentation performance quality profile", () => {
   const viewer = fs.readFileSync("apps/public/src/viewer/Viewer3D.tsx", "utf8");
   assert.match(viewer, /antialias: referenceVisual \|\| !environmentMobileQuality/);
