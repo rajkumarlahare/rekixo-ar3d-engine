@@ -456,7 +456,7 @@ function IntegratedGeoScene({ data, toolbarContainer }: { data: GeoPayload; tool
               node.receiveShadow = false;
             });
             overlay?.requestRedraw();
-            setFailure("");
+            if (contextRestored) setFailure("");
           })
           .catch((reason: unknown) => {
             if (cancelled) return;
