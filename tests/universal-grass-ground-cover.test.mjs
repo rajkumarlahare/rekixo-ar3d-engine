@@ -26,6 +26,8 @@ test("the lawn underlay and curved horizon stay in a bounded low-poly presentati
 test("grass instances avoid reviewed road, parking and path footprints", () => {
   assert.match(site, /item\.kind === "road" \|\| item\.kind === "parking" \|\| item\.kind === "path"/);
   assert.match(site, /excludedAreas: grassExcludedAreas/);
+  assert.match(site, /kind: "building-footprint"/);
+  assert.match(site, /width: modelSize.x,[\s\S]*depth: modelSize.z/);
   assert.match(grass, /excludedAreas\.some\(\(area\) => containsArea/);
   assert.match(grass, /surfaceYFor\(worldX, worldZ, groundElevation, lawnAreas\)/);
 });
