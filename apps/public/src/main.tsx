@@ -10,7 +10,6 @@ import { loadPublicExperience, type ClientExperience } from "./api";
 import { loadPublicBranding, type PublicProjectBranding } from "./branding";
 import "./styles.css";
 import { clientViewerCapabilities } from "./clientPresentation";
-import "./viewer/walkthrough-ui.css";
 
 const GeoPublicDemo = lazy(() => import("./geo/GeoPublicDemo"));
 const loadViewer3D = () => import("./viewer/Viewer3D");
