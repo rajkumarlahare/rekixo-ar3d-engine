@@ -423,6 +423,7 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
     });
   };
 
+  root.userData.footprintOutlineVertexCount = footprintHull.length;
   root.userData.grassBladeInstanceCount = instances.reduce((sum, tier) => sum + tier.length, 0);
   root.userData.grassBladeTierCounts = instances.map((tier) => tier.length);
   root.userData.horizonRadius = radius;
