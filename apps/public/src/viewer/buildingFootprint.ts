@@ -4,6 +4,8 @@ const SITE_ONLY_NAME =
   /(?:^|[\\s_.-])(ground|terrain|grass|road|parking|paving|curb|kerb|sidewalk|driveway|compound|boundary|fence|gate|tree|trees|plant|plants|shrub|landscape|garden|lawn|site[\\s_.-]*wall|plot[\\s_.-]*wall|retaining[\\s_.-]*wall)(?:$|[\\s_.-])/i;
 const BUILDING_NAME =
   /building|facade|floor|storey|story|structure|apartment|residential|column|pillar|structural|wall/i;
+const FLAT_BASE_NAME =
+  /foundation|footing|plinth|podium|platform|ground[\\s_.-]*slab|floor[\\s_.-]*slab|base[\\s_.-]*slab/i;
 
 interface Candidate {
   box: THREE.Box3;
@@ -39,16 +41,18 @@ export function deriveBuildingFootprintPolygon(
   root.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
     const names = namesForMesh(node, root);
-    if (!fromProfile && names.some((name) => SITE_ONLY_NAME.test(name))) return;
+    if (names.some((name) => SITE_ONLY_NAME.test(name))) return;
+    if (names.some((name) => FLAT_BASE_NAME.test(name))) return;
     const box = new THREE.Box3().setFromObject(node);
     if (!validBox(box)) return;
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     if (!fromProfile) {
       const modelHeight = Math.max(footprintBounds.max.y - footprintBounds.min.y, 1);
+      // Flat slab meshes are the usual source of the oversized white rectangle.
+      // Require vertical structural extent instead of trusting names like "Floor".
       const tallEnough = size.y >= Math.max(0.8, modelHeight * 0.06);
-      const buildingNamed = names.some((name) => BUILDING_NAME.test(name));
-      if (!tallEnough && !buildingNamed) return;
+      if (!tallEnough) return;
       if (box.max.x < footprintBounds.min.x - 0.25 ||
           box.min.x > footprintBounds.max.x + 0.25 ||
           box.max.z < footprintBounds.min.z - 0.25 ||
