@@ -24,10 +24,14 @@ const surfaceUrl = compile("apps/public/src/viewer/proceduralSurfaceMaterials.ts
 const presentationUrl = compile("apps/public/src/viewer/presentationEnvironment.ts", {
   "./proceduralSurfaceMaterials": surfaceUrl,
 });
+const grassUrl = compile("apps/public/src/viewer/grassGroundCover.ts", {
+  "./proceduralSurfaceMaterials": surfaceUrl,
+});
 const environment = await import(compile("apps/public/src/viewer/siteEnvironment.ts", {
   "./publicRuntimeContext": runtimeUrl,
   "./presentationEnvironment": presentationUrl,
   "./proceduralSurfaceMaterials": surfaceUrl,
+  "./grassGroundCover": grassUrl,
 }));
 
 test("client modules exclude disabled and absent scenes", () => {

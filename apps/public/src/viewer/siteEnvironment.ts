@@ -9,6 +9,10 @@ import {
   configureProceduralSurfaceTextures,
   createProceduralSurfaceMaterial,
 } from "./proceduralSurfaceMaterials";
+import {
+  createUniversalGrassGroundCover,
+  type GrassCoverArea,
+} from "./grassGroundCover";
 
 const AREA_KINDS = new Set<PublicSiteElement["kind"]>([
   "garden",
@@ -512,12 +516,14 @@ export function createArchitecturalSiteEnvironment(
   waterMotion = true,
   sourceSiteIncluded = false,
   landscapePreset: PresentationLandscapePreset = "auto",
+  universalGroundCover = presentation,
 ) {
   configureProceduralSurfaceTextures(renderer);
   const root = new THREE.Group();
   root.name = "source-backed-site-environment";
   const elements = getPublicRuntimeSiteElements();
   root.userData.sourceBackedSiteElementCount = elements.length;
+  root.userData.sourceSiteGeometryIncluded = sourceSiteIncluded;
 
   const areas = elements.filter((item) => AREA_KINDS.has(item.kind));
   const trees = elements.filter((item) => item.kind === "tree");
@@ -542,17 +548,138 @@ export function createArchitecturalSiteEnvironment(
     !bounds.isEmpty() &&
     safeGround &&
     (baselinePolicy === "always" || elements.length === 0);
+  const hasRoad = areas.some((item) => item.kind === "road");
+  const hasPath = areas.some((item) => item.kind === "path");
+  const hasLawn = areas.some(
+    (item) => item.kind === "garden" || item.kind === "lawn",
+  );
+  const modelSize = bounds.getSize(new THREE.Vector3());
+  const modelCenter = bounds.getCenter(new THREE.Vector3());
+  const grassExcludedAreas: GrassCoverArea[] = [
+    // The source model's projected footprint is a conservative hard exclusion:
+    // grass blades must never sprout through a building, even when its ground floor
+    // has openings or the legacy project has no surveyed footprint polygon.
+    ...(modelSize.x > 0 && modelSize.z > 0
+      ? [{
+          kind: "building-footprint",
+          x: modelCenter.x,
+          z: modelCenter.z,
+          width: modelSize.x,
+          depth: modelSize.z,
+          rotation: 0,
+        }]
+      : []),
+    ...areas
+      .filter((item) => item.kind === "road" || item.kind === "parking" || item.kind === "path")
+      .map((item) => ({
+        kind: item.kind,
+        x: item.x,
+        z: item.z,
+        width: item.width,
+        depth: item.depth,
+        rotation: item.rotation,
+        y: item.y,
+        height: item.height,
+      })),
+  ];
+  const lawnAreas: GrassCoverArea[] = areas
+    .filter((item) => item.kind === "garden" || item.kind === "lawn")
+    .map((item) => ({
+      kind: item.kind,
+      x: item.x,
+      z: item.z,
+      width: item.width,
+      depth: item.depth,
+      rotation: item.rotation,
+      y: item.y,
+      height: item.height,
+    }));
+
+  // Match built-in road/paving footprints so instanced blades never grow
+  // through them. The curved turf remains presentation-only, not survey data.
+  if (shouldAddBaseline) {
+    const size = bounds.getSize(new THREE.Vector3());
+    const center = bounds.getCenter(new THREE.Vector3());
+    const span = Math.max(size.x, size.z, size.y * 0.48, 8);
+    const margin = Math.max(span * 0.24, 2.8);
+    const siteWidth = Math.max(size.x + margin * 2.4, span * 1.9);
+    const roadDepth =
+      landscapePreset === "rural-farm"
+        ? Math.max(span * 0.16, 3.2)
+        : Math.max(span * 0.34, 4.8);
+    const roadZ = bounds.max.z + margin * 0.58 + roadDepth / 2;
+    const sidewalkDepth = Math.max(span * 0.075, 1.2);
+    const sidewalkZ = roadZ - roadDepth / 2 - sidewalkDepth / 2 - 0.18;
+    if (landscapePreset !== "hillside" && !hasRoad) {
+      grassExcludedAreas.push({
+        kind: "fallback-road",
+        x: center.x,
+        z: roadZ,
+        width: siteWidth * 8,
+        depth: roadDepth,
+        rotation: 0,
+      });
+    }
+    const includeFallbackSidewalk =
+      landscapePreset !== "rural-farm" &&
+      landscapePreset !== "hillside" &&
+      !hasPath;
+    if (includeFallbackSidewalk) {
+      grassExcludedAreas.push({
+        kind: "fallback-sidewalk",
+        x: center.x,
+        z: sidewalkZ,
+        width: siteWidth * 1.18,
+        depth: sidewalkDepth,
+        rotation: 0,
+      });
+      grassExcludedAreas.push({
+        kind: "fallback-curb",
+        x: center.x,
+        z: sidewalkZ + sidewalkDepth / 2,
+        width: siteWidth * 1.18,
+        depth: 0.18,
+        rotation: 0,
+      });
+    }
+    if (!hasPath) {
+      const driveDepth = Math.max(
+        sidewalkZ - sidewalkDepth / 2 - bounds.max.z,
+        1.2,
+      );
+      grassExcludedAreas.push({
+        kind: "fallback-driveway",
+        x: center.x + size.x * 0.16,
+        z: bounds.max.z + driveDepth / 2,
+        width: Math.max(size.x * 0.28, 2.4),
+        depth: driveDepth,
+        rotation: 0,
+      });
+    }
+  }
+
+  let universalCover:
+    | ReturnType<typeof createUniversalGrassGroundCover>
+    | undefined;
+  if (universalGroundCover && !bounds.isEmpty() && safeGround) {
+    universalCover = createUniversalGrassGroundCover({
+      bounds,
+      groundElevation:
+        knownGrade && typeof groundElevation === "number"
+          ? groundElevation
+          : bounds.min.y,
+      mobile,
+      excludedAreas: grassExcludedAreas,
+      lawnAreas,
+    });
+    root.add(universalCover.root);
+  }
 
   if (shouldAddBaseline) {
-    const hasRoad = areas.some((item) => item.kind === "road");
-    const hasPath = areas.some((item) => item.kind === "path");
-    const hasLawn = areas.some(
-      (item) => item.kind === "garden" || item.kind === "lawn",
-    );
     const baselineOptions = elements.length
       ? {
-          includeGround: !sourceSiteIncluded,
-          includeSurroundingGround: !sourceSiteIncluded,
+          includeGround: false,
+          includeSurroundingGround: false,
           includeRoad: landscapePreset !== "hillside" && !hasRoad,
           includeCars: false,
           landscapePreset,
@@ -568,8 +695,8 @@ export function createArchitecturalSiteEnvironment(
           // Until curated vehicle/context GLB assets ship, avoid adding blocky
           // placeholder cars or neighborhood cuboids to the cinematic profile.
           landscapePreset,
-          includeGround: !sourceSiteIncluded,
-          includeSurroundingGround: !sourceSiteIncluded,
+          includeGround: false,
+          includeSurroundingGround: false,
           includeCars: landscapePreset === "urban" && !mobile,
           includeContextMassing: false,
         };
@@ -611,6 +738,7 @@ export function createArchitecturalSiteEnvironment(
     setNight(night: boolean) {
       if (bulbMaterial) bulbMaterial.emissiveIntensity = night ? 4.2 : 0.38;
       for (const bulb of presentationBulbs) bulb.emissiveIntensity = night ? 4.2 : 0.38;
+      universalCover?.setNight(night);
     },
     dispose() {
       disposeRoot(root);
