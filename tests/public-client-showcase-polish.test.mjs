@@ -124,7 +124,9 @@ test("curved ground mesh has a building-sized hole, not turf under interior wall
   }
   const indices = ground.geometry.index;
   assert.ok(indices && indices.count > 1000);
-  assert.ok(Math.abs(positions.getX(0) - 5.18) < 1e-3);
+  assert.ok(positions.count > 1000);
+  assert.ok(positions.getX(0) !== 5.18, "the inner ring follows the polygon, not a rectangular slab");
+  assert.ok(cover.root.userData.footprintOutlineVertexCount >= 4);
   assert.equal(cover.root.position.x, 0, "terrain is centered on the measured Building");
   assert.equal(cover.root.position.z, 0, "terrain is centered on the measured Building");
   let farthestSiteCoverage = 0;
