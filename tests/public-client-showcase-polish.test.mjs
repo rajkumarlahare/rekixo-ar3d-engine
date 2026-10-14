@@ -140,6 +140,62 @@ test("curved ground mesh has a building-sized hole, not turf under interior wall
   cover.dispose();
 });
 
+test("curved ground uses the irregular footprint polygon instead of a white rectangular slab", () => {
+  const bounds = new THREE.Box3(
+    new THREE.Vector3(-16, 0, -13),
+    new THREE.Vector3(24, 20, 19),
+  );
+  const footprintBounds = new THREE.Box3(
+    new THREE.Vector3(-5, 0, -4),
+    new THREE.Vector3(5, 15, 4),
+  );
+  const footprintPoints = [
+    new THREE.Vector2(-4.8, -3.2),
+    new THREE.Vector2(2.9, -4.0),
+    new THREE.Vector2(5.0, 2.6),
+    new THREE.Vector2(-1.8, 4.1),
+  ];
+  const cover = grass.createUniversalGrassGroundCover({
+    bounds,
+    footprintBounds,
+    footprintPoints,
+    groundElevation: 0,
+    mobile: true,
+    excludedAreas: [],
+    lawnAreas: [],
+  });
+  const ground = cover.root.children.find(
+    child => child.name === "Curved turf and horizon surface",
+  );
+  assert.ok(ground?.isMesh);
+  assert.ok(cover.root.userData.footprintOutlineSourcePointCount >= 4);
+  const positions = ground.geometry.getAttribute("position");
+  const segments = Math.floor(positions.count / 23);
+  assert.ok(segments >= 64);
+  const innerVertices = Array.from({ length: segments }, (_, index) =>
+    new THREE.Vector2(positions.getX(index), positions.getZ(index)),
+  );
+  // The first ring is offset outward, so all its vertices must be outside the
+  // source convex polygon. It must retain several non-axis-aligned coordinates.
+  const pointInside = (point, polygon) => {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const a = polygon[i], b = polygon[j];
+      if (((a.y > point.y) !== (b.y > point.y)) &&
+          point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  };
+  assert.ok(innerVertices.every(point => !pointInside(point, footprintPoints)));
+  assert.ok(innerVertices.some(point =>
+    Math.abs(point.x - Math.round(point.x)) > 0.12 &&
+    Math.abs(point.y - Math.round(point.y)) > 0.12,
+  ), "inner contour must follow angled polygon edges, not a rectangular footprint");
+  cover.dispose();
+});
+
 test("client modules exclude disabled and absent scenes", () => {
   assert.deepEqual(client.availableClientModules({ scenes: [{ type: "project-navigation", enabled: true }, { type: "typical-floor", enabled: false }] }, ["project-navigation", "typical-floor", "amenity"]), ["project-navigation"]);
 });
