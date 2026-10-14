@@ -517,6 +517,7 @@ export function createArchitecturalSiteEnvironment(
   sourceSiteIncluded = false,
   landscapePreset: PresentationLandscapePreset = "auto",
   universalGroundCover = presentation,
+  buildingBounds: THREE.Box3 = bounds,
 ) {
   configureProceduralSurfaceTextures(renderer);
   const root = new THREE.Group();
@@ -553,8 +554,8 @@ export function createArchitecturalSiteEnvironment(
   const hasLawn = areas.some(
     (item) => item.kind === "garden" || item.kind === "lawn",
   );
-  const modelSize = bounds.getSize(new THREE.Vector3());
-  const modelCenter = bounds.getCenter(new THREE.Vector3());
+  const modelSize = buildingBounds.getSize(new THREE.Vector3());
+  const modelCenter = buildingBounds.getCenter(new THREE.Vector3());
   const grassExcludedAreas: GrassCoverArea[] = [
     // The source model's projected footprint is a conservative hard exclusion:
     // grass blades must never sprout through a building, even when its ground floor
@@ -664,6 +665,7 @@ export function createArchitecturalSiteEnvironment(
   if (universalGroundCover && !bounds.isEmpty() && safeGround) {
     universalCover = createUniversalGrassGroundCover({
       bounds,
+      footprintBounds: buildingBounds,
       groundElevation:
         knownGrade && typeof groundElevation === "number"
           ? groundElevation
