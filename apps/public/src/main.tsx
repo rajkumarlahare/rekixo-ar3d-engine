@@ -729,7 +729,7 @@ function App() {
   // Preload only on Building routes, alongside the project API request.
   // The Geo route stays free of Building-viewer-only JavaScript.
   useEffect(() => {
-    void loadViewer3D();
+    void loadViewer3D().catch(() => undefined);
   }, []);
 
   useEffect(() => {
