@@ -17,6 +17,8 @@ export interface GrassGroundCoverOptions {
   bounds: THREE.Box3;
   /** Measured building bounds used only for the inner ground cutout. */
   footprintBounds?: THREE.Box3;
+  /** Measured footprint vertices in world X/Z coordinates when available. */
+  footprintPoints?: readonly THREE.Vector2[];
   groundElevation: number;
   mobile: boolean;
   /** Reviewed paving/road areas plus any generated fallback hardscape. */
@@ -80,90 +82,130 @@ function surfaceYFor(
   return groundElevation + 0.004;
 }
 
+interface GroundRingPoint {
+  x: number;
+  z: number;
+}
+
+function convexHull(points: readonly THREE.Vector2[]): THREE.Vector2[] {
+  const unique = new Map<string, THREE.Vector2>();
+  for (const point of points) unique.set(`${point.x.toFixed(5)},${point.y.toFixed(5)}`, point.clone());
+  const sorted = [...unique.values()].sort((a, b) => a.x - b.x || a.y - b.y);
+  if (sorted.length <= 3) return sorted;
+  const cross = (o: THREE.Vector2, a: THREE.Vector2, b: THREE.Vector2) =>
+    (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower: THREE.Vector2[] = [];
+  for (const point of sorted) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 1e-7) lower.pop();
+    lower.push(point);
+  }
+  const upper: THREE.Vector2[] = [];
+  for (let index = sorted.length - 1; index >= 0; index -= 1) {
+    const point = sorted[index];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 1e-7) upper.pop();
+    upper.push(point);
+  }
+  lower.pop();
+  upper.pop();
+  return [...lower, ...upper];
+}
+
+function insetFromCenter(hull: readonly THREE.Vector2[], amount: number): THREE.Vector2[] {
+  if (hull.length < 3) return hull.map(point => point.clone());
+  const center = hull.reduce((sum, point) => sum.add(point), new THREE.Vector2()).multiplyScalar(1 / hull.length);
+  // A conservative radial inset avoids a rectangular terrain slab. The outline
+  // follows the source footprint vertices while staying just outside the walls.
+  return hull.map(point => {
+    const direction = center.clone().sub(point);
+    const distance = direction.length();
+    if (distance <= amount + 0.01) return point.clone();
+    return point.clone().addScaledVector(direction.normalize(), amount);
+  });
+}
+
+function pointInPolygon(x: number, z: number, polygon: readonly THREE.Vector2[]) {
+  let inside = false;
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index++) {
+    const xi = polygon[index].x, zi = polygon[index].y;
+    const xj = polygon[previous].x, zj = polygon[previous].y;
+    const crosses = (zi > z) !== (zj > z) &&
+      x < ((xj - xi) * (z - zi)) / (zj - zi || 1e-12) + xi;
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
 function createCurvedGroundGeometry(
   radius: number,
   rise: number,
   mobile: boolean,
-  footprintHalfX: number,
-  footprintHalfZ: number,
+  footprint: readonly THREE.Vector2[],
 ) {
   const baseSegments = mobile ? 64 : 112;
   const rings = mobile ? 22 : 36;
-  // A distinct vertex at each rectangle corner makes the first ring follow
-  // straight wall-aligned edges rather than cutting across a corner chord.
-  const cornerHalfX = Math.max(footprintHalfX + 0.18, 0.6);
-  const cornerHalfZ = Math.max(footprintHalfZ + 0.18, 0.6);
-  const cornerAngle = Math.atan2(cornerHalfZ, cornerHalfX);
-  const angles = Array.from(
-    { length: baseSegments },
-    (_, segment) => (segment / baseSegments) * TAU,
-  );
-  angles.push(
-    cornerAngle,
-    Math.PI - cornerAngle,
-    Math.PI + cornerAngle,
-    TAU - cornerAngle,
-  );
-  angles.sort((a, b) => a - b);
-  const uniqueAngles = angles.filter(
-    (angle, index) =>
-      index === 0 || Math.abs(angle - angles[index - 1]) > 1e-7,
-  );
-  const segments = uniqueAngles.length;
-
+  const safeFootprint = footprint.length >= 3
+    ? footprint
+    : [new THREE.Vector2(-0.5, -0.5), new THREE.Vector2(0.5, -0.5), new THREE.Vector2(0.5, 0.5), new THREE.Vector2(-0.5, 0.5)];
+  const inner = insetFromCenter(safeFootprint, 0.06);
+  const center = safeFootprint.reduce((sum, p) => sum.add(p), new THREE.Vector2()).multiplyScalar(1 / safeFootprint.length);
   const positions: number[] = [];
   const colors: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
+  const innerPoints = inner.map(point => new THREE.Vector2(point.x - center.x, point.y - center.y));
+  const count = Math.max(baseSegments, innerPoints.length);
+  const innerPerimeter: THREE.Vector2[] = [];
+  // Uniformly sample the actual polygon perimeter so inner and outer rings share
+  // vertices and the annulus remains a connected, low-poly surface.
+  const edgeLengths = innerPoints.map((p, i) => p.distanceTo(innerPoints[(i + 1) % innerPoints.length]));
+  const perimeter = edgeLengths.reduce((sum, value) => sum + value, 0);
+  for (let sample = 0; sample < count; sample += 1) {
+    let distance = (sample / count) * perimeter;
+    let edge = 0;
+    while (edge < edgeLengths.length - 1 && distance > edgeLengths[edge]) {
+      distance -= edgeLengths[edge++];
+    }
+    const from = innerPoints[edge];
+    const to = innerPoints[(edge + 1) % innerPoints.length];
+    const t = distance / Math.max(edgeLengths[edge], 1e-9);
+    innerPerimeter.push(from.clone().lerp(to, t));
+  }
 
   const turfNear = new THREE.Color("#557e3e");
   const turfFar = new THREE.Color("#748f60");
   const horizonHaze = new THREE.Color("#a3bdba");
   const cloudEdge = new THREE.Color("#c7d9e0");
-
   for (let ring = 0; ring <= rings; ring += 1) {
     const t = ring / rings;
     const bend = smooth01((t - 0.70) / 0.30);
     const lift = rise * bend * bend;
-    let tint: THREE.Color;
-    if (t < 0.70) {
-      tint = turfNear.clone().lerp(turfFar, smooth01(t / 0.70) * 0.22);
-    } else if (t < 0.84) {
-      tint = turfFar.clone().lerp(horizonHaze, smooth01((t - 0.70) / 0.14));
-    } else {
-      tint = horizonHaze.clone().lerp(cloudEdge, smooth01((t - 0.84) / 0.16));
-    }
-
-    for (const angle of uniqueAngles) {
-      const cosine = Math.abs(Math.cos(angle));
-      const sine = Math.abs(Math.sin(angle));
-      const xBoundary = cornerHalfX / Math.max(cosine, 1e-6);
-      const zBoundary = cornerHalfZ / Math.max(sine, 1e-6);
-      const innerRadius = Math.min(xBoundary, zBoundary);
-      const ringRadius = innerRadius + (radius - innerRadius) * t;
-      const x = Math.cos(angle) * ringRadius;
-      const z = Math.sin(angle) * ringRadius;
+    const tint = t < 0.70
+      ? turfNear.clone().lerp(turfFar, smooth01(t / 0.70) * 0.22)
+      : t < 0.84
+        ? turfFar.clone().lerp(horizonHaze, smooth01((t - 0.70) / 0.14))
+        : horizonHaze.clone().lerp(cloudEdge, smooth01((t - 0.84) / 0.16));
+    for (let segment = 0; segment < count; segment += 1) {
+      const angle = (segment / count) * TAU;
+      const outerX = Math.cos(angle) * radius;
+      const outerZ = Math.sin(angle) * radius;
+      const innerPoint = innerPerimeter[segment];
+      const x = innerPoint.x + (outerX - innerPoint.x) * t;
+      const z = innerPoint.y + (outerZ - innerPoint.y) * t;
       positions.push(x, lift, z);
       colors.push(tint.r, tint.g, tint.b);
       uvs.push(x / 8, z / 8);
     }
   }
-
-  // There is intentionally no center vertex/fan: the building footprint is
-  // an actual hole in the ground mesh, not just an exclusion for grass blades.
   for (let ring = 0; ring < rings; ring += 1) {
-    const inner = ring * segments;
-    const outer = (ring + 1) * segments;
-    for (let segment = 0; segment < segments; segment += 1) {
-      const next = (segment + 1) % segments;
-      const a = inner + segment;
-      const b = inner + next;
-      const c = outer + next;
-      const d = outer + segment;
+    const start = ring * count;
+    const outer = (ring + 1) * count;
+    for (let segment = 0; segment < count; segment += 1) {
+      const next = (segment + 1) % count;
+      const a = start + segment, b = start + next;
+      const c = outer + next, d = outer + segment;
       indices.push(a, b, d, b, c, d);
     }
   }
-
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
@@ -173,6 +215,7 @@ function createCurvedGroundGeometry(
   geometry.computeBoundingSphere();
   return geometry;
 }
+
 function createGrassClumpGeometry() {
   const positions: number[] = [];
   const indices: number[] = [];
@@ -265,6 +308,15 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
   const footprintBounds = options.footprintBounds ?? bounds;
   const footprintSize = footprintBounds.getSize(new THREE.Vector3());
   const footprintCenter = footprintBounds.getCenter(new THREE.Vector3());
+  const footprintPoints = options.footprintPoints?.length
+    ? options.footprintPoints
+    : [
+        new THREE.Vector2(footprintBounds.min.x, footprintBounds.min.z),
+        new THREE.Vector2(footprintBounds.max.x, footprintBounds.min.z),
+        new THREE.Vector2(footprintBounds.max.x, footprintBounds.max.z),
+        new THREE.Vector2(footprintBounds.min.x, footprintBounds.max.z),
+      ];
+  const footprintHull = convexHull(footprintPoints);
   const span = Math.max(size.x, size.z, 8);
   const siteCorners = [
     [bounds.min.x, bounds.min.z],
@@ -288,8 +340,7 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
     radius,
     rise,
     mobile,
-    footprintSize.x / 2,
-    footprintSize.z / 2,
+    footprintHull.map(point => new THREE.Vector2(point.x - footprintCenter.x, point.y - footprintCenter.z)),
   );
   const terrainMaterial = new THREE.MeshStandardMaterial({
     name: "Procedural turf blending into a soft cloud horizon",
@@ -332,6 +383,7 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
     const worldX = center.x + x;
     const worldZ = center.z + z;
 
+    if (pointInPolygon(worldX, worldZ, footprintHull)) continue;
     if (excludedAreas.some((area) => containsArea(worldX, worldZ, area, 0.035))) continue;
 
     const slot = instances[0].length + instances[1].length + instances[2].length;
