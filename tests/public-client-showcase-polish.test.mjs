@@ -36,12 +36,19 @@ const environment = await import(compile("apps/public/src/viewer/siteEnvironment
 }));
 
 test("curved ground mesh has a building-sized hole, not turf under interior walls", () => {
+  // The loaded source bounds include the compound/site; the measured Building
+  // bounds are deliberately smaller so the open plot remains covered in grass.
   const bounds = new THREE.Box3(
+    new THREE.Vector3(-14, 0, -11),
+    new THREE.Vector3(30, 20, 21),
+  );
+  const footprintBounds = new THREE.Box3(
     new THREE.Vector3(-5, 0, -4),
     new THREE.Vector3(5, 15, 4),
   );
   const cover = grass.createUniversalGrassGroundCover({
     bounds,
+    footprintBounds,
     groundElevation: 0,
     mobile: true,
     excludedAreas: [{
@@ -71,6 +78,16 @@ test("curved ground mesh has a building-sized hole, not turf under interior wall
   const indices = ground.geometry.index;
   assert.ok(indices && indices.count > 1000);
   assert.ok(Math.abs(positions.getX(0) - 5.18) < 1e-3);
+  assert.equal(cover.root.position.x, 0, "terrain is centered on the measured Building");
+  assert.equal(cover.root.position.z, 0, "terrain is centered on the measured Building");
+  let farthestSiteCoverage = 0;
+  for (let index = 0; index < positions.count; index += 1) {
+    farthestSiteCoverage = Math.max(
+      farthestSiteCoverage,
+      Math.hypot(positions.getX(index), positions.getZ(index)),
+    );
+  }
+  assert.ok(farthestSiteCoverage > 30, "curved turf still spans the outer project bounds");
   cover.dispose();
 });
 
