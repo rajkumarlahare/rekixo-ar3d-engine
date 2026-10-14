@@ -896,8 +896,8 @@ export function Viewer3D({
       object.traverse((node) => {
         if (!(node instanceof THREE.Mesh)) return;
         const meshBox = new THREE.Box3().setFromObject(node);
-        if (meshBox.isEmpty()) return;
         worldBoundsByMesh.set(node, meshBox);
+        if (meshBox.isEmpty()) return;
         meshBounds.push({
           minX: meshBox.min.x,
           minY: meshBox.min.y,
