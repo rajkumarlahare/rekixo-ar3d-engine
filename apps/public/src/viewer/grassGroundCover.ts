@@ -13,7 +13,10 @@ export interface GrassCoverArea {
 }
 
 export interface GrassGroundCoverOptions {
+  /** Overall loaded site/model bounds used to size the distant landscape. */
   bounds: THREE.Box3;
+  /** Measured building bounds used only for the inner ground cutout. */
+  footprintBounds?: THREE.Box3;
   groundElevation: number;
   mobile: boolean;
   /** Reviewed paving/road areas plus any generated fallback hardscape. */
@@ -257,15 +260,36 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
 
   const size = bounds.getSize(new THREE.Vector3());
   const center = bounds.getCenter(new THREE.Vector3());
+  // The loaded source may contain an outer compound wall or site paving. Only
+  // the measured Building bounds should become an interior grass-free hole.
+  const footprintBounds = options.footprintBounds ?? bounds;
+  const footprintSize = footprintBounds.getSize(new THREE.Vector3());
+  const footprintCenter = footprintBounds.getCenter(new THREE.Vector3());
   const span = Math.max(size.x, size.z, 8);
-  const radius = Math.min(Math.max(span * 5, 75), 2000);
+  const siteCorners = [
+    [bounds.min.x, bounds.min.z],
+    [bounds.min.x, bounds.max.z],
+    [bounds.max.x, bounds.min.z],
+    [bounds.max.x, bounds.max.z],
+  ];
+  const farthestSiteCorner = Math.max(
+    ...siteCorners.map(([x, z]) =>
+      Math.hypot(x - footprintCenter.x, z - footprintCenter.z),
+    ),
+  );
+  const preferredRadius = Math.min(Math.max(span * 5, 75), 2000);
+  const radius = Math.max(
+    preferredRadius,
+    farthestSiteCorner + Math.max(span * 0.12, 10),
+    footprintSize.x / 2 + footprintSize.z / 2 + 5,
+  );
   const rise = Math.min(Math.max(span * 0.65, 5), 12);
   const geometry = createCurvedGroundGeometry(
     radius,
     rise,
     mobile,
-    size.x / 2,
-    size.z / 2,
+    footprintSize.x / 2,
+    footprintSize.z / 2,
   );
   const terrainMaterial = new THREE.MeshStandardMaterial({
     name: "Procedural turf blending into a soft cloud horizon",
@@ -280,7 +304,13 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
   ground.castShadow = false;
   ground.receiveShadow = !mobile;
   root.add(ground);
-  root.position.set(center.x, groundElevation - 0.055, center.z);
+  // The annular terrain is centered on the actual building footprint, while
+  // its radius is large enough to cover the full loaded site bounds.
+  root.position.set(
+    footprintCenter.x,
+    groundElevation - 0.055,
+    footprintCenter.z,
+  );
 
   const targetCount = mobile ? 720 : 3600;
   const bladeRadius = Math.min(Math.max(span * 0.78, 12), 28);
@@ -313,9 +343,11 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
     );
     const surfaceY = surfaceYFor(worldX, worldZ, groundElevation, lawnAreas);
     instances[tier].push({
-      x,
+      // Blade instances are rooted relative to the building-centered ground
+      // mesh, not the overall source-model/site center.
+      x: worldX - footprintCenter.x,
       y: surfaceY - (groundElevation - 0.055) + 0.001,
-      z,
+      z: worldZ - footprintCenter.z,
       rotation: random() * TAU,
       color,
       variation: 0.88 + random() * 0.24,
