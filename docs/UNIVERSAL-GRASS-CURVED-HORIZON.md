@@ -12,7 +12,7 @@ The public Building viewer now receives a presentation-only ground layer for cus
 ## Boundaries and safety
 
 - The ground and grass are marked presentation-only and non-authoritative. They do not alter, cut, relocate, or rewrite a customer's building model or published Studio geometry.
-- A reliable surveyed parcel polygon is not currently available in every legacy project. For that reason the outer curved horizon is a cosmetic backdrop sized from model bounds, not a claim that it represents the true legal plot boundary.
+- A reliable surveyed parcel polygon is not currently available in every legacy project. For that reason the outer curved horizon is a cosmetic backdrop sized from model bounds, not a claim that it represents a surveyed plot boundary or the true legal parcel.
 - Ground is omitted when model bounds are empty or the baseline elevation is not safe to infer.
 - The former oversized flat surrounding-ground slab is disabled in this presentation path; the curved low-poly surface replaces it.
 
