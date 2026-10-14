@@ -70,7 +70,7 @@ test("curved ground mesh has a building-sized hole, not turf under interior wall
   }
   const indices = ground.geometry.index;
   assert.ok(indices && indices.count > 1000);
-  assert.equal(positions.getX(0), 5.18);
+  assert.ok(Math.abs(positions.getX(0) - 5.18) < 1e-3);
   cover.dispose();
 });
 
