@@ -19,6 +19,7 @@ test("viewer computes a loaded GLB digest once and independently checks each pre
   assert.ok(start >= 0 && end > start, "presentation-aware model load path must exist");
   const block = viewer.slice(start, end);
   assert.equal((block.match(/await sha256Hex\(bytes\)/g) ?? []).length, 1);
+  assert.match(block, /await mountObject\(gltf\.scene, Boolean\(cameraPreset\)\)[\s\S]*?await sha256Hex\(bytes\)/);
   assert.match(block, /sourcePresentation,[\s\S]*?verifiedModelSha256/);
   assert.match(block, /buildingPresentation,[\s\S]*?verifiedModelSha256/);
   assert.match(sourcePresentation, /digest !== source\.modelSha256/);
