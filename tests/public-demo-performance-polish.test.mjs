@@ -49,7 +49,7 @@ test("public Geo route does not eagerly import the Building viewer bundle", () =
   assert.ok(app.includes('const GeoPublicDemo = lazy(() => import("./geo/GeoPublicDemo"));'));
   assert.ok(app.includes('const loadViewer3D = () => import("./viewer/Viewer3D");'));
   assert.ok(app.includes('const Viewer3D = lazy(() => loadViewer3D().then((module) => ({ default: module.Viewer3D })));'));
-  assert.ok(app.includes("void loadViewer3D();"));
+  assert.ok(app.includes("void loadViewer3D().catch(() => undefined);"));
   assert.ok(app.includes("<Suspense fallback={<LoadingPage />}>"));
   assert.ok(app.includes("{geoRoute ? <GeoPublicDemo /> : <App />}"));
 });
