@@ -100,12 +100,15 @@ function addBounds(bounds: THREE.Box3, box: THREE.Box3) {
  */
 export function createFloorVisibilityController(
   root: THREE.Object3D,
+  worldBoundsByMesh?: ReadonlyMap<THREE.Mesh, THREE.Box3>,
 ): FloorVisibilityController {
   root.updateMatrixWorld(true);
   const records: MeshRecord[] = [];
   root.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
-    const box = new THREE.Box3().setFromObject(node);
+    // Viewer3D has already measured model mesh bounds for floor derivation.
+    // Reuse those immutable world-space boxes instead of recomputing each one.
+    const box = worldBoundsByMesh?.get(node) ?? new THREE.Box3().setFromObject(node);
     if (box.isEmpty()) return;
     records.push({
       mesh: node,
