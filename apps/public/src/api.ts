@@ -102,15 +102,33 @@ export async function loadPublicExperience(
   }
 
   const body = (await response.json()) as Record<string, unknown>;
-  // Studio enrichment and recovered source presentation are optional. Allow
-  // them a short shared grace period, but never let either delay the source GLB
-  // request indefinitely when an auxiliary endpoint is slow.
+  // Bound optional enrichment by one deadline. Start both auxiliary requests
+  // before waiting so a slow Studio response cannot prevent presentation lookup.
   const optionalMetadataDeadline = Date.now() + OPTIONAL_METADATA_BUDGET_MS;
-  const studioMetadata = await waitForOptionalMetadata(
-    studioMetadataPromise,
-    optionalMetadataDeadline,
-    undefined,
-  );
+  const release = body.release as { manifestSha256?: string } | undefined;
+  const model = body.model as { id?: string } | undefined;
+  let presentationPromise: Promise<SourcePresentation | undefined> = Promise.resolve(undefined);
+  if (release?.manifestSha256 && /^[a-f0-9]{64}$/.test(release.manifestSha256) && model?.id) {
+    presentationPromise = fetch(
+      `${PUBLIC_BASE_PATH}/presentations/${release.manifestSha256}/manifest.json`,
+      { signal, cache: "no-cache" },
+    ).then(async (presentationResponse) => {
+      if (
+        !presentationResponse.ok ||
+        !presentationResponse.headers.get("content-type")?.includes("application/json")
+      ) return undefined;
+      return parseSourcePresentation(
+        await presentationResponse.json(),
+        release.manifestSha256!,
+        model.id!,
+      );
+    }).catch(() => undefined);
+  }
+
+  const [studioMetadata, sourcePresentation] = await Promise.all([
+    waitForOptionalMetadata(studioMetadataPromise, optionalMetadataDeadline, undefined),
+    waitForOptionalMetadata(presentationPromise, optionalMetadataDeadline, undefined),
+  ]);
   const siteElements = studioMetadata?.siteElements ?? [];
   const semanticInterior: SemanticInteriorRuntime | undefined =
     studioMetadata?.semanticInterior;
@@ -128,36 +146,6 @@ export async function loadPublicExperience(
         ? `3D project response is corrupted: ${error.message}`
         : "3D project response is corrupted.",
       502,
-    );
-  }
-
-  const release = body.release as { manifestSha256?: string } | undefined;
-  const model = body.model as { id?: string } | undefined;
-  let sourcePresentation: SourcePresentation | undefined;
-  if (
-    release?.manifestSha256 &&
-    /^[a-f0-9]{64}$/.test(release.manifestSha256) &&
-    model?.id &&
-    Date.now() < optionalMetadataDeadline
-  ) {
-    const presentationPromise = fetch(
-      `${PUBLIC_BASE_PATH}/presentations/${release.manifestSha256}/manifest.json`,
-      { signal, cache: "no-cache" },
-    ).then(async (presentationResponse) => {
-      if (
-        !presentationResponse.ok ||
-        !presentationResponse.headers.get("content-type")?.includes("application/json")
-      ) return undefined;
-      return parseSourcePresentation(
-        await presentationResponse.json(),
-        release.manifestSha256!,
-        model.id!,
-      );
-    }).catch(() => undefined);
-    sourcePresentation = await waitForOptionalMetadata(
-      presentationPromise,
-      optionalMetadataDeadline,
-      undefined,
     );
   }
   setPublicRuntimeSiteElements(siteElements ?? []);
