@@ -553,18 +553,35 @@ export function createArchitecturalSiteEnvironment(
   const hasLawn = areas.some(
     (item) => item.kind === "garden" || item.kind === "lawn",
   );
-  const grassExcludedAreas: GrassCoverArea[] = areas
-    .filter((item) => item.kind === "road" || item.kind === "parking" || item.kind === "path")
-    .map((item) => ({
-      kind: item.kind,
-      x: item.x,
-      z: item.z,
-      width: item.width,
-      depth: item.depth,
-      rotation: item.rotation,
-      y: item.y,
-      height: item.height,
-    }));
+  const modelSize = bounds.getSize(new THREE.Vector3());
+  const modelCenter = bounds.getCenter(new THREE.Vector3());
+  const grassExcludedAreas: GrassCoverArea[] = [
+    // The source model's projected footprint is a conservative hard exclusion:
+    // grass blades must never sprout through a building, even when its ground floor
+    // has openings or the legacy project has no surveyed footprint polygon.
+    ...(modelSize.x > 0 && modelSize.z > 0
+      ? [{
+          kind: "building-footprint",
+          x: modelCenter.x,
+          z: modelCenter.z,
+          width: modelSize.x,
+          depth: modelSize.z,
+          rotation: 0,
+        }]
+      : []),
+    ...areas
+      .filter((item) => item.kind === "road" || item.kind === "parking" || item.kind === "path")
+      .map((item) => ({
+        kind: item.kind,
+        x: item.x,
+        z: item.z,
+        width: item.width,
+        depth: item.depth,
+        rotation: item.rotation,
+        y: item.y,
+        height: item.height,
+      })),
+  ];
   const lawnAreas: GrassCoverArea[] = areas
     .filter((item) => item.kind === "garden" || item.kind === "lawn")
     .map((item) => ({
