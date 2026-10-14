@@ -1489,7 +1489,8 @@ export function Viewer3D({
           setProgress(60);
           const gltf = await loader.parseAsync(bytes, new URL(".", new URL(modelUrl, window.location.href)).href);
           if (disposed) { disposeViewerObject(gltf.scene); return; }
-          void mountObject(gltf.scene, Boolean(cameraPreset));
+          await mountObject(gltf.scene, Boolean(cameraPreset));
+          if (disposed || activeObject !== gltf.scene) return;
           setProgress(100);
           setMode("model");
           // Both optional presentation layers verify the same immutable bytes.
