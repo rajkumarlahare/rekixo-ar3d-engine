@@ -15,7 +15,7 @@ test("universal grass uses the requested real-world 1, 2 and 3 inch tiers", () =
 
 test("the lawn underlay and curved horizon stay in a bounded low-poly presentation mesh", () => {
   assert.match(grass, /createCurvedGroundGeometry/);
-  assert.match(grass, /segments = mobile \? 64 : 112/);
+  assert.match(grass, /baseSegments = mobile \? 64 : 112/);
   assert.match(grass, /rings = mobile \? 22 : 36/);
   assert.match(grass, /vertexColors: true/);
   assert.match(grass, /proceduralSurfaceTexture\("grass"\)/);
@@ -27,7 +27,10 @@ test("grass instances avoid reviewed road, parking and path footprints", () => {
   assert.match(site, /item\.kind === "road" \|\| item\.kind === "parking" \|\| item\.kind === "path"/);
   assert.match(site, /excludedAreas: grassExcludedAreas/);
   assert.match(site, /kind: "building-footprint"/);
-  assert.match(site, /width: modelSize.x,[\s\S]*depth: modelSize.z/);
+  assert.match(site, /const modelSize = buildingBounds\.getSize/);
+  assert.match(site, /footprintBounds: buildingBounds/);
+  assert.match(viewer, /clientPresentation,\s+cameraBounds,/);
+  assert.match(site, /width: modelSize\.x,[\s\S]*depth: modelSize\.z/);
   assert.match(grass, /excludedAreas\.some\(\(area\) => containsArea/);
   assert.match(grass, /surfaceYFor\(worldX, worldZ, groundElevation, lawnAreas\)/);
 });

@@ -27,12 +27,69 @@ const presentationUrl = compile("apps/public/src/viewer/presentationEnvironment.
 const grassUrl = compile("apps/public/src/viewer/grassGroundCover.ts", {
   "./proceduralSurfaceMaterials": surfaceUrl,
 });
+const grass = await import(grassUrl);
 const environment = await import(compile("apps/public/src/viewer/siteEnvironment.ts", {
   "./publicRuntimeContext": runtimeUrl,
   "./presentationEnvironment": presentationUrl,
   "./proceduralSurfaceMaterials": surfaceUrl,
   "./grassGroundCover": grassUrl,
 }));
+
+test("curved ground mesh has a building-sized hole, not turf under interior walls", () => {
+  // The loaded source bounds include the compound/site; the measured Building
+  // bounds are deliberately smaller so the open plot remains covered in grass.
+  const bounds = new THREE.Box3(
+    new THREE.Vector3(-14, 0, -11),
+    new THREE.Vector3(30, 20, 21),
+  );
+  const footprintBounds = new THREE.Box3(
+    new THREE.Vector3(-5, 0, -4),
+    new THREE.Vector3(5, 15, 4),
+  );
+  const cover = grass.createUniversalGrassGroundCover({
+    bounds,
+    footprintBounds,
+    groundElevation: 0,
+    mobile: true,
+    excludedAreas: [{
+      kind: "building-footprint",
+      x: 0,
+      z: 0,
+      width: 10,
+      depth: 8,
+      rotation: 0,
+    }],
+    lawnAreas: [],
+  });
+  const ground = cover.root.children.find(
+    (child) => child.name === "Curved turf and horizon surface",
+  );
+  assert.ok(ground?.isMesh);
+  const positions = ground.geometry.getAttribute("position");
+  assert.ok(positions.count > 1000, "curved horizon retains its outer landscape mesh");
+  for (let index = 0; index < positions.count; index += 1) {
+    const x = positions.getX(index);
+    const z = positions.getZ(index);
+    assert.ok(
+      Math.abs(x) >= 5 || Math.abs(z) >= 4,
+      `ground vertex ${index} intrudes into the building footprint at (${x}, ${z})`,
+    );
+  }
+  const indices = ground.geometry.index;
+  assert.ok(indices && indices.count > 1000);
+  assert.ok(Math.abs(positions.getX(0) - 5.18) < 1e-3);
+  assert.equal(cover.root.position.x, 0, "terrain is centered on the measured Building");
+  assert.equal(cover.root.position.z, 0, "terrain is centered on the measured Building");
+  let farthestSiteCoverage = 0;
+  for (let index = 0; index < positions.count; index += 1) {
+    farthestSiteCoverage = Math.max(
+      farthestSiteCoverage,
+      Math.hypot(positions.getX(index), positions.getZ(index)),
+    );
+  }
+  assert.ok(farthestSiteCoverage > 30, "curved turf still spans the outer project bounds");
+  cover.dispose();
+});
 
 test("client modules exclude disabled and absent scenes", () => {
   assert.deepEqual(client.availableClientModules({ scenes: [{ type: "project-navigation", enabled: true }, { type: "typical-floor", enabled: false }] }, ["project-navigation", "typical-floor", "amenity"]), ["project-navigation"]);

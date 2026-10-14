@@ -1046,6 +1046,7 @@ export function Viewer3D({
           includedSourceSite,
           environmentProfile?.landscape ?? "auto",
           clientPresentation,
+          cameraBounds,
         );
         scene.add(siteEnvironment.root);
         if (
