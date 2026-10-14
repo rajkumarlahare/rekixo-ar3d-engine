@@ -892,10 +892,12 @@ export function Viewer3D({
         profile: modelProfile?.floorGeometry,
       });
       const meshBounds: ModelMeshBounds[] = [];
+      const worldBoundsByMesh = new Map<THREE.Mesh, THREE.Box3>();
       object.traverse((node) => {
         if (!(node instanceof THREE.Mesh)) return;
         const meshBox = new THREE.Box3().setFromObject(node);
         if (meshBox.isEmpty()) return;
+        worldBoundsByMesh.set(node, meshBox);
         meshBounds.push({
           minX: meshBox.min.x,
           minY: meshBox.min.y,
@@ -957,7 +959,7 @@ export function Viewer3D({
       enhanceArchitecturalModel(object, renderer, referenceVisual);
       // Capture the post-enhancement materials so All/reset restores the actual customer presentation.
       floorVisibilityController = floorVisibilityModule
-        ? floorVisibilityModule.createFloorVisibilityController(object)
+        ? floorVisibilityModule.createFloorVisibilityController(object, worldBoundsByMesh)
         : undefined;
       if (clientPresentation && floorVisibilityController) {
         // Do not display a floor control unless the published model has original
