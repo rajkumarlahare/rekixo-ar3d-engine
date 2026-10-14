@@ -31,3 +31,14 @@ test("low-power and responsive polish reduce UI cost while preserving usability"
   assert.match(css, /min-height:\s*52px/);
   assert.match(css, /viewer-loader-track/);
 });
+
+test("Building renderer honors the presentation performance quality profile", () => {
+  const viewer = fs.readFileSync("apps/public/src/viewer/Viewer3D.tsx", "utf8");
+  assert.match(viewer, /antialias: referenceVisual \|\| !environmentMobileQuality/);
+  assert.match(viewer, /renderer\.shadowMap\.enabled = referenceVisual \|\| !environmentMobileQuality/);
+  assert.match(
+    viewer,
+    /renderer\.setPixelRatio\(Math\.min\(window\.devicePixelRatio \|\| 1, environmentMobileQuality \? \(referenceVisual \? 1\.55 : 1\.35\) : 2\)\)/,
+  );
+  assert.match(viewer, /environmentProfile\?\.quality === "performance"/);
+});

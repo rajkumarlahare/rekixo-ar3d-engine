@@ -278,7 +278,7 @@ export function Viewer3D({
     camera.position.set(8, 6, 9);
 
     const renderer = new THREE.WebGLRenderer({
-      antialias: referenceVisual || !mobile,
+      antialias: referenceVisual || !environmentMobileQuality,
       alpha: false,
       powerPreference: "high-performance",
     });
@@ -286,9 +286,9 @@ export function Viewer3D({
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure =
       baseExposure;
-    renderer.shadowMap.enabled = referenceVisual || !mobile;
+    renderer.shadowMap.enabled = referenceVisual || !environmentMobileQuality;
     renderer.shadowMap.type = THREE.PCFShadowMap;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? (referenceVisual ? 1.55 : 1.35) : 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, environmentMobileQuality ? (referenceVisual ? 1.55 : 1.35) : 2));
     renderer.domElement.className = "viewer-canvas";
     renderer.domElement.style.touchAction = "none";
     renderer.domElement.setAttribute("aria-label", "Interactive 3D project viewer");
