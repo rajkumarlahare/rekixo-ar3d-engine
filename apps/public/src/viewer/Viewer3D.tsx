@@ -1045,6 +1045,7 @@ export function Viewer3D({
           environmentProfile?.preset === "cinematic-exterior" && environmentProfile.motion.water !== "off",
           includedSourceSite,
           environmentProfile?.landscape ?? "auto",
+          clientPresentation,
         );
         scene.add(siteEnvironment.root);
         if (
