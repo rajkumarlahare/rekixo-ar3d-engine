@@ -523,6 +523,7 @@ export function createArchitecturalSiteEnvironment(
   root.name = "source-backed-site-environment";
   const elements = getPublicRuntimeSiteElements();
   root.userData.sourceBackedSiteElementCount = elements.length;
+  root.userData.sourceSiteGeometryIncluded = sourceSiteIncluded;
 
   const areas = elements.filter((item) => AREA_KINDS.has(item.kind));
   const trees = elements.filter((item) => item.kind === "tree");
