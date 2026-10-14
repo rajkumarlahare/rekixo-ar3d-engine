@@ -893,7 +893,10 @@ export function Viewer3D({
       });
       const meshBounds: ModelMeshBounds[] = [];
       const worldBoundsByMesh = new Map<THREE.Mesh, THREE.Box3>();
+      let includedSourceSite = false;
       object.traverse((node) => {
+        if (node.userData.sourceGeometry?.siteGeometry === "included-in-source")
+          includedSourceSite = true;
         if (!(node instanceof THREE.Mesh)) return;
         const meshBox = new THREE.Box3().setFromObject(node);
         worldBoundsByMesh.set(node, meshBox);
@@ -1027,10 +1030,6 @@ export function Viewer3D({
       siteInteractionController = undefined;
       siteEnvironment?.dispose();
       if (siteEnvironment) scene.remove(siteEnvironment.root);
-      let includedSourceSite = false;
-      object.traverse((node) => {
-        if (node.userData.sourceGeometry?.siteGeometry === "included-in-source") includedSourceSite = true;
-      });
       const additiveBaseline = environmentProfile?.baseline === "always";
       if (siteEnvironmentModule) {
         siteEnvironment = siteEnvironmentModule.createArchitecturalSiteEnvironment(
@@ -1101,11 +1100,7 @@ export function Viewer3D({
             }))
           : [],
       );
-      let preserveSourceSite = false;
-      object.traverse((node) => {
-        if (node.userData.sourceGeometry?.siteGeometry === "included-in-source")
-          preserveSourceSite = true;
-      });
+      const preserveSourceSite = includedSourceSite;
       const experiencePromise = loadProfileExperience(modelProfile, bounds, {
         mobile,
         referenceVisual,
