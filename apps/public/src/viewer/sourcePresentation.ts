@@ -25,6 +25,12 @@ export function presentationAssetBase(source: SourcePresentation) {
   return `/3Dprojects/presentations/${source.releaseManifestSha256}`;
 }
 
+/** Compute a model digest once when multiple release-bound layers need to verify the same bytes. */
+export async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return Array.from(digest, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
 /** Recovered bytes are opt-in and are applied only to the exact immutable model digest. */
 export async function applySourcePresentation(
   root: THREE.Object3D,
@@ -32,8 +38,9 @@ export async function applySourcePresentation(
   modelBytes: ArrayBuffer,
   renderer: THREE.WebGLRenderer,
   disposed: () => boolean,
+  verifiedModelSha256?: string,
 ) {
-  const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", modelBytes)), (v) => v.toString(16).padStart(2, "0")).join("");
+  const digest = verifiedModelSha256 ?? await sha256Hex(modelBytes);
   if (disposed() || digest !== source.modelSha256) return;
   const definitions = new Map(source.materials.map((item) => [item.name, item]));
   const materials = new Set<THREE.MeshStandardMaterial>();
