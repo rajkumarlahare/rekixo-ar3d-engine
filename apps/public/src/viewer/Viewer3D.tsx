@@ -12,7 +12,10 @@ import {
   type PublicWalkthroughGraph,
 } from "@rekixo/3d-contracts";
 import { createFloorExploder, enhanceArchitecturalModel } from "./realism";
-import { deriveBuildingFootprintBounds } from "./buildingFootprint";
+import {
+  deriveBuildingFootprintBounds,
+  deriveBuildingFootprintPolygon,
+} from "./buildingFootprint";
 import {
   deriveFloorGeometryFromModel,
   floorFocusElevation,
@@ -1022,6 +1025,11 @@ export function Viewer3D({
         bounds,
         modelProfile?.cameraBounds,
       );
+      const buildingFootprintPoints = deriveBuildingFootprintPolygon(
+        object,
+        buildingFootprintBounds,
+        modelProfile?.cameraBounds,
+      ).map((point) => new THREE.Vector2(point.x, point.y));
       const sphere = cameraBounds.getBoundingSphere(new THREE.Sphere());
       const sizeForView = bounds.getSize(new THREE.Vector3());
       const centerForView = sphere.center.clone();
@@ -1053,6 +1061,7 @@ export function Viewer3D({
           environmentProfile?.landscape ?? "auto",
           clientPresentation,
           buildingFootprintBounds,
+          buildingFootprintPoints,
         );
         scene.add(siteEnvironment.root);
         if (
