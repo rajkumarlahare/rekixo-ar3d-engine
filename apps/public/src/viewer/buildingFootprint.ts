@@ -26,6 +26,59 @@ function validBox(box: THREE.Box3) {
     box.max.z > box.min.z;
 }
 
+/** Projects actual mesh vertices into the floor plane and reduces them to an outline. */
+export function deriveBuildingFootprintPolygon(
+  root: THREE.Object3D,
+  footprintBounds: THREE.Box3,
+  profileBounds?: THREE.Box3,
+): THREE.Vector2[] {
+  if (!validBox(footprintBounds)) return [];
+  const points: THREE.Vector2[] = [];
+  const fromProfile = Boolean(profileBounds && validBox(profileBounds));
+  root.updateMatrixWorld(true);
+  root.traverse((node) => {
+    if (!(node instanceof THREE.Mesh)) return;
+    const names = namesForMesh(node, root);
+    if (!fromProfile && names.some((name) => SITE_ONLY_NAME.test(name))) return;
+    const box = new THREE.Box3().setFromObject(node);
+    if (!validBox(box)) return;
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    if (!fromProfile) {
+      const modelHeight = Math.max(footprintBounds.max.y - footprintBounds.min.y, 1);
+      const tallEnough = size.y >= Math.max(0.8, modelHeight * 0.06);
+      const buildingNamed = names.some((name) => BUILDING_NAME.test(name));
+      if (!tallEnough && !buildingNamed) return;
+      if (box.max.x < footprintBounds.min.x - 0.25 ||
+          box.min.x > footprintBounds.max.x + 0.25 ||
+          box.max.z < footprintBounds.min.z - 0.25 ||
+          box.min.z > footprintBounds.max.z + 0.25) return;
+    } else {
+      // Reviewed/profile box is authoritative: retain only meshes that overlap it.
+      if (box.max.x < profileBounds!.min.x || box.min.x > profileBounds!.max.x ||
+          box.max.z < profileBounds!.min.z || box.min.z > profileBounds!.max.z) return;
+    }
+
+    const position = node.geometry.getAttribute("position");
+    const stride = Math.max(1, Math.floor(position.count / 1600));
+    for (let index = 0; index < position.count; index += stride) {
+      const local = new THREE.Vector3().fromBufferAttribute(position, index);
+      local.applyMatrix4(node.matrixWorld);
+      if (!Number.isFinite(local.x) || !Number.isFinite(local.z)) continue;
+      // The plane projection clips incidental overhangs/terrain using the chosen
+      // footprint bounds; hull remains a safe convex approximation of the walls.
+      if (!fromProfile && (
+        local.x < footprintBounds.min.x - 0.3 ||
+        local.x > footprintBounds.max.x + 0.3 ||
+        local.z < footprintBounds.min.z - 0.3 ||
+        local.z > footprintBounds.max.z + 0.3
+      )) continue;
+      points.push(new THREE.Vector2(local.x, local.z));
+    }
+  });
+  return points;
+}
+
 function unionCandidates(candidates: readonly Candidate[]) {
   const result = new THREE.Box3();
   for (const candidate of candidates) result.union(candidate.box);
