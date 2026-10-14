@@ -47,7 +47,7 @@ import {
   updateCameraDepthRange,
   type HomeView,
 } from "./viewerCamera";
-import { applySourcePresentation, type SourcePresentation } from "./sourcePresentation";
+import { applySourcePresentation, sha256Hex, type SourcePresentation } from "./sourcePresentation";
 import {
   applyBuildingPresentationMaterials,
   authoredExteriorView,
@@ -1492,6 +1492,10 @@ export function Viewer3D({
           void mountObject(gltf.scene, Boolean(cameraPreset));
           setProgress(100);
           setMode("model");
+          // Both optional presentation layers verify the same immutable bytes.
+          // Compute SHA-256 once, then preserve each layer's independent comparison.
+          const verifiedModelSha256 = await sha256Hex(bytes);
+          if (disposed || activeObject !== gltf.scene) return;
           if (sourcePresentation)
             await applySourcePresentation(
               gltf.scene,
@@ -1499,6 +1503,7 @@ export function Viewer3D({
               bytes,
               renderer,
               () => disposed || activeObject !== gltf.scene,
+              verifiedModelSha256,
             );
           if (buildingPresentation)
             await applyBuildingPresentationMaterials(
@@ -1506,6 +1511,7 @@ export function Viewer3D({
               buildingPresentation,
               bytes,
               () => disposed || activeObject !== gltf.scene,
+              verifiedModelSha256,
             );
         }).catch((error) => {
           if (!disposed) { console.error("3D model load failed", error); mountPreview("The building could not be loaded. Please reload to try again."); }
