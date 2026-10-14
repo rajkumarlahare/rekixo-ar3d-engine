@@ -126,8 +126,9 @@ test("customer camera and generated outdoor surfaces stay stable while zooming a
   assert.match(surfaces, /configureProceduralSurfaceTextures/);
   assert.match(surfaces, /texture\.anisotropy = configuredAnisotropy/);
   assert.match(surfaces, /texture\.repeat\.set\(4, 4\)/);
-  assert.match(site, /includeGround: !sourceSiteIncluded/);
-  assert.match(site, /includeSurroundingGround: !sourceSiteIncluded/);
+  assert.match(site, /createUniversalGrassGroundCover/);
+  assert.match(site, /includeGround: false/);
+  assert.match(site, /includeSurroundingGround: false/);
   assert.match(site, /configureProceduralSurfaceTextures\(renderer\)/);
   assert.match(fallback, /includeSurroundingGround\?: boolean/);
   assert.match(fallback, /if \(includeGround\)/);
