@@ -34,6 +34,28 @@ export class ExperienceApiError extends Error {
   }
 }
 
+const OPTIONAL_METADATA_BUDGET_MS = 240;
+
+/** Race additive metadata against a deadline without making it required. */
+async function waitForOptionalMetadata<T>(
+  promise: Promise<T>,
+  deadline: number,
+  fallback: T,
+): Promise<T> {
+  const remainingMs = deadline - Date.now();
+  if (remainingMs <= 0) return fallback;
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((resolve) => {
+    timeoutId = setTimeout(() => resolve(fallback), remainingMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
 export async function loadPublicExperience(
   slug: string,
   signal?: AbortSignal,
@@ -41,23 +63,29 @@ export async function loadPublicExperience(
   clearPublicRuntimeSiteElements();
   clearSemanticInteriorRuntime();
   const headers = { Accept: "application/json" };
-  const [response, studioResponse] = await Promise.all([
-    fetch(`${PUBLIC_BASE_PATH}/api/projects/${encodeURIComponent(slug)}`, {
+  const projectResponsePromise = fetch(`${PUBLIC_BASE_PATH}/api/projects/${encodeURIComponent(slug)}`, {
+    method: "GET",
+    headers,
+    signal,
+    cache: "no-store",
+  });
+  const studioMetadataPromise = fetch(
+    `${PUBLIC_BASE_PATH}/api/releases/projects/${encodeURIComponent(slug)}/studio`,
+    {
       method: "GET",
       headers,
       signal,
       cache: "no-store",
-    }),
-    fetch(
-      `${PUBLIC_BASE_PATH}/api/releases/projects/${encodeURIComponent(slug)}/studio`,
-      {
-        method: "GET",
-        headers,
-        signal,
-        cache: "no-store",
-      },
-    ).catch(() => undefined),
-  ]);
+    },
+  ).then(async (studioResponse) => {
+    if (!studioResponse.ok) return undefined;
+    const studio = (await studioResponse.json()) as { project?: unknown };
+    return {
+      siteElements: derivePublicSiteElementsFromStudio(studio.project),
+      semanticInterior: deriveSemanticInteriorFromStudio(studio.project),
+    };
+  }).catch(() => undefined);
+  const response = await projectResponsePromise;
 
   if (!response.ok) {
     let message = `Could not load 3D project (${response.status}).`;
@@ -71,20 +99,18 @@ export async function loadPublicExperience(
   }
 
   const body = (await response.json()) as Record<string, unknown>;
-  let siteElements = [] as Public3DExperience["siteElements"];
-  let semanticInterior: SemanticInteriorRuntime | undefined;
-  if (studioResponse?.ok) {
-    try {
-      const studio = (await studioResponse.json()) as { project?: unknown };
-      siteElements = derivePublicSiteElementsFromStudio(studio.project);
-      semanticInterior = deriveSemanticInteriorFromStudio(studio.project);
-    } catch {
-      // Reviewed Studio geometry is additive. A malformed optional Studio
-      // response must not take an otherwise valid published building offline.
-      siteElements = [];
-      semanticInterior = undefined;
-    }
-  }
+  // Studio enrichment and recovered source presentation are optional. Allow
+  // them a short shared grace period, but never let either delay the source GLB
+  // request indefinitely when an auxiliary endpoint is slow.
+  const optionalMetadataDeadline = Date.now() + OPTIONAL_METADATA_BUDGET_MS;
+  const studioMetadata = await waitForOptionalMetadata(
+    studioMetadataPromise,
+    optionalMetadataDeadline,
+    undefined,
+  );
+  const siteElements = studioMetadata?.siteElements ?? [];
+  const semanticInterior: SemanticInteriorRuntime | undefined =
+    studioMetadata?.semanticInterior;
 
   const enriched = siteElements?.length ? { ...body, siteElements } : body;
   try {
@@ -105,11 +131,31 @@ export async function loadPublicExperience(
   const release = body.release as { manifestSha256?: string } | undefined;
   const model = body.model as { id?: string } | undefined;
   let sourcePresentation: SourcePresentation | undefined;
-  if (release?.manifestSha256 && /^[a-f0-9]{64}$/.test(release.manifestSha256) && model?.id) {
-    try {
-      const response = await fetch(`${PUBLIC_BASE_PATH}/presentations/${release.manifestSha256}/manifest.json`, { signal, cache: "no-cache" });
-      if (response.ok && response.headers.get("content-type")?.includes("application/json")) sourcePresentation = parseSourcePresentation(await response.json(), release.manifestSha256, model.id);
-    } catch { /* Presentation assets never block an otherwise valid published model. */ }
+  if (
+    release?.manifestSha256 &&
+    /^[a-f0-9]{64}$/.test(release.manifestSha256) &&
+    model?.id &&
+    Date.now() < optionalMetadataDeadline
+  ) {
+    const presentationPromise = fetch(
+      `${PUBLIC_BASE_PATH}/presentations/${release.manifestSha256}/manifest.json`,
+      { signal, cache: "no-cache" },
+    ).then(async (presentationResponse) => {
+      if (
+        !presentationResponse.ok ||
+        !presentationResponse.headers.get("content-type")?.includes("application/json")
+      ) return undefined;
+      return parseSourcePresentation(
+        await presentationResponse.json(),
+        release.manifestSha256!,
+        model.id!,
+      );
+    }).catch(() => undefined);
+    sourcePresentation = await waitForOptionalMetadata(
+      presentationPromise,
+      optionalMetadataDeadline,
+      undefined,
+    );
   }
   setPublicRuntimeSiteElements(siteElements ?? []);
   setSemanticInteriorRuntime(semanticInterior);
