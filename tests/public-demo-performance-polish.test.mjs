@@ -46,6 +46,9 @@ test("source-site detection shares the model bounds traversal instead of walking
 test("public Geo route does not eagerly import the Building viewer bundle", () => {
   const app = fs.readFileSync("apps/public/src/main.tsx", "utf8");
   assert.equal(app.includes('import { Viewer3D } from "./viewer/Viewer3D";'), false);
+  assert.equal(app.includes('import "./viewer/walkthrough-ui.css";'), false);
+  const viewer = fs.readFileSync("apps/public/src/viewer/Viewer3D.tsx", "utf8");
+  assert.ok(viewer.includes('import "./walkthrough-ui.css";'));
   assert.ok(app.includes('const GeoPublicDemo = lazy(() => import("./geo/GeoPublicDemo"));'));
   assert.ok(app.includes('const loadViewer3D = () => import("./viewer/Viewer3D");'));
   assert.ok(app.includes('const Viewer3D = lazy(() => loadViewer3D().then((module) => ({ default: module.Viewer3D })));'));
