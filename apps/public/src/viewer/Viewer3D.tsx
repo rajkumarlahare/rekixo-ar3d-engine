@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import "./walkthrough-ui.css";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -47,7 +48,7 @@ import {
   updateCameraDepthRange,
   type HomeView,
 } from "./viewerCamera";
-import { applySourcePresentation, type SourcePresentation } from "./sourcePresentation";
+import { applySourcePresentation, sha256Hex, type SourcePresentation } from "./sourcePresentation";
 import {
   applyBuildingPresentationMaterials,
   authoredExteriorView,
@@ -278,7 +279,7 @@ export function Viewer3D({
     camera.position.set(8, 6, 9);
 
     const renderer = new THREE.WebGLRenderer({
-      antialias: referenceVisual || !mobile,
+      antialias: referenceVisual || !environmentMobileQuality,
       alpha: false,
       powerPreference: "high-performance",
     });
@@ -286,9 +287,9 @@ export function Viewer3D({
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure =
       baseExposure;
-    renderer.shadowMap.enabled = referenceVisual || !mobile;
+    renderer.shadowMap.enabled = referenceVisual || !environmentMobileQuality;
     renderer.shadowMap.type = THREE.PCFShadowMap;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? (referenceVisual ? 1.55 : 1.35) : 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, environmentMobileQuality ? (referenceVisual ? 1.55 : 1.35) : 2));
     renderer.domElement.className = "viewer-canvas";
     renderer.domElement.style.touchAction = "none";
     renderer.domElement.setAttribute("aria-label", "Interactive 3D project viewer");
@@ -344,8 +345,33 @@ export function Viewer3D({
     scene.add(warmFill);
 
     const pmrem = new THREE.PMREMGenerator(renderer);
-    const environmentTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environment = environmentTexture;
+    let environmentTexture: THREE.Texture | undefined;
+    let environmentWorkHandle: number | undefined;
+    let environmentWorkUsesIdleCallback = false;
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    const buildEnvironmentTexture = () => {
+      if (disposed) return;
+      try {
+        environmentTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+        if (disposed) {
+          environmentTexture.dispose();
+          environmentTexture = undefined;
+          return;
+        }
+        scene.environment = environmentTexture;
+      } catch (error) {
+        console.warn("Deferred 3D environment map could not be generated.", error);
+      }
+    };
+    if (idleWindow.requestIdleCallback) {
+      environmentWorkUsesIdleCallback = true;
+      environmentWorkHandle = idleWindow.requestIdleCallback(buildEnvironmentTexture, { timeout: 1500 });
+    } else {
+      environmentWorkHandle = window.setTimeout(buildEnvironmentTexture, 200);
+    }
     scene.environmentIntensity = baseEnvironmentIntensity;
 
     const updateSize = () => {
@@ -867,9 +893,14 @@ export function Viewer3D({
         profile: modelProfile?.floorGeometry,
       });
       const meshBounds: ModelMeshBounds[] = [];
+      const worldBoundsByMesh = new Map<THREE.Mesh, THREE.Box3>();
+      let includedSourceSite = false;
       object.traverse((node) => {
+        if (node.userData.sourceGeometry?.siteGeometry === "included-in-source")
+          includedSourceSite = true;
         if (!(node instanceof THREE.Mesh)) return;
         const meshBox = new THREE.Box3().setFromObject(node);
+        worldBoundsByMesh.set(node, meshBox);
         if (meshBox.isEmpty()) return;
         meshBounds.push({
           minX: meshBox.min.x,
@@ -932,7 +963,7 @@ export function Viewer3D({
       enhanceArchitecturalModel(object, renderer, referenceVisual);
       // Capture the post-enhancement materials so All/reset restores the actual customer presentation.
       floorVisibilityController = floorVisibilityModule
-        ? floorVisibilityModule.createFloorVisibilityController(object)
+        ? floorVisibilityModule.createFloorVisibilityController(object, worldBoundsByMesh)
         : undefined;
       if (clientPresentation && floorVisibilityController) {
         // Do not display a floor control unless the published model has original
@@ -1000,10 +1031,6 @@ export function Viewer3D({
       siteInteractionController = undefined;
       siteEnvironment?.dispose();
       if (siteEnvironment) scene.remove(siteEnvironment.root);
-      let includedSourceSite = false;
-      object.traverse((node) => {
-        if (node.userData.sourceGeometry?.siteGeometry === "included-in-source") includedSourceSite = true;
-      });
       const additiveBaseline = environmentProfile?.baseline === "always";
       if (siteEnvironmentModule) {
         siteEnvironment = siteEnvironmentModule.createArchitecturalSiteEnvironment(
@@ -1074,11 +1101,7 @@ export function Viewer3D({
             }))
           : [],
       );
-      let preserveSourceSite = false;
-      object.traverse((node) => {
-        if (node.userData.sourceGeometry?.siteGeometry === "included-in-source")
-          preserveSourceSite = true;
-      });
+      const preserveSourceSite = includedSourceSite;
       const experiencePromise = loadProfileExperience(modelProfile, bounds, {
         mobile,
         referenceVisual,
@@ -1464,9 +1487,14 @@ export function Viewer3D({
           setProgress(60);
           const gltf = await loader.parseAsync(bytes, new URL(".", new URL(modelUrl, window.location.href)).href);
           if (disposed) { disposeViewerObject(gltf.scene); return; }
-          void mountObject(gltf.scene, Boolean(cameraPreset));
+          await mountObject(gltf.scene, Boolean(cameraPreset));
+          if (disposed || activeObject !== gltf.scene) return;
           setProgress(100);
           setMode("model");
+          // Both optional presentation layers verify the same immutable bytes.
+          // Compute SHA-256 once, then preserve each layer's independent comparison.
+          const verifiedModelSha256 = await sha256Hex(bytes);
+          if (disposed || activeObject !== gltf.scene) return;
           if (sourcePresentation)
             await applySourcePresentation(
               gltf.scene,
@@ -1474,6 +1502,7 @@ export function Viewer3D({
               bytes,
               renderer,
               () => disposed || activeObject !== gltf.scene,
+              verifiedModelSha256,
             );
           if (buildingPresentation)
             await applyBuildingPresentationMaterials(
@@ -1481,6 +1510,7 @@ export function Viewer3D({
               buildingPresentation,
               bytes,
               () => disposed || activeObject !== gltf.scene,
+              verifiedModelSha256,
             );
         }).catch((error) => {
           if (!disposed) { console.error("3D model load failed", error); mountPreview("The building could not be loaded. Please reload to try again."); }
@@ -1624,7 +1654,11 @@ export function Viewer3D({
         projectExperience.dispose();
       }
       modelProfile = undefined;
-      environmentTexture.dispose();
+      if (environmentWorkHandle !== undefined) {
+        if (environmentWorkUsesIdleCallback) idleWindow.cancelIdleCallback?.(environmentWorkHandle);
+        else window.clearTimeout(environmentWorkHandle);
+      }
+      environmentTexture?.dispose();
       pmrem.dispose();
       renderer.dispose();
       renderer.forceContextLoss();

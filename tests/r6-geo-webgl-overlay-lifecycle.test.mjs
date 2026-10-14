@@ -30,3 +30,27 @@ test("Public integrated Geo remains pinned to the configured production Map ID",
   assert.match(publicGeo, /data\.maps\.configured && data\.maps\.apiKey && data\.maps\.mapId/);
   assert.doesNotMatch(publicGeo, /DEMO_MAP_ID/);
 });
+
+test("Public Geo map initializes independently of the verified Building GLB", () => {
+  assert.doesNotMatch(
+    publicGeo,
+    /Promise\.all\(\[loadGoogleMaps\(data\.maps\.apiKey\),\s*loadVerifiedModel\(data\.model\)\]\)/,
+  );
+  assert.match(publicGeo, /const modelResultPromise = loadVerifiedModel\(data\.model\)/);
+  assert.match(publicGeo, /void loadGoogleMaps\(data\.maps\.apiKey\)/);
+  assert.ok(
+    publicGeo.indexOf("overlay.setMap(map)") < publicGeo.indexOf("void modelResultPromise\n          .then"),
+    "Google Maps overlay setup should not wait for GLB parsing",
+  );
+  assert.match(publicGeo, /model\.byteSize !== undefined/);
+  assert.match(publicGeo, /model\.sha256 && \(await sha256Hex\(bytes\)\)/);
+  assert.match(publicGeo, /applyRigidBuildingPlacement\(/);
+});
+
+test("Building viewer defers expensive PMREM generation until browser idle time", () => {
+  const viewer = fs.readFileSync("apps/public/src/viewer/Viewer3D.tsx", "utf8");
+  assert.match(viewer, /requestIdleCallback\(buildEnvironmentTexture, \{ timeout: 1500 \}\)/);
+  assert.match(viewer, /setTimeout\(buildEnvironmentTexture, 200\)/);
+  assert.match(viewer, /environmentTexture\?\.dispose\(\)/);
+  assert.match(viewer, /cancelIdleCallback\?\.\(environmentWorkHandle\)/);
+});

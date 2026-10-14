@@ -25,7 +25,7 @@ function mesh(name, width, height, depth, y, color) {
 }
 
 test("customer floor isolation uses original mesh visibility and not vertical clipping planes", () => {
-  assert.match(viewer, /createFloorVisibilityController\(object\)/);
+  assert.match(viewer, /createFloorVisibilityController\(object, worldBoundsByMesh\)/);
   assert.match(viewer, /clientPresentation && floorVisibilityController/);
   assert.match(viewer, /floorVisibilityController\.showFloor\(level, clientFloorReviewModeRef\.current\)/);
   assert.match(viewer, /floorVisibilityController\.showAll\(\)/);
@@ -34,6 +34,33 @@ test("customer floor isolation uses original mesh visibility and not vertical cl
   assert.match(viewer, /clientFloorReviewModeRef.current === "stacked"/);
   assert.match(viewer, /aria-label="Stacked floor view"/);
   assert.match(viewer, /aria-label="Isolate selected floor"/);
+});
+
+test("floor visibility reuses precomputed world-space mesh bounds", () => {
+  const root = new THREE.Group();
+  const ground = mesh("Ground slab", 4, 2, 4, 1, "#d8d8d8");
+  root.add(ground);
+  const cachedBounds = new THREE.Box3(
+    new THREE.Vector3(-2, 10, -2),
+    new THREE.Vector3(2, 12, 2),
+  );
+  const originalSetFromObject = THREE.Box3.prototype.setFromObject;
+  let measuredAgain = 0;
+  THREE.Box3.prototype.setFromObject = function (...args) {
+    measuredAgain += 1;
+    return originalSetFromObject.apply(this, args);
+  };
+  try {
+    const controller = createFloorVisibilityController(root, new Map([[ground, cachedBounds]]));
+    const bounds = controller.showFloor({ floor: 2, elevationM: 10, topElevationM: 12, source: "model" });
+    assert.ok(bounds);
+    assert.equal(bounds.min.y, 10);
+    assert.equal(bounds.max.y, 12);
+    assert.equal(measuredAgain, 0, "provided mesh bounds should avoid a second geometry bounds pass");
+    controller.dispose();
+  } finally {
+    THREE.Box3.prototype.setFromObject = originalSetFromObject;
+  }
 });
 
 test("actual Three.js meshes isolate a floor, ghost a shared shell, and frame the selected geometry", () => {

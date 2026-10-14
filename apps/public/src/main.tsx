@@ -8,12 +8,12 @@ import {
 import { projectSlugFromPathname } from "@rekixo/3d-engine-core";
 import { loadPublicExperience, type ClientExperience } from "./api";
 import { loadPublicBranding, type PublicProjectBranding } from "./branding";
-import { Viewer3D } from "./viewer/Viewer3D";
 import "./styles.css";
 import { clientViewerCapabilities } from "./clientPresentation";
-import "./viewer/walkthrough-ui.css";
 
 const GeoPublicDemo = lazy(() => import("./geo/GeoPublicDemo"));
+const loadViewer3D = () => import("./viewer/Viewer3D");
+const Viewer3D = lazy(() => loadViewer3D().then((module) => ({ default: module.Viewer3D })));
 
 type UnitFact = { series: string; type: string; areaSqFt: number };
 type NearbyFact = { name: string; distance: string };
@@ -725,6 +725,12 @@ function App() {
   const [error, setError] = useState<string>();
   const [attempt, setAttempt] = useState(0);
 
+  // Preload only on Building routes, alongside the project API request.
+  // The Geo route stays free of Building-viewer-only JavaScript.
+  useEffect(() => {
+    void loadViewer3D().catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     if (!slug) return;
     const controller = new AbortController();
@@ -783,12 +789,8 @@ if (!root) throw new Error("Missing #root mount node");
 const geoRoute = /^\/3Dprojects\/[^/]+\/geo\/?$/.test(window.location.pathname);
 createRoot(root).render(
   <React.StrictMode>
-    {geoRoute ? (
-      <Suspense fallback={<LoadingPage />}>
-        <GeoPublicDemo />
-      </Suspense>
-    ) : (
-      <App />
-    )}
+    <Suspense fallback={<LoadingPage />}>
+      {geoRoute ? <GeoPublicDemo /> : <App />}
+    </Suspense>
   </React.StrictMode>,
 );

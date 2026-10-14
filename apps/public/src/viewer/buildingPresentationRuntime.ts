@@ -2,19 +2,15 @@ import * as THREE from "three";
 import type { BuildingPresentationManifestV1 } from "@rekixo/3d-contracts";
 import type { HomeView } from "./viewerCamera";
 import type { ExteriorView } from "./exteriorCamera";
-
-async function sha256Hex(bytes: ArrayBuffer) {
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-  return Array.from(digest, (value) =>
-    value.toString(16).padStart(2, "0"),
-  ).join("");
-}
+import { sha256Hex } from "./sourcePresentation";
 
 export async function presentationMatchesModel(
   bytes: ArrayBuffer,
   presentation: BuildingPresentationManifestV1,
+  verifiedModelSha256?: string,
 ) {
-  return (await sha256Hex(bytes)) === presentation.model.canonicalSha256;
+  const digest = verifiedModelSha256 ?? await sha256Hex(bytes);
+  return digest === presentation.model.canonicalSha256;
 }
 
 /**
@@ -27,8 +23,9 @@ export async function applyBuildingPresentationMaterials(
   presentation: BuildingPresentationManifestV1,
   modelBytes: ArrayBuffer,
   disposed: () => boolean,
+  verifiedModelSha256?: string,
 ) {
-  if (!(await presentationMatchesModel(modelBytes, presentation)) || disposed())
+  if (!(await presentationMatchesModel(modelBytes, presentation, verifiedModelSha256)) || disposed())
     return false;
 
   const overrides = new Map(
