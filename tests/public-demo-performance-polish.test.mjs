@@ -43,6 +43,16 @@ test("source-site detection shares the model bounds traversal instead of walking
   assert.equal((viewer.match(/node\.userData\.sourceGeometry\?\.siteGeometry === "included-in-source"/g) ?? []).length, 1);
 });
 
+test("public Geo route does not eagerly import the Building viewer bundle", () => {
+  const app = fs.readFileSync("apps/public/src/main.tsx", "utf8");
+  assert.doesNotMatch(app, /^import\\s+\\{\\s*Viewer3D\\s*\\}\\s+from\\s+"\\.\\/viewer\\/Viewer3D"/m);
+  assert.match(app, /const GeoPublicDemo = lazy\\(\\(\\) => import\\("\.\\/geo\\/GeoPublicDemo"\\)\\)/);
+  assert.match(app, /const loadViewer3D = \\(\\) => import\\("\.\\/viewer\\/Viewer3D"\\)/);
+  assert.match(app, /const Viewer3D = lazy\\(\\(\\) => loadViewer3D\\(\\)\\.then/);
+  assert.match(app, /void loadViewer3D\\(\\)/);
+  assert.match(app, /<Suspense fallback=\\{<LoadingPage \\/>\\}>[\\s\\S]*geoRoute \\? <GeoPublicDemo \\/> : <App \\/>/);
+});
+
 test("Building renderer honors the presentation performance quality profile", () => {
   const viewer = fs.readFileSync("apps/public/src/viewer/Viewer3D.tsx", "utf8");
   assert.match(viewer, /antialias: referenceVisual \|\| !environmentMobileQuality/);
