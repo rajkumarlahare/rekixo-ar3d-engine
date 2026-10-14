@@ -199,7 +199,7 @@ function createInstances(
     side: THREE.DoubleSide,
   });
   const mesh = new THREE.InstancedMesh(geometry, material, instances.length);
-  mesh.name = `Universal grass blades ${GRASS_HEIGHTS_METRES[tier] * 100}mm`;
+  mesh.name = `Universal grass blades ${GRASS_HEIGHTS_METRES[tier] * 1000}mm`;
   mesh.castShadow = false;
   mesh.receiveShadow = false;
 
@@ -294,6 +294,18 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
     createInstances(root, blades, instances[tier], tier);
   }
 
+  const setNight = (night: boolean) => {
+    root.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const entry of materials) {
+        if (entry instanceof THREE.MeshStandardMaterial) {
+          entry.color.set(night ? "#5d6879" : "#ffffff");
+        }
+      }
+    });
+  };
+
   root.userData.grassBladeInstanceCount = instances.reduce((sum, tier) => sum + tier.length, 0);
   root.userData.grassBladeTierCounts = instances.map((tier) => tier.length);
   root.userData.horizonRadius = radius;
@@ -301,6 +313,7 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
 
   return {
     root,
+    setNight,
     dispose() {
       const geometries = new Set<THREE.BufferGeometry>();
       const materials = new Set<THREE.Material>();
