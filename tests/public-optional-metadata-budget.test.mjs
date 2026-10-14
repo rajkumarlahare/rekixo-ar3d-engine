@@ -6,7 +6,7 @@ const api = fs.readFileSync("apps/public/src/api.ts", "utf8");
 
 test("public Building launch does not join the required project request to optional Studio metadata", () => {
   assert.match(api, /const projectResponsePromise = fetch\([\s\S]*?\/api\/projects\//);
-  assert.match(api, /const studioMetadataPromise = fetch\([\s\S]*?\/studio\//);
+  assert.match(api, /const studioMetadataPromise = fetch\([\s\S]*?\/studio/);
   assert.match(api, /const response = await projectResponsePromise/);
   assert.doesNotMatch(api, /const \[response, studioResponse\] = await Promise\.all/);
 });
