@@ -1020,15 +1020,15 @@ export function Viewer3D({
       const bounds = modelBounds;
       // Frame the measured building, not the much wider site/paving mesh.
       const cameraBounds = modelProfile?.cameraBounds ?? bounds;
+      // Camera framing bounds often include the compound/site: never use them as
+      // the building cutout. Infer the footprint from structural mesh geometry.
       const buildingFootprintBounds = deriveBuildingFootprintBounds(
         object,
         bounds,
-        modelProfile?.cameraBounds,
       );
       const buildingFootprintPoints = deriveBuildingFootprintPolygon(
         object,
         buildingFootprintBounds,
-        modelProfile?.cameraBounds,
       ).map((point) => new THREE.Vector2(point.x, point.y));
       const sphere = cameraBounds.getBoundingSphere(new THREE.Sphere());
       const sizeForView = bounds.getSize(new THREE.Vector3());
