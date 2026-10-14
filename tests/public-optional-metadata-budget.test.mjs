@@ -20,6 +20,16 @@ test("optional Studio and source-presentation metadata share a bounded launch wa
   assert.match(api, /optionalMetadataDeadline = Date\.now\(\) \+ OPTIONAL_METADATA_BUDGET_MS/);
 });
 
+test("Studio and source-presentation lookup start before their shared bounded wait", () => {
+  assert.match(api, /let presentationPromise: Promise<SourcePresentation \| undefined> = Promise\.resolve\(undefined\)/);
+  assert.match(api, /const \[studioMetadata, sourcePresentation\] = await Promise\.all\(\[/);
+  assert.ok(
+    api.indexOf("let presentationPromise") < api.indexOf("const [studioMetadata, sourcePresentation] = await Promise.all"),
+    "presentation lookup must be configured before the shared wait starts",
+  );
+  assert.doesNotMatch(api, /Date\.now\(\) < optionalMetadataDeadline/);
+});
+
 test("the optional metadata budget preserves immutable source-presentation validation", () => {
   assert.match(api, /release\?\.manifestSha256/);
   assert.match(api, /parseSourcePresentation\([\s\S]*?release\.manifestSha256!,[\s\S]*?model\.id!/);
