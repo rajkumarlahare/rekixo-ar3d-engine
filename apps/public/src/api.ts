@@ -84,7 +84,10 @@ export async function loadPublicExperience(
       siteElements: derivePublicSiteElementsFromStudio(studio.project),
       semanticInterior: deriveSemanticInteriorFromStudio(studio.project),
     };
-  }).catch(() => undefined);
+  }).catch(() => {
+    // Studio geometry is additive; a malformed optional response must not disable the published model.
+    return undefined;
+  });
   const response = await projectResponsePromise;
 
   if (!response.ok) {
