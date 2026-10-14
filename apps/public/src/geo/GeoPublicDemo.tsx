@@ -307,10 +307,15 @@ function IntegratedGeoScene({ data, toolbarContainer }: { data: GeoPayload; tool
       contextTimer = undefined;
     };
 
-    Promise.all([loadGoogleMaps(data.maps.apiKey), loadVerifiedModel(data.model)])
-      .then(([google, model]) => {
+    const modelResultPromise = loadVerifiedModel(data.model)
+      .then((model) => ({ model, error: undefined as unknown }))
+      .catch((error: unknown) => ({ model: undefined, error }));
+    void loadGoogleMaps(data.maps.apiKey)
+      .then((google) => {
         if (cancelled || !hostRef.current) {
-          disposeObject(model);
+          void modelResultPromise.then(({ model }) => {
+            if (model && model !== loadedModel) disposeObject(model);
+          });
           return;
         }
         if (!browserSupportsWebGL())
@@ -319,7 +324,6 @@ function IntegratedGeoScene({ data, toolbarContainer }: { data: GeoPayload; tool
         if (!WebGLOverlayView)
           throw new Error("This browser/map runtime does not expose WebGLOverlayView.");
 
-        loadedModel = model;
         const center = {
           lat: data.placement.anchor.latitude,
           lng: data.placement.anchor.longitude,
@@ -344,26 +348,6 @@ function IntegratedGeoScene({ data, toolbarContainer }: { data: GeoPayload; tool
         const camera = new THREE.Camera();
         root = new THREE.Group();
         root.name = "rekixo-rigid-geo-building";
-        applyRigidBuildingPlacement(
-          root,
-          model,
-          data.modelAnchor.localPositionM,
-          {
-            eastOffsetM: data.placement.eastOffsetM,
-            northOffsetM: data.placement.northOffsetM,
-            verticalOffsetM: data.placement.verticalOffsetM,
-            headingDeg: data.placement.headingDeg,
-            pitchDeg: data.placement.pitchDeg,
-            rollDeg: data.placement.rollDeg,
-            scale: data.placement.scale,
-          },
-        );
-        model.traverse((node) => {
-          if (!(node instanceof THREE.Mesh)) return;
-          node.frustumCulled = true;
-          node.castShadow = false;
-          node.receiveShadow = false;
-        });
         scene.add(root);
         scene.add(new THREE.HemisphereLight(0xffffff, 0x66717b, 1.35));
         const sun = new THREE.DirectionalLight(0xffffff, 2.0);
@@ -383,13 +367,11 @@ function IntegratedGeoScene({ data, toolbarContainer }: { data: GeoPayload; tool
         overlay = new WebGLOverlayView();
         overlay.onAdd = () => {
           if (cancelled) return;
-          setFailure("");
         };
         overlay.onContextRestored = ({ gl }) => {
           if (cancelled) return;
           contextRestored = true;
           clearContextTimer();
-          setFailure("");
           renderer = new THREE.WebGLRenderer({
             canvas: gl.canvas as HTMLCanvasElement,
             context: gl,
@@ -429,6 +411,61 @@ function IntegratedGeoScene({ data, toolbarContainer }: { data: GeoPayload; tool
           renderer = undefined;
         };
         overlay.setMap(map);
+
+        // Map initialization no longer waits for the complete, verified GLB.
+        // Asset download/verification/parsing continues in parallel.
+        void modelResultPromise
+          .then(({ model, error }) => {
+            if (cancelled) {
+              if (model && model !== loadedModel) disposeObject(model);
+              return;
+            }
+            if (error || !model) {
+              setFailure(
+                error instanceof Error
+                  ? error.message
+                  : "Verified 3D Geo model could not be loaded.",
+              );
+              return;
+            }
+            const modelRoot = root;
+            if (!modelRoot) {
+              disposeObject(model);
+              setFailure("3D Geo map initialized without a model container.");
+              return;
+            }
+            loadedModel = model;
+            applyRigidBuildingPlacement(
+              modelRoot,
+              model,
+              data.modelAnchor.localPositionM,
+              {
+                eastOffsetM: data.placement.eastOffsetM,
+                northOffsetM: data.placement.northOffsetM,
+                verticalOffsetM: data.placement.verticalOffsetM,
+                headingDeg: data.placement.headingDeg,
+                pitchDeg: data.placement.pitchDeg,
+                rollDeg: data.placement.rollDeg,
+                scale: data.placement.scale,
+              },
+            );
+            model.traverse((node) => {
+              if (!(node instanceof THREE.Mesh)) return;
+              node.frustumCulled = true;
+              node.castShadow = false;
+              node.receiveShadow = false;
+            });
+            overlay?.requestRedraw();
+            setFailure("");
+          })
+          .catch((reason: unknown) => {
+            if (cancelled) return;
+            setFailure(
+              reason instanceof Error
+                ? reason.message
+                : "Verified 3D Geo model could not be placed.",
+            );
+          });
 
         const applyCamera = (view: GeoCameraView) => {
           const preset = cameraPreset(view, data.placement.headingDeg);
@@ -475,6 +512,9 @@ function IntegratedGeoScene({ data, toolbarContainer }: { data: GeoPayload; tool
       .catch((reason) => {
         if (cancelled) return;
         clearContextTimer();
+        void modelResultPromise.then(({ model }) => {
+          if (model && model !== loadedModel) disposeObject(model);
+        });
         setFailure(
           reason instanceof Error
             ? reason.message

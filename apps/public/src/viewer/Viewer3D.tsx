@@ -344,8 +344,33 @@ export function Viewer3D({
     scene.add(warmFill);
 
     const pmrem = new THREE.PMREMGenerator(renderer);
-    const environmentTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environment = environmentTexture;
+    let environmentTexture: THREE.Texture | undefined;
+    let environmentWorkHandle: number | undefined;
+    let environmentWorkUsesIdleCallback = false;
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    const buildEnvironmentTexture = () => {
+      if (disposed) return;
+      try {
+        environmentTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+        if (disposed) {
+          environmentTexture.dispose();
+          environmentTexture = undefined;
+          return;
+        }
+        scene.environment = environmentTexture;
+      } catch (error) {
+        console.warn("Deferred 3D environment map could not be generated.", error);
+      }
+    };
+    if (idleWindow.requestIdleCallback) {
+      environmentWorkUsesIdleCallback = true;
+      environmentWorkHandle = idleWindow.requestIdleCallback(buildEnvironmentTexture, { timeout: 1500 });
+    } else {
+      environmentWorkHandle = window.setTimeout(buildEnvironmentTexture, 200);
+    }
     scene.environmentIntensity = baseEnvironmentIntensity;
 
     const updateSize = () => {
@@ -1624,7 +1649,11 @@ export function Viewer3D({
         projectExperience.dispose();
       }
       modelProfile = undefined;
-      environmentTexture.dispose();
+      if (environmentWorkHandle !== undefined) {
+        if (environmentWorkUsesIdleCallback) idleWindow.cancelIdleCallback?.(environmentWorkHandle);
+        else window.clearTimeout(environmentWorkHandle);
+      }
+      environmentTexture?.dispose();
       pmrem.dispose();
       renderer.dispose();
       renderer.forceContextLoss();
