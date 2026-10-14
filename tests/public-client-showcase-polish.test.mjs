@@ -28,12 +28,59 @@ const grassUrl = compile("apps/public/src/viewer/grassGroundCover.ts", {
   "./proceduralSurfaceMaterials": surfaceUrl,
 });
 const grass = await import(grassUrl);
+const buildingFootprint = await import(compile("apps/public/src/viewer/buildingFootprint.ts"));
 const environment = await import(compile("apps/public/src/viewer/siteEnvironment.ts", {
   "./publicRuntimeContext": runtimeUrl,
   "./presentationEnvironment": presentationUrl,
   "./proceduralSurfaceMaterials": surfaceUrl,
   "./grassGroundCover": grassUrl,
 }));
+
+test("footprint inference separates the Building from low compound walls and ground meshes", () => {
+  const root = new THREE.Group();
+  const addPart = (name, width, height, depth, x, y, z) => {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(width, height, depth),
+      new THREE.MeshStandardMaterial(),
+    );
+    mesh.name = name;
+    mesh.position.set(x, y, z);
+    root.add(mesh);
+  };
+
+  // Large flat site/paving and short compound walls must not inflate the hole.
+  addPart("Ground plane", 44, 0.1, 32, 8, 0, 5);
+  addPart("North compound wall", 44, 1.8, 0.25, 8, 0.9, 21);
+  addPart("South compound wall", 44, 1.8, 0.25, 8, 0.9, -11);
+  addPart("East compound wall", 0.25, 1.8, 32, 30, 0.9, 5);
+  addPart("West compound wall", 0.25, 1.8, 32, -14, 0.9, 5);
+
+  // A multi-storey building assembled from storey-height wall meshes.
+  for (let floor = 0; floor < 4; floor += 1) {
+    const y = floor * 3 + 1.5;
+    addPart(`Floor ${floor} north wall`, 10, 3, 0.2, 0, y, 4);
+    addPart(`Floor ${floor} south wall`, 10, 3, 0.2, 0, y, -4);
+    addPart(`Floor ${floor} east wall`, 0.2, 3, 8, 5, y, 0);
+    addPart(`Floor ${floor} west wall`, 0.2, 3, 8, -5, y, 0);
+  }
+
+  const siteBounds = new THREE.Box3(
+    new THREE.Vector3(-14, 0, -11),
+    new THREE.Vector3(30, 20, 21),
+  );
+  const inferred = buildingFootprint.deriveBuildingFootprintBounds(
+    root,
+    siteBounds,
+  );
+  assert.ok(Math.abs(inferred.min.x + 5.1) < 0.2);
+  assert.ok(Math.abs(inferred.max.x - 5.1) < 0.2);
+  assert.ok(Math.abs(inferred.min.z + 4.1) < 0.2);
+  assert.ok(Math.abs(inferred.max.z - 4.1) < 0.2);
+  for (const child of root.children) {
+    child.geometry.dispose();
+    child.material.dispose();
+  }
+});
 
 test("curved ground mesh has a building-sized hole, not turf under interior walls", () => {
   // The loaded source bounds include the compound/site; the measured Building
