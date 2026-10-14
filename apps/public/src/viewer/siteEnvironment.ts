@@ -641,8 +641,11 @@ export function createArchitecturalSiteEnvironment(
     }
   }
 
+  let universalCover:
+    | ReturnType<typeof createUniversalGrassGroundCover>
+    | undefined;
   if (universalGroundCover && !bounds.isEmpty() && safeGround) {
-    const cover = createUniversalGrassGroundCover({
+    universalCover = createUniversalGrassGroundCover({
       bounds,
       groundElevation:
         knownGrade && typeof groundElevation === "number"
@@ -652,7 +655,7 @@ export function createArchitecturalSiteEnvironment(
       excludedAreas: grassExcludedAreas,
       lawnAreas,
     });
-    root.add(cover.root);
+    root.add(universalCover.root);
   }
 
   if (shouldAddBaseline) {
@@ -718,6 +721,7 @@ export function createArchitecturalSiteEnvironment(
     setNight(night: boolean) {
       if (bulbMaterial) bulbMaterial.emissiveIntensity = night ? 4.2 : 0.38;
       for (const bulb of presentationBulbs) bulb.emissiveIntensity = night ? 4.2 : 0.38;
+      universalCover?.setNight(night);
     },
     dispose() {
       disposeRoot(root);
