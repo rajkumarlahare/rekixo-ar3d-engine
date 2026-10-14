@@ -77,12 +77,40 @@ function surfaceYFor(
   return groundElevation + 0.004;
 }
 
-function createCurvedGroundGeometry(radius: number, rise: number, mobile: boolean) {
-  const segments = mobile ? 64 : 112;
+function createCurvedGroundGeometry(
+  radius: number,
+  rise: number,
+  mobile: boolean,
+  footprintHalfX: number,
+  footprintHalfZ: number,
+) {
+  const baseSegments = mobile ? 64 : 112;
   const rings = mobile ? 22 : 36;
-  const positions: number[] = [0, 0, 0];
+  // A distinct vertex at each rectangle corner makes the first ring follow
+  // straight wall-aligned edges rather than cutting across a corner chord.
+  const cornerHalfX = Math.max(footprintHalfX + 0.18, 0.6);
+  const cornerHalfZ = Math.max(footprintHalfZ + 0.18, 0.6);
+  const cornerAngle = Math.atan2(cornerHalfZ, cornerHalfX);
+  const angles = Array.from(
+    { length: baseSegments },
+    (_, segment) => (segment / baseSegments) * TAU,
+  );
+  angles.push(
+    cornerAngle,
+    Math.PI - cornerAngle,
+    Math.PI + cornerAngle,
+    TAU - cornerAngle,
+  );
+  angles.sort((a, b) => a - b);
+  const uniqueAngles = angles.filter(
+    (angle, index) =>
+      index === 0 || Math.abs(angle - angles[index - 1]) > 1e-7,
+  );
+  const segments = uniqueAngles.length;
+
+  const positions: number[] = [];
   const colors: number[] = [];
-  const uvs: number[] = [0, 0];
+  const uvs: number[] = [];
   const indices: number[] = [];
 
   const turfNear = new THREE.Color("#557e3e");
@@ -90,10 +118,8 @@ function createCurvedGroundGeometry(radius: number, rise: number, mobile: boolea
   const horizonHaze = new THREE.Color("#a3bdba");
   const cloudEdge = new THREE.Color("#c7d9e0");
 
-  colors.push(turfNear.r, turfNear.g, turfNear.b);
-  for (let ring = 1; ring <= rings; ring += 1) {
+  for (let ring = 0; ring <= rings; ring += 1) {
     const t = ring / rings;
-    const ringRadius = radius * t;
     const bend = smooth01((t - 0.70) / 0.30);
     const lift = rise * bend * bend;
     let tint: THREE.Color;
@@ -105,8 +131,13 @@ function createCurvedGroundGeometry(radius: number, rise: number, mobile: boolea
       tint = horizonHaze.clone().lerp(cloudEdge, smooth01((t - 0.84) / 0.16));
     }
 
-    for (let segment = 0; segment < segments; segment += 1) {
-      const angle = (segment / segments) * TAU;
+    for (const angle of uniqueAngles) {
+      const cosine = Math.abs(Math.cos(angle));
+      const sine = Math.abs(Math.sin(angle));
+      const xBoundary = cornerHalfX / Math.max(cosine, 1e-6);
+      const zBoundary = cornerHalfZ / Math.max(sine, 1e-6);
+      const innerRadius = Math.min(xBoundary, zBoundary);
+      const ringRadius = innerRadius + (radius - innerRadius) * t;
       const x = Math.cos(angle) * ringRadius;
       const z = Math.sin(angle) * ringRadius;
       positions.push(x, lift, z);
@@ -115,14 +146,11 @@ function createCurvedGroundGeometry(radius: number, rise: number, mobile: boolea
     }
   }
 
-  for (let segment = 0; segment < segments; segment += 1) {
-    const current = 1 + segment;
-    const next = 1 + ((segment + 1) % segments);
-    indices.push(0, next, current);
-  }
-  for (let ring = 1; ring < rings; ring += 1) {
-    const inner = 1 + (ring - 1) * segments;
-    const outer = 1 + ring * segments;
+  // There is intentionally no center vertex/fan: the building footprint is
+  // an actual hole in the ground mesh, not just an exclusion for grass blades.
+  for (let ring = 0; ring < rings; ring += 1) {
+    const inner = ring * segments;
+    const outer = (ring + 1) * segments;
     for (let segment = 0; segment < segments; segment += 1) {
       const next = (segment + 1) % segments;
       const a = inner + segment;
@@ -142,7 +170,6 @@ function createCurvedGroundGeometry(radius: number, rise: number, mobile: boolea
   geometry.computeBoundingSphere();
   return geometry;
 }
-
 function createGrassClumpGeometry() {
   const positions: number[] = [];
   const indices: number[] = [];
@@ -233,7 +260,13 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
   const span = Math.max(size.x, size.z, 8);
   const radius = Math.min(Math.max(span * 5, 75), 2000);
   const rise = Math.min(Math.max(span * 0.65, 5), 12);
-  const geometry = createCurvedGroundGeometry(radius, rise, mobile);
+  const geometry = createCurvedGroundGeometry(
+    radius,
+    rise,
+    mobile,
+    size.x / 2,
+    size.z / 2,
+  );
   const terrainMaterial = new THREE.MeshStandardMaterial({
     name: "Procedural turf blending into a soft cloud horizon",
     color: "#ffffff",
