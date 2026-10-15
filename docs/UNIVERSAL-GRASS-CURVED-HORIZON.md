@@ -19,3 +19,7 @@ The public Building viewer now receives a presentation-only ground layer for cus
 ## Verification
 
 The tests cover real-world grass height tiers, bounded geometry detail, source-area masking, universal activation in customer views, and the presentation-only boundary.
+
+
+## Mesh-outline validation
+A regression test uses a trapezoidal Building mesh plus an oversized flat ground slab. It verifies the contour keeps real source vertices and does not invent corners from the axis-aligned box around that mesh. This prevents the ground cutout from defaulting to a white rectangle merely because the model contains many separate mesh bounds.
