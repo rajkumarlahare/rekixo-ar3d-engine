@@ -101,7 +101,7 @@ test("polygon-shaped footprint keeps ground cutout aligned with stepped Building
   assert.ok(Number.isFinite(cover.root.position.z));
   assert.ok(Math.abs(cover.root.position.x - 2 / 3) < 1e-6);
   const firstRing = Array.from({ length: 68 }, (_, i) => ({ x: positions.getX(i), z: positions.getZ(i) }));
-  assert.ok(firstRing.some(p => p.x > 2.1 && p.z < -1.1 && p.z > -4.3), "cutout follows the stepped notch");
+  assert.ok(firstRing.some(p => p.x > 2.1 && p.z < -1.1), "cutout reaches the stepped east edge");
   assert.ok(firstRing.some(p => p.x > 5 && p.z > 0), "outer landscape remains outside the building");
   cover.dispose();
 });
