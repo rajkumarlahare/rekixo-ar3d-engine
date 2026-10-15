@@ -12,7 +12,7 @@ import {
   type PublicWalkthroughGraph,
 } from "@rekixo/3d-contracts";
 import { createFloorExploder, enhanceArchitecturalModel } from "./realism";
-import { deriveBuildingFootprintBounds } from "./buildingFootprint";
+import { deriveBuildingFootprint } from "./buildingFootprint";
 import {
   deriveFloorGeometryFromModel,
   floorFocusElevation,
@@ -1017,11 +1017,12 @@ export function Viewer3D({
       const bounds = modelBounds;
       // Frame the measured building, not the much wider site/paving mesh.
       const cameraBounds = modelProfile?.cameraBounds ?? bounds;
-      const buildingFootprintBounds = deriveBuildingFootprintBounds(
+      const buildingFootprint = deriveBuildingFootprint(
         object,
         bounds,
         modelProfile?.cameraBounds,
       );
+      const buildingFootprintBounds = buildingFootprint.bounds;
       const sphere = cameraBounds.getBoundingSphere(new THREE.Sphere());
       const sizeForView = bounds.getSize(new THREE.Vector3());
       const centerForView = sphere.center.clone();
@@ -1053,6 +1054,7 @@ export function Viewer3D({
           environmentProfile?.landscape ?? "auto",
           clientPresentation,
           buildingFootprintBounds,
+          buildingFootprint.outline,
         );
         scene.add(siteEnvironment.root);
         if (
