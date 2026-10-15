@@ -437,6 +437,49 @@ export function deriveBuildingFootprintMask(
     }
   };
 
+  const clipProjectedPolygon = (
+    input: THREE.Vector3[],
+    axis: "x" | "z",
+    boundary: number,
+    keepGreater: boolean,
+  ) => {
+    if (input.length === 0) return input;
+    const output: THREE.Vector3[] = [];
+    const coordinate = (point: THREE.Vector3) => point[axis];
+    let previous = input[input.length - 1];
+    let previousInside = keepGreater
+      ? coordinate(previous) >= boundary
+      : coordinate(previous) <= boundary;
+    for (const current of input) {
+      const currentInside = keepGreater
+        ? coordinate(current) >= boundary
+        : coordinate(current) <= boundary;
+      if (currentInside !== previousInside) {
+        const delta = coordinate(current) - coordinate(previous);
+        const t = Math.abs(delta) < 1e-9
+          ? 0
+          : (boundary - coordinate(previous)) / delta;
+        output.push(new THREE.Vector3(
+          previous.x + (current.x - previous.x) * t,
+          previous.y + (current.y - previous.y) * t,
+          previous.z + (current.z - previous.z) * t,
+        ));
+      }
+      if (currentInside) output.push(current);
+      previous = current;
+      previousInside = currentInside;
+    }
+    return output;
+  };
+  const clipTriangleToMaskBounds = (triangle: THREE.Vector3[]) => {
+    let polygon = triangle;
+    polygon = clipProjectedPolygon(polygon, "x", minX, true);
+    polygon = clipProjectedPolygon(polygon, "x", maxX, false);
+    polygon = clipProjectedPolygon(polygon, "z", minZ, true);
+    polygon = clipProjectedPolygon(polygon, "z", maxZ, false);
+    return polygon;
+  };
+
   const footprintArea = projectedArea(footprint);
   let processedTriangles = 0;
   let surfaceTriangles = 0;
@@ -451,7 +494,17 @@ export function deriveBuildingFootprintMask(
     const box = new THREE.Box3().setFromObject(node);
     if (!validBox(box)) return;
     const size = box.getSize(new THREE.Vector3());
-    if (size.y < 0.06 || size.x * size.z < footprintArea * 0.00025) return;
+    // Reject thin site slabs/ground plates even when their exported mesh name
+    // is generic. A real Building wall or merged structural mesh has a much
+    // larger vertical span and remains eligible for footprint masking.
+    const minimumStructuralHeight = Math.max(
+      0.3,
+      (footprint.max.y - footprint.min.y) * 0.04,
+    );
+    if (
+      size.y < minimumStructuralHeight ||
+      size.x * size.z < footprintArea * 0.00025
+    ) return;
     const overlapX = Math.max(0, Math.min(box.max.x, footprint.max.x) - Math.max(box.min.x, footprint.min.x));
     const overlapZ = Math.max(0, Math.min(box.max.z, footprint.max.z) - Math.max(box.min.z, footprint.min.z));
     if (overlapX * overlapZ < footprintArea * 0.00025) return;
@@ -479,22 +532,30 @@ export function deriveBuildingFootprintMask(
         Math.max(a.x, b.x, c.x) < minX || Math.min(a.x, b.x, c.x) > maxX ||
         Math.max(a.z, b.z, c.z) < minZ || Math.min(a.z, b.z, c.z) > maxZ
       ) continue;
-      const pa = toPixel(a.x, a.z), pb = toPixel(b.x, b.z), pc = toPixel(c.x, c.z);
-      // All actual projected edges contribute to a closed perimeter. Horizontal
-      // and sloped floor/roof triangles also fill their real projected areas.
+      // Clip projected triangles against the mask's world-space bounds before
+      // mapping to pixels. Clamping an oversized slab/roof vertex to the edge
+      // would otherwise paint a false rectangle across the whole raster.
+      const clipped = clipTriangleToMaskBounds([a.clone(), b.clone(), c.clone()]);
+      if (clipped.length < 3) continue;
+      const pixels = clipped.map((point) => toPixel(point.x, point.z));
+      for (let edge = 0; edge < pixels.length; edge += 1) {
+        const next = (edge + 1) % pixels.length;
+        drawLine(pixels[edge].x, pixels[edge].y, pixels[next].x, pixels[next].y);
+      }
+
       const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
       const acx = c.x - a.x, acy = c.y - a.y, acz = c.z - a.z;
-      // Preserve actual triangle edges at every orientation. They create
-      // a closed silhouette from vertical walls, while horizontal faces below
-      // are also filled to retain the true solid footprint.
-      drawLine(pa.x, pa.y, pb.x, pb.y);
-      drawLine(pb.x, pb.y, pc.x, pc.y);
-      drawLine(pc.x, pc.y, pa.x, pa.y);
       const normalY = abz * acx - abx * acz;
-      const normalLength = Math.hypot(aby * acz - abz * acy, normalY, abx * acy - aby * acx);
+      const normalLength = Math.hypot(
+        aby * acz - abz * acy,
+        normalY,
+        abx * acy - aby * acx,
+      );
       if (normalLength > 1e-9 && Math.abs(normalY) / normalLength > 0.22) {
         surfaceTriangles += 1;
-        fillTriangle(pa, pb, pc);
+        for (let fan = 1; fan < pixels.length - 1; fan += 1) {
+          fillTriangle(pixels[0], pixels[fan], pixels[fan + 1]);
+        }
       }
     }
   });
