@@ -31,6 +31,12 @@ test("grass instances avoid reviewed road, parking and path footprints", () => {
   assert.match(site, /footprintBounds: buildingBounds/);
   assert.match(viewer, /deriveBuildingFootprintBounds\(/);
   assert.match(viewer, /deriveBuildingFootprintOutline\(/);
+  assert.match(viewer, /deriveBuildingFootprintMask\(/);
+  assert.match(viewer, /buildingFootprintMask,/);
+  assert.match(site, /footprintMask: buildingFootprintMask/);
+  assert.match(grass, /uBuildingFootprintMask/);
+  assert.match(grass, /texture2D\(uBuildingFootprintMask, buildingMaskUv\).*discard/);
+  assert.match(grass, /footprintMaskContains\(options\.footprintMask, worldX, worldZ\)/);
   assert.match(viewer, /clientPresentation,\s+buildingFootprintBounds,\s+buildingFootprintOutline,/);
   assert.match(site, /footprintOutline: buildingOutline/);
   assert.match(site, /width: modelSize\.x,[\s\S]*depth: modelSize\.z/);
