@@ -518,6 +518,7 @@ export function createArchitecturalSiteEnvironment(
   landscapePreset: PresentationLandscapePreset = "auto",
   universalGroundCover = presentation,
   buildingBounds: THREE.Box3 = bounds,
+  buildingOutline: readonly { x: number; z: number }[] = [],
 ) {
   configureProceduralSurfaceTextures(renderer);
   const root = new THREE.Group();
@@ -666,6 +667,7 @@ export function createArchitecturalSiteEnvironment(
     universalCover = createUniversalGrassGroundCover({
       bounds,
       footprintBounds: buildingBounds,
+      footprintOutline: buildingOutline,
       groundElevation:
         knownGrade && typeof groundElevation === "number"
           ? groundElevation
