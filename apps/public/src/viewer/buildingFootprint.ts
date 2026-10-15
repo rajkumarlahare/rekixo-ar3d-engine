@@ -220,3 +220,65 @@ export function deriveBuildingFootprint(
     ? { bounds, outline }
     : { bounds, outline: [] };
 }
+
+
+/**
+ * Extracts a conservative building perimeter from the projected source meshes.
+ * The convex hull excludes arbitrary axis-aligned corners and follows rotated
+ * footprints, while retaining any concave notches only when supported by clear
+ * profile metadata in a future revision.
+ */
+export function deriveBuildingFootprintOutline(
+  root: THREE.Object3D,
+  footprint: THREE.Box3,
+): Array<{ x: number; z: number }> {
+  if (!validBox(footprint)) return [];
+  const points: Array<{ x: number; z: number }> = [];
+  const footprintArea = projectedArea(footprint);
+  root.updateMatrixWorld(true);
+  root.traverse((node) => {
+    if (!(node instanceof THREE.Mesh)) return;
+    const box = new THREE.Box3().setFromObject(node);
+    if (!validBox(box)) return;
+    const names = namesForMesh(node, root);
+    if (names.some((name) => SITE_ONLY_NAME.test(name))) return;
+    const size = box.getSize(new THREE.Vector3());
+    const area = Math.max(0, size.x) * Math.max(0, size.z);
+    if (area < footprintArea * 0.001 || size.y < 0.35) return;
+    const overlapX = Math.max(0, Math.min(box.max.x, footprint.max.x) - Math.max(box.min.x, footprint.min.x));
+    const overlapZ = Math.max(0, Math.min(box.max.z, footprint.max.z) - Math.max(box.min.z, footprint.min.z));
+    if (overlapX * overlapZ < footprintArea * 0.0005) return;
+    for (const x of [box.min.x, box.max.x]) {
+      for (const z of [box.min.z, box.max.z]) {
+        if (x >= footprint.min.x - 0.2 && x <= footprint.max.x + 0.2 &&
+            z >= footprint.min.z - 0.2 && z <= footprint.max.z + 0.2) {
+          points.push({ x, z });
+        }
+      }
+    }
+  });
+  const unique = points.filter((p, i) =>
+    points.findIndex((q) => Math.hypot(p.x - q.x, p.z - q.z) < 1e-3) === i,
+  ).sort((a, b) => a.x - b.x || a.z - b.z);
+  if (unique.length < 3) return [];
+  const cross = (o: {x:number;z:number}, a:{x:number;z:number}, b:{x:number;z:number}) =>
+    (a.x-o.x)*(b.z-o.z)-(a.z-o.z)*(b.x-o.x);
+  const lower: Array<{x:number;z:number}> = [];
+  for (const p of unique) {
+    while(lower.length>=2 && cross(lower[lower.length-2],lower[lower.length-1],p)<=1e-7) lower.pop();
+    lower.push(p);
+  }
+  const upper: Array<{x:number;z:number}> = [];
+  for (const p of [...unique].reverse()) {
+    while(upper.length>=2 && cross(upper[upper.length-2],upper[upper.length-1],p)<=1e-7) upper.pop();
+    upper.push(p);
+  }
+  const outline=[...lower.slice(0,-1),...upper.slice(0,-1)];
+  let area = 0;
+  for (let index = 0; index < outline.length; index += 1) {
+    const a = outline[index], b = outline[(index + 1) % outline.length];
+    area += a.x * b.z - b.x * a.z;
+  }
+  if (outline.length < 3 || Math.abs(area) * 0.5 < footprintArea * 0.42) return [];
+  return outline;
+}
