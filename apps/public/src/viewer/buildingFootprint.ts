@@ -500,6 +500,13 @@ export function deriveBuildingFootprintMask(
 
   // Flood-fill the external background. Any unvisited cell is inside a closed
   // projected structural boundary or a projected floor/roof triangle.
+  const surfaceCoverageRatio = occupied.reduce(
+    (sum, value) => sum + (value ? 1 : 0),
+    0,
+  ) / total;
+
+  // Try a true closed-shell fill first. Concave notches connected to the
+  // outside stay empty; only enclosed structural areas are filled.
   const exterior = new Uint8Array(total);
   const queue = new Int32Array(total);
   let head = 0, tail = 0;
@@ -526,35 +533,57 @@ export function deriveBuildingFootprintMask(
     if (y + 1 < height) seedExterior(index + width);
   }
 
-  const data = new Uint8Array(total);
-  let filled = 0;
+  const enclosed = new Uint8Array(total);
   for (let index = 0; index < total; index += 1) {
-    if (occupied[index] !== 0 || exterior[index] === 0) {
-      data[index] = 255;
-      filled += 1;
-    }
+    if (occupied[index] !== 0 || exterior[index] === 0) enclosed[index] = 255;
+  }
+  const enclosedCoverageRatio = enclosed.reduce(
+    (sum, value) => sum + (value ? 1 : 0),
+    0,
+  ) / total;
+
+  // If an exported wall loop has a doorway/gap that lets flood-fill leak,
+  // retain the real projected floor/roof triangles rather than replacing the
+  // shape with a rectangle. Flat source-site slabs are filtered above.
+  let data: Uint8Array | undefined;
+  let sourceCoverageRatio = 0;
+  if (enclosedCoverageRatio >= 0.025 && enclosedCoverageRatio <= 0.985) {
+    data = enclosed;
+    sourceCoverageRatio = enclosedCoverageRatio;
+  } else if (surfaceCoverageRatio >= 0.025 && surfaceCoverageRatio <= 0.985) {
+    data = occupied.slice();
+    sourceCoverageRatio = surfaceCoverageRatio;
   }
 
-  // Expand by two pixels: the grass starts just outside, never over the wall.
-  for (let pass = 0; pass < 2; pass += 1) {
-    const expanded = data.slice();
-    for (let y = 1; y < height - 1; y += 1) {
-      for (let x = 1; x < width - 1; x += 1) {
-        const index = y * width + x;
-        if (
-          data[index] || data[index - 1] || data[index + 1] ||
-          data[index - width] || data[index + width]
-        ) {
-          expanded[index] = 255;
+  if (data) {
+    // Expand by two pixels: the grass starts just outside, never over the wall.
+    for (let pass = 0; pass < 2; pass += 1) {
+      const expanded = data.slice();
+      for (let y = 1; y < height - 1; y += 1) {
+        for (let x = 1; x < width - 1; x += 1) {
+          const index = y * width + x;
+          if (
+            data[index] || data[index - 1] || data[index + 1] ||
+            data[index - width] || data[index + width]
+          ) expanded[index] = 255;
         }
       }
+      data.set(expanded);
     }
-    data.set(expanded);
-  }
-
-  const filledRatio = data.reduce((sum, value) => sum + (value ? 1 : 0), 0) / total;
-  if (filledRatio >= 0.025 && filledRatio <= 0.985) {
-    return { source: "triangles" as const, sourceCoverageRatio: filledRatio, width, height, data, minX, minZ, maxX, maxZ };
+    const finalRatio = data.reduce((sum, value) => sum + (value ? 1 : 0), 0) / total;
+    if (finalRatio >= 0.025 && finalRatio <= 0.985) {
+      return {
+        source: "triangles" as const,
+        sourceCoverageRatio,
+        width,
+        height,
+        data,
+        minX,
+        minZ,
+        maxX,
+        maxZ,
+      };
+    }
   }
 
   // Some older exports have open or disconnected wall meshes. In that case,
@@ -601,5 +630,15 @@ export function deriveBuildingFootprintMask(
   }
   const fallbackRatio = fallbackFilled / total;
   if (fallbackRatio < 0.025 || fallbackRatio > 0.985) return undefined;
-  return { source: "outline" as const, sourceCoverageRatio: fallbackRatio, width, height, data: fallback, minX, minZ, maxX, maxZ };
+  return {
+    source: "outline" as const,
+    sourceCoverageRatio,
+    width,
+    height,
+    data: fallback,
+    minX,
+    minZ,
+    maxX,
+    maxZ,
+  };
 }
