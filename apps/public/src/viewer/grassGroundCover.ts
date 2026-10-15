@@ -17,6 +17,8 @@ export interface GrassGroundCoverOptions {
   bounds: THREE.Box3;
   /** Measured building bounds used only for the inner ground cutout. */
   footprintBounds?: THREE.Box3;
+  /** Optional measured outer building outline in world X/Z, for non-rectangular walls. */
+  footprintOutline?: readonly FootprintPoint[];
   groundElevation: number;
   mobile: boolean;
   /** Reviewed paving/road areas plus any generated fallback hardscape. */
@@ -80,17 +82,151 @@ function surfaceYFor(
   return groundElevation + 0.004;
 }
 
+interface FootprintPoint {
+  x: number;
+  z: number;
+}
+
+/** Normalize, de-duplicate, and order a projected source-mesh footprint. */
+function normalizeFootprint(points: readonly FootprintPoint[]): FootprintPoint[] {
+  const unique: FootprintPoint[] = [];
+  for (const point of points) {
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.z)) continue;
+    if (unique.every((other) => Math.hypot(other.x - point.x, other.z - point.z) > 1e-4)) {
+      unique.push(point);
+    }
+  }
+  if (unique.length < 3) return [];
+  const center = unique.reduce(
+    (sum, point) => ({ x: sum.x + point.x / unique.length, z: sum.z + point.z / unique.length }),
+    { x: 0, z: 0 },
+  );
+  unique.sort((left, right) =>
+    Math.atan2(left.z - center.z, left.x - center.x) -
+    Math.atan2(right.z - center.z, right.x - center.x),
+  );
+  return unique;
+}
+
+function polygonArea(points: readonly FootprintPoint[]) {
+  let area = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const a = points[index];
+    const b = points[(index + 1) % points.length];
+    area += a.x * b.z - b.x * a.z;
+  }
+  return Math.abs(area) * 0.5;
+}
+
+function pointOnSegment(
+  point: FootprintPoint,
+  start: FootprintPoint,
+  end: FootprintPoint,
+) {
+  const dx = end.x - start.x;
+  const dz = end.z - start.z;
+  const lengthSquared = dx * dx + dz * dz;
+  if (lengthSquared < 1e-12) return Math.hypot(point.x - start.x, point.z - start.z) < 1e-5;
+  const t = THREE.MathUtils.clamp(
+    ((point.x - start.x) * dx + (point.z - start.z) * dz) / lengthSquared,
+    0,
+    1,
+  );
+  return Math.hypot(point.x - (start.x + t * dx), point.z - (start.z + t * dz)) < 1e-5;
+}
+
+function insidePolygon(point: FootprintPoint, polygon: readonly FootprintPoint[]) {
+  let inside = false;
+  for (let current = 0, previous = polygon.length - 1; current < polygon.length; previous = current++) {
+    const a = polygon[current];
+    const b = polygon[previous];
+    if (pointOnSegment(point, a, b)) return true;
+    const crosses = (a.z > point.z) !== (b.z > point.z) &&
+      point.x < ((b.x - a.x) * (point.z - a.z)) / (b.z - a.z) + a.x;
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
+function distanceToSegment(point: FootprintPoint, a: FootprintPoint, b: FootprintPoint) {
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const lengthSquared = dx * dx + dz * dz;
+  const t = lengthSquared < 1e-12
+    ? 0
+    : THREE.MathUtils.clamp(
+        ((point.x - a.x) * dx + (point.z - a.z) * dz) / lengthSquared,
+        0,
+        1,
+      );
+  return Math.hypot(point.x - (a.x + dx * t), point.z - (a.z + dz * t));
+}
+
+/** A rounded buffer of the measured polygon keeps turf just outside the wall line. */
+function insideBufferedFootprint(
+  point: FootprintPoint,
+  polygon: readonly FootprintPoint[],
+  padding: number,
+) {
+  if (insidePolygon(point, polygon)) return true;
+  for (let index = 0; index < polygon.length; index += 1) {
+    if (distanceToSegment(point, polygon[index], polygon[(index + 1) % polygon.length]) <= padding) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function radialBoundary(
+  angle: number,
+  polygon: readonly FootprintPoint[],
+  fallbackHalfX: number,
+  fallbackHalfZ: number,
+  center: FootprintPoint,
+  padding: number,
+) {
+  const direction = { x: Math.cos(angle), z: Math.sin(angle) };
+  let nearest = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < polygon.length; index += 1) {
+    const a = polygon[index];
+    const b = polygon[(index + 1) % polygon.length];
+    const edge = { x: b.x - a.x, z: b.z - a.z };
+    const offset = { x: a.x - center.x, z: a.z - center.z };
+    const denominator = direction.x * edge.z - direction.z * edge.x;
+    if (Math.abs(denominator) < 1e-9) continue;
+    const distance = (offset.x * edge.z - offset.z * edge.x) / denominator;
+    const along = (offset.x * direction.z - offset.z * direction.x) / denominator;
+    if (distance >= 0 && along >= -1e-7 && along <= 1 + 1e-7) {
+      nearest = Math.min(nearest, distance);
+    }
+  }
+  if (Number.isFinite(nearest)) return nearest + padding;
+  const x = fallbackHalfX / Math.max(Math.abs(direction.x), 1e-6);
+  const z = fallbackHalfZ / Math.max(Math.abs(direction.z), 1e-6);
+  return Math.min(x, z) + padding;
+}
+
 function createCurvedGroundGeometry(
   radius: number,
   rise: number,
   mobile: boolean,
   footprintHalfX: number,
   footprintHalfZ: number,
+  footprintOutline: readonly FootprintPoint[],
+  footprintCenter: FootprintPoint,
 ) {
   const baseSegments = mobile ? 64 : 112;
   const rings = mobile ? 22 : 36;
-  // A distinct vertex at each rectangle corner makes the first ring follow
-  // straight wall-aligned edges rather than cutting across a corner chord.
+  const polygon = normalizeFootprint(footprintOutline);
+  const innerRadiusAt = (angle: number) =>
+    radialBoundary(
+      angle,
+      polygon,
+      footprintHalfX,
+      footprintHalfZ,
+      footprintCenter,
+      0.18,
+    );
   const cornerHalfX = Math.max(footprintHalfX + 0.18, 0.6);
   const cornerHalfZ = Math.max(footprintHalfZ + 0.18, 0.6);
   const cornerAngle = Math.atan2(cornerHalfZ, cornerHalfX);
@@ -98,16 +234,16 @@ function createCurvedGroundGeometry(
     { length: baseSegments },
     (_, segment) => (segment / baseSegments) * TAU,
   );
-  angles.push(
-    cornerAngle,
-    Math.PI - cornerAngle,
-    Math.PI + cornerAngle,
-    TAU - cornerAngle,
-  );
-  angles.sort((a, b) => a - b);
+  if (polygon.length >= 3) {
+    for (const point of polygon) {
+      angles.push(Math.atan2(point.z - footprintCenter.z, point.x - footprintCenter.x));
+    }
+  } else {
+    angles.push(cornerAngle, Math.PI - cornerAngle, Math.PI + cornerAngle, TAU - cornerAngle);
+  }
+  angles.sort((left, right) => left - right);
   const uniqueAngles = angles.filter(
-    (angle, index) =>
-      index === 0 || Math.abs(angle - angles[index - 1]) > 1e-7,
+    (angle, index) => index === 0 || Math.abs(angle - angles[index - 1]) > 1e-7,
   );
   const segments = uniqueAngles.length;
 
@@ -115,7 +251,6 @@ function createCurvedGroundGeometry(
   const colors: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
-
   const turfNear = new THREE.Color("#557e3e");
   const turfFar = new THREE.Color("#748f60");
   const horizonHaze = new THREE.Color("#a3bdba");
@@ -125,21 +260,13 @@ function createCurvedGroundGeometry(
     const t = ring / rings;
     const bend = smooth01((t - 0.70) / 0.30);
     const lift = rise * bend * bend;
-    let tint: THREE.Color;
-    if (t < 0.70) {
-      tint = turfNear.clone().lerp(turfFar, smooth01(t / 0.70) * 0.22);
-    } else if (t < 0.84) {
-      tint = turfFar.clone().lerp(horizonHaze, smooth01((t - 0.70) / 0.14));
-    } else {
-      tint = horizonHaze.clone().lerp(cloudEdge, smooth01((t - 0.84) / 0.16));
-    }
-
+    const tint = t < 0.70
+      ? turfNear.clone().lerp(turfFar, smooth01(t / 0.70) * 0.22)
+      : t < 0.84
+        ? turfFar.clone().lerp(horizonHaze, smooth01((t - 0.70) / 0.14))
+        : horizonHaze.clone().lerp(cloudEdge, smooth01((t - 0.84) / 0.16));
     for (const angle of uniqueAngles) {
-      const cosine = Math.abs(Math.cos(angle));
-      const sine = Math.abs(Math.sin(angle));
-      const xBoundary = cornerHalfX / Math.max(cosine, 1e-6);
-      const zBoundary = cornerHalfZ / Math.max(sine, 1e-6);
-      const innerRadius = Math.min(xBoundary, zBoundary);
+      const innerRadius = innerRadiusAt(angle);
       const ringRadius = innerRadius + (radius - innerRadius) * t;
       const x = Math.cos(angle) * ringRadius;
       const z = Math.sin(angle) * ringRadius;
@@ -149,8 +276,7 @@ function createCurvedGroundGeometry(
     }
   }
 
-  // There is intentionally no center vertex/fan: the building footprint is
-  // an actual hole in the ground mesh, not just an exclusion for grass blades.
+  // Annular topology: no triangles are created inside the polygon cutout.
   for (let ring = 0; ring < rings; ring += 1) {
     const inner = ring * segments;
     const outer = (ring + 1) * segments;
@@ -284,12 +410,25 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
     footprintSize.x / 2 + footprintSize.z / 2 + 5,
   );
   const rise = Math.min(Math.max(span * 0.65, 5), 12);
+  const outline = normalizeFootprint(options.footprintOutline ?? []);
+  const groundCenter = outline.length >= 3
+    ? outline.reduce(
+        (sum, point) => ({ x: sum.x + point.x / outline.length, z: sum.z + point.z / outline.length }),
+        { x: 0, z: 0 },
+      )
+    : { x: footprintCenter.x, z: footprintCenter.z };
+  const localOutline = outline.map((point) => ({
+    x: point.x - groundCenter.x,
+    z: point.z - groundCenter.z,
+  }));
   const geometry = createCurvedGroundGeometry(
     radius,
     rise,
     mobile,
     footprintSize.x / 2,
     footprintSize.z / 2,
+    localOutline,
+    { x: 0, z: 0 },
   );
   const terrainMaterial = new THREE.MeshStandardMaterial({
     name: "Procedural turf blending into a soft cloud horizon",
@@ -307,9 +446,9 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
   // The annular terrain is centered on the actual building footprint, while
   // its radius is large enough to cover the full loaded site bounds.
   root.position.set(
-    footprintCenter.x,
+    groundCenter.x,
     groundElevation - 0.055,
-    footprintCenter.z,
+    groundCenter.z,
   );
 
   const targetCount = mobile ? 720 : 3600;
@@ -332,7 +471,11 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
     const worldX = center.x + x;
     const worldZ = center.z + z;
 
-    if (excludedAreas.some((area) => containsArea(worldX, worldZ, area, 0.035))) continue;
+    if (
+      (outline.length >= 3 &&
+        insideBufferedFootprint({ x: worldX, z: worldZ }, outline, 0.18)) ||
+      excludedAreas.some((area) => containsArea(worldX, worldZ, area, 0.035))
+    ) continue;
 
     const slot = instances[0].length + instances[1].length + instances[2].length;
     const tier: 0 | 1 | 2 = slot % 10 < 5 ? 0 : slot % 10 < 8 ? 1 : 2;
