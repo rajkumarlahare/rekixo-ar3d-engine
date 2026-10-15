@@ -291,11 +291,13 @@ export function deriveBuildingFootprintOutline(
     }
   });
 
-  const unique = points.filter((point, index) =>
-    points.findIndex((other) =>
-      Math.hypot(other.x - point.x, other.z - point.z) < 1e-3,
-    ) === index,
-  ).sort((left, right) => left.x - right.x || left.z - right.z);
+  const uniqueMap = new Map<string, { x: number; z: number }>();
+  for (const point of points) {
+    uniqueMap.set(`${point.x.toFixed(4)},${point.z.toFixed(4)}`, point);
+  }
+  const unique = [...uniqueMap.values()].sort(
+    (left, right) => left.x - right.x || left.z - right.z,
+  );
   if (unique.length < 3) return [];
 
   const cross = (
