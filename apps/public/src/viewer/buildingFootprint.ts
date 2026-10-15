@@ -4,6 +4,8 @@ const SITE_ONLY_NAME =
   /(?:^|[\\s_.-])(ground|terrain|grass|road|parking|paving|curb|kerb|sidewalk|driveway|compound|boundary|fence|gate|tree|trees|plant|plants|shrub|landscape|garden|lawn|site[\\s_.-]*wall|plot[\\s_.-]*wall|retaining[\\s_.-]*wall)(?:$|[\\s_.-])/i;
 const BUILDING_NAME =
   /building|facade|floor|storey|story|structure|apartment|residential|column|pillar|structural|wall/i;
+const FLAT_BASE_NAME =
+  /foundation|footing|plinth|podium|platform|ground[\\s_.-]*slab|floor[\\s_.-]*slab|base[\\s_.-]*slab/i;
 
 interface Candidate {
   box: THREE.Box3;
@@ -235,50 +237,99 @@ export function deriveBuildingFootprintOutline(
   if (!validBox(footprint)) return [];
   const points: Array<{ x: number; z: number }> = [];
   const footprintArea = projectedArea(footprint);
+  const modelHeight = footprint.max.y - footprint.min.y;
+  const minimumStructuralHeight = Math.max(0.8, modelHeight * 0.06);
+  const maxSamples = 24000;
+  const worldPoint = new THREE.Vector3();
+
   root.updateMatrixWorld(true);
   root.traverse((node) => {
-    if (!(node instanceof THREE.Mesh)) return;
+    if (points.length >= maxSamples || !(node instanceof THREE.Mesh)) return;
+    const names = namesForMesh(node, root);
+    if (
+      names.some((name) => SITE_ONLY_NAME.test(name)) ||
+      names.some((name) => FLAT_BASE_NAME.test(name))
+    ) return;
+
     const box = new THREE.Box3().setFromObject(node);
     if (!validBox(box)) return;
-    const names = namesForMesh(node, root);
-    if (names.some((name) => SITE_ONLY_NAME.test(name))) return;
     const size = box.getSize(new THREE.Vector3());
     const area = Math.max(0, size.x) * Math.max(0, size.z);
-    if (area < footprintArea * 0.001 || size.y < 0.35) return;
-    const overlapX = Math.max(0, Math.min(box.max.x, footprint.max.x) - Math.max(box.min.x, footprint.min.x));
-    const overlapZ = Math.max(0, Math.min(box.max.z, footprint.max.z) - Math.max(box.min.z, footprint.min.z));
+    // Ignore thin ground plates, paving, rails and trim. A named/profiled
+    // building footprint still supplies bounds separately; this outline is
+    // built from actual structural vertices rather than the corners of every
+    // mesh's axis-aligned Box3.
+    if (area < footprintArea * 0.001 || size.y < minimumStructuralHeight) return;
+
+    const overlapX = Math.max(
+      0,
+      Math.min(box.max.x, footprint.max.x) - Math.max(box.min.x, footprint.min.x),
+    );
+    const overlapZ = Math.max(
+      0,
+      Math.min(box.max.z, footprint.max.z) - Math.max(box.min.z, footprint.min.z),
+    );
     if (overlapX * overlapZ < footprintArea * 0.0005) return;
-    for (const x of [box.min.x, box.max.x]) {
-      for (const z of [box.min.z, box.max.z]) {
-        if (x >= footprint.min.x - 0.2 && x <= footprint.max.x + 0.2 &&
-            z >= footprint.min.z - 0.2 && z <= footprint.max.z + 0.2) {
-          points.push({ x, z });
-        }
-      }
+
+    const position = node.geometry.getAttribute("position");
+    if (!position || position.count < 3) return;
+    // Cap total work at model-load time; evenly sample dense meshes while
+    // retaining all vertices from the smaller structural parts.
+    const remaining = Math.max(3, maxSamples - points.length);
+    const stride = Math.max(1, Math.ceil(position.count / Math.min(1800, remaining)));
+    for (let index = 0; index < position.count && points.length < maxSamples; index += stride) {
+      worldPoint.fromBufferAttribute(position, index).applyMatrix4(node.matrixWorld);
+      if (
+        !Number.isFinite(worldPoint.x) ||
+        !Number.isFinite(worldPoint.z) ||
+        worldPoint.x < footprint.min.x - 0.25 ||
+        worldPoint.x > footprint.max.x + 0.25 ||
+        worldPoint.z < footprint.min.z - 0.25 ||
+        worldPoint.z > footprint.max.z + 0.25
+      ) continue;
+      points.push({ x: worldPoint.x, z: worldPoint.z });
     }
   });
-  const unique = points.filter((p, i) =>
-    points.findIndex((q) => Math.hypot(p.x - q.x, p.z - q.z) < 1e-3) === i,
-  ).sort((a, b) => a.x - b.x || a.z - b.z);
+
+  const uniqueMap = new Map<string, { x: number; z: number }>();
+  for (const point of points) {
+    uniqueMap.set(`${point.x.toFixed(4)},${point.z.toFixed(4)}`, point);
+  }
+  const unique = [...uniqueMap.values()].sort(
+    (left, right) => left.x - right.x || left.z - right.z,
+  );
   if (unique.length < 3) return [];
-  const cross = (o: {x:number;z:number}, a:{x:number;z:number}, b:{x:number;z:number}) =>
-    (a.x-o.x)*(b.z-o.z)-(a.z-o.z)*(b.x-o.x);
-  const lower: Array<{x:number;z:number}> = [];
-  for (const p of unique) {
-    while(lower.length>=2 && cross(lower[lower.length-2],lower[lower.length-1],p)<=1e-7) lower.pop();
-    lower.push(p);
+
+  const cross = (
+    origin: { x: number; z: number },
+    a: { x: number; z: number },
+    b: { x: number; z: number },
+  ) => (a.x - origin.x) * (b.z - origin.z) - (a.z - origin.z) * (b.x - origin.x);
+
+  const lower: Array<{ x: number; z: number }> = [];
+  for (const point of unique) {
+    while (
+      lower.length >= 2 &&
+      cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 1e-7
+    ) lower.pop();
+    lower.push(point);
   }
-  const upper: Array<{x:number;z:number}> = [];
-  for (const p of [...unique].reverse()) {
-    while(upper.length>=2 && cross(upper[upper.length-2],upper[upper.length-1],p)<=1e-7) upper.pop();
-    upper.push(p);
+  const upper: Array<{ x: number; z: number }> = [];
+  for (const point of [...unique].reverse()) {
+    while (
+      upper.length >= 2 &&
+      cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 1e-7
+    ) upper.pop();
+    upper.push(point);
   }
-  const outline=[...lower.slice(0,-1),...upper.slice(0,-1)];
+  const outline = [...lower.slice(0, -1), ...upper.slice(0, -1)];
   let area = 0;
   for (let index = 0; index < outline.length; index += 1) {
     const a = outline[index], b = outline[(index + 1) % outline.length];
     area += a.x * b.z - b.x * a.z;
   }
+  // Do not create a small or obviously corrupt hole if source geometry is
+  // merged, hidden, or has too few structural vertices.
   if (outline.length < 3 || Math.abs(area) * 0.5 < footprintArea * 0.42) return [];
   return outline;
 }

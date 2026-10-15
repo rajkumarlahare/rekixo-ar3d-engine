@@ -36,6 +36,51 @@ const environment = await import(compile("apps/public/src/viewer/siteEnvironment
   "./grassGroundCover": grassUrl,
 }));
 
+test("Building ground outline follows actual mesh vertices and ignores oversized ground slabs", () => {
+  const root = new THREE.Group();
+  const shape = new THREE.Shape();
+  shape.moveTo(-4, -2);
+  shape.lineTo(3, -2);
+  shape.lineTo(1, 2);
+  shape.lineTo(-2, 2);
+  shape.closePath();
+  const building = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(shape, { depth: 3, bevelEnabled: false }),
+    new THREE.MeshStandardMaterial(),
+  );
+  building.name = "Building shell";
+  building.rotation.x = Math.PI / 2;
+  building.position.y = 3;
+  root.add(building);
+
+  // This is the oversized flat white plane that should not determine the outline.
+  const slab = new THREE.Mesh(
+    new THREE.BoxGeometry(12, 0.2, 12),
+    new THREE.MeshStandardMaterial(),
+  );
+  slab.name = "Ground slab";
+  slab.position.y = 0.1;
+  root.add(slab);
+
+  const footprint = new THREE.Box3(
+    new THREE.Vector3(-4, 0, -2),
+    new THREE.Vector3(3, 3, 2),
+  );
+  const outline = buildingFootprint.deriveBuildingFootprintOutline(root, footprint);
+  assert.equal(outline.length, 4, "trapezoid should remain a four-point outline");
+  assert.ok(outline.some(point => Math.abs(point.x - 3) < 1e-4 && Math.abs(point.z + 2) < 1e-4));
+  assert.ok(outline.some(point => Math.abs(point.x - 1) < 1e-4 && Math.abs(point.z - 2) < 1e-4));
+  assert.ok(
+    !outline.some(point => Math.abs(point.x - 3) < 1e-4 && Math.abs(point.z - 2) < 1e-4),
+    "an axis-aligned bounding-box corner must not replace the source mesh contour",
+  );
+
+  building.geometry.dispose();
+  building.material.dispose();
+  slab.geometry.dispose();
+  slab.material.dispose();
+});
+
 test("footprint inference separates the Building from low compound walls and ground meshes", () => {
   const root = new THREE.Group();
   const addPart = (name, width, height, depth, x, y, z) => {
