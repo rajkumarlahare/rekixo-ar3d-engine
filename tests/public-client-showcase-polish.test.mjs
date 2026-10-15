@@ -66,7 +66,7 @@ test("projected triangle mask preserves the real non-rectangular Building bounda
   );
   const mask = buildingFootprint.deriveBuildingFootprintMask(root, footprint);
   assert.ok(mask, "closed source triangles should produce a footprint mask");
-  assert.equal(mask.source, "triangles", "closed real mesh surfaces should be preferred over convex-hull fallback");
+  assert.equal(mask.source, "triangles", `closed real mesh surfaces should be preferred over convex-hull fallback; source=${mask.source}, coverage=${mask.sourceCoverageRatio}`);
   const sample = (x, z) => {
     const px = Math.max(0, Math.min(mask.width - 1, Math.round(((x - mask.minX) / (mask.maxX - mask.minX)) * (mask.width - 1))));
     const py = Math.max(0, Math.min(mask.height - 1, Math.round(((z - mask.minZ) / (mask.maxZ - mask.minZ)) * (mask.height - 1))));
