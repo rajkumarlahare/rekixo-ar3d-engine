@@ -337,6 +337,8 @@ export function deriveBuildingFootprintOutline(
 
 export interface BuildingFootprintMask {
   source: "triangles" | "outline";
+  /** Diagnostic coverage ratio used to validate source geometry quality. */
+  sourceCoverageRatio: number;
   width: number;
   height: number;
   /** 255 marks building interior plus a small wall-edge safety margin. */
@@ -552,7 +554,7 @@ export function deriveBuildingFootprintMask(
 
   const filledRatio = data.reduce((sum, value) => sum + (value ? 1 : 0), 0) / total;
   if (filledRatio >= 0.025 && filledRatio <= 0.985) {
-    return { source: "triangles" as const, width, height, data, minX, minZ, maxX, maxZ };
+    return { source: "triangles" as const, sourceCoverageRatio: filledRatio, width, height, data, minX, minZ, maxX, maxZ };
   }
 
   // Some older exports have open or disconnected wall meshes. In that case,
@@ -599,5 +601,5 @@ export function deriveBuildingFootprintMask(
   }
   const fallbackRatio = fallbackFilled / total;
   if (fallbackRatio < 0.025 || fallbackRatio > 0.985) return undefined;
-  return { source: "outline" as const, width, height, data: fallback, minX, minZ, maxX, maxZ };
+  return { source: "outline" as const, sourceCoverageRatio: fallbackRatio, width, height, data: fallback, minX, minZ, maxX, maxZ };
 }
