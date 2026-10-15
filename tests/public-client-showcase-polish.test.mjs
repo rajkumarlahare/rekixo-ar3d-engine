@@ -49,7 +49,8 @@ test("Building ground outline follows actual mesh vertices and ignores oversized
     new THREE.MeshStandardMaterial(),
   );
   building.name = "Building shell";
-  building.rotation.x = -Math.PI / 2;
+  building.rotation.x = Math.PI / 2;
+  building.position.y = 3;
   root.add(building);
 
   // This is the oversized flat white plane that should not determine the outline.
