@@ -485,17 +485,17 @@ export function deriveBuildingFootprintMask(
       // and sloped floor/roof triangles also fill their real projected areas.
       const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
       const acx = c.x - a.x, acy = c.y - a.y, acz = c.z - a.z;
+      // Preserve actual triangle edges at every orientation. They create
+      // a closed silhouette from vertical walls, while horizontal faces below
+      // are also filled to retain the true solid footprint.
+      drawLine(pa.x, pa.y, pb.x, pb.y);
+      drawLine(pb.x, pb.y, pc.x, pc.y);
+      drawLine(pc.x, pc.y, pa.x, pa.y);
       const normalY = abz * acx - abx * acz;
       const normalLength = Math.hypot(aby * acz - abz * acy, normalY, abx * acy - aby * acx);
       if (normalLength > 1e-9 && Math.abs(normalY) / normalLength > 0.22) {
         surfaceTriangles += 1;
         fillTriangle(pa, pb, pc);
-      } else {
-        // Vertical wall triangles collapse into lines in X/Z projection; keep
-        // their actual projected edges to close the external perimeter.
-        drawLine(pa.x, pa.y, pb.x, pb.y);
-        drawLine(pb.x, pb.y, pc.x, pc.y);
-        drawLine(pc.x, pc.y, pa.x, pa.y);
       }
     }
   });
