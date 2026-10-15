@@ -333,3 +333,220 @@ export function deriveBuildingFootprintOutline(
   if (outline.length < 3 || Math.abs(area) * 0.5 < footprintArea * 0.42) return [];
   return outline;
 }
+
+
+export interface BuildingFootprintMask {
+  width: number;
+  height: number;
+  /** 255 marks building interior plus a small wall-edge safety margin. */
+  data: Uint8Array;
+  minX: number;
+  minZ: number;
+  maxX: number;
+  maxZ: number;
+}
+
+/**
+ * Rasterizes the actual projected source triangles into a compact 2D mask.
+ * A flood-fill closes structural wall loops so L/stepped footprints remain
+ * concave; unlike a convex hull of boxes, their notches are not filled in.
+ */
+export function deriveBuildingFootprintMask(
+  root: THREE.Object3D,
+  footprint: THREE.Box3,
+): BuildingFootprintMask | undefined {
+  if (!validBox(footprint)) return undefined;
+  root.updateMatrixWorld(true);
+
+  const padding = 0.24;
+  const minX = footprint.min.x - padding;
+  const maxX = footprint.max.x + padding;
+  const minZ = footprint.min.z - padding;
+  const maxZ = footprint.max.z + padding;
+  const extentX = maxX - minX;
+  const extentZ = maxZ - minZ;
+  if (extentX <= 0 || extentZ <= 0) return undefined;
+
+  const longestPixels = 512;
+  const density = longestPixels / Math.max(extentX, extentZ);
+  const width = THREE.MathUtils.clamp(Math.round(extentX * density), 96, longestPixels);
+  const height = THREE.MathUtils.clamp(Math.round(extentZ * density), 96, longestPixels);
+  const total = width * height;
+  const occupied = new Uint8Array(total);
+  const world = new THREE.Vector3();
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+
+  const toPixel = (x: number, z: number) => ({
+    x: THREE.MathUtils.clamp(((x - minX) / extentX) * (width - 1), 0, width - 1),
+    y: THREE.MathUtils.clamp(((z - minZ) / extentZ) * (height - 1), 0, height - 1),
+  });
+  const setPixel = (x: number, y: number, radius = 1) => {
+    const cx = Math.round(x), cy = Math.round(y);
+    for (let py = Math.max(0, cy - radius); py <= Math.min(height - 1, cy + radius); py += 1) {
+      for (let px = Math.max(0, cx - radius); px <= Math.min(width - 1, cx + radius); px += 1) {
+        occupied[py * width + px] = 255;
+      }
+    }
+  };
+  const drawLine = (fromX: number, fromY: number, toX: number, toY: number) => {
+    let x0 = Math.round(fromX), y0 = Math.round(fromY);
+    const x1 = Math.round(toX), y1 = Math.round(toY);
+    const dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    const dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    let error = dx + dy;
+    while (true) {
+      setPixel(x0, y0, 1);
+      if (x0 === x1 && y0 === y1) break;
+      const doubled = 2 * error;
+      if (doubled >= dy) { error += dy; x0 += sx; }
+      if (doubled <= dx) { error += dx; y0 += sy; }
+    }
+  };
+  const fillTriangle = (
+    p0: { x: number; y: number },
+    p1: { x: number; y: number },
+    p2: { x: number; y: number },
+  ) => {
+    const denominator =
+      (p1.y - p2.y) * (p0.x - p2.x) +
+      (p2.x - p1.x) * (p0.y - p2.y);
+    if (Math.abs(denominator) < 0.3) return;
+    const minXPixel = Math.max(0, Math.floor(Math.min(p0.x, p1.x, p2.x)));
+    const maxXPixel = Math.min(width - 1, Math.ceil(Math.max(p0.x, p1.x, p2.x)));
+    const minYPixel = Math.max(0, Math.floor(Math.min(p0.y, p1.y, p2.y)));
+    const maxYPixel = Math.min(height - 1, Math.ceil(Math.max(p0.y, p1.y, p2.y)));
+    for (let py = minYPixel; py <= maxYPixel; py += 1) {
+      for (let px = minXPixel; px <= maxXPixel; px += 1) {
+        const sampleX = px + 0.5, sampleY = py + 0.5;
+        const u =
+          ((p1.y - p2.y) * (sampleX - p2.x) +
+            (p2.x - p1.x) * (sampleY - p2.y)) / denominator;
+        const v =
+          ((p2.y - p0.y) * (sampleX - p2.x) +
+            (p0.x - p2.x) * (sampleY - p2.y)) / denominator;
+        if (u >= -1e-4 && v >= -1e-4 && u + v <= 1.0001) {
+          occupied[py * width + px] = 255;
+        }
+      }
+    }
+  };
+
+  const footprintArea = projectedArea(footprint);
+  let processedTriangles = 0;
+  const maxTriangles = 650_000;
+  root.traverse((node) => {
+    if (!(node instanceof THREE.Mesh) || processedTriangles >= maxTriangles) return;
+    const names = namesForMesh(node, root);
+    if (
+      names.some((name) => SITE_ONLY_NAME.test(name)) ||
+      names.some((name) => FLAT_BASE_NAME.test(name))
+    ) return;
+    const box = new THREE.Box3().setFromObject(node);
+    if (!validBox(box)) return;
+    const size = box.getSize(new THREE.Vector3());
+    if (size.y < 0.06 || size.x * size.z < footprintArea * 0.00025) return;
+    const overlapX = Math.max(0, Math.min(box.max.x, footprint.max.x) - Math.max(box.min.x, footprint.min.x));
+    const overlapZ = Math.max(0, Math.min(box.max.z, footprint.max.z) - Math.max(box.min.z, footprint.min.z));
+    if (overlapX * overlapZ < footprintArea * 0.00025) return;
+
+    const position = node.geometry.getAttribute("position");
+    if (!position || position.count < 3) return;
+    const index = node.geometry.getIndex();
+    const count = index ? index.count : position.count;
+    const triangleCount = Math.floor(count / 3);
+    const stride = Math.max(1, Math.ceil(triangleCount / Math.max(1, maxTriangles - processedTriangles)));
+    for (let triangle = 0; triangle < triangleCount && processedTriangles < maxTriangles; triangle += stride) {
+      const getVertex = (vertex: number, target: THREE.Vector3) => {
+        const vertexIndex = index ? index.getX(vertex) : vertex;
+        target.fromBufferAttribute(position, vertexIndex).applyMatrix4(node.matrixWorld);
+        return target;
+      };
+      getVertex(triangle * 3, a);
+      getVertex(triangle * 3 + 1, b);
+      getVertex(triangle * 3 + 2, c);
+      processedTriangles += 1;
+      if (
+        ![a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z].every(Number.isFinite)
+      ) continue;
+      if (
+        Math.max(a.x, b.x, c.x) < minX || Math.min(a.x, b.x, c.x) > maxX ||
+        Math.max(a.z, b.z, c.z) < minZ || Math.min(a.z, b.z, c.z) > maxZ
+      ) continue;
+      const pa = toPixel(a.x, a.z), pb = toPixel(b.x, b.z), pc = toPixel(c.x, c.z);
+      // All actual projected edges contribute to a closed perimeter. Horizontal
+      // and sloped floor/roof triangles also fill their real projected areas.
+      drawLine(pa.x, pa.y, pb.x, pb.y);
+      drawLine(pb.x, pb.y, pc.x, pc.y);
+      drawLine(pc.x, pc.y, pa.x, pa.y);
+      const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
+      const acx = c.x - a.x, acy = c.y - a.y, acz = c.z - a.z;
+      const normalY = abz * acx - abx * acz;
+      const normalLength = Math.hypot(aby * acz - abz * acy, normalY, abx * acy - aby * acx);
+      if (normalLength > 1e-9 && Math.abs(normalY) / normalLength > 0.22) {
+        fillTriangle(pa, pb, pc);
+      }
+    }
+  });
+
+  if (processedTriangles < 8) return undefined;
+
+  // Flood-fill the external background. Any unvisited cell is inside a closed
+  // projected structural boundary or a projected floor/roof triangle.
+  const exterior = new Uint8Array(total);
+  const queue = new Int32Array(total);
+  let head = 0, tail = 0;
+  const seedExterior = (index: number) => {
+    if (occupied[index] === 0 && exterior[index] === 0) {
+      exterior[index] = 1;
+      queue[tail++] = index;
+    }
+  };
+  for (let x = 0; x < width; x += 1) {
+    seedExterior(x);
+    seedExterior((height - 1) * width + x);
+  }
+  for (let y = 0; y < height; y += 1) {
+    seedExterior(y * width);
+    seedExterior(y * width + width - 1);
+  }
+  while (head < tail) {
+    const index = queue[head++];
+    const x = index % width, y = Math.floor(index / width);
+    if (x > 0) seedExterior(index - 1);
+    if (x + 1 < width) seedExterior(index + 1);
+    if (y > 0) seedExterior(index - width);
+    if (y + 1 < height) seedExterior(index + width);
+  }
+
+  const data = new Uint8Array(total);
+  let filled = 0;
+  for (let index = 0; index < total; index += 1) {
+    if (occupied[index] !== 0 || exterior[index] === 0) {
+      data[index] = 255;
+      filled += 1;
+    }
+  }
+
+  // Expand by two pixels: the grass starts just outside, never over the wall.
+  for (let pass = 0; pass < 2; pass += 1) {
+    const expanded = data.slice();
+    for (let y = 1; y < height - 1; y += 1) {
+      for (let x = 1; x < width - 1; x += 1) {
+        const index = y * width + x;
+        if (
+          data[index] || data[index - 1] || data[index + 1] ||
+          data[index - width] || data[index + width]
+        ) {
+          expanded[index] = 255;
+        }
+      }
+    }
+    data.set(expanded);
+  }
+
+  const filledRatio = data.reduce((sum, value) => sum + (value ? 1 : 0), 0) / total;
+  if (filledRatio < 0.025 || filledRatio > 0.985) return undefined;
+  return { width, height, data, minX, minZ, maxX, maxZ };
+}
