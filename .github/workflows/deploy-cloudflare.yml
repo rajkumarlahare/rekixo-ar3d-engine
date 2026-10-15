@@ -44,9 +44,12 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          MERGE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          API="https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls"
+          # GitHub's commit->pulls index can lag or omit squash merge commits.
+          # Verify that an actual closed PR to main carries this exact merge SHA.
+          API="https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?state=closed&per_page=100"
           BODY="$(mktemp)"
           STATUS="$(curl --silent --show-error --output "$BODY" --write-out '%{http_code}' \
             --header "Authorization: Bearer $GH_TOKEN" \
@@ -54,19 +57,20 @@ jobs:
             --header "X-GitHub-Api-Version: 2022-11-28" \
             "$API")"
           if [ "$STATUS" != "200" ]; then
-            echo "::error::Could not verify PR origin for production commit (HTTP $STATUS)."
+            echo "::error::Could not verify merged PR origin for production commit (HTTP $STATUS)."
             head -c 1200 "$BODY" || true
             rm -f "$BODY"
             exit 1
           fi
-          node - "$BODY" <<'NODE'
+          node - "$BODY" "$MERGE_SHA" <<'NODE'
           const fs = require("fs");
           const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const mergeSha = process.argv[3];
           const mergedToMain = Array.isArray(payload) && payload.some(
-            (pr) => pr && pr.merged_at && pr.base?.ref === "main"
+            (pr) => pr && pr.merged_at && pr.base?.ref === "main" && pr.merge_commit_sha === mergeSha
           );
           if (!mergedToMain) {
-            console.error("::error::Production deploy blocked: main commit is not associated with a merged PR.");
+            console.error("::error::Production deploy blocked: no merged PR to main matches this exact commit SHA.");
             process.exit(1);
           }
           console.log("Production commit is associated with a merged PR to main.");
