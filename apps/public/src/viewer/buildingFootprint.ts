@@ -414,26 +414,25 @@ export function deriveBuildingFootprintMask(
     p1: { x: number; y: number },
     p2: { x: number; y: number },
   ) => {
-    const denominator =
-      (p1.y - p2.y) * (p0.x - p2.x) +
-      (p2.x - p1.x) * (p0.y - p2.y);
-    if (Math.abs(denominator) < 0.3) return;
     const minXPixel = Math.max(0, Math.floor(Math.min(p0.x, p1.x, p2.x)));
     const maxXPixel = Math.min(width - 1, Math.ceil(Math.max(p0.x, p1.x, p2.x)));
     const minYPixel = Math.max(0, Math.floor(Math.min(p0.y, p1.y, p2.y)));
     const maxYPixel = Math.min(height - 1, Math.ceil(Math.max(p0.y, p1.y, p2.y)));
+    const edgeSign = (
+      left: {x:number;y:number},
+      right: {x:number;y:number},
+      point: {x:number;y:number},
+    ) => (point.x - right.x) * (left.y - right.y) -
+      (left.x - right.x) * (point.y - right.y);
     for (let py = minYPixel; py <= maxYPixel; py += 1) {
       for (let px = minXPixel; px <= maxXPixel; px += 1) {
-        const sampleX = px + 0.5, sampleY = py + 0.5;
-        const u =
-          ((p1.y - p2.y) * (sampleX - p2.x) +
-            (p2.x - p1.x) * (sampleY - p2.y)) / denominator;
-        const v =
-          ((p2.y - p0.y) * (sampleX - p2.x) +
-            (p0.x - p2.x) * (sampleY - p2.y)) / denominator;
-        if (u >= -1e-4 && v >= -1e-4 && u + v <= 1.0001) {
-          occupied[py * width + px] = 255;
-        }
+        const point = { x: px + 0.5, y: py + 0.5 };
+        const d1 = edgeSign(p0, p1, point);
+        const d2 = edgeSign(p1, p2, point);
+        const d3 = edgeSign(p2, p0, point);
+        const hasNegative = d1 < -1e-4 || d2 < -1e-4 || d3 < -1e-4;
+        const hasPositive = d1 > 1e-4 || d2 > 1e-4 || d3 > 1e-4;
+        if (!(hasNegative && hasPositive)) occupied[py * width + px] = 255;
       }
     }
   };
