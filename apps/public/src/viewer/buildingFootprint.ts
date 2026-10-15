@@ -339,6 +339,8 @@ export interface BuildingFootprintMask {
   source: "triangles" | "outline";
   /** Diagnostic coverage ratio used to validate source geometry quality. */
   sourceCoverageRatio: number;
+  processedTriangles?: number;
+  surfaceTriangles?: number;
   width: number;
   height: number;
   /** 255 marks building interior plus a small wall-edge safety margin. */
@@ -438,6 +440,7 @@ export function deriveBuildingFootprintMask(
 
   const footprintArea = projectedArea(footprint);
   let processedTriangles = 0;
+  let surfaceTriangles = 0;
   const maxTriangles = 160_000;
   root.traverse((node) => {
     if (!(node instanceof THREE.Mesh) || processedTriangles >= maxTriangles) return;
@@ -485,6 +488,7 @@ export function deriveBuildingFootprintMask(
       const normalY = abz * acx - abx * acz;
       const normalLength = Math.hypot(aby * acz - abz * acy, normalY, abx * acy - aby * acx);
       if (normalLength > 1e-9 && Math.abs(normalY) / normalLength > 0.22) {
+        surfaceTriangles += 1;
         fillTriangle(pa, pb, pc);
       } else {
         // Vertical wall triangles collapse into lines in X/Z projection; keep
@@ -575,6 +579,8 @@ export function deriveBuildingFootprintMask(
       return {
         source: "triangles" as const,
         sourceCoverageRatio,
+        processedTriangles,
+        surfaceTriangles,
         width,
         height,
         data,
@@ -633,6 +639,8 @@ export function deriveBuildingFootprintMask(
   return {
     source: "outline" as const,
     sourceCoverageRatio,
+    processedTriangles,
+    surfaceTriangles,
     width,
     height,
     data: fallback,
