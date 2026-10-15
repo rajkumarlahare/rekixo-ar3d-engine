@@ -336,6 +336,7 @@ export function deriveBuildingFootprintOutline(
 
 
 export interface BuildingFootprintMask {
+  source: "triangles" | "outline";
   width: number;
   height: number;
   /** 255 marks building interior plus a small wall-edge safety margin. */
@@ -435,7 +436,7 @@ export function deriveBuildingFootprintMask(
 
   const footprintArea = projectedArea(footprint);
   let processedTriangles = 0;
-  const maxTriangles = 650_000;
+  const maxTriangles = 160_000;
   root.traverse((node) => {
     if (!(node instanceof THREE.Mesh) || processedTriangles >= maxTriangles) return;
     const names = namesForMesh(node, root);
@@ -477,15 +478,18 @@ export function deriveBuildingFootprintMask(
       const pa = toPixel(a.x, a.z), pb = toPixel(b.x, b.z), pc = toPixel(c.x, c.z);
       // All actual projected edges contribute to a closed perimeter. Horizontal
       // and sloped floor/roof triangles also fill their real projected areas.
-      drawLine(pa.x, pa.y, pb.x, pb.y);
-      drawLine(pb.x, pb.y, pc.x, pc.y);
-      drawLine(pc.x, pc.y, pa.x, pa.y);
       const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
       const acx = c.x - a.x, acy = c.y - a.y, acz = c.z - a.z;
       const normalY = abz * acx - abx * acz;
       const normalLength = Math.hypot(aby * acz - abz * acy, normalY, abx * acy - aby * acx);
       if (normalLength > 1e-9 && Math.abs(normalY) / normalLength > 0.22) {
         fillTriangle(pa, pb, pc);
+      } else {
+        // Vertical wall triangles collapse into lines in X/Z projection; keep
+        // their actual projected edges to close the external perimeter.
+        drawLine(pa.x, pa.y, pb.x, pb.y);
+        drawLine(pb.x, pb.y, pc.x, pc.y);
+        drawLine(pc.x, pc.y, pa.x, pa.y);
       }
     }
   });
@@ -548,7 +552,7 @@ export function deriveBuildingFootprintMask(
 
   const filledRatio = data.reduce((sum, value) => sum + (value ? 1 : 0), 0) / total;
   if (filledRatio >= 0.025 && filledRatio <= 0.985) {
-    return { width, height, data, minX, minZ, maxX, maxZ };
+    return { source: "triangles" as const, width, height, data, minX, minZ, maxX, maxZ };
   }
 
   // Some older exports have open or disconnected wall meshes. In that case,
@@ -595,5 +599,5 @@ export function deriveBuildingFootprintMask(
   }
   const fallbackRatio = fallbackFilled / total;
   if (fallbackRatio < 0.025 || fallbackRatio > 0.985) return undefined;
-  return { width, height, data: fallback, minX, minZ, maxX, maxZ };
+  return { source: "outline" as const, width, height, data: fallback, minX, minZ, maxX, maxZ };
 }
