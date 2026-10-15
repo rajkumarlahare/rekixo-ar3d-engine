@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { proceduralSurfaceTexture } from "./proceduralSurfaceMaterials";
+import type { BuildingFootprintMask } from "./buildingFootprint";
 
 export interface GrassCoverArea {
   kind: string;
@@ -19,6 +20,8 @@ export interface GrassGroundCoverOptions {
   footprintBounds?: THREE.Box3;
   /** Optional measured outer building outline in world X/Z, for non-rectangular walls. */
   footprintOutline?: readonly FootprintPoint[];
+  /** Raster mask from actual projected mesh triangles; supports concave/stepped footprints. */
+  footprintMask?: BuildingFootprintMask;
   groundElevation: number;
   mobile: boolean;
   /** Reviewed paving/road areas plus any generated fallback hardscape. */
@@ -65,6 +68,17 @@ function containsArea(x: number, z: number, area: GrassCoverArea, padding = 0) {
     Math.abs(localX) <= area.width / 2 + padding &&
     Math.abs(localZ) <= area.depth / 2 + padding
   );
+}
+
+function footprintMaskContains(mask: BuildingFootprintMask, x: number, z: number) {
+  if (
+    x < mask.minX || x > mask.maxX ||
+    z < mask.minZ || z > mask.maxZ ||
+    mask.maxX <= mask.minX || mask.maxZ <= mask.minZ
+  ) return false;
+  const px = THREE.MathUtils.clamp(Math.round(((x - mask.minX) / (mask.maxX - mask.minX)) * (mask.width - 1)), 0, mask.width - 1);
+  const py = THREE.MathUtils.clamp(Math.round(((z - mask.minZ) / (mask.maxZ - mask.minZ)) * (mask.height - 1)), 0, mask.height - 1);
+  return mask.data[py * mask.width + px] > 0;
 }
 
 function surfaceYFor(
@@ -214,19 +228,25 @@ function createCurvedGroundGeometry(
   footprintHalfZ: number,
   footprintOutline: readonly FootprintPoint[],
   footprintCenter: FootprintPoint,
+  maskCutout: boolean,
 ) {
   const baseSegments = mobile ? 64 : 112;
   const rings = mobile ? 22 : 36;
   const polygon = normalizeFootprint(footprintOutline);
+  // With a mesh-derived mask the surface is continuous underneath and the
+  // fragment shader cuts the exact concave shape. A tiny inner ring avoids
+  // singular triangles at the center without creating a rectangular slab.
   const innerRadiusAt = (angle: number) =>
-    radialBoundary(
-      angle,
-      polygon,
-      footprintHalfX,
-      footprintHalfZ,
-      footprintCenter,
-      0.18,
-    );
+    maskCutout
+      ? 0.25
+      : radialBoundary(
+          angle,
+          polygon,
+          footprintHalfX,
+          footprintHalfZ,
+          footprintCenter,
+          0.18,
+        );
   const cornerHalfX = Math.max(footprintHalfX + 0.18, 0.6);
   const cornerHalfZ = Math.max(footprintHalfZ + 0.18, 0.6);
   const cornerAngle = Math.atan2(cornerHalfZ, cornerHalfX);
@@ -429,6 +449,7 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
     footprintSize.z / 2,
     localOutline,
     { x: 0, z: 0 },
+    !!options.footprintMask,
   );
   const terrainMaterial = new THREE.MeshStandardMaterial({
     name: "Procedural turf blending into a soft cloud horizon",
@@ -438,6 +459,47 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
     roughness: 0.98,
     metalness: 0,
   });
+  let footprintMaskTexture: THREE.DataTexture | undefined;
+  if (options.footprintMask) {
+    const mask = options.footprintMask;
+    footprintMaskTexture = new THREE.DataTexture(
+      mask.data,
+      mask.width,
+      mask.height,
+      THREE.RedFormat,
+      THREE.UnsignedByteType,
+    );
+    footprintMaskTexture.minFilter = THREE.LinearFilter;
+    footprintMaskTexture.magFilter = THREE.LinearFilter;
+    footprintMaskTexture.wrapS = THREE.ClampToEdgeWrapping;
+    footprintMaskTexture.wrapT = THREE.ClampToEdgeWrapping;
+    footprintMaskTexture.generateMipmaps = false;
+    footprintMaskTexture.unpackAlignment = 1;
+    footprintMaskTexture.needsUpdate = true;
+    terrainMaterial.onBeforeCompile = (shader) => {
+      shader.uniforms.uBuildingFootprintMask = { value: footprintMaskTexture };
+      shader.uniforms.uBuildingFootprintMaskBounds = {
+        value: new THREE.Vector4(mask.minX, mask.minZ, mask.maxX, mask.maxZ),
+      };
+      shader.vertexShader = shader.vertexShader.replace(
+        "#include <common>",
+        "#include <common>\nvarying vec2 vBuildingFootprintWorldXZ;",
+      );
+      shader.vertexShader = shader.vertexShader.replace(
+        "#include <project_vertex>",
+        "#include <project_vertex>\nvBuildingFootprintWorldXZ = (modelMatrix * vec4(transformed, 1.0)).xz;",
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <common>",
+        "#include <common>\nuniform sampler2D uBuildingFootprintMask;\nuniform vec4 uBuildingFootprintMaskBounds;\nvarying vec2 vBuildingFootprintWorldXZ;",
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <clipping_planes_fragment>",
+        "#include <clipping_planes_fragment>\nvec2 buildingMaskUv = (vBuildingFootprintWorldXZ - uBuildingFootprintMaskBounds.xy) / (uBuildingFootprintMaskBounds.zw - uBuildingFootprintMaskBounds.xy);\nbool inBuildingMaskBounds = all(greaterThanEqual(buildingMaskUv, vec2(0.0))) && all(lessThanEqual(buildingMaskUv, vec2(1.0)));\nif (inBuildingMaskBounds && texture2D(uBuildingFootprintMask, buildingMaskUv).r > 0.5) discard;",
+      );
+    };
+    terrainMaterial.customProgramCacheKey = () => "rekixo-building-footprint-mask-v1";
+  }
   const ground = new THREE.Mesh(geometry, terrainMaterial);
   ground.name = "Curved turf and horizon surface";
   ground.castShadow = false;
@@ -472,7 +534,9 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
     const worldZ = center.z + z;
 
     if (
-      (outline.length >= 3 &&
+      (options.footprintMask &&
+        footprintMaskContains(options.footprintMask, worldX, worldZ)) ||
+      (!options.footprintMask && outline.length >= 3 &&
         insideBufferedFootprint({ x: worldX, z: worldZ }, outline, 0.18)) ||
       excludedAreas.some((area) => containsArea(worldX, worldZ, area, 0.035))
     ) continue;
@@ -488,9 +552,9 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
     instances[tier].push({
       // Blade instances are rooted relative to the building-centered ground
       // mesh, not the overall source-model/site center.
-      x: worldX - footprintCenter.x,
+      x: worldX - groundCenter.x,
       y: surfaceY - (groundElevation - 0.055) + 0.001,
-      z: worldZ - footprintCenter.z,
+      z: worldZ - groundCenter.z,
       rotation: random() * TAU,
       color,
       variation: 0.88 + random() * 0.24,
@@ -518,6 +582,7 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
   root.userData.grassBladeTierCounts = instances.map((tier) => tier.length);
   root.userData.horizonRadius = radius;
   root.userData.horizonRise = rise;
+  root.userData.buildingFootprintMaskApplied = !!options.footprintMask;
 
   return {
     root,
@@ -533,6 +598,7 @@ export function createUniversalGrassGroundCover(options: GrassGroundCoverOptions
       });
       geometries.forEach((entry) => entry.dispose());
       materials.forEach((entry) => entry.dispose());
+      footprintMaskTexture?.dispose();
       root.clear();
     },
   };
