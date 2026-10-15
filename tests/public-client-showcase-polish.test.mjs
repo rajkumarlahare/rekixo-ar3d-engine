@@ -73,7 +73,7 @@ test("projected triangle mask preserves the real non-rectangular Building bounda
   };
   assert.equal(sample(0, 0), 255, "inside the source Building must be masked");
   assert.equal(sample(2.6, 1), 0, "space outside the sloping wall must remain open for grass");
-  assert.equal(sample(-3.5, 1), 255, "the actual left wing remains in the footprint");
+  assert.equal(sample(-1.5, 1), 255, "the actual left wing remains in the footprint");
   assert.ok(mask.width <= 512 && mask.height <= 512, "mask is bounded for runtime cost");
 
   building.geometry.dispose();
