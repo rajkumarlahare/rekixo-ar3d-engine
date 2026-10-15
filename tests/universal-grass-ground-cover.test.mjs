@@ -30,7 +30,9 @@ test("grass instances avoid reviewed road, parking and path footprints", () => {
   assert.match(site, /const modelSize = buildingBounds\.getSize/);
   assert.match(site, /footprintBounds: buildingBounds/);
   assert.match(viewer, /deriveBuildingFootprintBounds\(/);
-  assert.match(viewer, /clientPresentation,\s+buildingFootprintBounds,/);
+  assert.match(viewer, /deriveBuildingFootprintOutline\(/);
+  assert.match(viewer, /clientPresentation,\s+buildingFootprintBounds,\s+buildingFootprintOutline,/);
+  assert.match(site, /footprintOutline: buildingOutline/);
   assert.match(site, /width: modelSize\.x,[\s\S]*depth: modelSize\.z/);
   assert.match(grass, /excludedAreas\.some\(\(area\) => containsArea/);
   assert.match(grass, /surfaceYFor\(worldX, worldZ, groundElevation, lawnAreas\)/);
