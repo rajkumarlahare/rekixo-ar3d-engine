@@ -36,6 +36,53 @@ const environment = await import(compile("apps/public/src/viewer/siteEnvironment
   "./grassGroundCover": grassUrl,
 }));
 
+test("projected triangle mask preserves the real non-rectangular Building boundary", () => {
+  const root = new THREE.Group();
+  const shape = new THREE.Shape();
+  shape.moveTo(-4, -2);
+  shape.lineTo(3, -2);
+  shape.lineTo(1, 2);
+  shape.lineTo(-2, 2);
+  shape.closePath();
+  const building = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(shape, { depth: 3, bevelEnabled: false }),
+    new THREE.MeshStandardMaterial(),
+  );
+  building.name = "Building shell";
+  building.rotation.x = Math.PI / 2;
+  building.position.y = 3;
+  root.add(building);
+  const slab = new THREE.Mesh(
+    new THREE.BoxGeometry(12, 0.2, 12),
+    new THREE.MeshStandardMaterial(),
+  );
+  slab.name = "Ground slab";
+  slab.position.y = 0.1;
+  root.add(slab);
+
+  const footprint = new THREE.Box3(
+    new THREE.Vector3(-4, 0, -2),
+    new THREE.Vector3(3, 3, 2),
+  );
+  const mask = buildingFootprint.deriveBuildingFootprintMask(root, footprint);
+  assert.ok(mask, "closed source triangles should produce a footprint mask");
+  assert.equal(mask.source, "triangles", `closed real mesh surfaces should be preferred over convex-hull fallback; source=${mask.source}, coverage=${mask.sourceCoverageRatio}, processed=${mask.processedTriangles}, surface=${mask.surfaceTriangles}`);
+  const sample = (x, z) => {
+    const px = Math.max(0, Math.min(mask.width - 1, Math.round(((x - mask.minX) / (mask.maxX - mask.minX)) * (mask.width - 1))));
+    const py = Math.max(0, Math.min(mask.height - 1, Math.round(((z - mask.minZ) / (mask.maxZ - mask.minZ)) * (mask.height - 1))));
+    return mask.data[py * mask.width + px];
+  };
+  assert.equal(sample(0, 0), 255, "inside the source Building must be masked");
+  assert.equal(sample(2.6, 1), 0, "space outside the sloping wall must remain open for grass");
+  assert.equal(sample(-1.5, 1), 255, "the actual left wing remains in the footprint");
+  assert.ok(mask.width <= 512 && mask.height <= 512, "mask is bounded for runtime cost");
+
+  building.geometry.dispose();
+  building.material.dispose();
+  slab.geometry.dispose();
+  slab.material.dispose();
+});
+
 test("Building ground outline follows actual mesh vertices and ignores oversized ground slabs", () => {
   const root = new THREE.Group();
   const shape = new THREE.Shape();

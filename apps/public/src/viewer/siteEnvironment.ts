@@ -1,4 +1,5 @@
 import type { PublicSiteElement } from "@rekixo/3d-contracts";
+import type { BuildingFootprintMask } from "./buildingFootprint";
 import * as THREE from "three";
 import {
   addPresentationFallback,
@@ -519,6 +520,7 @@ export function createArchitecturalSiteEnvironment(
   universalGroundCover = presentation,
   buildingBounds: THREE.Box3 = bounds,
   buildingOutline: readonly { x: number; z: number }[] = [],
+  buildingFootprintMask?: BuildingFootprintMask,
 ) {
   configureProceduralSurfaceTextures(renderer);
   const root = new THREE.Group();
@@ -668,6 +670,7 @@ export function createArchitecturalSiteEnvironment(
       bounds,
       footprintBounds: buildingBounds,
       footprintOutline: buildingOutline,
+      footprintMask: buildingFootprintMask,
       groundElevation:
         knownGrade && typeof groundElevation === "number"
           ? groundElevation
