@@ -547,6 +547,53 @@ export function deriveBuildingFootprintMask(
   }
 
   const filledRatio = data.reduce((sum, value) => sum + (value ? 1 : 0), 0) / total;
-  if (filledRatio < 0.025 || filledRatio > 0.985) return undefined;
-  return { width, height, data, minX, minZ, maxX, maxZ };
+  if (filledRatio >= 0.025 && filledRatio <= 0.985) {
+    return { width, height, data, minX, minZ, maxX, maxZ };
+  }
+
+  // Some older exports have open or disconnected wall meshes. In that case,
+  // fall back to an outline sampled from real source vertices (never the
+  // oversized site's bounding-box corners) rather than accepting a corrupt mask.
+  const outline = deriveBuildingFootprintOutline(root, footprint);
+  if (outline.length < 3) return undefined;
+  const fallback = new Uint8Array(total);
+  const pointInside = (x: number, z: number) => {
+    let inside = false;
+    for (let current = 0, previous = outline.length - 1; current < outline.length; previous = current++) {
+      const a = outline[current], b = outline[previous];
+      const crosses = (a.z > z) !== (b.z > z) &&
+        x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x;
+      if (crosses) inside = !inside;
+    }
+    return inside;
+  };
+  const edgeDistance = (x: number, z: number, a: {x:number;z:number}, b: {x:number;z:number}) => {
+    const dx = b.x - a.x, dz = b.z - a.z;
+    const lengthSquared = dx * dx + dz * dz;
+    const t = lengthSquared < 1e-12 ? 0 : THREE.MathUtils.clamp(((x-a.x)*dx+(z-a.z)*dz)/lengthSquared,0,1);
+    return Math.hypot(x - (a.x + dx*t), z - (a.z + dz*t));
+  };
+  let fallbackFilled = 0;
+  for (let y = 0; y < height; y += 1) {
+    const z = minZ + ((y + 0.5) / height) * extentZ;
+    for (let x = 0; x < width; x += 1) {
+      const worldX = minX + ((x + 0.5) / width) * extentX;
+      let inside = pointInside(worldX, z);
+      if (!inside) {
+        for (let edge = 0; edge < outline.length; edge += 1) {
+          if (edgeDistance(worldX, z, outline[edge], outline[(edge + 1) % outline.length]) <= padding) {
+            inside = true;
+            break;
+          }
+        }
+      }
+      if (inside) {
+        fallback[y * width + x] = 255;
+        fallbackFilled += 1;
+      }
+    }
+  }
+  const fallbackRatio = fallbackFilled / total;
+  if (fallbackRatio < 0.025 || fallbackRatio > 0.985) return undefined;
+  return { width, height, data: fallback, minX, minZ, maxX, maxZ };
 }
