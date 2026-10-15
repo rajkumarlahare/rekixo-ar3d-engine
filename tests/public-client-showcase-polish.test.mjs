@@ -82,6 +82,29 @@ test("footprint inference separates the Building from low compound walls and gro
   }
 });
 
+test("polygon-shaped footprint keeps ground cutout aligned with stepped Building edges", () => {
+  const outline = [
+    { x: -5, z: -4 }, { x: 2, z: -4 }, { x: 2, z: -1 },
+    { x: 5, z: -1 }, { x: 5, z: 4 }, { x: -5, z: 4 },
+  ];
+  const bounds = new THREE.Box3(new THREE.Vector3(-20, 0, -15), new THREE.Vector3(20, 18, 15));
+  const footprintBounds = new THREE.Box3(new THREE.Vector3(-5, 0, -4), new THREE.Vector3(5, 15, 4));
+  const cover = grass.createUniversalGrassGroundCover({
+    bounds, footprintBounds, footprintOutline: outline,
+    groundElevation: 0, mobile: true, excludedAreas: [], lawnAreas: [],
+  });
+  const ground = cover.root.children.find(child => child.name === "Curved turf and horizon surface");
+  assert.ok(ground?.isMesh);
+  const positions = ground.geometry.getAttribute("position");
+  assert.ok(positions.count > 1000);
+  assert.equal(cover.root.position.x, 0);
+  assert.equal(cover.root.position.z, 0);
+  const firstRing = Array.from({ length: 68 }, (_, i) => ({ x: positions.getX(i), z: positions.getZ(i) }));
+  assert.ok(firstRing.some(p => p.x > 2.1 && p.z < -1.1 && p.z > -4.3), "cutout follows the stepped notch");
+  assert.ok(firstRing.some(p => p.x > 5 && p.z > 0), "outer landscape remains outside the building");
+  cover.dispose();
+});
+
 test("curved ground mesh has a building-sized hole, not turf under interior walls", () => {
   // The loaded source bounds include the compound/site; the measured Building
   // bounds are deliberately smaller so the open plot remains covered in grass.
